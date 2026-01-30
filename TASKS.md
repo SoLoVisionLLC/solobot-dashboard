@@ -63,7 +63,9 @@
 - [x] JSON data structure for state (`data/state.json`)
 - [x] CLI update script (`scripts/update-state.js`)
 - [x] Task auto-pickup logic (via CLI)
-- [ ] Real-time polling from JSON (needs VPS deployment)
+- [x] VPS deployment (http://51.81.202.92:8585)
+- [x] GitHub repo (https://github.com/solovision24/solobot-dashboard)
+- [x] GitHub Pages (https://solovision24.github.io/solobot-dashboard/)
 - [ ] Heartbeat integration with Moltbot cron
 
 ---
