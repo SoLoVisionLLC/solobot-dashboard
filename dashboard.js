@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.4.0 - Persistent Local State
+// Version: 2.5.0 - SoLoBot Live Panel
 
 // ===================
 // STATE MANAGEMENT
@@ -19,7 +19,15 @@ let state = {
     notes: [],
     activity: [],
     docs: [],
-    pendingNotify: null  // Set when task moves to In Progress - triggers SoLoBot pickup
+    pendingNotify: null,  // Set when task moves to In Progress - triggers SoLoBot pickup
+    live: {
+        status: 'idle',      // idle, working, thinking, offline
+        task: null,          // Current task description
+        taskStarted: null,   // Timestamp when task started
+        thoughts: [],        // Recent thoughts/actions [{text, time}]
+        lastActive: null,    // Last activity timestamp
+        tasksToday: 0        // Count of tasks completed today
+    }
 };
 
 let newTaskPriority = 1;
@@ -346,12 +354,98 @@ function bulkDelete() {
 
 function render() {
     renderStatus();
+    renderLivePanel();
     renderTasks();
     renderNotes();
     renderActivity();
     renderDocs();
     renderBulkActionBar();
     updateArchiveBadge();
+}
+
+function renderLivePanel() {
+    const live = state.live || { status: 'idle', thoughts: [] };
+    
+    // Status badge
+    const statusBadge = document.getElementById('live-status-badge');
+    const statusIcon = document.getElementById('live-status-icon');
+    const statusEmoji = document.getElementById('live-status-emoji');
+    
+    if (statusBadge) {
+        const statusConfig = {
+            'working': { text: 'WORKING', color: 'bg-green-500/20 text-green-400', emoji: '⚡', iconBg: 'bg-green-500/20' },
+            'thinking': { text: 'THINKING', color: 'bg-yellow-500/20 text-yellow-400', emoji: '🧠', iconBg: 'bg-yellow-500/20' },
+            'idle': { text: 'IDLE', color: 'bg-blue-500/20 text-blue-400', emoji: '🤖', iconBg: 'bg-blue-500/20' },
+            'offline': { text: 'OFFLINE', color: 'bg-gray-500/20 text-gray-400', emoji: '💤', iconBg: 'bg-gray-500/20' }
+        };
+        const config = statusConfig[live.status] || statusConfig['idle'];
+        
+        statusBadge.textContent = config.text;
+        statusBadge.className = `text-xs px-2 py-0.5 rounded-full ${config.color}`;
+        if (statusEmoji) statusEmoji.textContent = config.emoji;
+        if (statusIcon) statusIcon.className = `w-12 h-12 rounded-full ${config.iconBg} flex items-center justify-center ${live.status === 'working' ? 'animate-pulse' : ''}`;
+    }
+    
+    // Current task
+    const taskEl = document.getElementById('live-current-task');
+    if (taskEl) {
+        taskEl.textContent = live.task || 'Waiting for tasks...';
+    }
+    
+    // Task timer
+    const timerEl = document.getElementById('live-task-timer');
+    if (timerEl && live.taskStarted) {
+        const elapsed = Math.floor((Date.now() - live.taskStarted) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        timerEl.classList.remove('hidden');
+    } else if (timerEl) {
+        timerEl.classList.add('hidden');
+    }
+    
+    // Thoughts
+    const thoughtsEl = document.getElementById('live-thoughts');
+    if (thoughtsEl && live.thoughts && live.thoughts.length > 0) {
+        thoughtsEl.innerHTML = live.thoughts.slice(-4).map(t => `
+            <div class="flex items-center gap-2">
+                <span class="text-gray-600">•</span>
+                <span>${escapeHtml(t.text)}</span>
+                <span class="text-gray-600 text-[10px]">${formatTimeShort(t.time)}</span>
+            </div>
+        `).join('');
+    } else if (thoughtsEl) {
+        thoughtsEl.innerHTML = '<div class="flex items-center gap-2"><span class="text-gray-600">•</span><span>Ready to help</span></div>';
+    }
+    
+    // Last active
+    const lastActiveEl = document.getElementById('live-last-active');
+    if (lastActiveEl && live.lastActive) {
+        lastActiveEl.textContent = formatRelativeTime(live.lastActive);
+    }
+    
+    // Tasks today
+    const tasksTodayEl = document.getElementById('live-tasks-today');
+    if (tasksTodayEl) {
+        tasksTodayEl.textContent = live.tasksToday || 0;
+    }
+}
+
+function formatTimeShort(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatRelativeTime(timestamp) {
+    if (!timestamp) return 'Unknown';
+    const diff = Date.now() - timestamp;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return formatDate(timestamp);
 }
 
 function updateArchiveBadge() {
@@ -986,6 +1080,43 @@ window.dashboardAPI = {
     markNoteSeen: (id) => { const note = state.notes.find(n => n.id === id); if (note) { note.seen = true; saveState(); render(); } },
     addActivity: (action, type) => { addActivity(action, type); saveState(); render(); },
     getTasks: () => state.tasks,
+    
+    // Live status API
+    setLiveStatus: (status, task = null) => {
+        if (!state.live) state.live = { thoughts: [] };
+        state.live.status = status;
+        state.live.task = task;
+        state.live.lastActive = Date.now();
+        if (status === 'working' && task && !state.live.taskStarted) {
+            state.live.taskStarted = Date.now();
+        } else if (status === 'idle') {
+            state.live.taskStarted = null;
+        }
+        saveState();
+        renderLivePanel();
+    },
+    addThought: (text) => {
+        if (!state.live) state.live = { thoughts: [] };
+        if (!state.live.thoughts) state.live.thoughts = [];
+        state.live.thoughts.push({ text, time: Date.now() });
+        // Keep only last 10 thoughts
+        if (state.live.thoughts.length > 10) {
+            state.live.thoughts = state.live.thoughts.slice(-10);
+        }
+        state.live.lastActive = Date.now();
+        saveState();
+        renderLivePanel();
+    },
+    completeTask: () => {
+        if (!state.live) state.live = { thoughts: [], tasksToday: 0 };
+        state.live.tasksToday = (state.live.tasksToday || 0) + 1;
+        state.live.status = 'idle';
+        state.live.task = null;
+        state.live.taskStarted = null;
+        saveState();
+        renderLivePanel();
+    },
+    getLive: () => state.live,
     listTasks: () => {
         let list = [];
         let num = 1;

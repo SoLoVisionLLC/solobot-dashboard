@@ -117,6 +117,46 @@
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto p-6">
         
+        <!-- SoLoBot Live Panel -->
+        <section class="mb-6">
+            <div class="bg-gradient-to-r from-solo-card to-solo-dark rounded-xl p-4 border border-slate-700">
+                <div class="flex items-start gap-4">
+                    <!-- Status Indicator -->
+                    <div class="flex-shrink-0">
+                        <div id="live-status-icon" class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                            <span id="live-status-emoji" class="text-2xl">🤖</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Main Info -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-3 mb-1">
+                            <h3 class="font-semibold text-white">SoLoBot</h3>
+                            <span id="live-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">IDLE</span>
+                            <span id="live-task-timer" class="text-xs text-gray-500 hidden">0:00</span>
+                        </div>
+                        <p id="live-current-task" class="text-sm text-gray-400 mb-2">Waiting for tasks...</p>
+                        
+                        <!-- Recent Thoughts -->
+                        <div id="live-thoughts" class="space-y-1 text-xs text-gray-500 max-h-[60px] overflow-hidden">
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-600">•</span>
+                                <span>Ready to help</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Stats -->
+                    <div class="flex-shrink-0 text-right hidden md:block">
+                        <div class="text-xs text-gray-500">Last active</div>
+                        <div id="live-last-active" class="text-sm text-gray-300">Just now</div>
+                        <div class="text-xs text-gray-500 mt-2">Tasks today</div>
+                        <div id="live-tasks-today" class="text-sm text-solo-accent">0</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
         <!-- Kanban Board -->
         <section class="mb-8">
             <div class="flex items-center justify-between mb-4">
@@ -428,6 +468,6 @@
         </div>
     </footer>
 
-    <script src="dashboard.js?v=2.4.0"></script>
+    <script src="dashboard.js?v=2.5.0"></script>
 </body>
 </html>
