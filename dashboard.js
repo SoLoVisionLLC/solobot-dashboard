@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.6.0 - Settings Page
+// Version: 2.7.0 - Terminal Console
 
 // ===================
 // STATE MANAGEMENT
@@ -27,6 +27,10 @@ let state = {
         thoughts: [],        // Recent thoughts/actions [{text, time}]
         lastActive: null,    // Last activity timestamp
         tasksToday: 0        // Count of tasks completed today
+    },
+    console: {
+        logs: [],            // Console log entries [{text, type, time}]
+        expanded: false      // Is console expanded
     }
 };
 
@@ -369,7 +373,7 @@ function bulkDelete() {
 
 function render() {
     renderStatus();
-    renderLivePanel();
+    renderConsole();
     renderTasks();
     renderNotes();
     renderActivity();
@@ -378,71 +382,128 @@ function render() {
     updateArchiveBadge();
 }
 
-function renderLivePanel() {
-    const live = state.live || { status: 'idle', thoughts: [] };
+function renderConsole() {
+    const live = state.live || { status: 'idle' };
+    const consoleData = state.console || { logs: [] };
     
     // Status badge
-    const statusBadge = document.getElementById('live-status-badge');
-    const statusIcon = document.getElementById('live-status-icon');
-    const statusEmoji = document.getElementById('live-status-emoji');
-    
+    const statusBadge = document.getElementById('console-status-badge');
     if (statusBadge) {
         const statusConfig = {
-            'working': { text: 'WORKING', color: 'bg-green-500/20 text-green-400', emoji: '⚡', iconBg: 'bg-green-500/20' },
-            'thinking': { text: 'THINKING', color: 'bg-yellow-500/20 text-yellow-400', emoji: '🧠', iconBg: 'bg-yellow-500/20' },
-            'idle': { text: 'IDLE', color: 'bg-blue-500/20 text-blue-400', emoji: '🤖', iconBg: 'bg-blue-500/20' },
-            'offline': { text: 'OFFLINE', color: 'bg-gray-500/20 text-gray-400', emoji: '💤', iconBg: 'bg-gray-500/20' }
+            'working': { text: 'WORKING', color: 'bg-green-500/20 text-green-400' },
+            'thinking': { text: 'THINKING', color: 'bg-yellow-500/20 text-yellow-400' },
+            'idle': { text: 'IDLE', color: 'bg-blue-500/20 text-blue-400' },
+            'offline': { text: 'OFFLINE', color: 'bg-gray-500/20 text-gray-400' }
         };
         const config = statusConfig[live.status] || statusConfig['idle'];
-        
         statusBadge.textContent = config.text;
-        statusBadge.className = `text-xs px-2 py-0.5 rounded-full ${config.color}`;
-        if (statusEmoji) statusEmoji.textContent = config.emoji;
-        if (statusIcon) statusIcon.className = `w-12 h-12 rounded-full ${config.iconBg} flex items-center justify-center ${live.status === 'working' ? 'animate-pulse' : ''}`;
-    }
-    
-    // Current task
-    const taskEl = document.getElementById('live-current-task');
-    if (taskEl) {
-        taskEl.textContent = live.task || 'Waiting for tasks...';
+        statusBadge.className = `text-xs px-2 py-0.5 rounded-full ${config.color} font-mono`;
     }
     
     // Task timer
-    const timerEl = document.getElementById('live-task-timer');
+    const timerEl = document.getElementById('console-task-timer');
     if (timerEl && live.taskStarted) {
         const elapsed = Math.floor((Date.now() - live.taskStarted) / 1000);
         const mins = Math.floor(elapsed / 60);
         const secs = elapsed % 60;
-        timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        timerEl.textContent = `⏱ ${mins}:${secs.toString().padStart(2, '0')}`;
         timerEl.classList.remove('hidden');
     } else if (timerEl) {
         timerEl.classList.add('hidden');
     }
     
-    // Thoughts
-    const thoughtsEl = document.getElementById('live-thoughts');
-    if (thoughtsEl && live.thoughts && live.thoughts.length > 0) {
-        thoughtsEl.innerHTML = live.thoughts.slice(-4).map(t => `
-            <div class="flex items-center gap-2">
-                <span class="text-gray-600">•</span>
-                <span>${escapeHtml(t.text)}</span>
-                <span class="text-gray-600 text-[10px]">${formatTimeShort(t.time)}</span>
-            </div>
-        `).join('');
-    } else if (thoughtsEl) {
-        thoughtsEl.innerHTML = '<div class="flex items-center gap-2"><span class="text-gray-600">•</span><span>Ready to help</span></div>';
+    // Current task bar
+    const taskbar = document.getElementById('console-taskbar');
+    const taskText = document.getElementById('console-current-task');
+    if (taskbar && taskText) {
+        if (live.task) {
+            taskbar.classList.remove('hidden');
+            taskText.textContent = live.task;
+        } else {
+            taskbar.classList.add('hidden');
+        }
     }
     
-    // Last active
-    const lastActiveEl = document.getElementById('live-last-active');
-    if (lastActiveEl && live.lastActive) {
-        lastActiveEl.textContent = formatRelativeTime(live.lastActive);
+    // Console logs
+    const output = document.getElementById('console-output');
+    if (output && consoleData.logs && consoleData.logs.length > 0) {
+        output.innerHTML = consoleData.logs.map(log => {
+            const timeStr = formatTimeShort(log.time);
+            const colorClass = getLogColor(log.type);
+            const prefix = getLogPrefix(log.type);
+            return `<div class="${colorClass}"><span class="text-gray-600">[${timeStr}]</span> ${prefix}${escapeHtml(log.text)}</div>`;
+        }).join('');
+        
+        // Auto-scroll to bottom
+        output.scrollTop = output.scrollHeight;
+    }
+}
+
+function getLogColor(type) {
+    switch(type) {
+        case 'command': return 'text-green-400';
+        case 'success': return 'text-green-300';
+        case 'error': return 'text-red-400';
+        case 'warning': return 'text-yellow-400';
+        case 'info': return 'text-blue-400';
+        case 'thinking': return 'text-purple-400';
+        case 'output': return 'text-gray-300';
+        default: return 'text-gray-400';
+    }
+}
+
+function getLogPrefix(type) {
+    switch(type) {
+        case 'command': return '$ ';
+        case 'thinking': return '🧠 ';
+        case 'success': return '✓ ';
+        case 'error': return '✗ ';
+        case 'warning': return '⚠ ';
+        default: return '';
+    }
+}
+
+function addConsoleLog(text, type = 'output') {
+    if (!state.console) state.console = { logs: [] };
+    if (!state.console.logs) state.console.logs = [];
+    
+    state.console.logs.push({
+        text,
+        type,
+        time: Date.now()
+    });
+    
+    // Keep only last 100 logs
+    if (state.console.logs.length > 100) {
+        state.console.logs = state.console.logs.slice(-100);
     }
     
-    // Tasks today
-    const tasksTodayEl = document.getElementById('live-tasks-today');
-    if (tasksTodayEl) {
-        tasksTodayEl.textContent = live.tasksToday || 0;
+    saveState();
+    renderConsole();
+}
+
+function clearConsole() {
+    if (!state.console) state.console = { logs: [] };
+    state.console.logs = [
+        { text: 'Console cleared', type: 'info', time: Date.now() }
+    ];
+    saveState();
+    renderConsole();
+}
+
+function toggleConsoleExpand() {
+    const output = document.getElementById('console-output');
+    const btn = document.getElementById('console-expand-btn');
+    
+    if (!state.console) state.console = { expanded: false };
+    state.console.expanded = !state.console.expanded;
+    
+    if (state.console.expanded) {
+        output.style.height = '400px';
+        btn.textContent = 'Collapse';
+    } else {
+        output.style.height = '200px';
+        btn.textContent = 'Expand';
     }
 }
 
@@ -1276,6 +1337,17 @@ window.dashboardAPI = {
         renderLivePanel();
     },
     getLive: () => state.live,
+    
+    // Console API
+    log: (text, type = 'output') => addConsoleLog(text, type),
+    logCommand: (text) => addConsoleLog(text, 'command'),
+    logThinking: (text) => addConsoleLog(text, 'thinking'),
+    logSuccess: (text) => addConsoleLog(text, 'success'),
+    logError: (text) => addConsoleLog(text, 'error'),
+    logWarning: (text) => addConsoleLog(text, 'warning'),
+    logInfo: (text) => addConsoleLog(text, 'info'),
+    clearConsole: () => clearConsole(),
+    getConsoleLogs: () => state.console?.logs || [],
     listTasks: () => {
         let list = [];
         let num = 1;

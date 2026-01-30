@@ -117,42 +117,39 @@
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto p-6">
         
-        <!-- SoLoBot Live Panel -->
-        <section class="mb-6">
-            <div class="bg-gradient-to-r from-solo-card to-solo-dark rounded-xl p-4 border border-slate-700">
-                <div class="flex items-start gap-4">
-                    <!-- Status Indicator -->
-                    <div class="flex-shrink-0">
-                        <div id="live-status-icon" class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                            <span id="live-status-emoji" class="text-2xl">🤖</span>
+        <!-- SoLoBot Console -->
+        <section class="mb-6" id="console-section">
+            <div class="bg-black rounded-xl border border-slate-700 overflow-hidden">
+                <!-- Console Header -->
+                <div class="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <div class="flex gap-1.5">
+                            <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
                         </div>
+                        <span class="text-sm text-gray-400 font-mono">SoLoBot Terminal</span>
+                        <span id="console-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">IDLE</span>
                     </div>
-                    
-                    <!-- Main Info -->
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-3 mb-1">
-                            <h3 class="font-semibold text-white">SoLoBot</h3>
-                            <span id="live-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">IDLE</span>
-                            <span id="live-task-timer" class="text-xs text-gray-500 hidden">0:00</span>
-                        </div>
-                        <p id="live-current-task" class="text-sm text-gray-400 mb-2">Waiting for tasks...</p>
-                        
-                        <!-- Recent Thoughts -->
-                        <div id="live-thoughts" class="space-y-1 text-xs text-gray-500 max-h-[60px] overflow-hidden">
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-600">•</span>
-                                <span>Ready to help</span>
-                            </div>
-                        </div>
+                    <div class="flex items-center gap-2">
+                        <span id="console-task-timer" class="text-xs text-gray-500 font-mono hidden">⏱ 0:00</span>
+                        <button onclick="clearConsole()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-slate-700 transition">Clear</button>
+                        <button onclick="toggleConsoleExpand()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-slate-700 transition" id="console-expand-btn">Expand</button>
                     </div>
-                    
-                    <!-- Quick Stats -->
-                    <div class="flex-shrink-0 text-right hidden md:block">
-                        <div class="text-xs text-gray-500">Last active</div>
-                        <div id="live-last-active" class="text-sm text-gray-300">Just now</div>
-                        <div class="text-xs text-gray-500 mt-2">Tasks today</div>
-                        <div id="live-tasks-today" class="text-sm text-solo-accent">0</div>
-                    </div>
+                </div>
+                
+                <!-- Console Output -->
+                <div id="console-output" class="p-4 font-mono text-sm h-[200px] overflow-y-auto scrollbar-thin bg-[#0d1117]" style="font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;">
+                    <div class="text-green-400">$ solobot --init</div>
+                    <div class="text-gray-400">SoLoBot v2.6 initialized</div>
+                    <div class="text-gray-400">Ready for commands...</div>
+                    <div class="text-gray-600 mt-2">---</div>
+                </div>
+                
+                <!-- Current Task Bar -->
+                <div id="console-taskbar" class="bg-slate-900 px-4 py-2 border-t border-slate-700 flex items-center gap-3 hidden">
+                    <span class="text-green-400 font-mono text-sm">▶</span>
+                    <span id="console-current-task" class="text-gray-300 font-mono text-sm truncate">Working on task...</span>
                 </div>
             </div>
         </section>
@@ -584,7 +581,7 @@
             </div>
             
             <div class="mt-6 pt-4 border-t border-slate-600 text-center text-xs text-gray-500">
-                Dashboard v2.6.0 • Changes save automatically
+                Dashboard v2.7.0 • Changes save automatically
             </div>
         </div>
     </div>
@@ -620,6 +617,6 @@
         </div>
     </footer>
 
-    <script src="dashboard.js?v=2.6.0"></script>
+    <script src="dashboard.js?v=2.7.0"></script>
 </body>
 </html>
