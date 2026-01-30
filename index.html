@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoLoVision Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        solo: {
+                            primary: '#6366f1',    // Indigo
+                            secondary: '#8b5cf6',  // Purple
+                            accent: '#22d3ee',     // Cyan
+                            dark: '#0f172a',       // Slate 900
+                            darker: '#020617',     // Slate 950
+                            card: '#1e293b',       // Slate 800
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .status-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #1e293b; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        
+        .priority-p0 { border-left: 4px solid #ef4444; }
+        .priority-p1 { border-left: 4px solid #eab308; }
+        .priority-p2 { border-left: 4px solid #3b82f6; }
+    </style>
+</head>
+<body class="bg-solo-darker text-gray-100 min-h-screen">
+    
+    <!-- Header -->
+    <header class="bg-solo-dark border-b border-slate-700 px-6 py-4">
+        <div class="flex items-center justify-between max-w-7xl mx-auto">
+            <div class="flex items-center gap-4">
+                <div class="text-2xl font-bold bg-gradient-to-r from-solo-primary to-solo-secondary bg-clip-text text-transparent">
+                    SoLoVision Command Center
+                </div>
+            </div>
+            
+            <!-- AI Status Panel -->
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-3 bg-solo-card px-4 py-2 rounded-lg">
+                    <div id="status-indicator" class="w-3 h-3 rounded-full bg-green-500 status-pulse"></div>
+                    <span id="status-text" class="text-sm font-medium">IDLE</span>
+                </div>
+                <div class="text-sm text-gray-400">
+                    <span class="text-gray-500">Model:</span> 
+                    <span id="model-name" class="text-solo-accent">opus 4.5</span>
+                </div>
+                <div id="current-task" class="text-sm text-gray-400 max-w-xs truncate hidden">
+                    <span class="text-gray-500">Task:</span>
+                    <span id="task-name" class="text-gray-300"></span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sub-agent Banner (hidden by default) -->
+    <div id="subagent-banner" class="bg-solo-secondary/20 border-b border-solo-secondary/30 px-6 py-2 hidden">
+        <div class="max-w-7xl mx-auto flex items-center gap-2 text-sm">
+            <svg class="w-4 h-4 text-solo-secondary animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-solo-secondary font-medium">Sub-agent active:</span>
+            <span id="subagent-task" class="text-gray-300">Researching...</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto p-6">
+        
+        <!-- Kanban Board -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                Task Board
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                <!-- To-Do Column -->
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                            To-Do
+                            <span id="todo-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
+                        </h3>
+                        <button onclick="openAddTask('todo')" class="text-gray-500 hover:text-gray-300 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="todo-tasks" class="space-y-2 min-h-[200px]">
+                        <!-- Tasks will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- In Progress Column -->
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+                            In Progress
+                            <span id="progress-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
+                        </h3>
+                    </div>
+                    <div id="progress-tasks" class="space-y-2 min-h-[200px]">
+                        <!-- Tasks will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Done Column -->
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                            Done
+                            <span id="done-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
+                        </h3>
+                        <button onclick="clearDone()" class="text-gray-500 hover:text-gray-300 transition text-xs">
+                            Clear
+                        </button>
+                    </div>
+                    <div id="done-tasks" class="space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto scrollbar-thin">
+                        <!-- Tasks will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Middle Row: Activity Log + Notes Panel -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            
+            <!-- Activity Log -->
+            <div class="bg-solo-card rounded-lg p-4">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Activity Log
+                </h2>
+                <div id="activity-log" class="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+                    <!-- Activity entries will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Notes Panel -->
+            <div class="bg-solo-card rounded-lg p-4">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Notes for SoLoBot
+                </h2>
+                <div class="mb-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="note-input" placeholder="Leave a note for SoLoBot..." 
+                               class="flex-1 bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-primary transition">
+                        <button onclick="addNote()" class="bg-solo-primary hover:bg-solo-primary/80 px-4 py-2 rounded-lg text-sm font-medium transition">
+                            Send
+                        </button>
+                    </div>
+                </div>
+                <div id="notes-list" class="space-y-2 max-h-[230px] overflow-y-auto scrollbar-thin">
+                    <!-- Notes will be inserted here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Product Status Cards -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+                Product Status
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-medium">SoLoLink</span>
+                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    </div>
+                    <p class="text-sm text-gray-400">Link/widget tool</p>
+                    <p class="text-xs text-gray-500 mt-2">Last update: Active</p>
+                </div>
+
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-medium">SoLoRecall</span>
+                        <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                    </div>
+                    <p class="text-sm text-gray-400">AI productivity app</p>
+                    <p class="text-xs text-gray-500 mt-2">Last update: In dev</p>
+                </div>
+
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-medium">SoLoVoice</span>
+                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    </div>
+                    <p class="text-sm text-gray-400">Voice/audio tool</p>
+                    <p class="text-xs text-gray-500 mt-2">Last update: Active</p>
+                </div>
+
+                <div class="bg-solo-card rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-medium">SoLoFamilyPlan</span>
+                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    </div>
+                    <p class="text-sm text-gray-400">Family organizer</p>
+                    <p class="text-xs text-gray-500 mt-2">Last update: Stable</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Docs Hub -->
+        <section>
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Docs Hub
+                <input type="text" id="docs-search" placeholder="Search docs..." 
+                       class="ml-auto bg-solo-dark border border-slate-600 rounded-lg px-3 py-1 text-sm w-48 focus:outline-none focus:border-solo-primary transition">
+            </h2>
+            <div id="docs-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Docs will be inserted here -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Add Task Modal -->
+    <div id="add-task-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+        <div class="bg-solo-card rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 class="text-lg font-semibold mb-4">Add New Task</h3>
+            <input type="text" id="new-task-title" placeholder="Task title..." 
+                   class="w-full bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-solo-primary transition">
+            <div class="flex gap-2 mb-4">
+                <button onclick="setTaskPriority(0)" id="priority-btn-0" class="flex-1 py-2 rounded-lg border-2 border-red-500 text-red-500 hover:bg-red-500/20 transition">P0</button>
+                <button onclick="setTaskPriority(1)" id="priority-btn-1" class="flex-1 py-2 rounded-lg border-2 border-yellow-500 text-yellow-500 hover:bg-yellow-500/20 transition">P1</button>
+                <button onclick="setTaskPriority(2)" id="priority-btn-2" class="flex-1 py-2 rounded-lg border-2 border-blue-500 text-blue-500 hover:bg-blue-500/20 transition">P2</button>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeAddTask()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
+                <button onclick="submitTask()" class="flex-1 py-2 rounded-lg bg-solo-primary hover:bg-solo-primary/80 transition">Add Task</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-solo-dark border-t border-slate-700 px-6 py-3 mt-8">
+        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-500">
+            <span>SoLoVision LLC © 2026</span>
+            <span>Last sync: <span id="last-sync">--:--</span></span>
+        </div>
+    </footer>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>
