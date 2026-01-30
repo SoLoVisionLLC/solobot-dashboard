@@ -27,16 +27,16 @@ let newTaskColumn = 'todo';
 // INITIALIZATION
 // ===================
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadState();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadState();
     render();
     updateLastSync();
     
-    // Auto-refresh every 30 seconds
-    setInterval(() => {
-        loadState();
+    // Auto-refresh every 10 seconds (poll server state)
+    setInterval(async () => {
+        await loadState();
         render();
-    }, 30000);
+    }, 10000);
     
     // Enter key for note input
     document.getElementById('note-input').addEventListener('keypress', (e) => {
@@ -58,20 +58,35 @@ document.addEventListener('DOMContentLoaded', () => {
 // DATA PERSISTENCE
 // ===================
 
-function loadState() {
+// Try to load from server state.json first, fallback to localStorage
+async function loadState() {
+    try {
+        const response = await fetch('data/state.json?' + Date.now());
+        if (response.ok) {
+            const serverState = await response.json();
+            state = { ...state, ...serverState };
+            console.log('Loaded state from server');
+            return;
+        }
+    } catch (e) {
+        console.log('Server state not available, using localStorage');
+    }
+    
+    // Fallback to localStorage
     const saved = localStorage.getItem('solovision-dashboard');
     if (saved) {
         const parsed = JSON.parse(saved);
         state = { ...state, ...parsed };
     } else {
-        // Initialize with sample data
         initSampleData();
     }
 }
 
 function saveState() {
+    // Save to localStorage (for offline/local use)
     localStorage.setItem('solovision-dashboard', JSON.stringify(state));
     updateLastSync();
+    // Note: Server state is updated via CLI tool, not from browser
 }
 
 function initSampleData() {
