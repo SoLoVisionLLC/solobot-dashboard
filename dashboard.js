@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.2.0 - Archive + Instant Notify
+// Version: 2.3.0 - Archive Modal + Fixes
 
 // ===================
 // STATE MANAGEMENT
@@ -327,6 +327,20 @@ function render() {
     renderActivity();
     renderDocs();
     renderBulkActionBar();
+    updateArchiveBadge();
+}
+
+function updateArchiveBadge() {
+    const badgeEl = document.getElementById('archive-badge');
+    if (!badgeEl) return;
+    
+    const count = (state.tasks.archive || []).length;
+    badgeEl.textContent = count;
+    if (count > 0) {
+        badgeEl.classList.remove('hidden');
+    } else {
+        badgeEl.classList.add('hidden');
+    }
 }
 
 function renderStatus() {
@@ -375,7 +389,7 @@ function renderStatus() {
 }
 
 function renderTasks() {
-    ['todo', 'progress', 'done', 'archive'].forEach(column => {
+    ['todo', 'progress', 'done'].forEach(column => {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
         
@@ -745,6 +759,95 @@ function clearArchive() {
     addActivity('Cleared archived tasks', 'info');
     saveState();
     render();
+    renderArchiveModal();
+}
+
+// ===================
+// ARCHIVE MODAL
+// ===================
+
+function openArchiveModal() {
+    renderArchiveModal();
+    document.getElementById('archive-modal').classList.remove('hidden');
+}
+
+function closeArchiveModal() {
+    document.getElementById('archive-modal').classList.add('hidden');
+}
+
+function renderArchiveModal() {
+    const container = document.getElementById('archive-tasks-list');
+    const countEl = document.getElementById('archive-modal-count');
+    const badgeEl = document.getElementById('archive-badge');
+    
+    const archived = state.tasks.archive || [];
+    
+    // Update counts
+    if (countEl) countEl.textContent = archived.length;
+    if (badgeEl) {
+        badgeEl.textContent = archived.length;
+        if (archived.length > 0) {
+            badgeEl.classList.remove('hidden');
+        } else {
+            badgeEl.classList.add('hidden');
+        }
+    }
+    
+    if (!container) return;
+    
+    if (archived.length === 0) {
+        container.innerHTML = '<div class="text-gray-500 text-center py-8">No archived tasks</div>';
+        return;
+    }
+    
+    container.innerHTML = archived.map((task, index) => `
+        <div class="bg-solo-dark rounded-lg p-3 priority-p${task.priority} flex items-center justify-between group">
+            <div class="flex-1">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm">${escapeHtml(task.title)}</span>
+                    <span class="text-xs px-1.5 py-0.5 rounded ${getPriorityClass(task.priority)}">P${task.priority}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">Archived: ${formatDate(task.archived || task.completed || task.created)}</div>
+            </div>
+            <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                <button onclick="restoreFromArchive('${task.id}')" class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 rounded transition" title="Restore to To-Do">
+                    ↩ Restore
+                </button>
+                <button onclick="deleteFromArchive('${task.id}')" class="text-xs px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded transition" title="Delete permanently">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function restoreFromArchive(taskId) {
+    if (!state.tasks.archive) return;
+    
+    const taskIndex = state.tasks.archive.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+    
+    const task = state.tasks.archive.splice(taskIndex, 1)[0];
+    delete task.archived;
+    delete task.completed;
+    state.tasks.todo.unshift(task);
+    
+    addActivity(`Restored "${task.title}" from archive`, 'info');
+    saveState();
+    render();
+    renderArchiveModal();
+}
+
+function deleteFromArchive(taskId) {
+    if (!state.tasks.archive) return;
+    
+    const taskIndex = state.tasks.archive.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+    
+    const task = state.tasks.archive.splice(taskIndex, 1)[0];
+    addActivity(`Permanently deleted "${task.title}"`, 'info');
+    saveState();
+    renderArchiveModal();
 }
 
 // ===================
