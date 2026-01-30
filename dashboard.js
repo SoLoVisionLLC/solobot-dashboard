@@ -128,31 +128,50 @@ async function loadState() {
     if (localState && localState.localModified) {
         state = { ...state, ...localState };
         console.log('Using locally modified state');
-        return;
+    } else {
+        // Otherwise try to load from server
+        try {
+            const response = await fetch('data/state.json?' + Date.now());
+            if (response.ok) {
+                const serverState = await response.json();
+                // Ensure archive array exists
+                if (!serverState.tasks.archive) {
+                    serverState.tasks.archive = [];
+                }
+                state = { ...state, ...serverState };
+                console.log('Loaded state from server');
+            }
+        } catch (e) {
+            console.log('Server state not available, using localStorage');
+            // Fallback to localStorage
+            if (localState) {
+                state = { ...state, ...localState };
+            } else {
+                initSampleData();
+            }
+        }
     }
     
-    // Otherwise try to load from server
+    // Always fetch live console logs from VPS (Moltbot's real logs)
+    await fetchConsoleLogs();
+}
+
+// Fetch live Moltbot logs from VPS sync API
+async function fetchConsoleLogs() {
     try {
-        const response = await fetch('data/state.json?' + Date.now());
+        const response = await fetch('http://51.81.202.92:3456/api/state?' + Date.now());
         if (response.ok) {
-            const serverState = await response.json();
-            // Ensure archive array exists
-            if (!serverState.tasks.archive) {
-                serverState.tasks.archive = [];
+            const vpsState = await response.json();
+            if (vpsState.console && vpsState.console.logs) {
+                state.console = vpsState.console;
+                console.log('Loaded console logs from VPS:', vpsState.console.logs.length, 'entries');
             }
-            state = { ...state, ...serverState };
-            console.log('Loaded state from server');
-            return;
+            if (vpsState.live) {
+                state.live = { ...state.live, ...vpsState.live };
+            }
         }
     } catch (e) {
-        console.log('Server state not available, using localStorage');
-    }
-    
-    // Fallback to localStorage
-    if (localState) {
-        state = { ...state, ...localState };
-    } else {
-        initSampleData();
+        console.log('Could not fetch VPS console logs:', e.message);
     }
 }
 
