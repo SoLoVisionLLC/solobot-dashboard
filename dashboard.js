@@ -628,7 +628,13 @@ function renderStatus() {
             text.textContent = 'IDLE';
     }
     
-    modelEl.textContent = state.model;
+    modelEl.textContent = state.model || 'opus 4.5';
+    
+    // Update provider if element exists
+    const providerEl = document.getElementById('provider-name');
+    if (providerEl) {
+        providerEl.textContent = state.provider || 'anthropic';
+    }
     
     if (state.currentTask) {
         taskEl.classList.remove('hidden');
