@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.3.0 - Archive Modal + Fixes
+// Version: 2.3.1 - Syntax Fix
 
 // ===================
 // STATE MANAGEMENT
@@ -401,7 +401,7 @@ function renderTasks() {
                  draggable="true"
                  ondragstart="handleDragStart(event, '${task.id}', '${column}')"
                  ondragend="handleDragEnd(event)"
-                 onclick="openActionModal('${task.id}', '${column}')">`
+                 onclick="openActionModal('${task.id}', '${column}')">
                 <div class="flex items-start gap-3">
                     <input type="checkbox" 
                            class="mt-1 w-4 h-4 rounded border-slate-500 bg-solo-darker text-solo-primary focus:ring-solo-primary cursor-pointer"
