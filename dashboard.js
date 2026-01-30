@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.3.1 - Syntax Fix
+// Version: 2.4.0 - Persistent Local State
 
 // ===================
 // STATE MANAGEMENT
@@ -93,29 +93,53 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ===================
 
 async function loadState() {
+    // Check if we have local changes that should be preserved
+    const localSaved = localStorage.getItem('solovision-dashboard');
+    const localState = localSaved ? JSON.parse(localSaved) : null;
+    
+    // If local state has been modified, use it instead of server
+    if (localState && localState.localModified) {
+        state = { ...state, ...localState };
+        console.log('Using locally modified state');
+        return;
+    }
+    
+    // Otherwise try to load from server
     try {
         const response = await fetch('data/state.json?' + Date.now());
         if (response.ok) {
             const serverState = await response.json();
+            // Ensure archive array exists
+            if (!serverState.tasks.archive) {
+                serverState.tasks.archive = [];
+            }
             state = { ...state, ...serverState };
+            console.log('Loaded state from server');
             return;
         }
     } catch (e) {
         console.log('Server state not available, using localStorage');
     }
     
-    const saved = localStorage.getItem('solovision-dashboard');
-    if (saved) {
-        const parsed = JSON.parse(saved);
-        state = { ...state, ...parsed };
+    // Fallback to localStorage
+    if (localState) {
+        state = { ...state, ...localState };
     } else {
         initSampleData();
     }
 }
 
 function saveState() {
+    // Mark state as locally modified so it won't be overwritten by server
+    state.localModified = Date.now();
     localStorage.setItem('solovision-dashboard', JSON.stringify(state));
     updateLastSync();
+}
+
+function resetToServerState() {
+    // Clear local modifications and reload from server
+    localStorage.removeItem('solovision-dashboard');
+    location.reload();
 }
 
 function initSampleData() {
