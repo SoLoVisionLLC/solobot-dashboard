@@ -159,7 +159,9 @@ async function loadState() {
 // Fetch live Moltbot logs from VPS sync API
 async function fetchConsoleLogs() {
     try {
-        const response = await fetch('http://51.81.202.92:3456/api/state?' + Date.now());
+        const response = await fetch('http://51.81.202.92:3456/api/state', {
+            cache: 'no-store'  // Bypass cache without query string (VPS doesn't handle query params)
+        });
         if (response.ok) {
             const vpsState = await response.json();
             if (vpsState.console && vpsState.console.logs) {
