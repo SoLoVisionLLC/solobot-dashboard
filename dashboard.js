@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.1.0 - Drag & Drop Update
+// Version: 2.2.0 - Archive + Instant Notify
 
 // ===================
 // STATE MANAGEMENT
@@ -13,11 +13,13 @@ let state = {
     tasks: {
         todo: [],
         progress: [],
-        done: []
+        done: [],
+        archive: []
     },
     notes: [],
     activity: [],
-    docs: []
+    docs: [],
+    pendingNotify: null  // Set when task moves to In Progress - triggers SoLoBot pickup
 };
 
 let newTaskPriority = 1;
@@ -373,7 +375,7 @@ function renderStatus() {
 }
 
 function renderTasks() {
-    ['todo', 'progress', 'done'].forEach(column => {
+    ['todo', 'progress', 'done', 'archive'].forEach(column => {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
         
@@ -499,8 +501,9 @@ function openActionModal(taskId, column) {
     document.getElementById('action-priority-text').textContent = `Change Priority (P${task.priority})`;
     
     // Highlight current column button
-    ['todo', 'progress', 'done'].forEach(col => {
+    ['todo', 'progress', 'done', 'archive'].forEach(col => {
         const btn = document.getElementById(`action-move-${col}`);
+        if (!btn) return;
         if (col === column) {
             btn.classList.add('ring-2', 'ring-solo-primary', 'bg-slate-700');
         } else {
@@ -665,14 +668,52 @@ function moveTask(taskId, fromColumn, toColumn) {
     
     const task = state.tasks[fromColumn].splice(taskIndex, 1)[0];
     
-    if (toColumn === 'progress') task.started = Date.now();
+    if (toColumn === 'progress') {
+        task.started = Date.now();
+        // Set pending notify flag - SoLoBot will pick this up
+        state.pendingNotify = {
+            taskId: task.id,
+            title: task.title,
+            priority: task.priority,
+            time: Date.now()
+        };
+        showNotifyBanner(task.title);
+    }
     if (toColumn === 'done') task.completed = Date.now();
+    if (toColumn === 'archive') task.archived = Date.now();
     
     state.tasks[toColumn].push(task);
     addActivity(`Moved "${task.title}" → ${toColumn}`, 'info');
     closeAllTaskMenus();
     saveState();
     render();
+}
+
+function showNotifyBanner(taskTitle) {
+    // Show a brief banner that SoLoBot has been notified
+    let banner = document.getElementById('notify-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'notify-banner';
+        banner.className = 'fixed top-4 right-4 bg-solo-primary text-white px-4 py-3 rounded-lg shadow-xl z-50 flex items-center gap-3 animate-pulse';
+        document.body.appendChild(banner);
+    }
+    banner.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+        <span>🤖 SoLoBot notified: <strong>${taskTitle}</strong></span>
+    `;
+    banner.classList.remove('hidden');
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+        banner.classList.add('hidden');
+    }, 3000);
+}
+
+function archiveTask(taskId, column) {
+    moveTask(taskId, column, 'archive');
 }
 
 function deleteTask(taskId, column) {
@@ -692,6 +733,16 @@ function clearDone() {
     
     state.tasks.done = [];
     addActivity('Cleared completed tasks', 'info');
+    saveState();
+    render();
+}
+
+function clearArchive() {
+    if (!state.tasks.archive || state.tasks.archive.length === 0) return;
+    if (!confirm('Clear all archived tasks?')) return;
+    
+    state.tasks.archive = [];
+    addActivity('Cleared archived tasks', 'info');
     saveState();
     render();
 }

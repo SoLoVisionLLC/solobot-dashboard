@@ -125,7 +125,7 @@
                 </svg>
                 Task Board
             </h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 
                 <!-- To-Do Column -->
                 <div class="bg-solo-card rounded-lg p-4">
@@ -185,6 +185,27 @@
                          ondragenter="handleDragEnter(event, 'done')"
                          ondragleave="handleDragLeave(event, 'done')"
                          ondrop="handleDrop(event, 'done')">
+                        <!-- Tasks will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Archive Column -->
+                <div class="bg-solo-card rounded-lg p-4 opacity-75">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                            Archive
+                            <span id="archive-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
+                        </h3>
+                        <button onclick="clearArchive()" class="text-gray-500 hover:text-gray-300 transition text-xs">
+                            Clear
+                        </button>
+                    </div>
+                    <div id="archive-tasks" class="drop-zone space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto scrollbar-thin rounded-lg transition-all"
+                         ondragover="handleDragOver(event)"
+                         ondragenter="handleDragEnter(event, 'archive')"
+                         ondragleave="handleDragLeave(event, 'archive')"
+                         ondrop="handleDrop(event, 'archive')">
                         <!-- Tasks will be inserted here -->
                     </div>
                 </div>
@@ -341,6 +362,10 @@
                     <span class="w-3 h-3 rounded-full bg-green-500"></span>
                     <span>Move to Done</span>
                 </button>
+                <button id="action-move-archive" onclick="modalMoveTask('archive')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                    <span>📦 Archive</span>
+                </button>
             </div>
             
             <div class="border-t border-slate-600 pt-4 space-y-2">
@@ -396,6 +421,6 @@
         </div>
     </footer>
 
-    <script src="dashboard.js?v=2.1.0"></script>
+    <script src="dashboard.js?v=2.2.0"></script>
 </body>
 </html>
