@@ -166,9 +166,14 @@
                     </svg>
                     Task Board
                 </h2>
-                <button onclick="openArchiveModal()" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition">
-                    📦 View Archive <span id="archive-badge" class="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full hidden">0</span>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="openArchiveModal()" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition">
+                        📦 Archive <span id="archive-badge" class="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full hidden">0</span>
+                    </button>
+                    <button onclick="openSettingsModal()" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition">
+                        ⚙️ Settings
+                    </button>
+                </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
@@ -437,6 +442,153 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl border border-slate-600 max-h-[85vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-semibold flex items-center gap-2">
+                    ⚙️ Dashboard Settings
+                </h3>
+                <button onclick="closeSettingsModal()" class="text-gray-500 hover:text-white transition p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- SoLoBot Settings -->
+            <div class="mb-6">
+                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                    🤖 SoLoBot Behavior
+                </h4>
+                <div class="space-y-4 bg-solo-dark rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Task Pickup Frequency</div>
+                            <div class="text-xs text-gray-500">How often SoLoBot checks for In Progress tasks</div>
+                        </div>
+                        <select id="setting-pickup-freq" onchange="updateSetting('pickupFreq', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                            <option value="disabled">Disabled</option>
+                            <option value="60000">Every 1 min</option>
+                            <option value="300000">Every 5 min</option>
+                            <option value="1800000">Every 30 min</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Work Priority Order</div>
+                            <div class="text-xs text-gray-500">How tasks are prioritized</div>
+                        </div>
+                        <select id="setting-priority-order" onchange="updateSetting('priorityOrder', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                            <option value="priority">P0 → P1 → P2</option>
+                            <option value="fifo">First In, First Out</option>
+                            <option value="lifo">Last In, First Out</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dashboard Settings -->
+            <div class="mb-6">
+                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                    📊 Dashboard
+                </h4>
+                <div class="space-y-4 bg-solo-dark rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Auto-Refresh</div>
+                            <div class="text-xs text-gray-500">How often dashboard reloads data</div>
+                        </div>
+                        <select id="setting-refresh" onchange="updateSetting('refreshInterval', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                            <option value="5000">Every 5 sec</option>
+                            <option value="10000">Every 10 sec</option>
+                            <option value="30000">Every 30 sec</option>
+                            <option value="60000">Every 1 min</option>
+                            <option value="0">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Default New Task Priority</div>
+                            <div class="text-xs text-gray-500">Priority for new tasks</div>
+                        </div>
+                        <select id="setting-default-priority" onchange="updateSetting('defaultPriority', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                            <option value="0">P0 (Urgent)</option>
+                            <option value="1">P1 (Normal)</option>
+                            <option value="2">P2 (Low)</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Compact Mode</div>
+                            <div class="text-xs text-gray-500">Denser task cards</div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="setting-compact" onchange="updateSetting('compactMode', this.checked)" class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-solo-primary rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-solo-primary"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Show/Hide Panels -->
+            <div class="mb-6">
+                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                    👁️ Visible Panels
+                </h4>
+                <div class="space-y-3 bg-solo-dark rounded-lg p-4">
+                    <label class="flex items-center justify-between cursor-pointer">
+                        <span class="text-sm text-white">SoLoBot Live Panel</span>
+                        <input type="checkbox" id="setting-show-live" onchange="updateSetting('showLive', this.checked)" checked class="w-4 h-4 accent-solo-primary">
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer">
+                        <span class="text-sm text-white">Activity Log</span>
+                        <input type="checkbox" id="setting-show-activity" onchange="updateSetting('showActivity', this.checked)" checked class="w-4 h-4 accent-solo-primary">
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer">
+                        <span class="text-sm text-white">Notes Panel</span>
+                        <input type="checkbox" id="setting-show-notes" onchange="updateSetting('showNotes', this.checked)" checked class="w-4 h-4 accent-solo-primary">
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer">
+                        <span class="text-sm text-white">Product Status</span>
+                        <input type="checkbox" id="setting-show-products" onchange="updateSetting('showProducts', this.checked)" checked class="w-4 h-4 accent-solo-primary">
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer">
+                        <span class="text-sm text-white">Docs Hub</span>
+                        <input type="checkbox" id="setting-show-docs" onchange="updateSetting('showDocs', this.checked)" checked class="w-4 h-4 accent-solo-primary">
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Danger Zone -->
+            <div>
+                <h4 class="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
+                    ⚠️ Danger Zone
+                </h4>
+                <div class="space-y-3 bg-red-500/10 rounded-lg p-4 border border-red-500/20">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Reset Local Data</div>
+                            <div class="text-xs text-gray-500">Reload all data from server</div>
+                        </div>
+                        <button onclick="resetToServerState()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">Reset</button>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm text-white">Clear All Data</div>
+                            <div class="text-xs text-gray-500">Delete all local data and tasks</div>
+                        </div>
+                        <button onclick="clearAllData()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">Clear</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-slate-600 text-center text-xs text-gray-500">
+                Dashboard v2.6.0 • Changes save automatically
+            </div>
+        </div>
+    </div>
+
     <!-- Archive Modal -->
     <div id="archive-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
         <div class="bg-solo-card rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl border border-slate-600 max-h-[80vh] flex flex-col">
@@ -468,6 +620,6 @@
         </div>
     </footer>
 
-    <script src="dashboard.js?v=2.5.0"></script>
+    <script src="dashboard.js?v=2.6.0"></script>
 </body>
 </html>

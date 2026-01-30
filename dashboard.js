@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.5.0 - SoLoBot Live Panel
+// Version: 2.6.0 - Settings Page
 
 // ===================
 // STATE MANAGEMENT
@@ -36,6 +36,21 @@ let selectedTasks = new Set(); // Track selected task IDs
 let editingTaskId = null; // Currently editing task
 let currentModalTask = null; // Task being edited in modal
 let currentModalColumn = null; // Column of task being edited
+let refreshIntervalId = null; // Auto-refresh timer
+
+// Default settings
+const defaultSettings = {
+    pickupFreq: 'disabled',
+    priorityOrder: 'priority',
+    refreshInterval: '10000',
+    defaultPriority: '1',
+    compactMode: false,
+    showLive: true,
+    showActivity: true,
+    showNotes: true,
+    showProducts: true,
+    showDocs: true
+};
 
 // ===================
 // INITIALIZATION
@@ -967,6 +982,150 @@ function deleteFromArchive(taskId) {
     saveState();
     renderArchiveModal();
 }
+
+// ===================
+// SETTINGS
+// ===================
+
+function getSettings() {
+    const saved = localStorage.getItem('solovision-settings');
+    if (saved) {
+        return { ...defaultSettings, ...JSON.parse(saved) };
+    }
+    return { ...defaultSettings };
+}
+
+function saveSettings(settings) {
+    localStorage.setItem('solovision-settings', JSON.stringify(settings));
+}
+
+function openSettingsModal() {
+    loadSettingsIntoForm();
+    document.getElementById('settings-modal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    document.getElementById('settings-modal').classList.add('hidden');
+}
+
+function loadSettingsIntoForm() {
+    const settings = getSettings();
+    
+    // Dropdowns
+    const pickupFreq = document.getElementById('setting-pickup-freq');
+    if (pickupFreq) pickupFreq.value = settings.pickupFreq;
+    
+    const priorityOrder = document.getElementById('setting-priority-order');
+    if (priorityOrder) priorityOrder.value = settings.priorityOrder;
+    
+    const refresh = document.getElementById('setting-refresh');
+    if (refresh) refresh.value = settings.refreshInterval;
+    
+    const defaultPriority = document.getElementById('setting-default-priority');
+    if (defaultPriority) defaultPriority.value = settings.defaultPriority;
+    
+    // Checkboxes
+    const compact = document.getElementById('setting-compact');
+    if (compact) compact.checked = settings.compactMode;
+    
+    const showLive = document.getElementById('setting-show-live');
+    if (showLive) showLive.checked = settings.showLive;
+    
+    const showActivity = document.getElementById('setting-show-activity');
+    if (showActivity) showActivity.checked = settings.showActivity;
+    
+    const showNotes = document.getElementById('setting-show-notes');
+    if (showNotes) showNotes.checked = settings.showNotes;
+    
+    const showProducts = document.getElementById('setting-show-products');
+    if (showProducts) showProducts.checked = settings.showProducts;
+    
+    const showDocs = document.getElementById('setting-show-docs');
+    if (showDocs) showDocs.checked = settings.showDocs;
+}
+
+function updateSetting(key, value) {
+    const settings = getSettings();
+    settings[key] = value;
+    saveSettings(settings);
+    applySettings();
+    
+    // Special handling for pickup frequency - notify about cron change needed
+    if (key === 'pickupFreq') {
+        addActivity(`Task pickup frequency changed to ${value === 'disabled' ? 'disabled' : (parseInt(value)/60000) + ' min'}`, 'info');
+    }
+}
+
+function applySettings() {
+    const settings = getSettings();
+    
+    // Apply default priority
+    newTaskPriority = parseInt(settings.defaultPriority);
+    
+    // Apply auto-refresh interval
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+    }
+    const interval = parseInt(settings.refreshInterval);
+    if (interval > 0) {
+        refreshIntervalId = setInterval(async () => {
+            await loadState();
+            render();
+        }, interval);
+    }
+    
+    // Apply compact mode
+    document.body.classList.toggle('compact-mode', settings.compactMode);
+    
+    // Apply panel visibility
+    const livePanel = document.querySelector('section:has(#live-status-badge)')?.parentElement?.querySelector('section:first-of-type');
+    const livePanelSection = document.querySelector('.mb-6:has(#live-status-badge)');
+    if (livePanelSection) livePanelSection.style.display = settings.showLive ? '' : 'none';
+    
+    // We'll use IDs for the sections to toggle them
+    toggleSectionVisibility('activity', settings.showActivity);
+    toggleSectionVisibility('notes', settings.showNotes);
+    toggleSectionVisibility('products', settings.showProducts);
+    toggleSectionVisibility('docs', settings.showDocs);
+}
+
+function toggleSectionVisibility(sectionType, visible) {
+    // Find sections by their content/headers
+    const sections = document.querySelectorAll('main > section');
+    sections.forEach(section => {
+        const header = section.querySelector('h2');
+        if (!header) return;
+        
+        const text = header.textContent.toLowerCase();
+        if (sectionType === 'activity' && text.includes('activity')) {
+            section.closest('.grid')?.querySelector('.bg-solo-card:first-child')?.style.setProperty('display', visible ? '' : 'none');
+        }
+        if (sectionType === 'notes' && text.includes('notes')) {
+            section.closest('.grid')?.querySelector('.bg-solo-card:last-child')?.style.setProperty('display', visible ? '' : 'none');
+        }
+        if (sectionType === 'products' && text.includes('product')) {
+            section.style.display = visible ? '' : 'none';
+        }
+        if (sectionType === 'docs' && text.includes('docs')) {
+            section.style.display = visible ? '' : 'none';
+        }
+    });
+}
+
+function clearAllData() {
+    if (!confirm('This will delete ALL local data including tasks, notes, and activity. Are you sure?')) return;
+    if (!confirm('Really? This cannot be undone!')) return;
+    
+    localStorage.removeItem('solovision-dashboard');
+    localStorage.removeItem('solovision-settings');
+    location.reload();
+}
+
+// Apply settings on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(applySettings, 100);
+});
 
 // ===================
 // NOTE FUNCTIONS
