@@ -43,6 +43,34 @@
         .priority-p0 { border-left: 4px solid #ef4444; }
         .priority-p1 { border-left: 4px solid #eab308; }
         .priority-p2 { border-left: 4px solid #3b82f6; }
+        
+        /* Task card hover effects */
+        .task-card:hover .task-quick-actions {
+            opacity: 1;
+            transform: translateY(-50%) translateX(4px);
+        }
+        .task-quick-actions {
+            transition: all 0.2s ease;
+        }
+        
+        /* Checkbox styling */
+        input[type="checkbox"] {
+            accent-color: #6366f1;
+        }
+        
+        /* Selected task glow */
+        .task-card.ring-2 {
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+        }
+        
+        /* Bulk action bar animation */
+        #bulk-action-bar {
+            animation: slideUp 0.2s ease;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translate(-50%, 20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
     </style>
 </head>
 <body class="bg-solo-darker text-gray-100 min-h-screen">
@@ -269,6 +297,81 @@
             <div class="flex gap-2">
                 <button onclick="closeAddTask()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
                 <button onclick="submitTask()" class="flex-1 py-2 rounded-lg bg-solo-primary hover:bg-solo-primary/80 transition">Add Task</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Action Modal -->
+    <div id="task-action-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-slate-600">
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Task Actions</h3>
+                    <p id="action-modal-task-title" class="text-sm text-gray-400 mt-1 truncate max-w-[250px]"></p>
+                </div>
+                <button onclick="closeActionModal()" class="text-gray-500 hover:text-white transition p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="space-y-2 mb-4">
+                <button id="action-move-todo" onclick="modalMoveTask('todo')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-slate-500"></span>
+                    <span>Move to To-Do</span>
+                </button>
+                <button id="action-move-progress" onclick="modalMoveTask('progress')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                    <span>Move to In Progress</span>
+                </button>
+                <button id="action-move-done" onclick="modalMoveTask('done')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span>Move to Done</span>
+                </button>
+            </div>
+            
+            <div class="border-t border-slate-600 pt-4 space-y-2">
+                <button onclick="modalEditTitle()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                    <span>✏️</span>
+                    <span>Edit Title</span>
+                </button>
+                <button onclick="modalCyclePriority()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                    <span>🔄</span>
+                    <span id="action-priority-text">Change Priority (P1)</span>
+                </button>
+            </div>
+            
+            <div class="border-t border-slate-600 pt-4 mt-4">
+                <button onclick="modalDeleteTask()" class="w-full text-left px-4 py-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition flex items-center gap-3">
+                    <span>🗑️</span>
+                    <span>Delete Task</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Title Modal -->
+    <div id="edit-title-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-slate-600">
+            <h3 class="text-lg font-semibold mb-4">Edit Task Title</h3>
+            <input type="text" id="edit-title-input" placeholder="Task title..." 
+                   class="w-full bg-solo-dark border border-slate-600 rounded-lg px-4 py-3 mb-4 focus:outline-none focus:border-solo-primary transition">
+            <div class="flex gap-2">
+                <button onclick="closeEditTitleModal()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
+                <button onclick="saveEditedTitle()" class="flex-1 py-2 rounded-lg bg-solo-primary hover:bg-solo-primary/80 transition">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-slate-600">
+            <h3 class="text-lg font-semibold mb-2">Delete Task?</h3>
+            <p id="delete-modal-task-title" class="text-sm text-gray-400 mb-6 truncate"></p>
+            <div class="flex gap-2">
+                <button onclick="closeDeleteModal()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
+                <button onclick="confirmDeleteTask()" class="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 transition">Delete</button>
             </div>
         </div>
     </div>

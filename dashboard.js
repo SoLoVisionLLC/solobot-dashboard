@@ -1,12 +1,12 @@
 // SoLoVision Command Center Dashboard
-// Version: 1.0.0
+// Version: 2.0.0 - Bulk Actions Update
 
 // ===================
 // STATE MANAGEMENT
 // ===================
 
 let state = {
-    status: 'idle', // idle, working, thinking, offline
+    status: 'idle',
     model: 'opus 4.5',
     currentTask: null,
     subagent: null,
@@ -22,6 +22,10 @@ let state = {
 
 let newTaskPriority = 1;
 let newTaskColumn = 'todo';
+let selectedTasks = new Set(); // Track selected task IDs
+let editingTaskId = null; // Currently editing task
+let currentModalTask = null; // Task being edited in modal
+let currentModalColumn = null; // Column of task being edited
 
 // ===================
 // INITIALIZATION
@@ -32,18 +36,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     render();
     updateLastSync();
     
-    // Auto-refresh every 10 seconds (poll server state)
+    // Auto-refresh every 10 seconds
     setInterval(async () => {
         await loadState();
         render();
     }, 10000);
     
-    // Enter key for note input
+    // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') addNote();
     });
     
-    // Enter key for task input
     document.getElementById('new-task-title').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') submitTask();
     });
@@ -52,27 +55,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('docs-search').addEventListener('input', (e) => {
         renderDocs(e.target.value);
     });
+    
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.task-menu') && !e.target.closest('.task-menu-btn')) {
+            closeAllTaskMenus();
+        }
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeAddTask();
+            closeAllTaskMenus();
+            closeActionModal();
+            closeEditTitleModal();
+            closeDeleteModal();
+            clearSelection();
+        }
+        // Ctrl+A to select all visible tasks
+        if (e.ctrlKey && e.key === 'a' && !e.target.matches('input, textarea')) {
+            e.preventDefault();
+            selectAllTasks();
+        }
+    });
+    
+    // Enter key for edit title modal
+    document.getElementById('edit-title-input')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') saveEditedTitle();
+    });
 });
 
 // ===================
 // DATA PERSISTENCE
 // ===================
 
-// Try to load from server state.json first, fallback to localStorage
 async function loadState() {
     try {
         const response = await fetch('data/state.json?' + Date.now());
         if (response.ok) {
             const serverState = await response.json();
             state = { ...state, ...serverState };
-            console.log('Loaded state from server');
             return;
         }
     } catch (e) {
         console.log('Server state not available, using localStorage');
     }
     
-    // Fallback to localStorage
     const saved = localStorage.getItem('solovision-dashboard');
     if (saved) {
         const parsed = JSON.parse(saved);
@@ -83,10 +112,8 @@ async function loadState() {
 }
 
 function saveState() {
-    // Save to localStorage (for offline/local use)
     localStorage.setItem('solovision-dashboard', JSON.stringify(state));
     updateLastSync();
-    // Note: Server state is updated via CLI tool, not from browser
 }
 
 function initSampleData() {
@@ -95,33 +122,130 @@ function initSampleData() {
             { id: 't1', title: 'Review PRD v2', priority: 0, created: Date.now() },
             { id: 't2', title: 'Set up heartbeat schedule', priority: 1, created: Date.now() }
         ],
-        progress: [
-            { id: 't3', title: 'Build dashboard UI', priority: 0, created: Date.now(), started: Date.now() }
-        ],
-        done: [
-            { id: 't4', title: 'Create Google OAuth', priority: 1, created: Date.now() - 3600000, completed: Date.now() },
-            { id: 't5', title: 'Write PRD v2', priority: 0, created: Date.now() - 7200000, completed: Date.now() - 1800000 }
-        ]
+        progress: [],
+        done: []
     };
-    
-    state.notes = [
-        { id: 'n1', text: 'Remember to update RUNNING-CONTEXT.md', created: Date.now() - 1800000, seen: true },
-        { id: 'n2', text: 'Check if OAuth tokens need refresh', created: Date.now(), seen: false }
-    ];
-    
-    state.activity = [
-        { time: Date.now() - 3600000, action: 'Completed Google OAuth setup', type: 'success' },
-        { time: Date.now() - 1800000, action: 'Created PRD v2 with all features', type: 'success' },
-        { time: Date.now() - 900000, action: 'Uploaded PRD to Google Drive', type: 'info' },
-        { time: Date.now(), action: 'Started building dashboard UI', type: 'info' }
-    ];
-    
-    state.docs = [
-        { id: 'd1', name: 'PRD-SoLoVision-Dashboard-v2', type: 'doc', url: 'https://docs.google.com/document/d/17FHVOwZECJTjkLS8XEra0LSt5OXhd_ySzC4CYH0oD1U/edit', updated: Date.now() },
-        { id: 'd2', name: 'SoLoBot Dashboard Inspiration', type: 'txt', url: 'https://drive.google.com/file/d/1rf4t1Zo_3dua56pSng5UIAzS7D2Y47Fm/view', updated: Date.now() - 86400000 }
-    ];
-    
+    state.notes = [];
+    state.activity = [];
+    state.docs = [];
     saveState();
+}
+
+// ===================
+// SELECTION MANAGEMENT
+// ===================
+
+function toggleTaskSelection(taskId, event) {
+    event.stopPropagation();
+    
+    if (selectedTasks.has(taskId)) {
+        selectedTasks.delete(taskId);
+    } else {
+        selectedTasks.add(taskId);
+    }
+    
+    renderTasks();
+    renderBulkActionBar();
+}
+
+function selectAllTasks() {
+    ['todo', 'progress', 'done'].forEach(column => {
+        state.tasks[column].forEach(task => {
+            selectedTasks.add(task.id);
+        });
+    });
+    renderTasks();
+    renderBulkActionBar();
+}
+
+function clearSelection() {
+    selectedTasks.clear();
+    renderTasks();
+    renderBulkActionBar();
+}
+
+function getSelectedCount() {
+    return selectedTasks.size;
+}
+
+// ===================
+// BULK ACTIONS
+// ===================
+
+function renderBulkActionBar() {
+    let bar = document.getElementById('bulk-action-bar');
+    
+    if (selectedTasks.size === 0) {
+        if (bar) bar.remove();
+        return;
+    }
+    
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'bulk-action-bar';
+        bar.className = 'fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-solo-card border border-slate-600 rounded-xl shadow-2xl px-6 py-4 flex items-center gap-4 z-50';
+        document.body.appendChild(bar);
+    }
+    
+    bar.innerHTML = `
+        <span class="text-sm font-medium text-solo-accent">${selectedTasks.size} selected</span>
+        <div class="h-6 w-px bg-slate-600"></div>
+        <button onclick="bulkMove('todo')" class="px-3 py-1.5 text-sm bg-slate-600 hover:bg-slate-500 rounded-lg transition flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span> To-Do
+        </button>
+        <button onclick="bulkMove('progress')" class="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-500 rounded-lg transition flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-yellow-400"></span> In Progress
+        </button>
+        <button onclick="bulkMove('done')" class="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-500 rounded-lg transition flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-green-400"></span> Done
+        </button>
+        <div class="h-6 w-px bg-slate-600"></div>
+        <button onclick="bulkDelete()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">
+            🗑️ Delete
+        </button>
+        <button onclick="clearSelection()" class="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition">
+            ✕ Cancel
+        </button>
+    `;
+}
+
+function bulkMove(toColumn) {
+    const tasksToMove = [];
+    
+    ['todo', 'progress', 'done'].forEach(fromColumn => {
+        state.tasks[fromColumn] = state.tasks[fromColumn].filter(task => {
+            if (selectedTasks.has(task.id)) {
+                if (toColumn === 'progress') task.started = Date.now();
+                if (toColumn === 'done') task.completed = Date.now();
+                tasksToMove.push(task);
+                return false;
+            }
+            return true;
+        });
+    });
+    
+    state.tasks[toColumn].push(...tasksToMove);
+    addActivity(`Moved ${tasksToMove.length} tasks to ${toColumn}`, 'info');
+    
+    clearSelection();
+    saveState();
+    render();
+}
+
+function bulkDelete() {
+    if (!confirm(`Delete ${selectedTasks.size} selected tasks?`)) return;
+    
+    let deletedCount = 0;
+    ['todo', 'progress', 'done'].forEach(column => {
+        const before = state.tasks[column].length;
+        state.tasks[column] = state.tasks[column].filter(task => !selectedTasks.has(task.id));
+        deletedCount += before - state.tasks[column].length;
+    });
+    
+    addActivity(`Deleted ${deletedCount} tasks`, 'info');
+    clearSelection();
+    saveState();
+    render();
 }
 
 // ===================
@@ -134,6 +258,7 @@ function render() {
     renderNotes();
     renderActivity();
     renderDocs();
+    renderBulkActionBar();
 }
 
 function renderStatus() {
@@ -145,7 +270,6 @@ function renderStatus() {
     const subagentBanner = document.getElementById('subagent-banner');
     const subagentTask = document.getElementById('subagent-task');
     
-    // Status indicator
     indicator.className = 'w-3 h-3 rounded-full';
     switch(state.status) {
         case 'working':
@@ -165,10 +289,8 @@ function renderStatus() {
             text.textContent = 'IDLE';
     }
     
-    // Model
     modelEl.textContent = state.model;
     
-    // Current task
     if (state.currentTask) {
         taskEl.classList.remove('hidden');
         taskName.textContent = state.currentTask;
@@ -176,7 +298,6 @@ function renderStatus() {
         taskEl.classList.add('hidden');
     }
     
-    // Sub-agent
     if (state.subagent) {
         subagentBanner.classList.remove('hidden');
         subagentTask.textContent = state.subagent;
@@ -190,16 +311,43 @@ function renderTasks() {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
         
-        container.innerHTML = state.tasks[column].map(task => `
-            <div class="bg-solo-dark rounded-lg p-3 priority-p${task.priority} cursor-pointer hover:bg-slate-700/50 transition" 
-                 onclick="showTaskMenu('${task.id}', '${column}')">
-                <div class="flex items-start justify-between">
-                    <span class="text-sm">${escapeHtml(task.title)}</span>
-                    <span class="text-xs px-1.5 py-0.5 rounded ${getPriorityClass(task.priority)}">P${task.priority}</span>
+        container.innerHTML = state.tasks[column].map((task, index) => {
+            const isSelected = selectedTasks.has(task.id);
+            return `
+            <div class="task-card bg-solo-dark rounded-lg p-3 priority-p${task.priority} ${isSelected ? 'ring-2 ring-solo-accent' : ''} transition group relative cursor-pointer hover:bg-slate-700/50" 
+                 data-task-id="${task.id}" data-column="${column}"
+                 onclick="openActionModal('${task.id}', '${column}')">
+                <div class="flex items-start gap-3">
+                    <input type="checkbox" 
+                           class="mt-1 w-4 h-4 rounded border-slate-500 bg-solo-darker text-solo-primary focus:ring-solo-primary cursor-pointer"
+                           ${isSelected ? 'checked' : ''}
+                           onclick="toggleTaskSelection('${task.id}', event)">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-start justify-between gap-2">
+                            <span class="text-sm ${column === 'done' ? 'line-through text-gray-500' : ''}">${escapeHtml(task.title)}</span>
+                            <div class="flex items-center gap-1">
+                                <span class="text-xs px-1.5 py-0.5 rounded ${getPriorityClass(task.priority)}">P${task.priority}</span>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">#${index + 1} • ${formatTime(task.created)}</div>
+                    </div>
                 </div>
-                <div class="text-xs text-gray-500 mt-2">${formatTime(task.created)}</div>
+                
+                <!-- Quick action buttons (visible on hover) -->
+                <div class="task-quick-actions absolute -right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition flex flex-col gap-1">
+                    ${column !== 'done' ? `
+                        <button onclick="quickMoveTask('${task.id}', '${column}', 'done', event)" 
+                                class="w-8 h-8 bg-green-600 hover:bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg"
+                                title="Mark Done">✓</button>
+                    ` : ''}
+                    ${column === 'done' ? `
+                        <button onclick="quickMoveTask('${task.id}', '${column}', 'todo', event)" 
+                                class="w-8 h-8 bg-slate-600 hover:bg-slate-500 rounded-full flex items-center justify-center text-white shadow-lg"
+                                title="Reopen">↩</button>
+                    ` : ''}
+                </div>
             </div>
-        `).join('');
+        `}).join('');
         
         count.textContent = state.tasks[column].length;
     });
@@ -220,7 +368,7 @@ function renderNotes() {
 
 function renderActivity() {
     const container = document.getElementById('activity-log');
-    container.innerHTML = state.activity.slice().reverse().map(entry => `
+    container.innerHTML = state.activity.slice().reverse().slice(0, 20).map(entry => `
         <div class="flex items-start gap-3 text-sm">
             <span class="text-gray-500 whitespace-nowrap">${formatTime(entry.time)}</span>
             <span class="${entry.type === 'success' ? 'text-green-400' : entry.type === 'error' ? 'text-red-400' : 'text-gray-300'}">
@@ -228,9 +376,6 @@ function renderActivity() {
             </span>
         </div>
     `).join('');
-    
-    // Scroll to bottom
-    container.scrollTop = container.scrollHeight;
 }
 
 function renderDocs(filter = '') {
@@ -255,7 +400,137 @@ function renderDocs(filter = '') {
 }
 
 // ===================
-// TASK FUNCTIONS
+// TASK MENU FUNCTIONS
+// ===================
+
+function toggleTaskMenu(taskId, column, event) {
+    event.stopPropagation();
+    openActionModal(taskId, column);
+}
+
+function closeAllTaskMenus() {
+    document.querySelectorAll('.task-menu').forEach(menu => {
+        menu.classList.add('hidden');
+    });
+}
+
+// ===================
+// ACTION MODAL FUNCTIONS
+// ===================
+
+function openActionModal(taskId, column) {
+    const task = state.tasks[column].find(t => t.id === taskId);
+    if (!task) return;
+    
+    currentModalTask = task;
+    currentModalColumn = column;
+    
+    // Set task title in modal
+    document.getElementById('action-modal-task-title').textContent = task.title;
+    document.getElementById('action-priority-text').textContent = `Change Priority (P${task.priority})`;
+    
+    // Highlight current column button
+    ['todo', 'progress', 'done'].forEach(col => {
+        const btn = document.getElementById(`action-move-${col}`);
+        if (col === column) {
+            btn.classList.add('ring-2', 'ring-solo-primary', 'bg-slate-700');
+        } else {
+            btn.classList.remove('ring-2', 'ring-solo-primary', 'bg-slate-700');
+        }
+    });
+    
+    document.getElementById('task-action-modal').classList.remove('hidden');
+}
+
+function closeActionModal() {
+    document.getElementById('task-action-modal').classList.add('hidden');
+    currentModalTask = null;
+    currentModalColumn = null;
+}
+
+function modalMoveTask(toColumn) {
+    if (!currentModalTask || !currentModalColumn) return;
+    if (currentModalColumn === toColumn) {
+        closeActionModal();
+        return;
+    }
+    
+    moveTask(currentModalTask.id, currentModalColumn, toColumn);
+    closeActionModal();
+}
+
+function modalEditTitle() {
+    if (!currentModalTask) return;
+    
+    closeActionModal();
+    document.getElementById('edit-title-input').value = currentModalTask.title;
+    document.getElementById('edit-title-modal').classList.remove('hidden');
+    document.getElementById('edit-title-input').focus();
+    document.getElementById('edit-title-input').select();
+}
+
+function closeEditTitleModal() {
+    document.getElementById('edit-title-modal').classList.add('hidden');
+}
+
+function saveEditedTitle() {
+    if (!currentModalTask || !currentModalColumn) return;
+    
+    const newTitle = document.getElementById('edit-title-input').value.trim();
+    if (newTitle && newTitle !== currentModalTask.title) {
+        currentModalTask.title = newTitle;
+        addActivity(`Renamed task to: ${newTitle}`, 'info');
+        saveState();
+        render();
+    }
+    
+    closeEditTitleModal();
+    currentModalTask = null;
+    currentModalColumn = null;
+}
+
+function modalCyclePriority() {
+    if (!currentModalTask || !currentModalColumn) return;
+    
+    currentModalTask.priority = (currentModalTask.priority + 1) % 3;
+    document.getElementById('action-priority-text').textContent = `Change Priority (P${currentModalTask.priority})`;
+    addActivity(`Changed "${currentModalTask.title}" to P${currentModalTask.priority}`, 'info');
+    saveState();
+    render();
+    
+    // Keep modal open to allow further changes
+}
+
+function modalDeleteTask() {
+    if (!currentModalTask) return;
+    
+    closeActionModal();
+    document.getElementById('delete-modal-task-title').textContent = `"${currentModalTask.title}"`;
+    document.getElementById('confirm-delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('confirm-delete-modal').classList.add('hidden');
+}
+
+function confirmDeleteTask() {
+    if (!currentModalTask || !currentModalColumn) return;
+    
+    const taskIndex = state.tasks[currentModalColumn].findIndex(t => t.id === currentModalTask.id);
+    if (taskIndex !== -1) {
+        const task = state.tasks[currentModalColumn].splice(taskIndex, 1)[0];
+        addActivity(`Deleted: ${task.title}`, 'info');
+        saveState();
+        render();
+    }
+    
+    closeDeleteModal();
+    currentModalTask = null;
+    currentModalColumn = null;
+}
+
+// ===================
+// TASK ACTIONS
 // ===================
 
 function openAddTask(column) {
@@ -308,19 +583,14 @@ function submitTask() {
     closeAddTask();
 }
 
-function showTaskMenu(taskId, column) {
-    const task = state.tasks[column].find(t => t.id === taskId);
-    if (!task) return;
-    
-    const action = prompt(`Task: ${task.title}\n\nActions:\n1. Move to To-Do\n2. Move to In Progress\n3. Move to Done\n4. Delete\n\nEnter number:`);
-    
-    if (action === '1') moveTask(taskId, column, 'todo');
-    else if (action === '2') moveTask(taskId, column, 'progress');
-    else if (action === '3') moveTask(taskId, column, 'done');
-    else if (action === '4') deleteTask(taskId, column);
+function quickMoveTask(taskId, fromColumn, toColumn, event) {
+    event.stopPropagation();
+    moveTask(taskId, fromColumn, toColumn);
 }
 
 function moveTask(taskId, fromColumn, toColumn) {
+    if (fromColumn === toColumn) return;
+    
     const taskIndex = state.tasks[fromColumn].findIndex(t => t.id === taskId);
     if (taskIndex === -1) return;
     
@@ -330,19 +600,21 @@ function moveTask(taskId, fromColumn, toColumn) {
     if (toColumn === 'done') task.completed = Date.now();
     
     state.tasks[toColumn].push(task);
-    addActivity(`Moved "${task.title}" to ${toColumn}`, 'info');
+    addActivity(`Moved "${task.title}" → ${toColumn}`, 'info');
+    closeAllTaskMenus();
     saveState();
     render();
 }
 
 function deleteTask(taskId, column) {
-    const taskIndex = state.tasks[column].findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
+    const task = state.tasks[column].find(t => t.id === taskId);
+    if (!task) return;
     
-    const task = state.tasks[column].splice(taskIndex, 1)[0];
-    addActivity(`Deleted task: ${task.title}`, 'info');
-    saveState();
-    render();
+    // Use modal instead of confirm
+    currentModalTask = task;
+    currentModalColumn = column;
+    document.getElementById('delete-modal-task-title').textContent = `"${task.title}"`;
+    document.getElementById('confirm-delete-modal').classList.remove('hidden');
 }
 
 function clearDone() {
@@ -372,7 +644,7 @@ function addNote() {
     };
     
     state.notes.unshift(note);
-    addActivity(`Note added: "${text.substring(0, 30)}..."`, 'info');
+    addActivity(`Note: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`, 'info');
     saveState();
     render();
     input.value = '';
@@ -389,7 +661,6 @@ function addActivity(action, type = 'info') {
         type
     });
     
-    // Keep only last 100 entries
     if (state.activity.length > 100) {
         state.activity = state.activity.slice(-100);
     }
@@ -432,28 +703,54 @@ function escapeHtml(text) {
 }
 
 // ===================
-// API FUNCTIONS (Future)
+// PUBLIC API
 // ===================
 
-// These will be implemented for AI integration
-async function fetchState() {
-    // TODO: Fetch state from JSON file or API
-}
-
-async function pushState() {
-    // TODO: Push state to JSON file or API
-}
-
-// Export for external access
 window.dashboardAPI = {
     getState: () => state,
     setState: (newState) => { state = { ...state, ...newState }; saveState(); render(); },
-    addTask: (title, priority = 1) => { submitTask(); },
+    addTask: (title, priority = 1, column = 'todo') => {
+        const task = { id: 't' + Date.now(), title, priority, created: Date.now() };
+        state.tasks[column].push(task);
+        addActivity(`Added: ${title}`, 'info');
+        saveState();
+        render();
+        return task.id;
+    },
+    moveTask: (taskId, toColumn) => {
+        ['todo', 'progress', 'done'].forEach(col => {
+            const idx = state.tasks[col].findIndex(t => t.id === taskId);
+            if (idx !== -1) moveTask(taskId, col, toColumn);
+        });
+    },
+    deleteTask: (taskId) => {
+        ['todo', 'progress', 'done'].forEach(col => {
+            const idx = state.tasks[col].findIndex(t => t.id === taskId);
+            if (idx !== -1) {
+                state.tasks[col].splice(idx, 1);
+                saveState();
+                render();
+            }
+        });
+    },
     addNote: (text) => { document.getElementById('note-input').value = text; addNote(); },
     setStatus: (status, task = null) => { state.status = status; state.currentTask = task; saveState(); renderStatus(); },
     setSubagent: (task) => { state.subagent = task; renderStatus(); },
     markNoteSeen: (id) => { const note = state.notes.find(n => n.id === id); if (note) { note.seen = true; saveState(); render(); } },
-    addActivity: (action, type) => { addActivity(action, type); saveState(); render(); }
+    addActivity: (action, type) => { addActivity(action, type); saveState(); render(); },
+    getTasks: () => state.tasks,
+    listTasks: () => {
+        let list = [];
+        let num = 1;
+        ['todo', 'progress', 'done'].forEach(col => {
+            state.tasks[col].forEach(t => {
+                list.push({ num: num++, id: t.id, title: t.title, column: col, priority: t.priority });
+            });
+        });
+        return list;
+    }
 };
 
-console.log('SoLoVision Dashboard loaded. Access API via window.dashboardAPI');
+console.log('SoLoVision Dashboard v2.0 loaded');
+console.log('Features: Bulk selection, quick actions, context menus');
+console.log('Shortcuts: Ctrl+A (select all), Esc (clear selection)');
