@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.0.0 - Bulk Actions Update
+// Version: 2.1.0 - Drag & Drop Update
 
 // ===================
 // STATE MANAGEMENT
@@ -129,6 +129,72 @@ function initSampleData() {
     state.activity = [];
     state.docs = [];
     saveState();
+}
+
+// ===================
+// DRAG AND DROP
+// ===================
+
+let draggedTaskId = null;
+let draggedFromColumn = null;
+
+function handleDragStart(e, taskId, column) {
+    draggedTaskId = taskId;
+    draggedFromColumn = column;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
+    
+    // Add dragging class after a tiny delay (so the drag image captures properly)
+    setTimeout(() => {
+        e.target.classList.add('opacity-50', 'scale-95');
+    }, 0);
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('opacity-50', 'scale-95');
+    draggedTaskId = null;
+    draggedFromColumn = null;
+    
+    // Remove all drop zone highlights
+    document.querySelectorAll('.drop-zone').forEach(zone => {
+        zone.classList.remove('ring-2', 'ring-solo-accent', 'bg-solo-accent/10');
+    });
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDragEnter(e, column) {
+    e.preventDefault();
+    const dropZone = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
+    if (dropZone && draggedFromColumn !== column) {
+        dropZone.classList.add('ring-2', 'ring-solo-accent', 'bg-solo-accent/10');
+    }
+}
+
+function handleDragLeave(e, column) {
+    const dropZone = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
+    // Only remove highlight if we're actually leaving the drop zone (not entering a child)
+    if (dropZone && !dropZone.contains(e.relatedTarget)) {
+        dropZone.classList.remove('ring-2', 'ring-solo-accent', 'bg-solo-accent/10');
+    }
+}
+
+function handleDrop(e, toColumn) {
+    e.preventDefault();
+    
+    const dropZone = document.getElementById(`${toColumn === 'progress' ? 'progress' : toColumn}-tasks`);
+    dropZone?.classList.remove('ring-2', 'ring-solo-accent', 'bg-solo-accent/10');
+    
+    if (!draggedTaskId || !draggedFromColumn || draggedFromColumn === toColumn) {
+        return;
+    }
+    
+    moveTask(draggedTaskId, draggedFromColumn, toColumn);
+    draggedTaskId = null;
+    draggedFromColumn = null;
 }
 
 // ===================
@@ -314,9 +380,12 @@ function renderTasks() {
         container.innerHTML = state.tasks[column].map((task, index) => {
             const isSelected = selectedTasks.has(task.id);
             return `
-            <div class="task-card bg-solo-dark rounded-lg p-3 priority-p${task.priority} ${isSelected ? 'ring-2 ring-solo-accent' : ''} transition group relative cursor-pointer hover:bg-slate-700/50" 
+            <div class="task-card bg-solo-dark rounded-lg p-3 priority-p${task.priority} ${isSelected ? 'ring-2 ring-solo-accent' : ''} transition group relative cursor-grab hover:bg-slate-700/50 active:cursor-grabbing" 
                  data-task-id="${task.id}" data-column="${column}"
-                 onclick="openActionModal('${task.id}', '${column}')">
+                 draggable="true"
+                 ondragstart="handleDragStart(event, '${task.id}', '${column}')"
+                 ondragend="handleDragEnd(event)"
+                 onclick="openActionModal('${task.id}', '${column}')">`
                 <div class="flex items-start gap-3">
                     <input type="checkbox" 
                            class="mt-1 w-4 h-4 rounded border-slate-500 bg-solo-darker text-solo-primary focus:ring-solo-primary cursor-pointer"

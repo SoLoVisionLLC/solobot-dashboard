@@ -141,7 +141,11 @@
                             </svg>
                         </button>
                     </div>
-                    <div id="todo-tasks" class="space-y-2 min-h-[200px]">
+                    <div id="todo-tasks" class="drop-zone space-y-2 min-h-[200px] rounded-lg transition-all"
+                         ondragover="handleDragOver(event)"
+                         ondragenter="handleDragEnter(event, 'todo')"
+                         ondragleave="handleDragLeave(event, 'todo')"
+                         ondrop="handleDrop(event, 'todo')">
                         <!-- Tasks will be inserted here -->
                     </div>
                 </div>
@@ -155,7 +159,11 @@
                             <span id="progress-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
                         </h3>
                     </div>
-                    <div id="progress-tasks" class="space-y-2 min-h-[200px]">
+                    <div id="progress-tasks" class="drop-zone space-y-2 min-h-[200px] rounded-lg transition-all"
+                         ondragover="handleDragOver(event)"
+                         ondragenter="handleDragEnter(event, 'progress')"
+                         ondragleave="handleDragLeave(event, 'progress')"
+                         ondrop="handleDrop(event, 'progress')">
                         <!-- Tasks will be inserted here -->
                     </div>
                 </div>
@@ -172,7 +180,11 @@
                             Clear
                         </button>
                     </div>
-                    <div id="done-tasks" class="space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto scrollbar-thin">
+                    <div id="done-tasks" class="drop-zone space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto scrollbar-thin rounded-lg transition-all"
+                         ondragover="handleDragOver(event)"
+                         ondragenter="handleDragEnter(event, 'done')"
+                         ondragleave="handleDragLeave(event, 'done')"
+                         ondrop="handleDrop(event, 'done')">
                         <!-- Tasks will be inserted here -->
                     </div>
                 </div>
@@ -384,6 +396,6 @@
         </div>
     </footer>
 
-    <script src="dashboard.js"></script>
+    <script src="dashboard.js?v=2.1.0"></script>
 </body>
 </html>
