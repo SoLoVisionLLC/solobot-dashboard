@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 2.7.0 - Terminal Console
+// Version: 2.8.0 - Real-time VPS Sync
 
 // ===================
 // STATE MANAGEMENT
@@ -156,11 +156,53 @@ async function loadState() {
     }
 }
 
-function saveState() {
-    // Mark state as locally modified so it won't be overwritten by server
+const SYNC_API = 'http://51.81.202.92:3456/api/sync';
+
+async function saveState(changeDescription = null) {
+    // Mark state as locally modified
     state.localModified = Date.now();
+    if (changeDescription) {
+        state.lastChange = changeDescription;
+    }
+    
+    // Save locally first (fast)
     localStorage.setItem('solovision-dashboard', JSON.stringify(state));
     updateLastSync();
+    
+    // Sync to server (async, don't block)
+    syncToServer();
+}
+
+async function syncToServer() {
+    try {
+        const response = await fetch(SYNC_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state)
+        });
+        
+        if (response.ok) {
+            console.log('Synced to server');
+            // Add console log entry
+            if (state.console && state.console.logs) {
+                // Don't call addConsoleLog to avoid infinite loop
+                state.console.logs.push({
+                    text: 'State synced to server',
+                    type: 'info',
+                    time: Date.now()
+                });
+                if (state.console.logs.length > 100) {
+                    state.console.logs = state.console.logs.slice(-100);
+                }
+                renderConsole();
+            }
+        } else {
+            console.error('Sync failed:', response.status);
+        }
+    } catch (err) {
+        console.error('Sync error:', err);
+        // Silently fail - local state is saved
+    }
 }
 
 function resetToServerState() {
