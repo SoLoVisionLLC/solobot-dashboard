@@ -20,37 +20,24 @@ sudo docker restart $(sudo docker ps -q --filter name=solobot-dashboard)
 sudo docker exec -it $(sudo docker ps -q --filter name=solobot-dashboard) /bin/sh
 ```
 
-### Check Dashboard Files
+### Check Dashboard State
 
 ```bash
-# List files in nginx html directory
-sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) ls -la /usr/share/nginx/html/
-
 # View state.json
-sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) cat /usr/share/nginx/html/data/state.json
+sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) cat /app/data/state.json
 
-# Check nginx config
-sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) cat /etc/nginx/nginx.conf
+# Test API endpoint
+curl http://localhost:3000/api/state
 ```
 
 ### Health Check
 
 ```bash
-# Check health endpoint
-curl http://localhost:80/health
+# Test locally
+curl http://localhost:3000/
 
 # Test from outside (replace with your domain)
-curl https://dashboard.sololink.cloud/health
-```
-
-### View Nginx Access Logs
-
-```bash
-# View access logs
-sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) tail -f /var/log/nginx/access.log
-
-# View error logs
-sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) tail -f /var/log/nginx/error.log
+curl https://dashboard.sololink.cloud/
 ```
 
 ## Coolify Deployment Setup
@@ -60,27 +47,25 @@ sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) tail -f /v
 1. **Create New Resource** → **Docker Image**
 2. **General Settings:**
    - Name: `solobot-dashboard`
-   - Git Repository: `https://github.com/yourusername/solobot-dashboard` (or your repo URL)
+   - Git Repository: `https://github.com/solovision24/solobot-dashboard`
    - Branch: `main`
    - Build Pack: `Dockerfile`
 
 3. **Ports:**
-   - Expose Port: `80`
-   - Public Port: `80` (or whatever Coolify assigns)
+   - Expose Port: `3000`
 
 4. **Domains:**
    - Add your domain: `dashboard.sololink.cloud`
    - Enable HTTPS (Let's Encrypt)
 
-5. **No Environment Variables Needed** (it's a static site!)
+5. **No Environment Variables Needed** (optional: set `PORT` if needed)
 
 ### 2. Build & Deploy
 
 Click **Deploy** in Coolify UI. It will:
 - Clone your repo
 - Build the Docker image
-- Start the container
-- Serve on port 80
+- Start the container on port 3000
 
 ### 3. Verify Deployment
 
@@ -88,85 +73,56 @@ Click **Deploy** in Coolify UI. It will:
 # Check if container is running
 sudo docker ps | grep solobot-dashboard
 
-# Test health endpoint
-curl http://localhost:80/health
-
-# Test dashboard
-curl https://dashboard.sololink.cloud/
+# Test API
+curl https://dashboard.sololink.cloud/api/state
 ```
 
-## VPS Sync API Integration
+## API Endpoints
 
-The dashboard connects to your VPS sync API at:
-```
-http://51.81.202.92:3456/api/state
-http://51.81.202.92:3456/api/sync
-```
+The Node.js server provides:
 
-Make sure:
-1. Your VPS sync server is running on port 3456
-2. Firewall allows connections from the dashboard container
-3. CORS is configured if needed
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Serve dashboard UI |
+| `/api/state` | GET | Get current state |
+| `/api/sync` | POST | Update state |
 
-## Troubleshooting
-
-### Dashboard not loading
-1. Check container logs: `sudo docker logs $(sudo docker ps -q --filter name=solobot-dashboard)`
-2. Verify nginx is running: `sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) ps aux | grep nginx`
-3. Check health endpoint: `curl http://localhost:80/health`
-
-### State not syncing
-1. Check if VPS API is reachable from container:
-   ```bash
-   sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) wget -O- http://51.81.202.92:3456/api/state
-   ```
-2. Check browser console for CORS errors
-3. Verify state.json format is valid
-
-### CSS/JS not loading
-1. Check nginx mime types: `sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) cat /etc/nginx/nginx.conf`
-2. Clear browser cache
-3. Check nginx access logs for 404s
-
-### Changes not reflecting
-1. Rebuild in Coolify UI
-2. Hard refresh browser (Ctrl+Shift+R)
-3. Check if new version deployed: `sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) ls -la /usr/share/nginx/html/`
-
-## Local Testing (Before Deploy)
+## Local Testing
 
 ```bash
 # Build the image
 docker build -t solobot-dashboard .
 
 # Run locally
-docker run -p 8080:80 solobot-dashboard
+docker run -p 3000:3000 solobot-dashboard
 
 # Test in browser
-open http://localhost:8080
+open http://localhost:3000
 ```
 
 ## File Structure in Container
 
 ```
-/usr/share/nginx/html/
-├── index.html          # Main HTML file
-├── dashboard.js        # JavaScript logic
-├── data/
-│   └── state.json     # State file (fallback)
-└── scripts/           # Any additional scripts
+/app/
+├── server.js           # Node.js server
+├── package.json        # Dependencies
+├── index.html          # Dashboard UI
+├── dashboard.js        # Frontend logic
+└── data/
+    └── state.json      # Persistent state
 ```
 
-## Performance Optimization
+## Troubleshooting
 
-The nginx config includes:
-- Gzip compression for text files
-- Browser caching for static assets
-- Security headers (X-Frame-Options, etc.)
+### Dashboard not loading
+1. Check container logs: `sudo docker logs $(sudo docker ps -q --filter name=solobot-dashboard)`
+2. Verify port 3000 is exposed
+3. Test API: `curl http://localhost:3000/api/state`
 
-## Security Notes
+### State not persisting
+1. Check data directory exists: `sudo docker exec $(sudo docker ps -q --filter name=solobot-dashboard) ls -la /app/data/`
+2. Verify state.json is writable
 
-- No sensitive data stored in container
-- Runs as nginx user (non-root)
-- Static files only - no server-side execution
-- HTTPS enforced via Coolify/Let's Encrypt
+### Container keeps restarting
+1. Check for Node.js errors in logs
+2. Verify server.js exists and is valid

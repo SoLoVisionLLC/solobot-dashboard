@@ -2,6 +2,7 @@
 .gitignore
 README.md
 TASKS.md
+COOLIFY-CHEATSHEET.md
 *.log
 node_modules
 .DS_Store
