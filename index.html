@@ -1148,18 +1148,23 @@
         
         .sidebar-nav {
             flex: 1;
-            padding: var(--space-3);
+            padding: var(--space-2) var(--space-2); /* Minimal padding when collapsed */
             display: flex;
             flex-direction: column;
             gap: var(--space-1);
+            transition: padding var(--transition-normal);
+        }
+        
+        .sidebar:hover .sidebar-nav {
+            padding: var(--space-3); /* More padding when expanded */
         }
         
         .sidebar-item {
             display: flex;
             align-items: center;
-            justify-content: center; /* Center icon when collapsed */
+            justify-content: center; /* Center everything when collapsed */
             gap: var(--space-3);
-            padding: var(--space-3);
+            padding: var(--space-3) var(--space-2);
             border-radius: var(--radius-md);
             color: var(--text-secondary);
             cursor: pointer;
@@ -1168,7 +1173,8 @@
         }
         
         .sidebar:hover .sidebar-item {
-            justify-content: flex-start; /* Left-align when expanded */
+            justify-content: flex-start;
+            padding: var(--space-3);
         }
         
         .sidebar-item:hover {
@@ -1207,8 +1213,13 @@
         }
         
         .sidebar-footer {
-            padding: var(--space-3);
+            padding: var(--space-2);
             border-top: 1px solid var(--border-default);
+            transition: padding var(--transition-normal);
+        }
+        
+        .sidebar:hover .sidebar-footer {
+            padding: var(--space-3);
         }
         
         .app-content {
