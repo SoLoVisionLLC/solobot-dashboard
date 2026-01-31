@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.11.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.12.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -99,39 +99,28 @@ let currentModalColumn = null;
 let refreshIntervalId = null;
 
 // Filter out heartbeat messages from display
-function isHeartbeatMessage(text) {
+function isHeartbeatMessage(text, from) {
     if (!text) return false;
     const trimmed = text.trim();
     
-    // Exact matches
-    if (trimmed === 'HEARTBEAT_OK') return true;
-    if (trimmed === '') return true; // Empty messages
+    // Never filter short messages (likely real user input)
+    if (trimmed.length < 50) return false;
     
-    // System cron/heartbeat messages (start with "System: [")
-    if (trimmed.startsWith('System: [')) {
-        if (trimmed.includes('HEARTBEAT:')) return true;
-        if (trimmed.includes('EMAIL CHECK:')) return true;
-        if (trimmed.includes('Cron:')) return true;
+    // Exact matches only
+    if (trimmed === 'HEARTBEAT_OK') return true;
+    
+    // Only filter USER messages that are system-injected (they start with "System: [")
+    if (from === 'user' && trimmed.startsWith('System: [')) {
+        return true; // All system-injected user messages get filtered
     }
     
-    // Messages that start with heartbeat prompt
-    if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
-    
-    // Bot responses to heartbeat (common patterns)
-    const heartbeatResponsePatterns = [
-        'Following heartbeat routine',
-        'Following the heartbeat routine',
-        'Checking current status via heartbeat',
-        'Checking current state following HEARTBEAT',
-        'checking the current status',
-        'checking current status',
-        'Let me check the current state and ensure everything is working',
-        'Let me check the current task board and ensure everything is working'
-    ];
-    
-    const lowerTrimmed = trimmed.toLowerCase();
-    for (const pattern of heartbeatResponsePatterns) {
-        if (lowerTrimmed.startsWith(pattern.toLowerCase())) return true;
+    // Filter bot messages that are just heartbeat acknowledgments
+    if (from === 'solobot') {
+        // Only filter if it starts with these exact patterns
+        if (trimmed.startsWith('Following heartbeat routine')) return true;
+        if (trimmed.startsWith('Following the heartbeat routine')) return true;
+        if (trimmed.startsWith('Checking current status via heartbeat')) return true;
+        if (trimmed.startsWith('Checking current state following HEARTBEAT')) return true;
     }
     
     return false;
@@ -850,7 +839,7 @@ function renderChat() {
 
     // Render each message (filter out heartbeat messages)
     messages.forEach(msg => {
-        if (isHeartbeatMessage(msg.text)) return; // Skip heartbeat messages
+        if (isHeartbeatMessage(msg.text, msg.from)) return; // Skip heartbeat messages
         const msgEl = createChatMessageElement(msg);
         if (msgEl) container.appendChild(msgEl);
     });
@@ -1134,7 +1123,7 @@ function renderChatPage() {
     
     // Render messages (filter out heartbeat messages)
     messages.forEach(msg => {
-        if (isHeartbeatMessage(msg.text)) return; // Skip heartbeat messages
+        if (isHeartbeatMessage(msg.text, msg.from)) return; // Skip heartbeat messages
         const msgEl = createChatPageMessage(msg);
         if (msgEl) container.appendChild(msgEl);
     });
