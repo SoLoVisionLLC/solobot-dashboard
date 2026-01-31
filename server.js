@@ -5,10 +5,12 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-const MEMORY_DIR = './openclaw/workspace';  // Mounted from OpenClaw's Docker volume
+const MEMORY_DIR = './data/memory';  // Stored in dashboard's persistent volume
 
-// Ensure data directory exists
+// Ensure data directories exist
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
+if (!fs.existsSync('./data/memory')) fs.mkdirSync('./data/memory');
+if (!fs.existsSync('./data/memory/memory')) fs.mkdirSync('./data/memory/memory');  // For daily logs
 
 // Load or initialize state
 let state = {};

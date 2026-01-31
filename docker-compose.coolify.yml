@@ -6,17 +6,10 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Persistent storage for dashboard state (tasks, notes, etc.)
+      # Persistent storage for dashboard state AND memory files
       - dashboard-data:/app/data
-      # Mount OpenClaw's workspace volume - THIS IS THE LIVE MEMORY FILES
-      # Using external named volume that OpenClaw created
-      - moltbot-openclaw:/app/openclaw:ro
     restart: unless-stopped
 
 volumes:
   dashboard-data:
-    # Dashboard's own persistent storage
-  moltbot-openclaw:
-    # External volume created by OpenClaw/MoltBot
-    external: true
-    name: a88sw4go8wc8wo4k4okg48cs_moltbot-openclaw
+    # Dashboard's persistent storage - includes state.json and memory/ folder
