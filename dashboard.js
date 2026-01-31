@@ -605,7 +605,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load gateway settings from server state if localStorage is empty
     loadGatewaySettingsFromServer();
     
-    render();
+    render({ includeSystem: true }); // Initial render includes system page
     updateLastSync();
 
     // Initialize Gateway client
@@ -1574,7 +1574,7 @@ function clearSystemHistory() {
 // RENDERING (OTHER FUNCTIONS REMAIN THE SAME)
 // ===================
 
-function render() {
+function render(options = {}) {
     renderStatus();
     renderConsole();
     renderTasks();
@@ -1583,7 +1583,11 @@ function render() {
     renderDocs();
     renderChat();
     renderChatPage();
-    renderSystemPage();
+    // Only render system page on explicit request (not during auto-refresh)
+    // System messages are local, not from VPS, so no need to refresh them
+    if (options.includeSystem) {
+        renderSystemPage();
+    }
     renderBulkActionBar();
     updateArchiveBadge();
 
