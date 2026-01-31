@@ -65,11 +65,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     render();
     updateLastSync();
     
-    // Auto-refresh every 10 seconds
+    // Auto-refresh every 5 seconds (pulls from VPS)
     setInterval(async () => {
         await loadState();
         render();
-    }, 10000);
+        updateLastSync();
+    }, 5000);
     
     // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {
@@ -120,40 +121,48 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ===================
 
 async function loadState() {
-    // Check if we have local changes that should be preserved
-    const localSaved = localStorage.getItem('solovision-dashboard');
-    const localState = localSaved ? JSON.parse(localSaved) : null;
-    
-    // If local state has been modified, use it instead of server
-    if (localState && localState.localModified) {
-        state = { ...state, ...localState };
-        console.log('Using locally modified state');
-    } else {
-        // Otherwise try to load from server
-        try {
-            const response = await fetch('data/state.json?' + Date.now());
-            if (response.ok) {
-                const serverState = await response.json();
-                // Ensure archive array exists
-                if (!serverState.tasks.archive) {
-                    serverState.tasks.archive = [];
-                }
-                state = { ...state, ...serverState };
-                console.log('Loaded state from server');
-            }
-        } catch (e) {
-            console.log('Server state not available, using localStorage');
-            // Fallback to localStorage
-            if (localState) {
-                state = { ...state, ...localState };
-            } else {
-                initSampleData();
-            }
+    // ALWAYS load from VPS first (SoLoBot's source of truth)
+    try {
+        const response = await fetch('http://51.81.202.92:3456/api/state', { cache: 'no-store' });
+        if (response.ok) {
+            const vpsState = await response.json();
+            // Ensure required arrays exist
+            if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
+            if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
+            state = { ...state, ...vpsState };
+            // Save to localStorage (without localModified so VPS stays authoritative)
+            delete state.localModified;
+            localStorage.setItem('solovision-dashboard', JSON.stringify(state));
+            console.log('Loaded state from VPS');
+            return;
         }
+    } catch (e) {
+        console.log('VPS not available:', e.message);
     }
     
-    // Always fetch live console logs from VPS (Moltbot's real logs)
-    await fetchConsoleLogs();
+    // Fallback: try local state.json
+    try {
+        const response = await fetch('data/state.json?' + Date.now());
+        if (response.ok) {
+            const serverState = await response.json();
+            if (!serverState.tasks) serverState.tasks = { todo: [], progress: [], done: [], archive: [] };
+            if (!serverState.tasks.archive) serverState.tasks.archive = [];
+            state = { ...state, ...serverState };
+            console.log('Loaded state from local file');
+            return;
+        }
+    } catch (e) {
+        console.log('Local state not available');
+    }
+    
+    // Final fallback: localStorage
+    const localSaved = localStorage.getItem('solovision-dashboard');
+    if (localSaved) {
+        state = { ...state, ...JSON.parse(localSaved) };
+        console.log('Loaded state from localStorage');
+    } else {
+        initSampleData();
+    }
 }
 
 // Fetch live Moltbot logs from VPS sync API
