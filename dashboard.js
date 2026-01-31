@@ -1035,26 +1035,41 @@ function renderActivity() {
 
 function renderDocs(filter = '') {
     const container = document.getElementById('docs-grid');
+    
+    // First, render the memory files from our local documentation
+    renderMemoryFiles(filter);
+    
+    // Then, append the existing Google Drive docs (if any) below the memory files
     const filtered = state.docs.filter(doc =>
         doc.name.toLowerCase().includes(filter.toLowerCase())
     );
-
-    container.innerHTML = filtered.map(doc => {
-        const iconClass = getDocIconClass(doc.type, doc.url);
-        const iconSymbol = getDocIconSymbol(doc.type, doc.url);
-        return `
-        <a href="${doc.url}" target="_blank" class="doc-card">
-            <div style="display: flex; align-items: center; gap: var(--space-3);">
-                <div class="doc-icon ${iconClass}">${iconSymbol}</div>
-                <div style="min-width: 0; flex: 1;">
-                    <div class="doc-title">${escapeHtml(doc.name)}</div>
-                    <div class="doc-meta">Updated: ${formatDate(doc.updated)}</div>
+    
+    if (filtered.length > 0) {
+        // Add a separator if we have both memory files and Google Drive docs
+        if (container.innerHTML && filtered.length > 0) {
+            container.innerHTML += '<div class="docs-separator"><h3 class="category-title">Google Drive Documents</h3></div>';
+        }
+        
+        const driveDocsHtml = filtered.map(doc => {
+            const iconClass = getDocIconClass(doc.type, doc.url);
+            const iconSymbol = getDocIconSymbol(doc.type, doc.url);
+            return `
+            <a href="${doc.url}" target="_blank" class="doc-card">
+                <div style="display: flex; align-items: center; gap: var(--space-3);">
+                    <div class="doc-icon ${iconClass}">${iconSymbol}</div>
+                    <div style="min-width: 0; flex: 1;">
+                        <div class="doc-title">${escapeHtml(doc.name)}</div>
+                        <div class="doc-meta">Updated: ${formatDate(doc.updated)}</div>
+                    </div>
                 </div>
-            </div>
-        </a>
-    `}).join('');
-
-    if (filtered.length === 0) {
+            </a>
+        `}).join('');
+        
+        container.innerHTML += driveDocsHtml;
+    }
+    
+    // If completely empty, show message
+    if (!container.innerHTML) {
         container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: var(--space-4);">No documents found</div>';
     }
 }
@@ -1687,3 +1702,67 @@ window.dashboardAPI = {
         render();
     }
 };
+
+// ===================
+// MEMORY FILE FUNCTIONS
+// ===================
+
+// View a memory file in the modal
+window.viewMemoryFile = function(fileId) {
+    const file = memoryFiles.find(f => f.id === fileId);
+    if (!file) return;
+    
+    // Set title
+    document.getElementById('memory-file-title').textContent = file.name;
+    
+    // For now, show placeholder content
+    // In full implementation, this would fetch from Google Drive
+    const placeholderContent = `# ${file.name}
+
+${file.description}
+
+---
+
+**Note**: In the full implementation, this would load the actual content from Google Drive.
+
+The file content would be fetched using the Google Drive API and displayed here for viewing and editing.
+
+File ID: ${fileId}
+Category: ${file.category}
+
+---
+
+To implement this fully:
+1. Integrate Google Drive API to fetch file content
+2. Add edit functionality with save back to Drive
+3. Handle authentication and permissions
+4. Add version control for changes
+`;
+    
+    document.getElementById('memory-file-content').textContent = placeholderContent;
+    showModal('memory-file-modal');
+};
+
+// Edit memory file in Google Drive
+window.editMemoryFile = function() {
+    // For now, open the Google Drive folder
+    // In full implementation, this would open the specific file for editing
+    window.open('https://drive.google.com/drive/folders/1VEOcQA_bgfPmwDhYHd1lqMzZom1sO869', '_blank');
+    hideModal('memory-file-modal');
+};
+
+// Load memory file content from Google Drive (placeholder for future implementation)
+async function loadMemoryFileContent(fileId) {
+    try {
+        // This would integrate with Google Drive API
+        // For now, return placeholder content
+        const file = memoryFiles.find(f => f.id === fileId);
+        if (file) {
+            return `# ${file.name}\n\n${file.description}\n\n[Content would be loaded from Google Drive]`;
+        }
+        return '# File not found';
+    } catch (error) {
+        console.error('Error loading memory file:', error);
+        return '# Error loading file content';
+    }
+}
