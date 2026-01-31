@@ -749,7 +749,7 @@ function renderChatMessage(msg) {
     }
 
     return `
-        <div class="${bgClass} rounded-lg p-3 ${alignClass} message-item w-full shrink-0" data-time="${msg.time}">
+        <div class="${bgClass} rounded-lg p-3 ${alignClass} mb-3" style="display:block; clear:both;" data-time="${msg.time}">
             <div class="flex items-center gap-2 mb-2 ${isUser ? 'justify-end' : ''}">
                 <span class="text-xs ${nameClass} font-medium">${name}</span>
                 <span class="text-xs text-gray-500">${timeStr}</span>
