@@ -14,7 +14,7 @@ RUN mkdir -p data
 
 # Copy default state ONLY if using without volume (for local dev)
 # In Coolify, the volume mount will override this directory
-COPY data/state.json ./data/default-state.json
+COPY data/default-state.json ./data/default-state.json
 
 EXPOSE 3000
 CMD ["node", "server.js"]
