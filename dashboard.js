@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.9.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.10.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -101,17 +101,19 @@ let refreshIntervalId = null;
 // Filter out heartbeat messages from display
 function isHeartbeatMessage(text) {
     if (!text) return false;
-    const heartbeatPatterns = [
-        'HEARTBEAT',
-        'Read HEARTBEAT.md',
-        'HEARTBEAT_OK',
-        'heartbeat routine',
-        'heartbeat poll'
-    ];
-    const lowerText = text.toLowerCase();
-    return heartbeatPatterns.some(pattern => 
-        lowerText.includes(pattern.toLowerCase())
-    );
+    const trimmed = text.trim();
+    
+    // Only filter out specific heartbeat messages, not all messages containing "heartbeat"
+    // Filter: exact HEARTBEAT_OK responses
+    if (trimmed === 'HEARTBEAT_OK') return true;
+    
+    // Filter: Messages that START with the heartbeat prompt
+    if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
+    
+    // Filter: System heartbeat check messages
+    if (trimmed.includes('[System]') && trimmed.toLowerCase().includes('heartbeat')) return true;
+    
+    return false;
 }
 
 // Default settings
