@@ -193,10 +193,11 @@ const server = http.createServer((req, res) => {
   // Get a specific memory file
   if (url.pathname.startsWith('/api/memory/') && req.method === 'GET') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
-    const filePath = path.join(MEMORY_DIR, filename);
+    const filePath = path.resolve(MEMORY_DIR, filename);
+    const memoryDirResolved = path.resolve(MEMORY_DIR);
     
     // Security: prevent path traversal
-    if (!filePath.startsWith(path.resolve(MEMORY_DIR))) {
+    if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
@@ -226,10 +227,11 @@ const server = http.createServer((req, res) => {
   // Update a memory file
   if (url.pathname.startsWith('/api/memory/') && req.method === 'PUT') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
-    const filePath = path.join(MEMORY_DIR, filename);
+    const filePath = path.resolve(MEMORY_DIR, filename);
+    const memoryDirResolved = path.resolve(MEMORY_DIR);
     
     // Security: prevent path traversal
-    if (!filePath.startsWith(path.resolve(MEMORY_DIR))) {
+    if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
