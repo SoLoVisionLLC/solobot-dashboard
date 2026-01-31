@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.12.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.13.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -103,20 +103,18 @@ function isHeartbeatMessage(text, from) {
     if (!text) return false;
     const trimmed = text.trim();
     
-    // Never filter short messages (likely real user input)
-    if (trimmed.length < 50) return false;
-    
-    // Exact matches only
+    // Exact matches
     if (trimmed === 'HEARTBEAT_OK') return true;
     
-    // Only filter USER messages that are system-injected (they start with "System: [")
-    if (from === 'user' && trimmed.startsWith('System: [')) {
-        return true; // All system-injected user messages get filtered
-    }
+    // Filter the heartbeat prompt itself (appears as user message)
+    if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
+    if (trimmed.includes('reply HEARTBEAT_OK')) return true;
     
-    // Filter bot messages that are just heartbeat acknowledgments
+    // Filter system-injected messages (start with "System: [")
+    if (trimmed.startsWith('System: [')) return true;
+    
+    // Filter bot heartbeat acknowledgments
     if (from === 'solobot') {
-        // Only filter if it starts with these exact patterns
         if (trimmed.startsWith('Following heartbeat routine')) return true;
         if (trimmed.startsWith('Following the heartbeat routine')) return true;
         if (trimmed.startsWith('Checking current status via heartbeat')) return true;
