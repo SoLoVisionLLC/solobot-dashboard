@@ -5,12 +5,10 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-const MEMORY_DIR = './data/memory';  // Stored in dashboard's persistent volume
+const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
 
-// Ensure data directories exist
+// Ensure data directory exists (memory is mounted from OpenClaw workspace)
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
-if (!fs.existsSync('./data/memory')) fs.mkdirSync('./data/memory');
-if (!fs.existsSync('./data/memory/memory')) fs.mkdirSync('./data/memory/memory');  // For daily logs
 
 // Load or initialize state
 let state = {};
