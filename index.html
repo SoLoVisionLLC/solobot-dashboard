@@ -1278,19 +1278,22 @@
             overflow: hidden;
         }
         
-        /* Prevent page-level scroll on chat page */
-        #page-chat {
+        /* Prevent page-level scroll on chat/system pages */
+        #page-chat,
+        #page-system {
             overflow: hidden;
             height: calc(100vh - 100px);
             max-height: calc(100vh - 100px);
         }
         
-        /* Prevent body scroll when chat page is active */
-        #page-chat.active ~ * {
+        /* Prevent body scroll when chat/system page is active */
+        #page-chat.active ~ *,
+        #page-system.active ~ * {
             overflow: hidden;
         }
         
-        body:has(#page-chat.active) {
+        body:has(#page-chat.active),
+        body:has(#page-system.active) {
             overflow: hidden;
         }
         
