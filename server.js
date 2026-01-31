@@ -68,6 +68,61 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Append chat messages (doesn't replace existing)
+  if (url.pathname === '/api/chat' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { messages } = JSON.parse(body);
+        if (!state.chat) state.chat = { messages: [] };
+        if (Array.isArray(messages)) {
+          // Append new messages, avoid duplicates by id
+          const existingIds = new Set(state.chat.messages.map(m => m.id));
+          const newMsgs = messages.filter(m => !existingIds.has(m.id));
+          state.chat.messages.push(...newMsgs);
+          // Keep last 200 messages
+          if (state.chat.messages.length > 200) {
+            state.chat.messages = state.chat.messages.slice(-200);
+          }
+        }
+        saveState();
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, added: messages?.length || 0 }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+  
+  // Append activity logs
+  if (url.pathname === '/api/activity' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { logs } = JSON.parse(body);
+        if (!state.activity) state.activity = { logs: [] };
+        if (Array.isArray(logs)) {
+          state.activity.logs.unshift(...logs);
+          // Keep last 100 activity logs
+          if (state.activity.logs.length > 100) {
+            state.activity.logs = state.activity.logs.slice(0, 100);
+          }
+        }
+        saveState();
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+  
   if (url.pathname === '/') {
     res.setHeader('Content-Type', 'text/html');
     return res.end(fs.readFileSync('./index.html'));
