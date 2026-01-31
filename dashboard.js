@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadState() {
     // Load from VPS first
     try {
-        const response = await fetch('http://51.81.202.92:3456/api/state', { cache: 'no-store' });
+        const response = await fetch('/api/state', { cache: 'no-store' });
         if (response.ok) {
             const vpsState = await response.json();
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
@@ -233,7 +233,7 @@ async function loadState() {
     }
 }
 
-const SYNC_API = 'http://51.81.202.92:3456/api/sync';
+const SYNC_API = '/api/sync';
 
 async function saveState(changeDescription = null) {
     state.localModified = Date.now();
