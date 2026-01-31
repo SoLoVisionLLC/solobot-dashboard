@@ -210,9 +210,10 @@
             </div>
         </section>
 
-        <section class="mb-6" id="console-section">
-            <div class="bg-black rounded-xl border border-slate-700 overflow-hidden">
-                <!-- Console Header -->
+        <!-- Row 1: Terminal + Activity Log side by side -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Terminal -->
+            <div class="bg-black rounded-xl border border-slate-700 overflow-hidden" id="console-section">
                 <div class="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-slate-700">
                     <div class="flex items-center gap-3">
                         <div class="flex gap-1.5">
@@ -224,31 +225,16 @@
                         <span id="console-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">IDLE</span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <span id="console-task-timer" class="text-xs text-gray-500 font-mono hidden">⏱ 0:00</span>
                         <button onclick="clearConsole()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-slate-700 transition">Clear</button>
                         <button onclick="toggleConsoleExpand()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-slate-700 transition" id="console-expand-btn">Expand</button>
                     </div>
                 </div>
-                
-                <!-- Console Output -->
-                <div id="console-output" class="p-4 font-mono text-sm h-[200px] overflow-y-auto scrollbar-thin bg-[#0d1117]" style="font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;">
+                <div id="console-output" class="p-4 font-mono text-sm h-[250px] overflow-y-auto scrollbar-thin bg-[#0d1117]" style="font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;">
                     <div class="text-green-400">$ solobot --init</div>
-                    <div class="text-gray-400">SoLoBot v2.6 initialized</div>
                     <div class="text-gray-400">Ready for commands...</div>
-                    <div class="text-gray-600 mt-2">---</div>
-                </div>
-                
-                <!-- Current Task Bar -->
-                <div id="console-taskbar" class="bg-slate-900 px-4 py-2 border-t border-slate-700 flex items-center gap-3 hidden">
-                    <span class="text-green-400 font-mono text-sm">▶</span>
-                    <span id="console-current-task" class="text-gray-300 font-mono text-sm truncate">Working on task...</span>
                 </div>
             </div>
-        </section>
 
-        <!-- Middle Row: Activity Log + Notes Panel -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            
             <!-- Activity Log -->
             <div class="bg-solo-card rounded-lg p-4">
                 <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -257,12 +243,39 @@
                     </svg>
                     Activity Log
                 </h2>
-                <div id="activity-log" class="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+                <div id="activity-log" class="space-y-2 h-[250px] overflow-y-auto scrollbar-thin">
                     <!-- Activity entries will be inserted here -->
                 </div>
             </div>
+        </section>
 
-            <!-- Notes Panel -->
+        <!-- Row 2: Chat + Notes side by side -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Chat -->
+            <div class="bg-solo-card rounded-lg overflow-hidden">
+                <div class="p-4 border-b border-slate-700">
+                    <h2 class="text-lg font-semibold flex items-center gap-2">
+                        <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        Chat with SoLoBot
+                        <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Live</span>
+                    </h2>
+                </div>
+                <div id="chat-messages" class="h-[200px] overflow-y-auto p-4 space-y-3 scrollbar-thin bg-[#0d1117]">
+                    <div class="text-gray-500 text-sm text-center py-4">💬 Messages sync every 3 seconds</div>
+                </div>
+                <div class="border-t border-slate-700 p-3 bg-slate-800">
+                    <div class="flex gap-2">
+                        <input type="text" id="chat-input" placeholder="Type a message..." 
+                               class="flex-1 bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-primary transition"
+                               onkeypress="if(event.key==='Enter')sendChatMessage()">
+                        <button onclick="sendChatMessage()" class="bg-solo-primary hover:bg-solo-primary/80 px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
             <div class="bg-solo-card rounded-lg p-4">
                 <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
                     <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,12 +287,10 @@
                     <div class="flex gap-2">
                         <input type="text" id="note-input" placeholder="Leave a note for SoLoBot..." 
                                class="flex-1 bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-primary transition">
-                        <button onclick="addNote()" class="bg-solo-primary hover:bg-solo-primary/80 px-4 py-2 rounded-lg text-sm font-medium transition">
-                            Send
-                        </button>
+                        <button onclick="addNote()" class="bg-solo-primary hover:bg-solo-primary/80 px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
                     </div>
                 </div>
-                <div id="notes-list" class="space-y-2 max-h-[230px] overflow-y-auto scrollbar-thin">
+                <div id="notes-list" class="space-y-2 h-[200px] overflow-y-auto scrollbar-thin">
                     <!-- Notes will be inserted here -->
                 </div>
             </div>
@@ -329,37 +340,6 @@
                     </div>
                     <p class="text-sm text-gray-400">Family organizer</p>
                     <p class="text-xs text-gray-500 mt-2">Last update: Stable</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Chat with SoLoBot -->
-        <section class="mb-8">
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-                </svg>
-                Chat with SoLoBot
-                <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Connected to Main Session</span>
-            </h2>
-            <div class="bg-solo-card rounded-lg overflow-hidden">
-                <div id="chat-messages" class="h-[300px] overflow-y-auto p-4 space-y-3 scrollbar-thin bg-[#0d1117]">
-                    <div class="text-gray-500 text-sm text-center py-8">
-                        💬 Chat with SoLoBot directly. Messages sync every 3 seconds.
-                    </div>
-                </div>
-                <div class="border-t border-slate-700 p-3 bg-slate-800">
-                    <div class="flex gap-2">
-                        <input type="text" id="chat-input" placeholder="Type a message..." 
-                               class="flex-1 bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-primary transition"
-                               onkeypress="if(event.key==='Enter')sendChatMessage()">
-                        <button onclick="sendChatMessage()" class="bg-solo-primary hover:bg-solo-primary/80 px-6 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                            <span>Send</span>
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                            </svg>
-                        </button>
-                    </div>
                 </div>
             </div>
         </section>
