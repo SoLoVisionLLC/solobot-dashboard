@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.14.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.15.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -106,6 +106,7 @@ function isHeartbeatMessage(text, from) {
     }
     const trimmed = text.trim();
     const preview = trimmed.substring(0, 80) + (trimmed.length > 80 ? '...' : '');
+    const lowerTrimmed = trimmed.toLowerCase();
     
     // Exact matches
     if (trimmed === 'HEARTBEAT_OK') {
@@ -113,9 +114,9 @@ function isHeartbeatMessage(text, from) {
         return true;
     }
     
-    // Filter the heartbeat prompt itself (appears as user message)
+    // Filter the heartbeat prompt itself
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) {
-        console.log(`[Filter] HIDDEN (starts with heartbeat prompt): "${preview}"`);
+        console.log(`[Filter] HIDDEN (heartbeat prompt): "${preview}"`);
         return true;
     }
     if (trimmed.includes('reply HEARTBEAT_OK')) {
@@ -123,29 +124,36 @@ function isHeartbeatMessage(text, from) {
         return true;
     }
     
-    // Filter system-injected messages (start with "System: [")
+    // Filter system-injected messages
     if (trimmed.startsWith('System: [')) {
-        console.log(`[Filter] HIDDEN (starts with System: [): "${preview}"`);
+        console.log(`[Filter] HIDDEN (system message): "${preview}"`);
         return true;
     }
     
-    // Filter bot heartbeat acknowledgments
+    // Filter bot heartbeat-related responses
     if (from === 'solobot') {
-        if (trimmed.startsWith('Following heartbeat routine')) {
-            console.log(`[Filter] HIDDEN (bot heartbeat ack): "${preview}"`);
-            return true;
-        }
-        if (trimmed.startsWith('Following the heartbeat routine')) {
-            console.log(`[Filter] HIDDEN (bot heartbeat ack): "${preview}"`);
-            return true;
-        }
-        if (trimmed.startsWith('Checking current status via heartbeat')) {
-            console.log(`[Filter] HIDDEN (bot heartbeat ack): "${preview}"`);
-            return true;
-        }
-        if (trimmed.startsWith('Checking current state following HEARTBEAT')) {
-            console.log(`[Filter] HIDDEN (bot heartbeat ack): "${preview}"`);
-            return true;
+        // Heartbeat acknowledgment patterns
+        const botHeartbeatPatterns = [
+            'following heartbeat',
+            'following the heartbeat',
+            'checking current status via heartbeat',
+            'checking current state following heartbeat',
+            'checking current state following heartbeat.md',
+            'let me check the current state and ensure',
+            'let me check the current task board',
+            'let me fix the syntax and provide',
+            'let me provide the simple heartbeat',
+            'logged: ✅ heartbeat',
+            'logged: 🔄 heartbeat',
+            '{ "status": "error"',
+            '{"status":"error"'
+        ];
+        
+        for (const pattern of botHeartbeatPatterns) {
+            if (lowerTrimmed.startsWith(pattern) || lowerTrimmed.includes(pattern)) {
+                console.log(`[Filter] HIDDEN (bot heartbeat): "${preview}"`);
+                return true;
+            }
         }
     }
     
