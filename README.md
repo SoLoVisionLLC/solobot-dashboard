@@ -151,22 +151,19 @@ Then access at `http://51.81.202.92:8080`
 
 ## Coolify Deployment with Persistent Storage
 
-**IMPORTANT**: To preserve your tasks, notes, and settings across redeploys, you MUST configure persistent storage.
+**IMPORTANT**: To preserve your tasks, notes, and settings across redeploys, you MUST configure persistent storage in Coolify's UI.
 
-### Option 1: Docker Compose (Recommended)
+### Required: Add Persistent Storage in Coolify
 
-1. In Coolify, set **Build Pack** to "Docker Compose"
-2. Set **Docker Compose Location** to `/docker-compose.coolify.yml`
-3. This automatically creates a persistent volume for `/app/data`
+1. Go to your **Dashboard application** in Coolify (not MoltBot)
+2. Click **Configuration** → **Persistent Storage**
+3. Click **+ Add** (or edit existing)
+4. Set:
+   - **Destination Path**: `/app/data`
+   - **Source Path**: Leave empty (Coolify creates the volume)
+5. **Save** and **Redeploy**
 
-### Option 2: Manual Volume Mount
-
-If using Dockerfile build pack:
-1. Go to your application settings in Coolify
-2. Under **Persistent Storage**, add a volume:
-   - **Source**: `dashboard-data` (or any name)
-   - **Destination**: `/app/data`
-3. Redeploy
+⚠️ **Note**: Coolify does NOT read volumes from docker-compose.yml automatically. You must configure storage through Coolify's UI.
 
 ### How It Works
 
