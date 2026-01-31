@@ -1608,6 +1608,51 @@
             pointer-events: none;
         }
 
+        /* =================== SYSTEM PAGE STYLES =================== */
+        .system-message {
+            display: flex;
+            margin-bottom: var(--space-3);
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            justify-content: flex-start;
+        }
+
+        .system-bubble {
+            max-width: 90%;
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-lg);
+            background: rgba(234, 179, 8, 0.1);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .system-bubble-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-2);
+            font-size: 12px;
+        }
+
+        .system-sender {
+            color: var(--warning);
+            font-weight: 500;
+        }
+
+        .system-bubble-time {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .system-bubble-content {
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: var(--text-muted);
+            font-family: 'Courier New', monospace;
+        }
+
         }
     </style>
 </head>
@@ -1636,6 +1681,10 @@
                 <span class="sidebar-item-icon">💬</span>
                 <span class="sidebar-item-text">Chat</span>
             </a>
+            <a class="sidebar-item" onclick="showPage('system')" data-page="system">
+                <span class="sidebar-item-icon">📟</span>
+                <span class="sidebar-item-text">System</span>
+            </a>
             <a class="sidebar-item" onclick="showPage('products')" data-page="products">
                 <span class="sidebar-item-icon">📦</span>
                 <span class="sidebar-item-text">Products</span>
@@ -1644,7 +1693,7 @@
         
         <div class="sidebar-footer">
             <a class="sidebar-item" onclick="openSettingsModal()">
-                <span class="sidebar-item-icon">⚙️</span>
+                <span class="sidebar-item-icon">🔧</span>
                 <span class="sidebar-item-text">Settings</span>
             </a>
         </div>
@@ -2039,7 +2088,30 @@
             </div>
         </div>
         <!-- END CHAT PAGE -->
-        
+
+        <!-- =================== SYSTEM PAGE =================== -->
+        <div id="page-system" class="page">
+            <div class="chat-page-wrapper">
+                <!-- Header -->
+                <div class="chat-page-header">
+                    <div class="chat-page-title">
+                        <h1>📟 System Messages</h1>
+                    </div>
+                    <div class="chat-page-actions">
+                        <button onclick="clearSystemHistory()" class="btn btn-ghost" title="Clear system messages">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Messages Area -->
+                <div id="system-page-messages" class="chat-page-messages">
+                    <!-- System messages rendered by JS -->
+                </div>
+            </div>
+        </div>
+        <!-- END SYSTEM PAGE -->
+
         <!-- =================== PRODUCTS PAGE =================== -->
         <div id="page-products" class="page">
             <div class="container" style="padding: var(--space-6);">
@@ -2387,7 +2459,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.15.0"></script>
+    <script src="dashboard.js?v=3.17.0"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
@@ -2416,6 +2488,11 @@
             // If showing chat page, render chat
             if (pageName === 'chat' && typeof renderChatPage === 'function') {
                 renderChatPage();
+            }
+
+            // If showing system page, render system messages
+            if (pageName === 'system' && typeof renderSystemPage === 'function') {
+                renderSystemPage();
             }
                 renderMemoryFilesForPage();
             }

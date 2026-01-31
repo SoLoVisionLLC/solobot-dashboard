@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.16.0 - Chat persistence fix (localStorage backup)
+// Version: 3.17.0 - Separate System tab for system messages/heartbeats
 
 // ===================
 // STATE MANAGEMENT
@@ -33,16 +33,20 @@ let state = {
         expanded: false
     },
     chat: {
-        messages: []
+        messages: []  // User and SoLoBot messages only
+    },
+    system: {
+        messages: []  // System messages, heartbeats, errors, etc.
     }
 };
 
-// Load persisted chat messages from localStorage on init
-function loadPersistedChat() {
+// Load persisted chat and system messages from localStorage on init
+function loadPersistedMessages() {
     try {
-        const saved = localStorage.getItem('solobot-chat-messages');
-        if (saved) {
-            const parsed = JSON.parse(saved);
+        // Load chat messages
+        const savedChat = localStorage.getItem('solobot-chat-messages');
+        if (savedChat) {
+            const parsed = JSON.parse(savedChat);
             if (Array.isArray(parsed)) {
                 // Only keep messages from last 24 hours
                 const cutoff = Date.now() - (24 * 60 * 60 * 1000);
@@ -50,24 +54,39 @@ function loadPersistedChat() {
                 console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
             }
         }
+
+        // Load system messages
+        const savedSystem = localStorage.getItem('solobot-system-messages');
+        if (savedSystem) {
+            const parsed = JSON.parse(savedSystem);
+            if (Array.isArray(parsed)) {
+                const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+                state.system.messages = parsed.filter(m => m.time > cutoff);
+                console.log(`[Dashboard] Restored ${state.system.messages.length} system messages from localStorage`);
+            }
+        }
     } catch (e) {
-        console.log('[Dashboard] Failed to load persisted chat:', e.message);
+        console.log('[Dashboard] Failed to load persisted messages:', e.message);
     }
 }
 
-// Save chat messages to localStorage
-function persistChat() {
+// Save chat and system messages to localStorage
+function persistMessages() {
     try {
-        // Keep only last 100 messages to avoid localStorage bloat
-        const toSave = state.chat.messages.slice(-100);
-        localStorage.setItem('solobot-chat-messages', JSON.stringify(toSave));
+        // Save chat messages (last 100)
+        const chatToSave = state.chat.messages.slice(-100);
+        localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
+
+        // Save system messages (last 100)
+        const systemToSave = state.system.messages.slice(-100);
+        localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
     } catch (e) {
-        console.log('[Dashboard] Failed to persist chat:', e.message);
+        console.log('[Dashboard] Failed to persist messages:', e.message);
     }
 }
 
-// Load persisted chat immediately
-loadPersistedChat();
+// Load persisted messages immediately
+loadPersistedMessages();
 
 // Gateway connection configuration - load from localStorage first, server state as fallback
 const GATEWAY_CONFIG = {
@@ -130,42 +149,29 @@ let currentModalTask = null;
 let currentModalColumn = null;
 let refreshIntervalId = null;
 
-// Filter out heartbeat messages from display
-function isHeartbeatMessage(text, from) {
-    if (!text) {
-        console.log('[Filter] SKIP: empty text');
-        return false;
-    }
+// Classify messages as system/heartbeat noise vs real chat
+function isSystemMessage(text, from) {
+    if (!text) return false;
+
     const trimmed = text.trim();
-    const preview = trimmed.substring(0, 80) + (trimmed.length > 80 ? '...' : '');
     const lowerTrimmed = trimmed.toLowerCase();
-    
-    // Exact matches
-    if (trimmed === 'HEARTBEAT_OK') {
-        console.log(`[Filter] HIDDEN (exact HEARTBEAT_OK): "${preview}"`);
-        return true;
-    }
-    
-    // Filter the heartbeat prompt itself
-    if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) {
-        console.log(`[Filter] HIDDEN (heartbeat prompt): "${preview}"`);
-        return true;
-    }
-    if (trimmed.includes('reply HEARTBEAT_OK')) {
-        console.log(`[Filter] HIDDEN (contains reply HEARTBEAT_OK): "${preview}"`);
-        return true;
-    }
-    
-    // Filter system-injected messages
-    if (trimmed.startsWith('System: [')) {
-        console.log(`[Filter] HIDDEN (system message): "${preview}"`);
-        return true;
-    }
-    
-    // Filter bot heartbeat-related responses
+
+    // System messages
+    if (from === 'system') return true;
+    if (trimmed.startsWith('System: [')) return true;
+    if (trimmed.startsWith('Error:')) return true;
+    if (trimmed.startsWith('Failed:')) return true;
+
+    // Exact heartbeat matches
+    if (trimmed === 'HEARTBEAT_OK') return true;
+
+    // Heartbeat prompts
+    if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
+    if (trimmed.includes('reply HEARTBEAT_OK')) return true;
+
+    // Bot heartbeat responses
     if (from === 'solobot') {
-        // Heartbeat acknowledgment patterns
-        const botHeartbeatPatterns = [
+        const botSystemPatterns = [
             'following heartbeat',
             'following the heartbeat',
             'checking current status via heartbeat',
@@ -180,16 +186,14 @@ function isHeartbeatMessage(text, from) {
             '{ "status": "error"',
             '{"status":"error"'
         ];
-        
-        for (const pattern of botHeartbeatPatterns) {
+
+        for (const pattern of botSystemPatterns) {
             if (lowerTrimmed.startsWith(pattern) || lowerTrimmed.includes(pattern)) {
-                console.log(`[Filter] HIDDEN (bot heartbeat): "${preview}"`);
                 return true;
             }
         }
     }
-    
-    console.log(`[Filter] SHOWN (from: ${from}): "${preview}"`);
+
     return false;
 }
 
@@ -447,7 +451,7 @@ function loadHistoryMessages(messages) {
     }
 
     // Persist merged messages
-    persistChat();
+    persistMessages();
 
     renderChat();
     renderChatPage();
@@ -522,7 +526,7 @@ function mergeHistoryMessages(messages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
         // Persist merged messages
-        persistChat();
+        persistMessages();
         renderChat();
         renderChatPage();
     }
@@ -856,7 +860,8 @@ async function sendChatMessage() {
 
 function addLocalChatMessage(text, from, image = null) {
     if (!state.chat) state.chat = { messages: [] };
-    
+    if (!state.system) state.system = { messages: [] };
+
     const message = {
         id: 'm' + Date.now(),
         from,
@@ -864,24 +869,33 @@ function addLocalChatMessage(text, from, image = null) {
         time: Date.now(),
         image: image
     };
-    
-    state.chat.messages.push(message);
-    
-    // Keep only last N messages
-    if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
-        state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
+
+    // Route to appropriate message array
+    if (isSystemMessage(text, from)) {
+        // System message - goes to system tab
+        state.system.messages.push(message);
+        if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
+            state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
+        }
+        renderSystemPage();
+    } else {
+        // Real chat message - goes to chat tab
+        state.chat.messages.push(message);
+        if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
+            state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
+        }
+
+        // Notify chat page of new message (for indicator when scrolled up)
+        if (from !== 'user' && typeof notifyChatPageNewMessage === 'function') {
+            notifyChatPageNewMessage();
+        }
+
+        renderChat();
+        renderChatPage();
     }
-    
-    // Persist to localStorage so messages survive page refresh
-    persistChat();
-    
-    // Notify chat page of new message (for indicator when scrolled up)
-    if (from !== 'user' && typeof notifyChatPageNewMessage === 'function') {
-        notifyChatPageNewMessage();
-    }
-    
-    renderChat();
-    renderChatPage();
+
+    // Persist both arrays to localStorage
+    persistMessages();
 }
 
 // ===================
@@ -912,9 +926,8 @@ function renderChat() {
     // Check scroll position before rendering
     const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
 
-    // Render each message (filter out heartbeat messages)
+    // Render each message (no filtering needed - system messages are in separate array)
     messages.forEach(msg => {
-        if (isHeartbeatMessage(msg.text, msg.from)) return; // Skip heartbeat messages
         const msgEl = createChatMessageElement(msg);
         if (msgEl) container.appendChild(msgEl);
     });
@@ -1196,9 +1209,8 @@ function renderChatPage() {
         return;
     }
     
-    // Render messages (filter out heartbeat messages)
+    // Render messages (no filtering - system messages are in separate array)
     messages.forEach(msg => {
-        if (isHeartbeatMessage(msg.text, msg.from)) return; // Skip heartbeat messages
         const msgEl = createChatPageMessage(msg);
         if (msgEl) container.appendChild(msgEl);
     });
@@ -1399,6 +1411,86 @@ function clearChatHistory() {
         chatPageUserScrolled = false;
         renderChat();
         renderChatPage();
+        persistMessages();
+    }
+}
+
+// ===================
+// SYSTEM PAGE RENDERING
+// ===================
+
+function renderSystemPage() {
+    const container = document.getElementById('system-page-messages');
+    if (!container) return;
+
+    const messages = state.system?.messages || [];
+
+    // Clear and re-render
+    container.innerHTML = '';
+
+    // Show empty state if no messages
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div class="chat-page-empty">
+                <div class="chat-page-empty-icon">⚙️</div>
+                <div class="chat-page-empty-text">
+                    No system messages yet. This tab shows heartbeats, errors, and other system noise.
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Render messages
+    messages.forEach(msg => {
+        const msgEl = createSystemMessage(msg);
+        if (msgEl) container.appendChild(msgEl);
+    });
+
+    // Auto-scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+function createSystemMessage(msg) {
+    if (!msg || typeof msg.text !== 'string') return null;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'system-message';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'system-bubble';
+
+    // Header with time
+    const header = document.createElement('div');
+    header.className = 'system-bubble-header';
+
+    const sender = document.createElement('span');
+    sender.className = 'system-sender';
+    sender.textContent = msg.from === 'solobot' ? 'SoLoBot (System)' : 'System';
+
+    const time = document.createElement('span');
+    time.className = 'system-bubble-time';
+    time.textContent = formatTime(msg.time);
+
+    header.appendChild(sender);
+    header.appendChild(time);
+    bubble.appendChild(header);
+
+    // Content
+    const content = document.createElement('div');
+    content.className = 'system-bubble-content';
+    content.textContent = msg.text;
+    bubble.appendChild(content);
+
+    wrapper.appendChild(bubble);
+    return wrapper;
+}
+
+function clearSystemHistory() {
+    if (confirm('Clear all system messages?')) {
+        state.system.messages = [];
+        renderSystemPage();
+        persistMessages();
     }
 }
 
@@ -1414,6 +1506,7 @@ function render() {
     renderDocs();
     renderChat();
     renderChatPage();
+    renderSystemPage();
     renderBulkActionBar();
     updateArchiveBadge();
 
