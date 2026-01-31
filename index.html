@@ -1276,6 +1276,17 @@
         /* Prevent page-level scroll on chat page */
         #page-chat {
             overflow: hidden;
+            height: calc(100vh - 60px);
+            max-height: calc(100vh - 60px);
+        }
+        
+        /* Prevent body scroll when chat page is active */
+        #page-chat.active ~ * {
+            overflow: hidden;
+        }
+        
+        body:has(#page-chat.active) {
+            overflow: hidden;
         }
         
         /* Minimal header - just status */
@@ -1470,7 +1481,7 @@
             background: linear-gradient(135deg, #1B2232 0%, #2a3548 100%);
             border: 1px solid rgba(169, 178, 188, 0.2);
             border-bottom-left-radius: 4px;
-            color: var(--text-primary);
+            color: #ffffff;
         }
         
         .chat-page-message.system .chat-page-bubble {
@@ -2376,7 +2387,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.7.7"></script>
+    <script src="dashboard.js?v=3.7.8"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
