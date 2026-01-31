@@ -1,9 +1,10 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.18.0 - Gateway-synced chat with separate System tab
+// Version: 3.19.0 - Gateway-synced chat with conservative system filtering
 //
 // Message Architecture:
 // - Chat messages: Synced via Gateway (single source of truth across all devices)
 // - System messages: Local UI noise (heartbeats, errors) - persisted to localStorage only
+// - Filtering: Very conservative - only filters obvious heartbeat/system patterns
 
 // ===================
 // STATE MANAGEMENT
@@ -147,44 +148,36 @@ function isSystemMessage(text, from) {
     const trimmed = text.trim();
     const lowerTrimmed = trimmed.toLowerCase();
 
-    // System messages
+    // Only mark as system if from='system' explicitly
     if (from === 'system') return true;
-    if (trimmed.startsWith('System: [')) return true;
-    if (trimmed.startsWith('Error:')) return true;
-    if (trimmed.startsWith('Failed:')) return true;
+
+    // VERY specific patterns only - don't be too aggressive
+    // Only filter obvious heartbeat/system noise
 
     // Exact heartbeat matches
     if (trimmed === 'HEARTBEAT_OK') return true;
+    if (trimmed.startsWith('System: [')) return true;
 
-    // Heartbeat prompts
+    // Heartbeat prompts (exact match from start)
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
-    if (trimmed.includes('reply HEARTBEAT_OK')) return true;
 
-    // Bot heartbeat responses
-    if (from === 'solobot') {
-        const botSystemPatterns = [
-            'following heartbeat',
-            'following the heartbeat',
+    // Only filter if message is VERY short and matches exact heartbeat patterns
+    if (from === 'solobot' && trimmed.length < 200) {
+        // Only exact start-of-message matches for very specific heartbeat phrases
+        const exactStartPatterns = [
+            'following heartbeat routine',
+            'following the heartbeat routine',
             'checking current status via heartbeat',
-            'checking current state following heartbeat',
-            'checking current state following heartbeat.md',
-            'let me check the current state and ensure',
-            'let me check the current task board',
-            'let me fix the syntax and provide',
-            'let me provide the simple heartbeat',
-            'logged: ✅ heartbeat',
-            'logged: 🔄 heartbeat',
-            '{ "status": "error"',
-            '{"status":"error"'
         ];
 
-        for (const pattern of botSystemPatterns) {
-            if (lowerTrimmed.startsWith(pattern) || lowerTrimmed.includes(pattern)) {
+        for (const pattern of exactStartPatterns) {
+            if (lowerTrimmed.startsWith(pattern)) {
                 return true;
             }
         }
     }
 
+    // Don't filter anything else - better to show too much than hide real messages
     return false;
 }
 
@@ -903,9 +896,15 @@ function addLocalChatMessage(text, from, image = null) {
         image: image
     };
 
+    const isSystem = isSystemMessage(text, from);
+    const preview = text.substring(0, 80) + (text.length > 80 ? '...' : '');
+
+    console.log(`[addLocalChatMessage] from: ${from}, isSystem: ${isSystem}, text: "${preview}"`);
+
     // Route to appropriate message array
-    if (isSystemMessage(text, from)) {
+    if (isSystem) {
         // System message - goes to system tab (local UI noise)
+        console.log(`[addLocalChatMessage] → SYSTEM tab (${state.system.messages.length} total)`);
         state.system.messages.push(message);
         if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -914,6 +913,7 @@ function addLocalChatMessage(text, from, image = null) {
         renderSystemPage();
     } else {
         // Real chat message - goes to chat tab (synced via Gateway)
+        console.log(`[addLocalChatMessage] → CHAT tab (${state.chat.messages.length} total)`);
         state.chat.messages.push(message);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -943,6 +943,8 @@ function renderChat() {
 
     const messages = state.chat?.messages || [];
     const isConnected = gateway?.isConnected();
+
+    console.log(`[renderChat] Rendering ${messages.length} chat messages, streaming: ${!!streamingText}`);
 
     // Show placeholder if no messages
     if (messages.length === 0 && !streamingText) {
