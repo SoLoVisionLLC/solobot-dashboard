@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.5.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.6.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -87,6 +87,7 @@ function loadGatewaySettingsFromServer() {
 let gateway = null;
 let streamingText = '';
 let isProcessing = false;
+let lastProcessingEndTime = 0; // Track when processing ended to avoid poll conflicts
 let historyPollInterval = null;
 
 let newTaskPriority = 1;
@@ -280,7 +281,8 @@ function handleChatEvent(event) {
 
         case 'final':
             // Final response from assistant
-            const finalContent = content || streamingText;
+            // Prefer streamingText if available for consistency (avoid content mismatch)
+            const finalContent = streamingText || content;
             console.log('[Dashboard] final - content:', finalContent?.length, 'chars, role:', role);
             if (finalContent && role !== 'user') {
                 console.log('[Dashboard] Adding final message to chat');
@@ -290,8 +292,9 @@ function handleChatEvent(event) {
             }
             streamingText = '';
             isProcessing = false;
+            lastProcessingEndTime = Date.now();
             renderChat();
-    renderChatPage();
+            renderChatPage();
             break;
 
         case 'error':
@@ -299,8 +302,9 @@ function handleChatEvent(event) {
             addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
             streamingText = '';
             isProcessing = false;
+            lastProcessingEndTime = Date.now();
             renderChat();
-    renderChatPage();
+            renderChatPage();
             break;
 
         default:
@@ -310,7 +314,12 @@ function handleChatEvent(event) {
 
 function loadHistoryMessages(messages) {
     // Convert gateway history format to our format
-    state.chat.messages = messages.map(msg => {
+    // Preserve any very recent local messages (within 10 seconds) to avoid losing in-flight messages
+    const recentLocalMessages = state.chat.messages.filter(m => 
+        (Date.now() - m.time) < 10000 && m.id.startsWith('m')
+    );
+    
+    const historyMessages = messages.map(msg => {
         let textContent = '';
         if (msg.content) {
             for (const part of msg.content) {
@@ -327,6 +336,20 @@ function loadHistoryMessages(messages) {
             time: msg.timestamp || Date.now()
         };
     });
+    
+    // Merge: start with history, add any recent local messages not in history
+    const historyTexts = new Set(historyMessages.map(m => m.text.substring(0, 100)));
+    const uniqueRecentLocal = recentLocalMessages.filter(m => 
+        !historyTexts.has(m.text.substring(0, 100))
+    );
+    
+    state.chat.messages = [...historyMessages, ...uniqueRecentLocal];
+    
+    // Sort by time and trim
+    state.chat.messages.sort((a, b) => a.time - b.time);
+    if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
+        state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
+    }
 
     renderChat();
     renderChatPage();
@@ -335,9 +358,12 @@ function loadHistoryMessages(messages) {
 function startHistoryPolling() {
     stopHistoryPolling(); // Clear any existing interval
 
-    // Poll every 5 seconds to catch user messages from other clients
+    // Poll every 10 seconds to catch user messages from other clients
+    // Increased interval and added buffer to prevent race conditions
     historyPollInterval = setInterval(() => {
+        // Skip if not connected, processing, or just finished processing (3 second buffer)
         if (!gateway || !gateway.isConnected() || isProcessing) return;
+        if (Date.now() - lastProcessingEndTime < 3000) return;
 
         gateway.loadHistory().then(result => {
             if (result?.messages) {
@@ -346,7 +372,7 @@ function startHistoryPolling() {
         }).catch(err => {
             console.log('[Dashboard] History poll failed:', err.message);
         });
-    }, 5000);
+    }, 10000);
 }
 
 function stopHistoryPolling() {
