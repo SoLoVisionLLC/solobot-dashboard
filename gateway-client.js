@@ -1,6 +1,8 @@
 // Gateway WebSocket Client
 // Mirrors the SoLoBot Android app approach for shared session chat
 
+console.log('[Gateway] gateway-client.js loaded - v2 with debug logging');
+
 const GATEWAY_PROTOCOL_VERSION = 3;
 
 class GatewayClient {
@@ -55,6 +57,7 @@ class GatewayClient {
         };
 
         this.socket.onmessage = (event) => {
+            console.log('[Gateway] RAW message received, length:', event.data?.length);
             this._handleMessage(event.data);
         };
 
