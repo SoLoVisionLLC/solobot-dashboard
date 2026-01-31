@@ -77,8 +77,6 @@ const defaultSettings = {
 // GATEWAY CONNECTION
 // ===================
 
-let historyPollInterval = null;
-
 function initGateway() {
     gateway = new GatewayClient({
         sessionKey: GATEWAY_CONFIG.sessionKey,
@@ -87,27 +85,20 @@ function initGateway() {
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
 
-            // Load chat history
+            // Load chat history on connect
             gateway.loadHistory().then(result => {
                 if (result?.messages) {
                     loadHistoryMessages(result.messages);
                 }
+            }).catch(err => {
+                console.log('[Dashboard] chat.history failed:', err.message);
             });
-
-            // Poll for new messages from other clients every 3 seconds
-            if (historyPollInterval) clearInterval(historyPollInterval);
-            historyPollInterval = setInterval(pollChatHistory, 3000);
         },
         onDisconnected: (message) => {
             console.log(`[Dashboard] Disconnected: ${message}`);
             updateConnectionUI('disconnected', message);
             isProcessing = false;
             streamingText = '';
-            // Stop polling when disconnected
-            if (historyPollInterval) {
-                clearInterval(historyPollInterval);
-                historyPollInterval = null;
-            }
         },
         onChatEvent: (event) => {
             handleChatEvent(event);
