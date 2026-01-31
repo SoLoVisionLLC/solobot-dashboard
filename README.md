@@ -88,7 +88,41 @@ Every 30 minutes, SoLoBot should:
 
 ## Deployment
 
-For live dashboard on VPS:
+### Option 1: Coolify (Recommended)
+
+Deploy to Coolify with Docker:
+
+1. **In Coolify UI:**
+   - Create New Resource → Docker Image
+   - Connect your Git repository
+   - Set Build Pack: `Dockerfile`
+   - Expose Port: `80`
+   - Add domain (e.g., `dashboard.sololink.cloud`)
+   - Enable HTTPS
+
+2. **Click Deploy** - Coolify will build and deploy automatically
+
+3. **Verify:** Visit your domain or run health check:
+   ```bash
+   curl https://dashboard.sololink.cloud/health
+   ```
+
+See [COOLIFY-CHEATSHEET.md](./COOLIFY-CHEATSHEET.md) for detailed commands.
+
+### Option 2: Docker Manually
+
+```bash
+# Build the image
+docker build -t solobot-dashboard .
+
+# Run locally
+docker run -d -p 8080:80 --name dashboard solobot-dashboard
+
+# Test
+curl http://localhost:8080/health
+```
+
+### Option 3: Simple HTTP Server (Development)
 
 ```bash
 # Copy files to VPS
