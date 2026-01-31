@@ -1270,6 +1270,12 @@
             margin: 0;
             padding: 0;
             position: relative;
+            overflow: hidden;
+        }
+        
+        /* Prevent page-level scroll on chat page */
+        #page-chat {
+            overflow: hidden;
         }
         
         /* Minimal header - just status */
@@ -1314,13 +1320,15 @@
             padding: var(--space-2) var(--space-3);
         }
         
-        /* Messages container - takes remaining space */
+        /* Messages container - takes remaining space, only this scrolls */
         .chat-page-messages {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: var(--space-4) var(--space-5);
             background: linear-gradient(180deg, var(--surface-1) 0%, rgba(27, 34, 50, 0.95) 100%);
             scroll-behavior: auto;
+            min-height: 0; /* Important for flex child scrolling */
         }
         
         .chat-page-messages::-webkit-scrollbar {
@@ -2367,7 +2375,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.7.5"></script>
+    <script src="dashboard.js?v=3.7.6"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
