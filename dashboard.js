@@ -200,8 +200,21 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
-    const { state: eventState, content, errorMessage } = event;
+    const { state: eventState, content, role, errorMessage } = event;
 
+    // Handle user messages from other clients (WebUI, Telegram, etc.)
+    if (role === 'user' && eventState === 'final' && content) {
+        // Check if we already have this message (to avoid duplicates from our own sends)
+        const isDuplicate = state.chat.messages.some(m =>
+            m.from === 'user' && m.text === content && (Date.now() - m.time) < 5000
+        );
+        if (!isDuplicate) {
+            addLocalChatMessage(content, 'user');
+        }
+        return;
+    }
+
+    // Handle assistant messages
     switch (eventState) {
         case 'delta':
             // Streaming response
@@ -211,9 +224,9 @@ function handleChatEvent(event) {
             break;
 
         case 'final':
-            // Final response
+            // Final response from assistant
             const finalContent = content || streamingText;
-            if (finalContent) {
+            if (finalContent && role !== 'user') {
                 addLocalChatMessage(finalContent, 'solobot');
             }
             streamingText = '';

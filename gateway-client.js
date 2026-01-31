@@ -211,8 +211,10 @@ class GatewayClient {
         const state = payload.state;
         const message = payload.message;
 
-        // Extract text content
+        // Extract text content and role
         let contentText = '';
+        let role = message?.role || 'assistant';
+
         if (message?.content) {
             for (const part of message.content) {
                 if (part.type === 'text') {
@@ -224,6 +226,7 @@ class GatewayClient {
         this.onChatEvent({
             state,
             content: contentText,
+            role,
             sessionKey: eventSessionKey,
             errorMessage: payload.errorMessage
         });
