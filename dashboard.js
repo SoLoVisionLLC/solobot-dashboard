@@ -555,37 +555,108 @@ function initSampleData() {
 // CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
 
+// Image handling
+let pendingImage = null;
+
+function handleImageSelect(event) {
+    const file = event.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+        processImageFile(file);
+    }
+}
+
+function handlePaste(event) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    
+    for (const item of items) {
+        if (item.type.startsWith('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (file) processImageFile(file);
+            return;
+        }
+    }
+}
+
+function processImageFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        pendingImage = {
+            data: e.target.result,
+            name: file.name,
+            type: file.type
+        };
+        showImagePreview(pendingImage.data);
+    };
+    reader.readAsDataURL(file);
+}
+
+function showImagePreview(dataUrl) {
+    const container = document.getElementById('image-preview-container');
+    const img = document.getElementById('image-preview');
+    if (container && img) {
+        img.src = dataUrl;
+        container.classList.remove('hidden');
+    }
+}
+
+function clearImagePreview() {
+    pendingImage = null;
+    const container = document.getElementById('image-preview-container');
+    const input = document.getElementById('image-upload');
+    if (container) container.classList.add('hidden');
+    if (input) input.value = '';
+}
+
 async function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !pendingImage) return;
 
     if (!gateway || !gateway.isConnected()) {
         alert('Not connected to Gateway. Please connect first.');
         return;
     }
 
-    // Add user message to local state immediately
-    addLocalChatMessage(text, 'user');
+    // Build message with optional image
+    let messageText = text;
+    let imageData = null;
+    
+    if (pendingImage) {
+        imageData = pendingImage.data;
+        // Add image indicator to local display
+        addLocalChatMessage(text || '📷 Image', 'user', imageData);
+    } else {
+        addLocalChatMessage(text, 'user');
+    }
+    
     input.value = '';
+    clearImagePreview();
 
     // Send via Gateway WebSocket
     try {
-        await gateway.sendMessage(text);
+        if (imageData) {
+            // Send with image attachment
+            await gateway.sendMessageWithImage(text || 'Image', imageData);
+        } else {
+            await gateway.sendMessage(text);
+        }
     } catch (err) {
         console.error('Failed to send message:', err);
         addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
     }
 }
 
-function addLocalChatMessage(text, from) {
+function addLocalChatMessage(text, from, image = null) {
     if (!state.chat) state.chat = { messages: [] };
     
     const message = {
         id: 'm' + Date.now(),
         from,
         text,
-        time: Date.now()
+        time: Date.now(),
+        image: image
     };
     
     state.chat.messages.push(message);
@@ -608,10 +679,10 @@ function renderChat() {
     if (!hasMessages && !hasStreaming) {
         const isConnected = gateway?.isConnected();
         container.innerHTML = `
-            <div class="text-gray-500 text-sm text-center py-8">
+            <div class="text-solo-grey text-sm text-center py-8">
                 ${isConnected
                     ? '💬 Connected! Chat mirrors your Telegram session.'
-                    : '🔌 Connect to Gateway to start chatting'}
+                    : '🔌 Connect to Gateway in Settings to start chatting'}
             </div>
         `;
         return;
@@ -652,17 +723,17 @@ function renderChatMessage(msg) {
     let bgClass, alignClass, nameClass, name;
 
     if (isUser) {
-        bgClass = 'bg-solo-primary/20 ml-8';
+        bgClass = 'bg-solo-red/20 ml-8 border border-solo-red/30';
         alignClass = 'text-right';
-        nameClass = 'text-solo-primary';
+        nameClass = 'text-solo-red';
         name = 'You';
     } else if (isSystem) {
-        bgClass = 'bg-red-500/10 border border-red-500/20';
+        bgClass = 'bg-yellow-500/10 border border-yellow-500/20';
         alignClass = 'text-left';
-        nameClass = 'text-red-400';
+        nameClass = 'text-yellow-400';
         name = '⚠️ System';
     } else {
-        bgClass = msg.isStreaming ? 'bg-slate-700/50 mr-8 border border-slate-600' : 'bg-slate-700 mr-8';
+        bgClass = msg.isStreaming ? 'bg-solo-card/50 mr-8 border border-solo-grey/30' : 'bg-solo-card mr-8 border border-solo-grey/20';
         alignClass = 'text-left';
         nameClass = 'text-green-400';
         name = msg.isStreaming ? '🤖 SoLoBot (typing...)' : '🤖 SoLoBot';
@@ -670,6 +741,12 @@ function renderChatMessage(msg) {
 
     // Format message with markdown-like support
     let formattedText = formatMarkdown(msg.text);
+    
+    // Add image if present
+    let imageHtml = '';
+    if (msg.image) {
+        imageHtml = `<img src="${msg.image}" class="max-w-full max-h-48 rounded-lg mb-2 cursor-pointer" onclick="openImageModal(this.src)" />`;
+    }
 
     return `
         <div class="${bgClass} rounded-lg p-3 ${alignClass} message-item w-full shrink-0" data-time="${msg.time}">
@@ -677,9 +754,18 @@ function renderChatMessage(msg) {
                 <span class="text-xs ${nameClass} font-medium">${name}</span>
                 <span class="text-xs text-gray-500">${timeStr}</span>
             </div>
+            ${imageHtml}
             <div class="text-sm text-gray-200 leading-relaxed break-words">${formattedText}</div>
         </div>
     `;
+}
+
+function openImageModal(src) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 cursor-pointer';
+    modal.onclick = () => modal.remove();
+    modal.innerHTML = `<img src="${src}" class="max-w-[90vw] max-h-[90vh] rounded-lg" />`;
+    document.body.appendChild(modal);
 }
 
 function formatMarkdown(text) {
@@ -687,21 +773,21 @@ function formatMarkdown(text) {
 
     return text
         // Headers
-        .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold text-gray-200 mb-2">$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-gray-100 mb-3">$1</h2>')
+        .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold text-white mb-2">$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-white mb-3">$1</h2>')
         .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-white mb-4">$1</h1>')
         // Bold
-        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-gray-100 font-semibold">$1</strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
         // Italic
-        .replace(/\*(.+?)\*/g, '<em class="text-gray-300">$1</em>')
+        .replace(/\*(.+?)\*/g, '<em class="text-solo-grey">$1</em>')
         // Code blocks
-        .replace(/```([\s\S]*?)```/g, '<pre class="bg-slate-800 p-3 rounded-lg text-sm overflow-x-auto my-3 border border-slate-600"><code class="text-green-400 font-mono">$1</code></pre>')
+        .replace(/```([\s\S]*?)```/g, '<pre class="bg-solo-darker p-3 rounded-lg text-sm overflow-x-auto my-3 border border-solo-grey/30"><code class="text-solo-red font-mono">$1</code></pre>')
         // Inline code
-        .replace(/`(.+?)`/g, '<code class="bg-slate-700 px-1.5 py-0.5 rounded text-sm text-cyan-400 font-mono">$1</code>')
+        .replace(/`(.+?)`/g, '<code class="bg-solo-darker px-1.5 py-0.5 rounded text-sm text-solo-red font-mono">$1</code>')
         // Lists
-        .replace(/^[*-] (.+)$/gm, '<li class="ml-4 text-gray-200 list-disc">$1</li>')
+        .replace(/^[*-] (.+)$/gm, '<li class="ml-4 text-white list-disc">$1</li>')
         // Links
-        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-solo-primary hover:text-solo-accent underline">$1</a>')
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-solo-red hover:underline">$1</a>')
         // Line breaks
         .replace(/\n/g, '<br>');
 }

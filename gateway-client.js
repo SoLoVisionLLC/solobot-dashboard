@@ -274,6 +274,38 @@ class GatewayClient {
         });
     }
 
+    sendMessageWithImage(text, imageDataUrl) {
+        if (!this.connected) {
+            console.warn('[Gateway] Not connected, cannot send message');
+            return Promise.reject(new Error('Not connected'));
+        }
+
+        // Extract base64 data and mime type from data URL
+        const matches = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
+        if (!matches) {
+            return Promise.reject(new Error('Invalid image data URL'));
+        }
+
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+
+        const params = {
+            message: text,
+            sessionKey: this.sessionKey,
+            idempotencyKey: crypto.randomUUID(),
+            attachments: [{
+                type: 'image',
+                mimeType: mimeType,
+                data: base64Data
+            }]
+        };
+
+        return this._request('chat.send', params).then(result => {
+            console.log('[Gateway] chat.send (with image) result:', result);
+            return result;
+        });
+    }
+
     loadHistory() {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));
