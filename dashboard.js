@@ -31,7 +31,11 @@ let state = {
     console: {
         logs: [],            // Console log entries [{text, type, time}]
         expanded: false      // Is console expanded
-    }
+    },
+    chat: {
+        messages: []         // Chat messages [{id, from, text, time}]
+    },
+    pendingChat: null        // Pending chat message for SoLoBot to respond to
 };
 
 let newTaskPriority = 1;
@@ -460,6 +464,7 @@ function render() {
     renderNotes();
     renderActivity();
     renderDocs();
+    renderChat();
     renderBulkActionBar();
     updateArchiveBadge();
 }
@@ -1320,6 +1325,75 @@ function addNote() {
     saveState();
     render();
     input.value = '';
+}
+
+// ===================
+// CHAT FUNCTIONS
+// ===================
+
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    // Add message to chat history
+    if (!state.chat) state.chat = { messages: [] };
+    
+    const message = {
+        id: 'm' + Date.now(),
+        from: 'user',
+        text,
+        time: Date.now()
+    };
+    
+    state.chat.messages.push(message);
+    
+    // Also set as pending chat for SoLoBot to pick up
+    state.pendingChat = {
+        text,
+        time: Date.now()
+    };
+    
+    addActivity(`Chat: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`, 'info');
+    saveState();
+    renderChat();
+    input.value = '';
+}
+
+function renderChat() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    
+    if (!state.chat || !state.chat.messages || state.chat.messages.length === 0) {
+        container.innerHTML = `
+            <div class="text-gray-500 text-sm text-center py-8">
+                💬 Chat with SoLoBot directly. Messages sync every 3 seconds.
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = state.chat.messages.map(msg => {
+        const isUser = msg.from === 'user';
+        const timeStr = formatTime(msg.time);
+        const bgClass = isUser ? 'bg-solo-primary/20 ml-8' : 'bg-slate-700 mr-8';
+        const alignClass = isUser ? 'text-right' : 'text-left';
+        const nameClass = isUser ? 'text-solo-primary' : 'text-green-400';
+        const name = isUser ? 'You' : '🤖 SoLoBot';
+        
+        return `
+            <div class="${bgClass} rounded-lg p-3 ${alignClass}">
+                <div class="flex items-center gap-2 mb-1 ${isUser ? 'justify-end' : ''}">
+                    <span class="text-xs ${nameClass} font-medium">${name}</span>
+                    <span class="text-xs text-gray-500">${timeStr}</span>
+                </div>
+                <p class="text-sm text-gray-200">${escapeHtml(msg.text)}</p>
+            </div>
+        `;
+    }).join('');
+    
+    // Auto-scroll to bottom
+    container.scrollTop = container.scrollHeight;
 }
 
 // ===================
