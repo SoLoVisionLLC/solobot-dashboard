@@ -1,570 +1,1561 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SoLoVision Command Center</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        solo: {
-                            primary: '#BC2026',    // Deep Red - accent/buttons
-                            secondary: '#A9B2BC',  // Cool Light Grey
-                            accent: '#BC2026',     // Deep Red
-                            dark: '#1B2232',       // Dark Navy Blue
-                            darker: '#121820',     // Darker Navy
-                            card: '#232D3F',       // Lighter Navy for cards
-                            grey: '#A9B2BC',       // Cool Light Grey
-                            red: '#BC2026',        // Deep Red
-                            navy: '#1B2232',       // Dark Navy Blue
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        
-        .status-pulse {
+        /* ========================================
+           DESIGN SYSTEM - SoLoVision Brand
+           ======================================== */
+
+        :root {
+            /* Brand Colors */
+            --brand-red: #BC2026;
+            --brand-red-hover: #a51c21;
+            --brand-navy: #1B2232;
+            --brand-grey: #A9B2BC;
+            --brand-white: #FFFFFF;
+
+            /* Spacing Scale (8px base) */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --space-10: 40px;
+            --space-12: 48px;
+
+            /* Border Radius */
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-full: 9999px;
+
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-normal: 200ms ease;
+        }
+
+        /* Dark Theme (Default) - Slate/metal cool grays */
+        [data-theme="dark"] {
+            /* Surfaces - slate grays with subtle cool undertone */
+            --surface-base: #0c0d10;
+            --surface-1: #14161a;
+            --surface-2: #1c1e23;
+            --surface-3: #24262c;
+            --surface-overlay: #2c2f36;
+
+            /* Text hierarchy */
+            --text-primary: #FFFFFF;
+            --text-secondary: #A9B2BC;
+            --text-muted: rgba(169, 178, 188, 0.6);
+            --text-faint: rgba(169, 178, 188, 0.4);
+
+            /* Borders - subtle, not harsh */
+            --border-default: rgba(169, 178, 188, 0.12);
+            --border-subtle: rgba(169, 178, 188, 0.08);
+            --border-strong: rgba(169, 178, 188, 0.2);
+            --border-focus: rgba(188, 32, 38, 0.5);
+
+            /* Controls */
+            --control-bg: #1B2232;
+            --control-border: rgba(169, 178, 188, 0.2);
+            --control-focus: rgba(188, 32, 38, 0.3);
+
+            /* Semantic */
+            --success: #22c55e;
+            --success-muted: rgba(34, 197, 94, 0.15);
+            --warning: #eab308;
+            --warning-muted: rgba(234, 179, 8, 0.15);
+            --error: #ef4444;
+            --error-muted: rgba(239, 68, 68, 0.15);
+
+            /* Scrollbar */
+            --scrollbar-track: var(--surface-1);
+            --scrollbar-thumb: var(--brand-grey);
+        }
+
+        /* Light Theme */
+        [data-theme="light"] {
+            /* Surfaces */
+            --surface-base: #F8FAFC;
+            --surface-1: #FFFFFF;
+            --surface-2: #F1F5F9;
+            --surface-3: #E2E8F0;
+            --surface-overlay: #FFFFFF;
+
+            /* Text hierarchy */
+            --text-primary: #1B2232;
+            --text-secondary: #64748b;
+            --text-muted: rgba(27, 34, 50, 0.5);
+            --text-faint: rgba(27, 34, 50, 0.3);
+
+            /* Borders */
+            --border-default: rgba(27, 34, 50, 0.1);
+            --border-subtle: rgba(27, 34, 50, 0.06);
+            --border-strong: rgba(27, 34, 50, 0.15);
+            --border-focus: rgba(188, 32, 38, 0.4);
+
+            /* Controls */
+            --control-bg: #FFFFFF;
+            --control-border: rgba(27, 34, 50, 0.15);
+            --control-focus: rgba(188, 32, 38, 0.2);
+
+            /* Semantic - slightly adjusted for light bg */
+            --success: #16a34a;
+            --success-muted: rgba(22, 163, 74, 0.1);
+            --warning: #ca8a04;
+            --warning-muted: rgba(202, 138, 4, 0.1);
+            --error: #dc2626;
+            --error-muted: rgba(220, 38, 38, 0.1);
+
+            /* Scrollbar */
+            --scrollbar-track: var(--surface-2);
+            --scrollbar-thumb: var(--brand-grey);
+        }
+
+        /* ========================================
+           BASE STYLES
+           ======================================== */
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--surface-base);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+        ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+        /* ========================================
+           COMPONENTS
+           ======================================== */
+
+        /* Card */
+        .card {
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+        }
+
+        .card-elevated {
+            background: var(--surface-2);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-primary {
+            background: var(--brand-red);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--brand-red-hover);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-default);
+        }
+        .btn-ghost:hover {
+            background: var(--surface-2);
+            color: var(--text-primary);
+            border-color: var(--border-strong);
+        }
+
+        .btn-icon {
+            padding: var(--space-2);
+            background: transparent;
+            color: var(--text-secondary);
+            border: none;
+            border-radius: var(--radius-md);
+        }
+        .btn-icon:hover {
+            background: var(--surface-2);
+            color: var(--text-primary);
+        }
+
+        /* Inputs */
+        .input {
+            width: 100%;
+            padding: var(--space-2) var(--space-3);
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: border-color var(--transition-fast);
+        }
+        .input::placeholder {
+            color: var(--text-muted);
+        }
+        .input:focus {
+            outline: none;
+            border-color: var(--brand-red);
+            box-shadow: 0 0 0 3px var(--control-focus);
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px var(--space-2);
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .badge-default {
+            background: var(--surface-3);
+            color: var(--text-secondary);
+        }
+        .badge-success {
+            background: var(--success-muted);
+            color: var(--success);
+        }
+        .badge-warning {
+            background: var(--warning-muted);
+            color: var(--warning);
+        }
+        .badge-error {
+            background: var(--error-muted);
+            color: var(--error);
+        }
+
+        /* Status dot */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .status-dot.success { background: var(--success); }
+        .status-dot.warning { background: var(--warning); }
+        .status-dot.error { background: var(--error); }
+        .status-dot.idle { background: var(--text-muted); }
+        .status-dot.pulse {
             animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
-        
-        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
-        .scrollbar-thin::-webkit-scrollbar-track { background: #1B2232; }
-        .scrollbar-thin::-webkit-scrollbar-thumb { background: #A9B2BC; border-radius: 3px; }
-        
-        .priority-p0 { border-left: 4px solid #BC2026; }
-        .priority-p1 { border-left: 4px solid #A9B2BC; }
-        .priority-p2 { border-left: 4px solid #3b82f6; }
-        
-        /* Task card hover effects */
+
+        /* Section heading */
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: var(--space-4);
+        }
+        .section-title svg {
+            width: 18px;
+            height: 18px;
+            color: var(--brand-red);
+        }
+
+        /* ========================================
+           LAYOUT
+           ======================================== */
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 var(--space-6);
+        }
+
+        /* Header */
+        .header {
+            background: var(--surface-1);
+            border-bottom: 1px solid var(--border-default);
+            padding: var(--space-4) 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: var(--space-6);
+        }
+
+        .status-chip {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            background: var(--surface-2);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .header-meta span {
+            color: var(--text-primary);
+        }
+
+        /* Theme toggle */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2);
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+        .theme-toggle:hover {
+            border-color: var(--border-strong);
+        }
+        .theme-toggle svg {
+            width: 18px;
+            height: 18px;
+            color: var(--text-secondary);
+        }
+        .theme-toggle:hover svg {
+            color: var(--text-primary);
+        }
+
+        /* Main content */
+        .main {
+            padding: var(--space-6) 0;
+        }
+
+        /* Grid layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: var(--space-6);
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-4);
+        }
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-4);
+        }
+
+        @media (max-width: 1024px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .grid-3 { grid-template-columns: 1fr; }
+            .grid-4 { grid-template-columns: 1fr; }
+        }
+
+        /* Section spacing */
+        .section {
+            margin-bottom: var(--space-8);
+        }
+
+        /* ========================================
+           TASK BOARD
+           ======================================== */
+
+        .board-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        .board-actions {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .column {
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            min-height: 300px;
+        }
+
+        .column-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        .column-title {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .drop-zone {
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            border-radius: var(--radius-md);
+            transition: background var(--transition-fast);
+        }
+        .drop-zone.drag-over {
+            background: var(--surface-2);
+        }
+
+        .task-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: var(--space-3);
+            margin-bottom: var(--space-2);
+            cursor: grab;
+            transition: all var(--transition-fast);
+            position: relative;
+        }
+        .task-card:hover {
+            border-color: var(--border-strong);
+        }
+        .task-card:active {
+            cursor: grabbing;
+        }
+
+        .task-card.selected {
+            border-color: var(--brand-red);
+            box-shadow: 0 0 0 2px var(--control-focus);
+        }
+
+        .priority-p0 { border-left: 3px solid var(--brand-red); }
+        .priority-p1 { border-left: 3px solid var(--warning); }
+        .priority-p2 { border-left: 3px solid #3b82f6; }
+
+        .task-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: var(--space-1);
+        }
+
+        .task-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Quick actions on hover */
+        .task-quick-actions {
+            position: absolute;
+            right: var(--space-2);
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0;
+            transition: opacity var(--transition-fast);
+        }
         .task-card:hover .task-quick-actions {
             opacity: 1;
-            transform: translateY(-50%) translateX(4px);
         }
-        .task-quick-actions {
-            transition: all 0.2s ease;
+
+        /* ========================================
+           TERMINAL
+           ======================================== */
+
+        .terminal {
+            background: #0d1117;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
         }
-        
-        /* Checkbox styling */
-        input[type="checkbox"] {
-            accent-color: #BC2026;
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-3) var(--space-4);
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border-default);
         }
-        
-        /* Selected task glow */
-        .task-card.ring-2 {
-            box-shadow: 0 0 0 2px rgba(188, 32, 38, 0.3);
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
         }
-        
-        /* Bulk action bar animation */
-        #bulk-action-bar {
+        .terminal-dots span {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .terminal-dots .red { background: #ff5f56; }
+        .terminal-dots .yellow { background: #ffbd2e; }
+        .terminal-dots .green { background: #27c93f; }
+
+        .terminal-title {
+            font-family: 'Fira Code', 'Monaco', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .terminal-output {
+            padding: var(--space-4);
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            height: 250px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            color: var(--text-secondary);
+        }
+        .terminal-output .cmd { color: #7ee787; }
+        .terminal-output .info { color: var(--text-muted); }
+        .terminal-output .error { color: #f85149; }
+
+        /* ========================================
+           CHAT
+           ======================================== */
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .chat-header {
+            padding: var(--space-4);
+            border-bottom: 1px solid var(--border-default);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-messages {
+            flex: 1;
+            min-height: 300px;
+            max-height: 350px;
+            overflow-y: auto;
+            padding: var(--space-4);
+            background: var(--surface-base);
+            overscroll-behavior: contain;
+        }
+
+        .chat-input-area {
+            padding: var(--space-3);
+            border-top: 1px solid var(--border-default);
+            display: flex;
+            gap: var(--space-2);
+            align-items: center;
+        }
+
+        /* Image preview */
+        .image-preview-container {
+            padding: var(--space-2) var(--space-3);
+            border-top: 1px solid var(--border-default);
+            display: none;
+        }
+        .image-preview-container.visible {
+            display: block;
+        }
+        .image-preview-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .image-preview-wrapper img {
+            max-height: 80px;
+            border-radius: var(--radius-md);
+        }
+        .image-preview-close {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            background: var(--brand-red);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ========================================
+           ACTIVITY LOG
+           ======================================== */
+
+        .activity-list {
+            height: 250px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            padding: var(--space-2) 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            min-width: 60px;
+        }
+
+        .activity-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .activity-text.success { color: var(--success); }
+        .activity-text.warning { color: var(--warning); }
+
+        /* ========================================
+           NOTES
+           ======================================== */
+
+        .notes-input {
+            display: flex;
+            gap: var(--space-2);
+            margin-bottom: var(--space-4);
+        }
+
+        .notes-list {
+            height: 200px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .note-item {
+            padding: var(--space-3);
+            background: var(--surface-2);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-2);
+        }
+
+        .note-text {
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-bottom: var(--space-1);
+        }
+
+        .note-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ========================================
+           PRODUCT STATUS
+           ======================================== */
+
+        .product-card {
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+        }
+
+        .product-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-2);
+        }
+
+        .product-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .product-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: var(--space-2);
+        }
+
+        .product-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ========================================
+           DOCS HUB
+           ======================================== */
+
+        .docs-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        .docs-search {
+            width: 200px;
+        }
+
+        .doc-card {
+            display: block;
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            transition: border-color var(--transition-fast);
+            text-decoration: none;
+            overflow: hidden;
+        }
+        .doc-card:hover {
+            border-color: var(--border-strong);
+        }
+        .doc-card * {
+            max-width: 100%;
+        }
+
+        .doc-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .doc-icon.gdoc { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
+        .doc-icon.gsheet { background: rgba(52, 168, 83, 0.15); color: #34a853; }
+        .doc-icon.pdf { background: rgba(234, 67, 53, 0.15); color: #ea4335; }
+        .doc-icon.default { background: var(--surface-3); color: var(--text-secondary); }
+
+        .doc-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .doc-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* ========================================
+           MODALS
+           ======================================== */
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: var(--space-4);
+        }
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            width: 100%;
+            max-width: 480px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .modal-lg {
+            max-width: 640px;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: var(--space-1);
+        }
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-section {
+            margin-bottom: var(--space-6);
+        }
+
+        .modal-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: var(--space-3);
+        }
+
+        .modal-section-content {
+            background: var(--surface-2);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+        }
+
+        .form-group {
+            margin-bottom: var(--space-3);
+        }
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: var(--space-1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-3);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-4);
+        }
+        .form-actions .btn {
+            flex: 1;
+        }
+
+        /* Settings row */
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-3) 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .setting-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Select styling */
+        .select {
+            padding: var(--space-2) var(--space-3);
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .select:focus {
+            outline: none;
+            border-color: var(--brand-red);
+        }
+
+        /* Toggle switch */
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: var(--surface-3);
+            border-radius: var(--radius-full);
+            transition: background var(--transition-fast);
+        }
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: transform var(--transition-fast);
+        }
+        .toggle input:checked + .toggle-slider {
+            background: var(--brand-red);
+        }
+        .toggle input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        /* Danger zone */
+        .danger-zone {
+            background: var(--error-muted);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        /* ========================================
+           FOOTER
+           ======================================== */
+
+        .footer {
+            background: var(--surface-1);
+            border-top: 1px solid var(--border-default);
+            padding: var(--space-3) 0;
+            margin-top: var(--space-8);
+        }
+
+        .footer-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .footer-status {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+            color: var(--success);
+        }
+
+        /* ========================================
+           BULK ACTIONS BAR
+           ======================================== */
+
+        .bulk-action-bar {
+            position: fixed;
+            bottom: var(--space-6);
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface-overlay);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-lg);
+            padding: var(--space-3) var(--space-4);
+            display: none;
+            align-items: center;
+            gap: var(--space-4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            z-index: 50;
             animation: slideUp 0.2s ease;
+        }
+        .bulk-action-bar.visible {
+            display: flex;
         }
         @keyframes slideUp {
             from { opacity: 0; transform: translate(-50%, 20px); }
             to { opacity: 1; transform: translate(-50%, 0); }
         }
+
+        /* ========================================
+           UTILITIES
+           ======================================== */
+
+        .hidden { display: none !important; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-1 { gap: var(--space-1); }
+        .gap-2 { gap: var(--space-2); }
+        .gap-3 { gap: var(--space-3); }
+        .gap-4 { gap: var(--space-4); }
+        .flex-1 { flex: 1; }
+        .text-center { text-align: center; }
+        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .space-y-2 > * + * { margin-top: var(--space-2); }
+        .space-y-3 > * + * { margin-top: var(--space-3); }
     </style>
 </head>
-<body class="bg-solo-darker text-gray-100 min-h-screen">
-    
+<body>
+
     <!-- Header -->
-    <header class="bg-solo-dark border-b border-solo-grey/20 px-6 py-4">
-        <div class="flex items-center justify-between max-w-7xl mx-auto">
-            <div class="flex items-center gap-4">
-                <div class="text-2xl font-bold text-white">
-                    SoLoVision Command Center
+    <header class="header">
+        <div class="container header-inner">
+            <div class="logo">SoLoVision Command Center</div>
+
+            <div class="header-status">
+                <div class="status-chip">
+                    <div id="status-indicator" class="status-dot success pulse"></div>
+                    <span id="status-text">IDLE</span>
                 </div>
-            </div>
-            
-            <!-- AI Status Panel -->
-            <div class="flex items-center gap-6">
-                <div class="flex items-center gap-3 bg-solo-card px-4 py-2 rounded-lg">
-                    <div id="status-indicator" class="w-3 h-3 rounded-full bg-green-500 status-pulse"></div>
-                    <span id="status-text" class="text-sm font-medium">IDLE</span>
+
+                <div class="header-meta">
+                    <div>Provider: <span id="provider-name">anthropic</span></div>
+                    <div>Model: <span id="model-name">opus 4.5</span></div>
                 </div>
-                <div class="text-sm text-solo-grey">
-                    <span class="text-solo-grey/70">Provider:</span> 
-                    <span id="provider-name" class="text-white">anthropic</span>
-                </div>
-                <div class="text-sm text-solo-grey">
-                    <span class="text-solo-grey/70">Model:</span> 
-                    <span id="model-name" class="text-white">opus 4.5</span>
-                </div>
-                <div id="current-task" class="text-sm text-solo-grey max-w-xs truncate hidden">
-                    <span class="text-solo-grey/70">Task:</span>
-                    <span id="task-name" class="text-white"></span>
-                </div>
+
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                    <svg id="theme-icon-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <svg id="theme-icon-light" class="hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Sub-agent Banner (hidden by default) -->
-    <div id="subagent-banner" class="bg-solo-secondary/20 border-b border-solo-secondary/30 px-6 py-2 hidden">
-        <div class="max-w-7xl mx-auto flex items-center gap-2 text-sm">
-            <svg class="w-4 h-4 text-solo-secondary animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    <!-- Sub-agent Banner -->
+    <div id="subagent-banner" class="hidden" style="background: var(--warning-muted); border-bottom: 1px solid var(--border-default); padding: var(--space-2) 0;">
+        <div class="container flex items-center gap-2" style="font-size: 13px;">
+            <svg class="animate-spin" style="width: 16px; height: 16px; color: var(--warning);" fill="none" viewBox="0 0 24 24">
+                <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span class="text-solo-secondary font-medium">Sub-agent active:</span>
-            <span id="subagent-task" class="text-white">Researching...</span>
+            <span style="color: var(--warning); font-weight: 500;">Sub-agent active:</span>
+            <span id="subagent-task">Researching...</span>
         </div>
     </div>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto p-6">
-        
-        <!-- SoLoBot Console -->
-        
-        <!-- Kanban Board -->
-        <section class="mb-8">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold flex items-center gap-2">
-                    <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                    </svg>
-                    Task Board
-                </h2>
-                <div class="flex items-center gap-2">
-                    <button onclick="openArchiveModal()" class="text-sm text-solo-grey hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-solo-card transition">
-                        📦 Archive <span id="archive-badge" class="text-xs bg-solo-red/20 text-solo-red px-2 py-0.5 rounded-full hidden">0</span>
-                    </button>
-                    <button onclick="syncFromVPS()" class="text-sm text-solo-grey hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-solo-card transition" title="Pull latest state from VPS">
-                        🔄 Sync
-                    </button>
-                    <button onclick="openSettingsModal()" class="text-sm text-solo-grey hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-solo-card transition">
-                        ⚙️ Settings
-                    </button>
-                </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                <!-- To-Do Column -->
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-medium text-white flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-slate-500"></span>
-                            To-Do
-                            <span id="todo-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
-                        </h3>
-                        <button onclick="openAddTask('todo')" class="text-solo-grey/70 hover:text-white transition">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                            </svg>
+    <main class="main">
+        <div class="container">
+
+            <!-- Task Board -->
+            <section class="section">
+                <div class="board-header">
+                    <h2 class="section-title">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        Task Board
+                    </h2>
+                    <div class="board-actions">
+                        <button onclick="openArchiveModal()" class="btn btn-ghost">
+                            <span>📦</span> Archive
+                            <span id="archive-badge" class="badge badge-error hidden">0</span>
+                        </button>
+                        <button onclick="syncFromVPS()" class="btn btn-ghost" title="Pull latest state from VPS">
+                            <span>🔄</span> Sync
+                        </button>
+                        <button onclick="openSettingsModal()" class="btn btn-ghost">
+                            <span>⚙️</span> Settings
                         </button>
                     </div>
-                    <div id="todo-tasks" class="drop-zone space-y-2 min-h-[200px] rounded-lg transition-all"
-                         ondragover="handleDragOver(event)"
-                         ondragenter="handleDragEnter(event, 'todo')"
-                         ondragleave="handleDragLeave(event, 'todo')"
-                         ondrop="handleDrop(event, 'todo')">
-                        <!-- Tasks will be inserted here -->
-                    </div>
                 </div>
 
-                <!-- In Progress Column -->
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-medium text-white flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
-                            In Progress
-                            <span id="progress-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
-                        </h3>
-                    </div>
-                    <div id="progress-tasks" class="drop-zone space-y-2 min-h-[200px] rounded-lg transition-all"
-                         ondragover="handleDragOver(event)"
-                         ondragenter="handleDragEnter(event, 'progress')"
-                         ondragleave="handleDragLeave(event, 'progress')"
-                         ondrop="handleDrop(event, 'progress')">
-                        <!-- Tasks will be inserted here -->
-                    </div>
-                </div>
-
-                <!-- Done Column -->
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-medium text-white flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                            Done
-                            <span id="done-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
-                        </h3>
-                        <button onclick="clearDone()" class="text-solo-grey/70 hover:text-white transition text-xs">
-                            Clear
-                        </button>
-                    </div>
-                    <div id="done-tasks" class="drop-zone space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto scrollbar-thin rounded-lg transition-all"
-                         ondragover="handleDragOver(event)"
-                         ondragenter="handleDragEnter(event, 'done')"
-                         ondragleave="handleDragLeave(event, 'done')"
-                         ondrop="handleDrop(event, 'done')">
-                        <!-- Tasks will be inserted here -->
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Row 1: Terminal + Activity Log side by side -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <!-- Terminal -->
-            <div class="bg-black rounded-xl border border-solo-grey/20 overflow-hidden" id="console-section">
-                <div class="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-solo-grey/20">
-                    <div class="flex items-center gap-3">
-                        <div class="flex gap-1.5">
-                            <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <div class="grid-3">
+                    <!-- To-Do Column -->
+                    <div class="column">
+                        <div class="column-header">
+                            <h3 class="column-title">
+                                <span class="status-dot idle"></span>
+                                To-Do
+                                <span id="todo-count" class="badge badge-default">0</span>
+                            </h3>
+                            <button onclick="openAddTask('todo')" class="btn-icon" title="Add task">
+                                <svg style="width: 18px; height: 18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                            </button>
                         </div>
-                        <span class="text-sm text-solo-grey font-mono">SoLoBot Terminal</span>
-                        <span id="console-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">IDLE</span>
+                        <div id="todo-tasks" class="drop-zone space-y-2"
+                             ondragover="handleDragOver(event)"
+                             ondragenter="handleDragEnter(event, 'todo')"
+                             ondragleave="handleDragLeave(event, 'todo')"
+                             ondrop="handleDrop(event, 'todo')">
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button onclick="clearConsole()" class="text-xs text-solo-grey/70 hover:text-white px-2 py-1 rounded hover:bg-solo-card transition">Clear</button>
-                        <button onclick="toggleConsoleExpand()" class="text-xs text-solo-grey/70 hover:text-white px-2 py-1 rounded hover:bg-solo-card transition" id="console-expand-btn">Expand</button>
+
+                    <!-- In Progress Column -->
+                    <div class="column">
+                        <div class="column-header">
+                            <h3 class="column-title">
+                                <span class="status-dot warning"></span>
+                                In Progress
+                                <span id="progress-count" class="badge badge-default">0</span>
+                            </h3>
+                        </div>
+                        <div id="progress-tasks" class="drop-zone space-y-2"
+                             ondragover="handleDragOver(event)"
+                             ondragenter="handleDragEnter(event, 'progress')"
+                             ondragleave="handleDragLeave(event, 'progress')"
+                             ondrop="handleDrop(event, 'progress')">
+                        </div>
+                    </div>
+
+                    <!-- Done Column -->
+                    <div class="column">
+                        <div class="column-header">
+                            <h3 class="column-title">
+                                <span class="status-dot success"></span>
+                                Done
+                                <span id="done-count" class="badge badge-default">0</span>
+                            </h3>
+                            <button onclick="clearDone()" class="btn-icon" title="Clear done" style="font-size: 12px; color: var(--text-muted);">
+                                Clear
+                            </button>
+                        </div>
+                        <div id="done-tasks" class="drop-zone space-y-2"
+                             ondragover="handleDragOver(event)"
+                             ondragenter="handleDragEnter(event, 'done')"
+                             ondragleave="handleDragLeave(event, 'done')"
+                             ondrop="handleDrop(event, 'done')">
+                        </div>
                     </div>
                 </div>
-                <div id="console-output" class="p-4 font-mono text-sm h-[250px] overflow-y-auto scrollbar-thin bg-solo-darker" style="font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;">
-                    <div class="text-green-400">$ solobot --init</div>
-                    <div class="text-solo-grey">Ready for commands...</div>
-                </div>
-            </div>
+            </section>
 
-            <!-- Activity Log -->
-            <div class="bg-solo-card rounded-lg p-4">
-                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    Activity Log
-                </h2>
-                <div id="activity-log" class="space-y-2 h-[250px] overflow-y-auto scrollbar-thin">
-                    <!-- Activity entries will be inserted here -->
-                </div>
-            </div>
-        </section>
+            <!-- Terminal + Activity -->
+            <section class="section">
+                <div class="grid-2">
+                    <!-- Terminal -->
+                    <div class="terminal" id="console-section">
+                        <div class="terminal-header">
+                            <div class="flex items-center gap-3">
+                                <div class="terminal-dots">
+                                    <span class="red"></span>
+                                    <span class="yellow"></span>
+                                    <span class="green"></span>
+                                </div>
+                                <span class="terminal-title">SoLoBot Terminal</span>
+                                <span id="console-status-badge" class="badge badge-success">IDLE</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="clearConsole()" class="btn-icon" style="font-size: 12px;">Clear</button>
+                                <button onclick="toggleConsoleExpand()" class="btn-icon" style="font-size: 12px;" id="console-expand-btn">Expand</button>
+                            </div>
+                        </div>
+                        <div id="console-output" class="terminal-output">
+                            <div class="cmd">$ solobot --init</div>
+                            <div class="info">Ready for commands...</div>
+                        </div>
+                    </div>
 
-        <!-- Row 2: Chat + Notes side by side -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Chat -->
-            <div class="bg-solo-card rounded-lg overflow-hidden">
-                <div class="p-4 border-b border-solo-grey/20">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-lg font-semibold flex items-center gap-2">
-                            <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                    <!-- Activity Log -->
+                    <div class="card" style="padding: var(--space-4);">
+                        <h2 class="section-title" style="margin-bottom: var(--space-3);">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
-                            Chat with SoLoBot
+                            Activity Log
                         </h2>
-                        <div class="flex items-center gap-2">
-                            <span id="gateway-status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                            <span id="gateway-status" class="text-xs text-solo-grey">Disconnected</span>
+                        <div id="activity-log" class="activity-list">
                         </div>
                     </div>
                 </div>
-                <div id="chat-messages" class="h-[300px] overflow-y-auto p-4 scrollbar-thin bg-solo-darker">
-                    <div class="text-solo-grey/70 text-sm text-center py-4">🔌 Connect to Gateway in Settings to start chatting</div>
-                </div>
-                <!-- Image Preview Area -->
-                <div id="image-preview-container" class="hidden border-t border-solo-grey/20 p-2 bg-solo-dark">
-                    <div class="relative inline-block">
-                        <img id="image-preview" class="max-h-32 rounded-lg" />
-                        <button onclick="clearImagePreview()" class="absolute -top-2 -right-2 bg-solo-red text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">✕</button>
+            </section>
+
+            <!-- Chat + Notes -->
+            <section class="section">
+                <div class="grid-2">
+                    <!-- Chat -->
+                    <div class="card chat-container">
+                        <div class="chat-header">
+                            <h2 class="section-title" style="margin-bottom: 0;">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                </svg>
+                                Chat with SoLoBot
+                            </h2>
+                            <div class="flex items-center gap-2">
+                                <span id="gateway-status-dot" class="status-dot idle"></span>
+                                <span id="gateway-status" style="font-size: 12px; color: var(--text-muted);">Disconnected</span>
+                            </div>
+                        </div>
+
+                        <div id="chat-messages" class="chat-messages">
+                            <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: var(--space-8) 0;">
+                                🔌 Connect to Gateway in Settings to start chatting
+                            </div>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div id="image-preview-container" class="image-preview-container">
+                            <div class="image-preview-wrapper">
+                                <img id="image-preview" />
+                                <button onclick="clearImagePreview()" class="image-preview-close">✕</button>
+                            </div>
+                        </div>
+
+                        <div class="chat-input-area">
+                            <label class="btn-icon" style="cursor: pointer;">
+                                <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="handleImageSelect(event)">
+                                <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                            </label>
+                            <input type="text" id="chat-input" class="input flex-1" placeholder="Type a message..."
+                                   onkeypress="if(event.key==='Enter')sendChatMessage()"
+                                   onpaste="handlePaste(event)">
+                            <button onclick="sendChatMessage()" class="btn btn-primary">Send</button>
+                        </div>
                     </div>
-                </div>
-                
-                <!-- Chat Input -->
-                <div class="border-t border-solo-grey/20 p-3 bg-solo-dark">
-                    <div class="flex gap-2 items-center">
-                        <!-- Image Upload Button -->
-                        <label class="cursor-pointer text-solo-grey hover:text-solo-red transition p-2">
-                            <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="handleImageSelect(event)">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+
+                    <!-- Notes -->
+                    <div class="card" style="padding: var(--space-4);">
+                        <h2 class="section-title" style="margin-bottom: var(--space-3);">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                             </svg>
-                        </label>
-                        <input type="text" id="chat-input" placeholder="Type a message..."
-                               class="flex-1 bg-solo-darker border border-solo-grey/30 rounded-lg px-4 py-2 text-sm text-white placeholder-solo-grey focus:outline-none focus:border-solo-red transition"
-                               onkeypress="if(event.key==='Enter')sendChatMessage()"
-                               onpaste="handlePaste(event)">
-                        <button onclick="sendChatMessage()" class="bg-solo-red hover:bg-solo-red/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
+                            Notes for SoLoBot
+                        </h2>
+                        <div class="notes-input">
+                            <input type="text" id="note-input" class="input flex-1" placeholder="Leave a note for SoLoBot...">
+                            <button onclick="addNote()" class="btn btn-primary">Send</button>
+                        </div>
+                        <div id="notes-list" class="notes-list">
+                        </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Notes -->
-            <div class="bg-solo-card rounded-lg p-4">
-                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+            <!-- Product Status -->
+            <section class="section">
+                <h2 class="section-title">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                     </svg>
-                    Notes for SoLoBot
+                    Product Status
                 </h2>
-                <div class="mb-4">
-                    <div class="flex gap-2">
-                        <input type="text" id="note-input" placeholder="Leave a note for SoLoBot..." 
-                               class="flex-1 bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-red transition">
-                        <button onclick="addNote()" class="bg-solo-red hover:bg-solo-red/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
+                <div class="grid-4">
+                    <div class="product-card">
+                        <div class="product-header">
+                            <span class="product-name">SoLoLink</span>
+                            <span class="status-dot success"></span>
+                        </div>
+                        <p class="product-desc">Link/widget tool</p>
+                        <p class="product-meta">Last update: Active</p>
+                    </div>
+                    <div class="product-card">
+                        <div class="product-header">
+                            <span class="product-name">SoLoRecall</span>
+                            <span class="status-dot warning"></span>
+                        </div>
+                        <p class="product-desc">AI productivity app</p>
+                        <p class="product-meta">Last update: In dev</p>
+                    </div>
+                    <div class="product-card">
+                        <div class="product-header">
+                            <span class="product-name">SoLoVoice</span>
+                            <span class="status-dot success"></span>
+                        </div>
+                        <p class="product-desc">Voice/audio tool</p>
+                        <p class="product-meta">Last update: Active</p>
+                    </div>
+                    <div class="product-card">
+                        <div class="product-header">
+                            <span class="product-name">SoLoFamilyPlan</span>
+                            <span class="status-dot success"></span>
+                        </div>
+                        <p class="product-desc">Family organizer</p>
+                        <p class="product-meta">Last update: Stable</p>
                     </div>
                 </div>
-                <div id="notes-list" class="space-y-2 h-[200px] overflow-y-auto scrollbar-thin">
-                    <!-- Notes will be inserted here -->
+            </section>
+
+            <!-- Docs Hub -->
+            <section class="section">
+                <div class="docs-header">
+                    <h2 class="section-title" style="margin-bottom: 0;">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Docs Hub
+                    </h2>
+                    <input type="text" id="docs-search" class="input docs-search" placeholder="Search docs...">
                 </div>
-            </div>
-        </section>
-
-        <!-- Product Status Cards -->
-        <section class="mb-8">
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                </svg>
-                Product Status
-            </h2>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-medium">SoLoLink</span>
-                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                    </div>
-                    <p class="text-sm text-solo-grey">Link/widget tool</p>
-                    <p class="text-xs text-solo-grey/70 mt-2">Last update: Active</p>
+                <div id="docs-grid" class="grid-3">
                 </div>
+            </section>
 
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-medium">SoLoRecall</span>
-                        <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
-                    </div>
-                    <p class="text-sm text-solo-grey">AI productivity app</p>
-                    <p class="text-xs text-solo-grey/70 mt-2">Last update: In dev</p>
-                </div>
-
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-medium">SoLoVoice</span>
-                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                    </div>
-                    <p class="text-sm text-solo-grey">Voice/audio tool</p>
-                    <p class="text-xs text-solo-grey/70 mt-2">Last update: Active</p>
-                </div>
-
-                <div class="bg-solo-card rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="font-medium">SoLoFamilyPlan</span>
-                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                    </div>
-                    <p class="text-sm text-solo-grey">Family organizer</p>
-                    <p class="text-xs text-solo-grey/70 mt-2">Last update: Stable</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Docs Hub -->
-        <section>
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-                Docs Hub
-                <input type="text" id="docs-search" placeholder="Search docs..." 
-                       class="ml-auto bg-solo-dark border border-solo-grey/30 rounded-lg px-3 py-1 text-sm w-48 focus:outline-none focus:border-solo-red transition">
-            </h2>
-            <div id="docs-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <!-- Docs will be inserted here -->
-            </div>
-        </section>
-
+        </div>
     </main>
 
-    <!-- Add Task Modal -->
-    <div id="add-task-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 class="text-lg font-semibold mb-4">Add New Task</h3>
-            <input type="text" id="new-task-title" placeholder="Task title..." 
-                   class="w-full bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-solo-red transition">
-            <div class="flex gap-2 mb-4">
-                <button onclick="setTaskPriority(0)" id="priority-btn-0" class="flex-1 py-2 rounded-lg border-2 border-red-500 text-red-500 hover:bg-red-500/20 transition">P0</button>
-                <button onclick="setTaskPriority(1)" id="priority-btn-1" class="flex-1 py-2 rounded-lg border-2 border-yellow-500 text-yellow-500 hover:bg-yellow-500/20 transition">P1</button>
-                <button onclick="setTaskPriority(2)" id="priority-btn-2" class="flex-1 py-2 rounded-lg border-2 border-blue-500 text-blue-500 hover:bg-blue-500/20 transition">P2</button>
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-inner">
+            <span>SoLoVision LLC © 2026</span>
+            <div class="footer-status">
+                <div class="live-indicator">
+                    <span class="status-dot success pulse"></span>
+                    <span>LIVE</span>
+                </div>
+                <span>Last sync: <span id="last-sync">--:--</span></span>
             </div>
-            <div class="flex gap-2">
-                <button onclick="closeAddTask()" class="flex-1 py-2 rounded-lg border border-solo-grey/30 hover:bg-solo-card transition">Cancel</button>
-                <button onclick="submitTask()" class="flex-1 py-2 rounded-lg bg-solo-red hover:bg-solo-red/80 text-white transition">Add Task</button>
+        </div>
+    </footer>
+
+    <!-- Bulk Action Bar -->
+    <div id="bulk-action-bar" class="bulk-action-bar">
+        <span id="bulk-count" style="font-size: 13px; font-weight: 500;">0 selected</span>
+        <button onclick="bulkMoveTo('todo')" class="btn btn-ghost">→ To-Do</button>
+        <button onclick="bulkMoveTo('progress')" class="btn btn-ghost">→ In Progress</button>
+        <button onclick="bulkMoveTo('done')" class="btn btn-ghost">→ Done</button>
+        <button onclick="bulkMoveTo('archive')" class="btn btn-ghost">📦 Archive</button>
+        <button onclick="clearSelection()" class="btn-icon">✕</button>
+    </div>
+
+    <!-- Add Task Modal -->
+    <div id="add-task-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Add New Task</h3>
+                <button onclick="closeAddTask()" class="modal-close">✕</button>
+            </div>
+            <input type="text" id="new-task-title" class="input" placeholder="Task title..." style="margin-bottom: var(--space-4);">
+            <div class="flex gap-2" style="margin-bottom: var(--space-4);">
+                <button onclick="setTaskPriority(0)" id="priority-btn-0" class="btn btn-ghost flex-1" style="border-color: var(--brand-red); color: var(--brand-red);">P0</button>
+                <button onclick="setTaskPriority(1)" id="priority-btn-1" class="btn btn-ghost flex-1" style="border-color: var(--warning); color: var(--warning);">P1</button>
+                <button onclick="setTaskPriority(2)" id="priority-btn-2" class="btn btn-ghost flex-1" style="border-color: #3b82f6; color: #3b82f6;">P2</button>
+            </div>
+            <div class="form-actions">
+                <button onclick="closeAddTask()" class="btn btn-ghost">Cancel</button>
+                <button onclick="submitTask()" class="btn btn-primary">Add Task</button>
             </div>
         </div>
     </div>
 
     <!-- Task Action Modal -->
-    <div id="task-action-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-solo-grey/30">
-            <div class="flex items-start justify-between mb-4">
+    <div id="task-action-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 360px;">
+            <div class="modal-header">
                 <div>
-                    <h3 class="text-lg font-semibold text-white">Task Actions</h3>
-                    <p id="action-modal-task-title" class="text-sm text-solo-grey mt-1 truncate max-w-[250px]"></p>
+                    <h3 class="modal-title">Task Actions</h3>
+                    <p id="action-modal-task-title" style="font-size: 13px; color: var(--text-muted); margin-top: var(--space-1); max-width: 250px;" class="truncate"></p>
                 </div>
-                <button onclick="closeActionModal()" class="text-solo-grey/70 hover:text-white transition p-1">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
+                <button onclick="closeActionModal()" class="modal-close">✕</button>
+            </div>
+
+            <div class="space-y-2" style="margin-bottom: var(--space-4);">
+                <button id="action-move-todo" onclick="modalMoveTask('todo')" class="btn btn-ghost" style="width: 100%; justify-content: flex-start;">
+                    <span class="status-dot idle"></span> Move to To-Do
+                </button>
+                <button id="action-move-progress" onclick="modalMoveTask('progress')" class="btn btn-ghost" style="width: 100%; justify-content: flex-start;">
+                    <span class="status-dot warning"></span> Move to In Progress
+                </button>
+                <button id="action-move-done" onclick="modalMoveTask('done')" class="btn btn-ghost" style="width: 100%; justify-content: flex-start;">
+                    <span class="status-dot success"></span> Move to Done
+                </button>
+                <button id="action-move-archive" onclick="modalMoveTask('archive')" class="btn btn-ghost" style="width: 100%; justify-content: flex-start;">
+                    📦 Archive
                 </button>
             </div>
-            
-            <div class="space-y-2 mb-4">
-                <button id="action-move-todo" onclick="modalMoveTask('todo')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-slate-500"></span>
-                    <span>Move to To-Do</span>
+
+            <div style="border-top: 1px solid var(--border-default); padding-top: var(--space-4);" class="space-y-2">
+                <button onclick="modalEditTitle()" class="btn btn-ghost" style="width: 100%; justify-content: flex-start;">
+                    ✏️ Edit Title
                 </button>
-                <button id="action-move-progress" onclick="modalMoveTask('progress')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
-                    <span>Move to In Progress</span>
-                </button>
-                <button id="action-move-done" onclick="modalMoveTask('done')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                    <span>Move to Done</span>
-                </button>
-                <button id="action-move-archive" onclick="modalMoveTask('archive')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-solo-red"></span>
-                    <span>📦 Archive</span>
+                <button onclick="modalCyclePriority()" class="btn btn-ghost" style="width: 100%; justify-content: flex-start;">
+                    🔄 <span id="action-priority-text">Change Priority (P1)</span>
                 </button>
             </div>
-            
-            <div class="border-t border-solo-grey/30 pt-4 space-y-2">
-                <button onclick="modalEditTitle()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
-                    <span>✏️</span>
-                    <span>Edit Title</span>
-                </button>
-                <button onclick="modalCyclePriority()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
-                    <span>🔄</span>
-                    <span id="action-priority-text">Change Priority (P1)</span>
-                </button>
-            </div>
-            
-            <div class="border-t border-solo-grey/30 pt-4 mt-4">
-                <button onclick="modalDeleteTask()" class="w-full text-left px-4 py-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition flex items-center gap-3">
-                    <span>🗑️</span>
-                    <span>Delete Task</span>
+
+            <div style="border-top: 1px solid var(--border-default); padding-top: var(--space-4); margin-top: var(--space-4);">
+                <button onclick="modalDeleteTask()" class="btn btn-ghost" style="width: 100%; justify-content: flex-start; color: var(--error);">
+                    🗑️ Delete Task
                 </button>
             </div>
         </div>
     </div>
 
     <!-- Edit Title Modal -->
-    <div id="edit-title-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-solo-grey/30">
-            <h3 class="text-lg font-semibold mb-4">Edit Task Title</h3>
-            <input type="text" id="edit-title-input" placeholder="Task title..." 
-                   class="w-full bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-3 mb-4 focus:outline-none focus:border-solo-red transition">
-            <div class="flex gap-2">
-                <button onclick="closeEditTitleModal()" class="flex-1 py-2 rounded-lg border border-solo-grey/30 hover:bg-solo-card transition">Cancel</button>
-                <button onclick="saveEditedTitle()" class="flex-1 py-2 rounded-lg bg-solo-red hover:bg-solo-red/80 text-white transition">Save</button>
+    <div id="edit-title-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 360px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Task Title</h3>
+                <button onclick="closeEditTitleModal()" class="modal-close">✕</button>
+            </div>
+            <input type="text" id="edit-title-input" class="input" placeholder="Task title..." style="margin-bottom: var(--space-4);">
+            <div class="form-actions">
+                <button onclick="closeEditTitleModal()" class="btn btn-ghost">Cancel</button>
+                <button onclick="saveEditedTitle()" class="btn btn-primary">Save</button>
             </div>
         </div>
     </div>
 
     <!-- Confirm Delete Modal -->
-    <div id="confirm-delete-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-solo-grey/30">
-            <h3 class="text-lg font-semibold mb-2">Delete Task?</h3>
-            <p id="delete-modal-task-title" class="text-sm text-solo-grey mb-6 truncate"></p>
-            <div class="flex gap-2">
-                <button onclick="closeDeleteModal()" class="flex-1 py-2 rounded-lg border border-solo-grey/30 hover:bg-solo-card transition">Cancel</button>
-                <button onclick="confirmDeleteTask()" class="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 transition">Delete</button>
+    <div id="confirm-delete-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 360px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Delete Task?</h3>
+                <button onclick="closeDeleteModal()" class="modal-close">✕</button>
+            </div>
+            <p id="delete-modal-task-title" style="font-size: 13px; color: var(--text-muted); margin-bottom: var(--space-4);" class="truncate"></p>
+            <div class="form-actions">
+                <button onclick="closeDeleteModal()" class="btn btn-ghost">Cancel</button>
+                <button onclick="confirmDeleteTask()" class="btn btn-danger">Delete</button>
             </div>
         </div>
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl border border-solo-grey/30 max-h-[85vh] overflow-y-auto">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-semibold flex items-center gap-2">
-                    ⚙️ Dashboard Settings
-                </h3>
-                <button onclick="closeSettingsModal()" class="text-solo-grey/70 hover:text-white transition p-1">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ Dashboard Settings</h3>
+                <button onclick="closeSettingsModal()" class="modal-close">✕</button>
             </div>
-            
+
             <!-- Gateway Connection -->
-            <div class="mb-6">
-                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    🔌 Gateway Connection
-                </h4>
-                <div class="space-y-4 bg-solo-dark rounded-lg p-4">
-                    <div class="flex items-center gap-2 mb-3">
-                        <span id="settings-gateway-dot" class="w-3 h-3 rounded-full bg-gray-500"></span>
-                        <span id="settings-gateway-status" class="text-sm text-solo-grey">Disconnected</span>
+            <div class="modal-section">
+                <h4 class="modal-section-title">🔌 Gateway Connection</h4>
+                <div class="modal-section-content">
+                    <div class="flex items-center gap-2" style="margin-bottom: var(--space-3);">
+                        <span id="settings-gateway-dot" class="status-dot idle"></span>
+                        <span id="settings-gateway-status" style="font-size: 13px; color: var(--text-muted);">Disconnected</span>
                     </div>
-                    <div>
-                        <label class="text-xs text-solo-grey/70 mb-1 block">Gateway Host</label>
-                        <input type="text" id="gateway-host" placeholder="e.g., moltbot.local or 192.168.1.100"
-                               class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
+                    <div class="form-group">
+                        <label class="form-label">Gateway Host</label>
+                        <input type="text" id="gateway-host" class="input" placeholder="e.g., moltbot.local or 192.168.1.100">
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-xs text-solo-grey/70 mb-1 block">Port</label>
-                            <input type="number" id="gateway-port" placeholder="443" value="443"
-                                   class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Port</label>
+                            <input type="number" id="gateway-port" class="input" placeholder="443" value="443">
                         </div>
-                        <div>
-                            <label class="text-xs text-solo-grey/70 mb-1 block">Session Key</label>
-                            <input type="text" id="gateway-session" placeholder="main" value="main"
-                                   class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
+                        <div class="form-group">
+                            <label class="form-label">Session Key</label>
+                            <input type="text" id="gateway-session" class="input" placeholder="main" value="main">
                         </div>
                     </div>
-                    <div>
-                        <label class="text-xs text-solo-grey/70 mb-1 block">Token (optional)</label>
-                        <input type="password" id="gateway-token" placeholder="Gateway auth token"
-                               class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
+                    <div class="form-group">
+                        <label class="form-label">Token (optional)</label>
+                        <input type="password" id="gateway-token" class="input" placeholder="Gateway auth token">
                     </div>
-                    <div class="flex gap-2 pt-2">
-                        <button id="gateway-connect-btn" onclick="connectToGateway()"
-                                class="flex-1 bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg text-sm font-medium transition">Connect</button>
-                        <button id="gateway-disconnect-btn" onclick="disconnectFromGateway()"
-                                class="flex-1 bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg text-sm font-medium transition hidden">Disconnect</button>
+                    <div class="form-actions" style="margin-top: var(--space-3);">
+                        <button id="gateway-connect-btn" onclick="connectToGateway()" class="btn btn-primary" style="background: var(--success);">Connect</button>
+                        <button id="gateway-disconnect-btn" onclick="disconnectFromGateway()" class="btn btn-danger hidden">Disconnect</button>
                     </div>
-                    <p class="text-xs text-solo-grey/70 mt-2">
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2);">
                         Connect to the same session as Telegram/Android for mirrored chat.
                     </p>
                 </div>
             </div>
 
-            <!-- SoLoBot Settings -->
-            <div class="mb-6">
-                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    🤖 SoLoBot Behavior
-                </h4>
-                <div class="space-y-4 bg-solo-dark rounded-lg p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Task Pickup Frequency</div>
-                            <div class="text-xs text-solo-grey/70">How often SoLoBot checks for In Progress tasks</div>
+            <!-- SoLoBot Behavior -->
+            <div class="modal-section">
+                <h4 class="modal-section-title">🤖 SoLoBot Behavior</h4>
+                <div class="modal-section-content">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Task Pickup Frequency</div>
+                            <div class="setting-desc">How often SoLoBot checks for In Progress tasks</div>
                         </div>
-                        <select id="setting-pickup-freq" onchange="updateSetting('pickupFreq', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-pickup-freq" onchange="updateSetting('pickupFreq', this.value)" class="select">
                             <option value="disabled">Disabled</option>
                             <option value="60000">Every 1 min</option>
                             <option value="300000">Every 5 min</option>
                             <option value="1800000">Every 30 min</option>
                         </select>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Work Priority Order</div>
-                            <div class="text-xs text-solo-grey/70">How tasks are prioritized</div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Work Priority Order</div>
+                            <div class="setting-desc">How tasks are prioritized</div>
                         </div>
-                        <select id="setting-priority-order" onchange="updateSetting('priorityOrder', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-priority-order" onchange="updateSetting('priorityOrder', this.value)" class="select">
                             <option value="priority">P0 → P1 → P2</option>
                             <option value="fifo">First In, First Out</option>
                             <option value="lifo">Last In, First Out</option>
@@ -572,19 +1563,17 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Dashboard Settings -->
-            <div class="mb-6">
-                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    📊 Dashboard
-                </h4>
-                <div class="space-y-4 bg-solo-dark rounded-lg p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Auto-Refresh</div>
-                            <div class="text-xs text-solo-grey/70">How often dashboard reloads data</div>
+            <div class="modal-section">
+                <h4 class="modal-section-title">📊 Dashboard</h4>
+                <div class="modal-section-content">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Auto-Refresh</div>
+                            <div class="setting-desc">How often dashboard reloads data</div>
                         </div>
-                        <select id="setting-refresh" onchange="updateSetting('refreshInterval', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-refresh" onchange="updateSetting('refreshInterval', this.value)" class="select">
                             <option value="5000">Every 5 sec</option>
                             <option value="10000">Every 10 sec</option>
                             <option value="30000">Every 30 sec</option>
@@ -592,127 +1581,194 @@
                             <option value="0">Disabled</option>
                         </select>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Default New Task Priority</div>
-                            <div class="text-xs text-solo-grey/70">Priority for new tasks</div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Default New Task Priority</div>
+                            <div class="setting-desc">Priority for new tasks</div>
                         </div>
-                        <select id="setting-default-priority" onchange="updateSetting('defaultPriority', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-default-priority" onchange="updateSetting('defaultPriority', this.value)" class="select">
                             <option value="0">P0 (Urgent)</option>
                             <option value="1">P1 (Normal)</option>
                             <option value="2">P2 (Low)</option>
                         </select>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Compact Mode</div>
-                            <div class="text-xs text-solo-grey/70">Denser task cards</div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Compact Mode</div>
+                            <div class="setting-desc">Denser task cards</div>
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="setting-compact" onchange="updateSetting('compactMode', this.checked)" class="sr-only peer">
-                            <div class="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-solo-primary rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-solo-primary"></div>
+                        <label class="toggle">
+                            <input type="checkbox" id="setting-compact" onchange="updateSetting('compactMode', this.checked)">
+                            <span class="toggle-slider"></span>
                         </label>
                     </div>
                 </div>
             </div>
-            
-            <!-- Show/Hide Panels -->
-            <div class="mb-6">
-                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    👁️ Visible Panels
-                </h4>
-                <div class="space-y-3 bg-solo-dark rounded-lg p-4">
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm text-white">SoLoBot Live Panel</span>
-                        <input type="checkbox" id="setting-show-live" onchange="updateSetting('showLive', this.checked)" checked class="w-4 h-4 accent-solo-primary">
-                    </label>
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm text-white">Activity Log</span>
-                        <input type="checkbox" id="setting-show-activity" onchange="updateSetting('showActivity', this.checked)" checked class="w-4 h-4 accent-solo-primary">
-                    </label>
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm text-white">Notes Panel</span>
-                        <input type="checkbox" id="setting-show-notes" onchange="updateSetting('showNotes', this.checked)" checked class="w-4 h-4 accent-solo-primary">
-                    </label>
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm text-white">Product Status</span>
-                        <input type="checkbox" id="setting-show-products" onchange="updateSetting('showProducts', this.checked)" checked class="w-4 h-4 accent-solo-primary">
-                    </label>
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm text-white">Docs Hub</span>
-                        <input type="checkbox" id="setting-show-docs" onchange="updateSetting('showDocs', this.checked)" checked class="w-4 h-4 accent-solo-primary">
-                    </label>
+
+            <!-- Visible Panels -->
+            <div class="modal-section">
+                <h4 class="modal-section-title">👁️ Visible Panels</h4>
+                <div class="modal-section-content">
+                    <div class="setting-row">
+                        <span class="setting-title">SoLoBot Live Panel</span>
+                        <input type="checkbox" id="setting-show-live" onchange="updateSetting('showLive', this.checked)" checked style="accent-color: var(--brand-red);">
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-title">Activity Log</span>
+                        <input type="checkbox" id="setting-show-activity" onchange="updateSetting('showActivity', this.checked)" checked style="accent-color: var(--brand-red);">
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-title">Notes Panel</span>
+                        <input type="checkbox" id="setting-show-notes" onchange="updateSetting('showNotes', this.checked)" checked style="accent-color: var(--brand-red);">
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-title">Product Status</span>
+                        <input type="checkbox" id="setting-show-products" onchange="updateSetting('showProducts', this.checked)" checked style="accent-color: var(--brand-red);">
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-title">Docs Hub</span>
+                        <input type="checkbox" id="setting-show-docs" onchange="updateSetting('showDocs', this.checked)" checked style="accent-color: var(--brand-red);">
+                    </div>
                 </div>
             </div>
-            
+
             <!-- Danger Zone -->
-            <div>
-                <h4 class="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
-                    ⚠️ Danger Zone
-                </h4>
-                <div class="space-y-3 bg-red-500/10 rounded-lg p-4 border border-red-500/20">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Reset Local Data</div>
-                            <div class="text-xs text-solo-grey/70">Reload all data from server</div>
+            <div class="modal-section">
+                <h4 class="modal-section-title" style="color: var(--error);">⚠️ Danger Zone</h4>
+                <div class="danger-zone">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Reset Local Data</div>
+                            <div class="setting-desc">Reload all data from server</div>
                         </div>
-                        <button onclick="resetToServerState()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">Reset</button>
+                        <button onclick="resetToServerState()" class="btn btn-danger" style="padding: var(--space-2) var(--space-3);">Reset</button>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm text-white">Clear All Data</div>
-                            <div class="text-xs text-solo-grey/70">Delete all local data and tasks</div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Clear All Data</div>
+                            <div class="setting-desc">Delete all local data and tasks</div>
                         </div>
-                        <button onclick="clearAllData()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">Clear</button>
+                        <button onclick="clearAllData()" class="btn btn-danger" style="padding: var(--space-2) var(--space-3);">Clear</button>
                     </div>
                 </div>
             </div>
-            
-            <div class="mt-6 pt-4 border-t border-solo-grey/30 text-center text-xs text-solo-grey/70">
-                Dashboard v3.1.0 • Gateway WebSocket Chat
+
+            <div style="text-align: center; font-size: 12px; color: var(--text-muted); margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-default);">
+                Dashboard v3.2.0 • Gateway WebSocket Chat
             </div>
         </div>
     </div>
 
     <!-- Archive Modal -->
-    <div id="archive-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl border border-solo-grey/30 max-h-[80vh] flex flex-col">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold flex items-center gap-2">
+    <div id="archive-modal" class="modal-overlay">
+        <div class="modal modal-lg" style="max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3 class="modal-title flex items-center gap-2">
                     📦 Archived Tasks
-                    <span id="archive-modal-count" class="text-xs bg-solo-red/20 text-solo-red px-2 py-0.5 rounded-full">0</span>
+                    <span id="archive-modal-count" class="badge badge-error">0</span>
                 </h3>
                 <div class="flex items-center gap-2">
-                    <button onclick="clearArchive()" class="text-sm text-red-400 hover:text-red-300 px-3 py-1 rounded hover:bg-red-500/10 transition">Clear All</button>
-                    <button onclick="closeArchiveModal()" class="text-solo-grey/70 hover:text-white transition p-1">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
+                    <button onclick="clearArchive()" style="font-size: 12px; color: var(--error); background: none; border: none; cursor: pointer;">Clear All</button>
+                    <button onclick="closeArchiveModal()" class="modal-close">✕</button>
                 </div>
             </div>
-            <div id="archive-tasks-list" class="flex-1 overflow-y-auto space-y-2 min-h-[200px]">
-                <!-- Archived tasks will be inserted here -->
+            <div id="archive-tasks-list" style="flex: 1; overflow-y: auto; min-height: 200px;" class="space-y-2">
             </div>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="bg-solo-dark border-t border-solo-grey/20 px-6 py-3 mt-8">
-        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm text-solo-grey/70">
-            <span>SoLoVision LLC © 2026</span>
-            <span class="flex items-center gap-2">
-                <span class="flex items-center gap-1">
-                    <span id="live-dot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    <span class="text-green-400">LIVE</span>
-                </span>
-                <span class="text-gray-600">|</span>
-                <span>Last sync: <span id="last-sync" class="text-solo-grey">--:--</span></span>
-            </span>
-        </div>
-    </footer>
+    <script src="gateway-client.js?v=3.2.0"></script>
+    <script src="dashboard.js?v=3.2.0"></script>
+    <script>
+        // Theme toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
 
-    <script src="gateway-client.js?v=3.1.0"></script>
-    <script src="dashboard.js?v=3.1.0"></script>
+        function updateThemeIcon(theme) {
+            const darkIcon = document.getElementById('theme-icon-dark');
+            const lightIcon = document.getElementById('theme-icon-light');
+            if (theme === 'dark') {
+                darkIcon.classList.remove('hidden');
+                lightIcon.classList.add('hidden');
+            } else {
+                darkIcon.classList.add('hidden');
+                lightIcon.classList.remove('hidden');
+            }
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        // Strict scroll containment - capture wheel events immediately
+        function setupScrollContainment() {
+            document.querySelectorAll('.chat-messages, .activity-list, .notes-list, .terminal-output, .drop-zone').forEach(el => {
+                if (!el.dataset.scrollContained) {
+                    el.dataset.scrollContained = 'true';
+                    el.addEventListener('wheel', (e) => {
+                        // Only stop propagation, let the element scroll naturally
+                        e.stopPropagation();
+                    }, { passive: false });
+                }
+            });
+        }
+
+        // Run on load and expose for re-running after dynamic content
+        document.addEventListener('DOMContentLoaded', setupScrollContainment);
+        window.setupScrollContainment = setupScrollContainment;
+
+        // Modal helpers for the new class system
+        function showModal(id) {
+            document.getElementById(id).classList.add('visible');
+        }
+        function hideModal(id) {
+            document.getElementById(id).classList.remove('visible');
+        }
+
+        // Override modal functions for new system
+        const originalOpenSettingsModal = window.openSettingsModal;
+        window.openSettingsModal = function() {
+            showModal('settings-modal');
+            if (typeof originalOpenSettingsModal === 'function') {
+                // Call original to load settings
+            }
+        };
+        window.closeSettingsModal = function() { hideModal('settings-modal'); };
+
+        window.openAddTask = function(column) {
+            window.addTaskColumn = column;
+            showModal('add-task-modal');
+            document.getElementById('new-task-title').focus();
+        };
+        window.closeAddTask = function() { hideModal('add-task-modal'); };
+
+        window.openArchiveModal = function() { showModal('archive-modal'); renderArchive(); };
+        window.closeArchiveModal = function() { hideModal('archive-modal'); };
+
+        window.closeActionModal = function() { hideModal('task-action-modal'); };
+        window.closeEditTitleModal = function() { hideModal('edit-title-modal'); };
+        window.closeDeleteModal = function() { hideModal('confirm-delete-modal'); };
+
+        // Image preview visibility
+        function showImagePreview(src) {
+            const container = document.getElementById('image-preview-container');
+            const img = document.getElementById('image-preview');
+            img.src = src;
+            container.classList.add('visible');
+        }
+        function clearImagePreview() {
+            const container = document.getElementById('image-preview-container');
+            container.classList.remove('visible');
+            pendingImage = null;
+            document.getElementById('image-upload').value = '';
+        }
+    </script>
 </body>
 </html>

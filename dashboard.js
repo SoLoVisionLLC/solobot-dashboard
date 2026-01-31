@@ -170,26 +170,26 @@ function updateConnectionUI(status, message) {
     if (statusEl) statusEl.textContent = displayMessage;
     if (settingsStatusEl) settingsStatusEl.textContent = displayMessage;
 
-    // Get color class based on status
-    const getColorClass = () => {
+    // Get status-dot class based on status
+    const getStatusClass = () => {
         switch (status) {
-            case 'connected': return 'bg-green-500';
-            case 'connecting': return 'bg-yellow-500 animate-pulse';
-            case 'error': return 'bg-red-500';
-            default: return 'bg-gray-500';
+            case 'connected': return 'success';
+            case 'connecting': return 'warning pulse';
+            case 'error': return 'error';
+            default: return 'idle';
         }
     };
 
-    const colorClass = getColorClass();
+    const statusClass = getStatusClass();
 
-    // Update chat header dot (w-2 h-2)
+    // Update chat header dot
     if (statusDot) {
-        statusDot.className = `w-2 h-2 rounded-full ${colorClass}`;
+        statusDot.className = `status-dot ${statusClass}`;
     }
 
-    // Update settings modal dot (w-3 h-3)
+    // Update settings modal dot
     if (settingsDot) {
-        settingsDot.className = `w-3 h-3 rounded-full ${colorClass}`;
+        settingsDot.className = `status-dot ${statusClass}`;
     }
 
     // Update buttons
@@ -686,10 +686,10 @@ function renderChat() {
     // Show placeholder if no messages
     if (messages.length === 0 && !streamingText) {
         const placeholder = document.createElement('div');
-        placeholder.className = 'text-gray-500 text-sm text-center py-8';
+        placeholder.style.cssText = 'color: var(--text-muted); font-size: 13px; text-align: center; padding: var(--space-8) 0;';
         placeholder.textContent = isConnected
-            ? 'Connected! Send a message to start chatting.'
-            : 'Connect to Gateway in Settings to start chatting';
+            ? '💬 Connected! Send a message to start chatting.'
+            : '🔌 Connect to Gateway in Settings to start chatting';
         container.appendChild(placeholder);
         return;
     }
@@ -729,56 +729,57 @@ function createChatMessageElement(msg) {
 
     // Create message container
     const wrapper = document.createElement('div');
-    wrapper.style.marginBottom = '12px';
+    wrapper.style.marginBottom = 'var(--space-3)';
 
     // Create message bubble
     const bubble = document.createElement('div');
-    bubble.style.padding = '12px';
-    bubble.style.borderRadius = '8px';
+    bubble.style.padding = 'var(--space-3)';
+    bubble.style.borderRadius = 'var(--radius-md)';
     bubble.style.maxWidth = '85%';
     bubble.style.wordWrap = 'break-word';
 
     if (isUser) {
-        // User message - right aligned, red tint
-        bubble.style.backgroundColor = 'rgba(188, 32, 38, 0.2)';
-        bubble.style.border = '1px solid rgba(188, 32, 38, 0.3)';
+        // User message - right aligned, brand red tint
+        bubble.style.backgroundColor = 'rgba(188, 32, 38, 0.15)';
+        bubble.style.border = '1px solid rgba(188, 32, 38, 0.25)';
         bubble.style.marginLeft = 'auto';
         bubble.style.textAlign = 'right';
     } else if (isSystem) {
-        // System message - yellow tint
-        bubble.style.backgroundColor = 'rgba(234, 179, 8, 0.1)';
+        // System message - warning tint
+        bubble.style.backgroundColor = 'var(--warning-muted)';
         bubble.style.border = '1px solid rgba(234, 179, 8, 0.2)';
     } else {
-        // Bot message - left aligned, card color
-        bubble.style.backgroundColor = msg.isStreaming ? 'rgba(35, 45, 63, 0.5)' : '#232D3F';
-        bubble.style.border = '1px solid rgba(169, 178, 188, 0.2)';
+        // Bot message - left aligned, surface-2
+        bubble.style.backgroundColor = msg.isStreaming ? 'var(--surface-2)' : 'var(--surface-2)';
+        bubble.style.border = '1px solid var(--border-default)';
         bubble.style.marginRight = 'auto';
+        if (msg.isStreaming) bubble.style.opacity = '0.8';
     }
 
     // Header with name and time
     const header = document.createElement('div');
     header.style.display = 'flex';
     header.style.alignItems = 'center';
-    header.style.gap = '8px';
-    header.style.marginBottom = '8px';
+    header.style.gap = 'var(--space-2)';
+    header.style.marginBottom = 'var(--space-2)';
     header.style.fontSize = '12px';
     if (isUser) header.style.justifyContent = 'flex-end';
 
     const nameSpan = document.createElement('span');
     nameSpan.style.fontWeight = '500';
     if (isUser) {
-        nameSpan.style.color = '#BC2026';
+        nameSpan.style.color = 'var(--brand-red)';
         nameSpan.textContent = 'You';
     } else if (isSystem) {
-        nameSpan.style.color = '#facc15';
+        nameSpan.style.color = 'var(--warning)';
         nameSpan.textContent = 'System';
     } else {
-        nameSpan.style.color = '#4ade80';
+        nameSpan.style.color = 'var(--success)';
         nameSpan.textContent = msg.isStreaming ? 'SoLoBot (typing...)' : 'SoLoBot';
     }
 
     const timeSpan = document.createElement('span');
-    timeSpan.style.color = '#6b7280';
+    timeSpan.style.color = 'var(--text-muted)';
     timeSpan.textContent = formatTime(msg.time);
 
     header.appendChild(nameSpan);
@@ -787,7 +788,7 @@ function createChatMessageElement(msg) {
     // Message content
     const content = document.createElement('div');
     content.style.fontSize = '14px';
-    content.style.color = '#e5e7eb';
+    content.style.color = 'var(--text-primary)';
     content.style.lineHeight = '1.5';
     content.style.whiteSpace = 'pre-wrap';
     content.textContent = msg.text; // Use textContent for safety - no HTML injection
@@ -798,11 +799,11 @@ function createChatMessageElement(msg) {
         img.src = msg.image;
         img.style.maxWidth = '150px';
         img.style.maxHeight = '100px';
-        img.style.borderRadius = '6px';
-        img.style.marginBottom = '8px';
+        img.style.borderRadius = 'var(--radius-md)';
+        img.style.marginBottom = 'var(--space-2)';
         img.style.cursor = 'pointer';
         img.style.objectFit = 'cover';
-        img.style.border = '1px solid rgba(255,255,255,0.1)';
+        img.style.border = '1px solid var(--border-default)';
         img.onclick = () => openImageModal(msg.image);
         bubble.appendChild(img);
     }
@@ -862,6 +863,11 @@ function render() {
     renderChat();
     renderBulkActionBar();
     updateArchiveBadge();
+
+    // Re-apply scroll containment after rendering
+    if (window.setupScrollContainment) {
+        window.setupScrollContainment();
+    }
 }
 
 function renderStatus() {
@@ -872,74 +878,75 @@ function renderStatus() {
     const taskName = document.getElementById('task-name');
     const subagentBanner = document.getElementById('subagent-banner');
     const subagentTask = document.getElementById('subagent-task');
-    
-    indicator.className = 'w-3 h-3 rounded-full';
+
+    // Use design system status-dot classes
+    indicator.className = 'status-dot';
     switch(state.status) {
         case 'working':
-            indicator.classList.add('bg-green-500', 'status-pulse');
+            indicator.classList.add('success', 'pulse');
             text.textContent = 'WORKING';
             break;
         case 'thinking':
-            indicator.classList.add('bg-yellow-500', 'status-pulse');
+            indicator.classList.add('warning', 'pulse');
             text.textContent = 'THINKING';
             break;
         case 'offline':
-            indicator.classList.add('bg-red-500');
+            indicator.classList.add('error');
             text.textContent = 'OFFLINE';
             break;
         default:
-            indicator.classList.add('bg-green-500');
+            indicator.classList.add('success');
             text.textContent = 'IDLE';
     }
-    
+
     modelEl.textContent = state.model || 'opus 4.5';
-    
+
     const providerEl = document.getElementById('provider-name');
     if (providerEl) {
         providerEl.textContent = state.provider || 'anthropic';
     }
-    
+
     if (state.currentTask) {
-        taskEl.classList.remove('hidden');
-        taskName.textContent = state.currentTask;
+        taskEl?.classList.remove('hidden');
+        if (taskName) taskName.textContent = state.currentTask;
     } else {
-        taskEl.classList.add('hidden');
+        taskEl?.classList.add('hidden');
     }
-    
+
     if (state.subagent) {
-        subagentBanner.classList.remove('hidden');
-        subagentTask.textContent = state.subagent;
+        subagentBanner?.classList.remove('hidden');
+        if (subagentTask) subagentTask.textContent = state.subagent;
     } else {
-        subagentBanner.classList.add('hidden');
+        subagentBanner?.classList.add('hidden');
     }
 }
 
 function renderConsole() {
     const live = state.live || { status: 'idle' };
     const consoleData = state.console || { logs: [] };
-    
+
     const statusBadge = document.getElementById('console-status-badge');
     if (statusBadge) {
         const statusConfig = {
-            'working': { text: 'WORKING', color: 'bg-green-500/20 text-green-400' },
-            'thinking': { text: 'THINKING', color: 'bg-yellow-500/20 text-yellow-400' },
-            'idle': { text: 'IDLE', color: 'bg-blue-500/20 text-blue-400' },
-            'offline': { text: 'OFFLINE', color: 'bg-gray-500/20 text-gray-400' }
+            'working': { text: 'WORKING', badgeClass: 'badge-success' },
+            'thinking': { text: 'THINKING', badgeClass: 'badge-warning' },
+            'idle': { text: 'IDLE', badgeClass: 'badge-success' },
+            'offline': { text: 'OFFLINE', badgeClass: 'badge-default' }
         };
         const config = statusConfig[live.status] || statusConfig['idle'];
         statusBadge.textContent = config.text;
-        statusBadge.className = `text-xs px-2 py-0.5 rounded-full ${config.color} font-mono`;
+        statusBadge.className = `badge ${config.badgeClass}`;
     }
-    
+
     const output = document.getElementById('console-output');
     if (output && consoleData.logs && consoleData.logs.length > 0) {
         output.innerHTML = consoleData.logs.map(log => {
             const timeStr = formatTimeShort(log.time);
             const colorClass = getLogColor(log.type);
             const prefix = getLogPrefix(log.type);
-            return `<div class="${colorClass}"><span class="text-gray-600">[${timeStr}]</span> ${prefix}${escapeHtml(log.text)}</div>`;
+            return `<div class="${colorClass}"><span class="info">[${timeStr}]</span> ${prefix}${escapeHtml(log.text)}</div>`;
         }).join('');
-        
+
         output.scrollTop = output.scrollHeight;
     }
 }
@@ -948,47 +955,46 @@ function renderTasks() {
     ['todo', 'progress', 'done'].forEach(column => {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
-        
+
         container.innerHTML = state.tasks[column].map((task, index) => {
             const isSelected = selectedTasks.has(task.id);
+            const doneStyle = column === 'done' ? 'text-decoration: line-through; color: var(--text-muted);' : '';
             return `
-            <div class="task-card bg-solo-dark rounded-lg p-3 priority-p${task.priority} ${isSelected ? 'ring-2 ring-solo-accent' : ''} transition group relative cursor-grab hover:bg-slate-700/50 active:cursor-grabbing" 
+            <div class="task-card priority-p${task.priority} ${isSelected ? 'selected' : ''}"
                  data-task-id="${task.id}" data-column="${column}"
                  draggable="true"
                  ondragstart="handleDragStart(event, '${task.id}', '${column}')"
                  ondragend="handleDragEnd(event)"
                  onclick="openActionModal('${task.id}', '${column}')">
-                <div class="flex items-start gap-3">
-                    <input type="checkbox" 
-                           class="mt-1 w-4 h-4 rounded border-slate-500 bg-solo-darker text-solo-primary focus:ring-solo-primary cursor-pointer"
+                <div style="display: flex; align-items: flex-start; gap: var(--space-3);">
+                    <input type="checkbox"
+                           style="margin-top: 2px; accent-color: var(--brand-red); cursor: pointer;"
                            ${isSelected ? 'checked' : ''}
                            onclick="toggleTaskSelection('${task.id}', event)">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-start justify-between gap-2">
-                            <span class="text-sm ${column === 'done' ? 'line-through text-gray-500' : ''}">${escapeHtml(task.title)}</span>
-                            <div class="flex items-center gap-1">
-                                <span class="text-xs px-1.5 py-0.5 rounded ${getPriorityClass(task.priority)}">P${task.priority}</span>
-                            </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2);">
+                            <span class="task-title" style="${doneStyle}">${escapeHtml(task.title)}</span>
+                            <span class="badge ${getPriorityBadgeClass(task.priority)}">P${task.priority}</span>
                         </div>
-                        <div class="text-xs text-gray-500 mt-1">#${index + 1} • ${formatTime(task.created)}</div>
+                        <div class="task-meta">#${index + 1} • ${formatTime(task.created)}</div>
                     </div>
                 </div>
-                
-                <div class="task-quick-actions absolute -right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition flex flex-col gap-1">
+
+                <div class="task-quick-actions">
                     ${column !== 'done' ? `
-                        <button onclick="quickMoveTask('${task.id}', '${column}', 'done', event)" 
-                                class="w-8 h-8 bg-green-600 hover:bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg"
+                        <button onclick="quickMoveTask('${task.id}', '${column}', 'done', event)"
+                                class="btn btn-primary" style="width: 28px; height: 28px; padding: 0; border-radius: 50%;"
                                 title="Mark Done">✓</button>
                     ` : ''}
                     ${column === 'done' ? `
-                        <button onclick="quickMoveTask('${task.id}', '${column}', 'todo', event)" 
-                                class="w-8 h-8 bg-slate-600 hover:bg-slate-500 rounded-full flex items-center justify-center text-white shadow-lg"
+                        <button onclick="quickMoveTask('${task.id}', '${column}', 'todo', event)"
+                                class="btn btn-ghost" style="width: 28px; height: 28px; padding: 0; border-radius: 50%;"
                                 title="Reopen">↩</button>
                     ` : ''}
                 </div>
             </div>
         `}).join('');
-        
+
         count.textContent = state.tasks[column].length;
     });
 }
@@ -996,47 +1002,75 @@ function renderTasks() {
 function renderNotes() {
     const container = document.getElementById('notes-list');
     container.innerHTML = state.notes.map(note => `
-        <div class="bg-solo-dark rounded-lg p-3 ${note.seen ? 'opacity-60' : ''}">
-            <div class="flex items-start justify-between">
-                <span class="text-sm">${escapeHtml(note.text)}</span>
-                ${note.seen ? '<span class="text-xs text-green-500">✓ Seen</span>' : '<span class="text-xs text-yellow-500">Pending</span>'}
+        <div class="note-item" style="${note.seen ? 'opacity: 0.6;' : ''}">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+                <span class="note-text">${escapeHtml(note.text)}</span>
+                ${note.seen
+                    ? '<span class="badge badge-success">✓ Seen</span>'
+                    : '<span class="badge badge-warning">Pending</span>'}
             </div>
-            <div class="text-xs text-gray-500 mt-2">${formatTime(note.created)}</div>
+            <div class="note-meta">${formatTime(note.created)}</div>
         </div>
-    `).join('');
+    `).join('') || '<div style="text-align: center; color: var(--text-muted); padding: var(--space-4);">No notes yet</div>';
 }
 
 function renderActivity() {
     const container = document.getElementById('activity-log');
-    container.innerHTML = state.activity.slice().reverse().slice(0, 20).map(entry => `
-        <div class="flex items-start gap-3 text-sm">
-            <span class="text-gray-500 whitespace-nowrap">${formatTime(entry.time)}</span>
-            <span class="${entry.type === 'success' ? 'text-green-400' : entry.type === 'error' ? 'text-red-400' : 'text-gray-300'}">
-                ${escapeHtml(entry.action)}
-            </span>
+    const entries = state.activity.slice().reverse().slice(0, 20);
+
+    if (entries.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: var(--space-4);">No activity yet</div>';
+        return;
+    }
+
+    container.innerHTML = entries.map(entry => {
+        const typeClass = entry.type === 'success' ? 'success' : entry.type === 'error' ? 'warning' : '';
+        return `
+        <div class="activity-item">
+            <span class="activity-time">${formatTime(entry.time)}</span>
+            <span class="activity-text ${typeClass}">${escapeHtml(entry.action)}</span>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function renderDocs(filter = '') {
     const container = document.getElementById('docs-grid');
-    const filtered = state.docs.filter(doc => 
+    const filtered = state.docs.filter(doc =>
         doc.name.toLowerCase().includes(filter.toLowerCase())
     );
-    
-    container.innerHTML = filtered.map(doc => `
-        <a href="${doc.url}" target="_blank" class="bg-solo-card rounded-lg p-4 hover:bg-slate-700 transition block">
-            <div class="flex items-center gap-3 mb-2">
-                ${getDocIcon(doc.type)}
-                <span class="font-medium truncate">${escapeHtml(doc.name)}</span>
+
+    container.innerHTML = filtered.map(doc => {
+        const iconClass = getDocIconClass(doc.type, doc.url);
+        const iconSymbol = getDocIconSymbol(doc.type, doc.url);
+        return `
+        <a href="${doc.url}" target="_blank" class="doc-card">
+            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                <div class="doc-icon ${iconClass}">${iconSymbol}</div>
+                <div style="min-width: 0; flex: 1;">
+                    <div class="doc-title">${escapeHtml(doc.name)}</div>
+                    <div class="doc-meta">Updated: ${formatDate(doc.updated)}</div>
+                </div>
             </div>
-            <div class="text-xs text-gray-500">Updated: ${formatDate(doc.updated)}</div>
         </a>
-    `).join('');
-    
+    `}).join('');
+
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="text-gray-500 text-sm col-span-full">No documents found</div>';
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: var(--space-4);">No documents found</div>';
     }
+}
+
+function getDocIconClass(type, url) {
+    if (url?.includes('docs.google.com/document')) return 'gdoc';
+    if (url?.includes('docs.google.com/spreadsheets')) return 'gsheet';
+    if (type === 'pdf' || url?.includes('.pdf')) return 'pdf';
+    return 'default';
+}
+
+function getDocIconSymbol(type, url) {
+    if (url?.includes('docs.google.com/document')) return '📄';
+    if (url?.includes('docs.google.com/spreadsheets')) return '📊';
+    if (type === 'pdf' || url?.includes('.pdf')) return '📕';
+    return '📁';
 }
 
 // ===================
@@ -1075,9 +1109,15 @@ function updateLastSync() {
 }
 
 function getPriorityClass(p) {
-    if (p === 0) return 'bg-red-500/20 text-red-400';
-    if (p === 1) return 'bg-yellow-500/20 text-yellow-400';
-    return 'bg-blue-500/20 text-blue-400';
+    if (p === 0) return 'badge-error';
+    if (p === 1) return 'badge-warning';
+    return 'badge-default';
+}
+
+function getPriorityBadgeClass(p) {
+    if (p === 0) return 'badge-error';
+    if (p === 1) return 'badge-warning';
+    return 'badge-default';
 }
 
 function getLogColor(type) {
@@ -1104,10 +1144,9 @@ function getLogPrefix(type) {
     }
 }
 
+// Legacy function - keeping for backwards compatibility
 function getDocIcon(type) {
-    if (type === 'doc') return '<svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>';
-    if (type === 'pdf') return '<svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>';
-    return '<svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>';
+    return getDocIconSymbol(type, '');
 }
 
 function escapeHtml(text) {
@@ -1150,16 +1189,25 @@ function renderBulkActionBar() {
     if (!bar) return;
 
     if (selectedTasks.size > 0) {
-        bar.classList.remove('hidden');
-        const countEl = bar.querySelector('#selected-count');
-        if (countEl) countEl.textContent = selectedTasks.size;
+        bar.classList.add('visible');
+        const countEl = document.getElementById('bulk-count');
+        if (countEl) countEl.textContent = `${selectedTasks.size} selected`;
     } else {
-        bar.classList.add('hidden');
+        bar.classList.remove('visible');
     }
 }
 
+// Modal helpers
+function showModal(id) {
+    document.getElementById(id)?.classList.add('visible');
+}
+
+function hideModal(id) {
+    document.getElementById(id)?.classList.remove('visible');
+}
+
 function openSettingsModal() {
-    document.getElementById('settings-modal')?.classList.remove('hidden');
+    showModal('settings-modal');
 
     // Populate gateway settings
     const hostEl = document.getElementById('gateway-host');
@@ -1174,7 +1222,7 @@ function openSettingsModal() {
 }
 
 function closeSettingsModal() {
-    document.getElementById('settings-modal')?.classList.add('hidden');
+    hideModal('settings-modal');
 }
 
 function syncFromVPS() {
@@ -1186,13 +1234,14 @@ function syncFromVPS() {
 
 function openAddTask(column = 'todo') {
     newTaskColumn = column;
-    document.getElementById('add-task-modal')?.classList.remove('hidden');
+    showModal('add-task-modal');
     document.getElementById('new-task-title')?.focus();
 }
 
 function closeAddTask() {
-    document.getElementById('add-task-modal')?.classList.add('hidden');
-    document.getElementById('new-task-title').value = '';
+    hideModal('add-task-modal');
+    const input = document.getElementById('new-task-title');
+    if (input) input.value = '';
 }
 
 function setTaskPriority(priority) {
@@ -1239,11 +1288,11 @@ function openActionModal(taskId, column) {
         if (btn) btn.classList.toggle('hidden', col === column);
     });
 
-    document.getElementById('task-action-modal')?.classList.remove('hidden');
+    showModal('task-action-modal');
 }
 
 function closeActionModal() {
-    document.getElementById('task-action-modal')?.classList.add('hidden');
+    hideModal('task-action-modal');
     currentModalTask = null;
     currentModalColumn = null;
 }
@@ -1271,12 +1320,12 @@ function modalEditTitle() {
 
     closeActionModal();
     document.getElementById('edit-title-input').value = task.title;
-    document.getElementById('edit-title-modal')?.classList.remove('hidden');
+    showModal('edit-title-modal');
     document.getElementById('edit-title-input')?.focus();
 }
 
 function closeEditTitleModal() {
-    document.getElementById('edit-title-modal')?.classList.add('hidden');
+    hideModal('edit-title-modal');
 }
 
 function saveEditedTitle() {
@@ -1310,11 +1359,11 @@ function modalDeleteTask() {
     document.getElementById('delete-modal-task-title').textContent =
         state.tasks[currentModalColumn]?.find(t => t.id === currentModalTask)?.title || '';
     closeActionModal();
-    document.getElementById('confirm-delete-modal')?.classList.remove('hidden');
+    showModal('confirm-delete-modal');
 }
 
 function closeDeleteModal() {
-    document.getElementById('confirm-delete-modal')?.classList.add('hidden');
+    hideModal('confirm-delete-modal');
 }
 
 function confirmDeleteTask() {
@@ -1368,6 +1417,26 @@ function clearSelection() {
     renderBulkActionBar();
 }
 
+function bulkMoveTo(targetColumn) {
+    if (selectedTasks.size === 0) return;
+
+    selectedTasks.forEach(taskId => {
+        // Find and move each selected task
+        ['todo', 'progress', 'done'].forEach(column => {
+            const taskIndex = state.tasks[column].findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+                const [task] = state.tasks[column].splice(taskIndex, 1);
+                state.tasks[targetColumn].push(task);
+            }
+        });
+    });
+
+    saveState(`Bulk moved ${selectedTasks.size} tasks to ${targetColumn}`);
+    clearSelection();
+    renderTasks();
+    updateArchiveBadge();
+}
+
 function clearDone() {
     // Move all done tasks to archive
     const doneTasks = state.tasks.done.splice(0);
@@ -1378,33 +1447,34 @@ function clearDone() {
 }
 
 function openArchiveModal() {
-    const modal = document.getElementById('archive-modal');
+    renderArchive();
+    showModal('archive-modal');
+}
+
+function renderArchive() {
     const list = document.getElementById('archive-tasks-list');
     const countEl = document.getElementById('archive-modal-count');
 
-    if (!modal || !list) return;
+    if (!list) return;
 
     const archived = state.tasks.archive || [];
-    countEl.textContent = archived.length;
+    if (countEl) countEl.textContent = archived.length;
 
     list.innerHTML = archived.map(task => `
-        <div class="bg-solo-dark rounded-lg p-3 flex items-center justify-between">
+        <div class="task-card" style="display: flex; align-items: center; justify-content: space-between;">
             <div>
-                <span class="text-sm">${escapeHtml(task.title)}</span>
-                <div class="text-xs text-gray-500">${formatTime(task.created)}</div>
+                <span class="task-title">${escapeHtml(task.title)}</span>
+                <div class="task-meta">${formatTime(task.created)}</div>
             </div>
-            <button onclick="restoreFromArchive('${task.id}')"
-                    class="text-xs text-solo-primary hover:text-solo-accent px-2 py-1 rounded hover:bg-slate-700">
+            <button onclick="restoreFromArchive('${task.id}')" class="btn btn-ghost" style="font-size: 12px;">
                 Restore
             </button>
         </div>
-    `).join('') || '<div class="text-gray-500 text-sm text-center py-8">No archived tasks</div>';
-
-    modal.classList.remove('hidden');
+    `).join('') || '<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: var(--space-8);">No archived tasks</div>';
 }
 
 function closeArchiveModal() {
-    document.getElementById('archive-modal')?.classList.add('hidden');
+    hideModal('archive-modal');
 }
 
 function restoreFromArchive(taskId) {
@@ -1415,7 +1485,7 @@ function restoreFromArchive(taskId) {
     state.tasks.todo.push(task);
 
     saveState('Restored task from archive');
-    openArchiveModal(); // Refresh the modal
+    renderArchive(); // Refresh the archive list
     renderTasks();
     updateArchiveBadge();
 }
@@ -1424,7 +1494,7 @@ function clearArchive() {
     if (confirm('Delete all archived tasks permanently?')) {
         state.tasks.archive = [];
         saveState('Cleared archive');
-        openArchiveModal();
+        renderArchive();
         updateArchiveBadge();
     }
 }
