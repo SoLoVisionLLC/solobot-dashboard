@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.10.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.11.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -103,15 +103,36 @@ function isHeartbeatMessage(text) {
     if (!text) return false;
     const trimmed = text.trim();
     
-    // Only filter out specific heartbeat messages, not all messages containing "heartbeat"
-    // Filter: exact HEARTBEAT_OK responses
+    // Exact matches
     if (trimmed === 'HEARTBEAT_OK') return true;
+    if (trimmed === '') return true; // Empty messages
     
-    // Filter: Messages that START with the heartbeat prompt
+    // System cron/heartbeat messages (start with "System: [")
+    if (trimmed.startsWith('System: [')) {
+        if (trimmed.includes('HEARTBEAT:')) return true;
+        if (trimmed.includes('EMAIL CHECK:')) return true;
+        if (trimmed.includes('Cron:')) return true;
+    }
+    
+    // Messages that start with heartbeat prompt
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
     
-    // Filter: System heartbeat check messages
-    if (trimmed.includes('[System]') && trimmed.toLowerCase().includes('heartbeat')) return true;
+    // Bot responses to heartbeat (common patterns)
+    const heartbeatResponsePatterns = [
+        'Following heartbeat routine',
+        'Following the heartbeat routine',
+        'Checking current status via heartbeat',
+        'Checking current state following HEARTBEAT',
+        'checking the current status',
+        'checking current status',
+        'Let me check the current state and ensure everything is working',
+        'Let me check the current task board and ensure everything is working'
+    ];
+    
+    const lowerTrimmed = trimmed.toLowerCase();
+    for (const pattern of heartbeatResponsePatterns) {
+        if (lowerTrimmed.startsWith(pattern.toLowerCase())) return true;
+    }
     
     return false;
 }
