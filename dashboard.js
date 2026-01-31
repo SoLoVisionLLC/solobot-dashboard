@@ -50,6 +50,7 @@ const GATEWAY_CONFIG = {
 let gateway = null;
 let streamingText = '';
 let isProcessing = false;
+let historyPollInterval = null;
 
 let newTaskPriority = 1;
 let newTaskColumn = 'todo';
@@ -93,12 +94,17 @@ function initGateway() {
             }).catch(err => {
                 console.log('[Dashboard] chat.history failed:', err.message);
             });
+
+            // Poll history periodically to catch user messages from other clients
+            // (Gateway doesn't broadcast user messages as events, only assistant messages)
+            startHistoryPolling();
         },
         onDisconnected: (message) => {
             console.log(`[Dashboard] Disconnected: ${message}`);
             updateConnectionUI('disconnected', message);
             isProcessing = false;
             streamingText = '';
+            stopHistoryPolling();
         },
         onChatEvent: (event) => {
             handleChatEvent(event);
@@ -285,6 +291,75 @@ function loadHistoryMessages(messages) {
     });
 
     renderChat();
+}
+
+function startHistoryPolling() {
+    stopHistoryPolling(); // Clear any existing interval
+
+    // Poll every 5 seconds to catch user messages from other clients
+    historyPollInterval = setInterval(() => {
+        if (!gateway || !gateway.isConnected() || isProcessing) return;
+
+        gateway.loadHistory().then(result => {
+            if (result?.messages) {
+                mergeHistoryMessages(result.messages);
+            }
+        }).catch(err => {
+            console.log('[Dashboard] History poll failed:', err.message);
+        });
+    }, 5000);
+}
+
+function stopHistoryPolling() {
+    if (historyPollInterval) {
+        clearInterval(historyPollInterval);
+        historyPollInterval = null;
+    }
+}
+
+function mergeHistoryMessages(messages) {
+    // Merge new messages from history without duplicates
+    // This catches user messages from other clients that weren't broadcast as events
+    const existingIds = new Set(state.chat.messages.map(m => m.id));
+    let newCount = 0;
+
+    for (const msg of messages) {
+        const msgId = msg.id || 'm' + msg.timestamp;
+
+        if (!existingIds.has(msgId)) {
+            let textContent = '';
+            if (msg.content) {
+                for (const part of msg.content) {
+                    if (part.type === 'text') {
+                        textContent += part.text || '';
+                    }
+                }
+            }
+
+            // Only add if we have content
+            if (textContent) {
+                state.chat.messages.push({
+                    id: msgId,
+                    from: msg.role === 'user' ? 'user' : 'solobot',
+                    text: textContent,
+                    time: msg.timestamp || Date.now()
+                });
+                existingIds.add(msgId);
+                newCount++;
+            }
+        }
+    }
+
+    if (newCount > 0) {
+        console.log(`[Dashboard] Merged ${newCount} new messages from history`);
+        // Sort by time
+        state.chat.messages.sort((a, b) => a.time - b.time);
+        // Trim to max
+        if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
+            state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
+        }
+        renderChat();
+    }
 }
 
 // ===================
