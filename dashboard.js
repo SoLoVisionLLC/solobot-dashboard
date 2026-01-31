@@ -891,6 +891,428 @@ function updateArchiveBadge() {
 }
 
 // ===================
+// MISSING FUNCTIONS (UI handlers)
+// ===================
+
+function renderBulkActionBar() {
+    const bar = document.getElementById('bulk-action-bar');
+    if (!bar) return;
+
+    if (selectedTasks.size > 0) {
+        bar.classList.remove('hidden');
+        const countEl = bar.querySelector('#selected-count');
+        if (countEl) countEl.textContent = selectedTasks.size;
+    } else {
+        bar.classList.add('hidden');
+    }
+}
+
+function openSettingsModal() {
+    document.getElementById('settings-modal')?.classList.remove('hidden');
+
+    // Populate gateway settings
+    const hostEl = document.getElementById('gateway-host');
+    const portEl = document.getElementById('gateway-port');
+    const tokenEl = document.getElementById('gateway-token');
+    const sessionEl = document.getElementById('gateway-session');
+
+    if (hostEl) hostEl.value = GATEWAY_CONFIG.host || '';
+    if (portEl) portEl.value = GATEWAY_CONFIG.port || 18789;
+    if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
+    if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
+}
+
+function closeSettingsModal() {
+    document.getElementById('settings-modal')?.classList.add('hidden');
+}
+
+function syncFromVPS() {
+    loadState().then(() => {
+        render();
+        updateLastSync();
+    });
+}
+
+function openAddTask(column = 'todo') {
+    newTaskColumn = column;
+    document.getElementById('add-task-modal')?.classList.remove('hidden');
+    document.getElementById('new-task-title')?.focus();
+}
+
+function closeAddTask() {
+    document.getElementById('add-task-modal')?.classList.add('hidden');
+    document.getElementById('new-task-title').value = '';
+}
+
+function setTaskPriority(priority) {
+    newTaskPriority = priority;
+    [0, 1, 2].forEach(p => {
+        const btn = document.getElementById(`priority-btn-${p}`);
+        if (btn) {
+            btn.classList.toggle('bg-opacity-50', p !== priority);
+        }
+    });
+}
+
+function submitTask() {
+    const titleInput = document.getElementById('new-task-title');
+    const title = titleInput?.value?.trim();
+    if (!title) return;
+
+    const task = {
+        id: 't' + Date.now(),
+        title,
+        priority: newTaskPriority,
+        created: Date.now()
+    };
+
+    state.tasks[newTaskColumn].push(task);
+    saveState('Added task: ' + title);
+    closeAddTask();
+    renderTasks();
+}
+
+function openActionModal(taskId, column) {
+    currentModalTask = taskId;
+    currentModalColumn = column;
+
+    const task = state.tasks[column]?.find(t => t.id === taskId);
+    if (!task) return;
+
+    document.getElementById('action-modal-task-title').textContent = task.title;
+    document.getElementById('action-priority-text').textContent = `Change Priority (P${task.priority})`;
+
+    // Hide current column option
+    ['todo', 'progress', 'done', 'archive'].forEach(col => {
+        const btn = document.getElementById(`action-move-${col}`);
+        if (btn) btn.classList.toggle('hidden', col === column);
+    });
+
+    document.getElementById('task-action-modal')?.classList.remove('hidden');
+}
+
+function closeActionModal() {
+    document.getElementById('task-action-modal')?.classList.add('hidden');
+    currentModalTask = null;
+    currentModalColumn = null;
+}
+
+function modalMoveTask(targetColumn) {
+    if (!currentModalTask || !currentModalColumn) return;
+
+    const taskIndex = state.tasks[currentModalColumn].findIndex(t => t.id === currentModalTask);
+    if (taskIndex === -1) return;
+
+    const [task] = state.tasks[currentModalColumn].splice(taskIndex, 1);
+    state.tasks[targetColumn].push(task);
+
+    saveState(`Moved task to ${targetColumn}`);
+    closeActionModal();
+    renderTasks();
+    updateArchiveBadge();
+}
+
+function modalEditTitle() {
+    if (!currentModalTask || !currentModalColumn) return;
+
+    const task = state.tasks[currentModalColumn]?.find(t => t.id === currentModalTask);
+    if (!task) return;
+
+    closeActionModal();
+    document.getElementById('edit-title-input').value = task.title;
+    document.getElementById('edit-title-modal')?.classList.remove('hidden');
+    document.getElementById('edit-title-input')?.focus();
+}
+
+function closeEditTitleModal() {
+    document.getElementById('edit-title-modal')?.classList.add('hidden');
+}
+
+function saveEditedTitle() {
+    if (!currentModalTask || !currentModalColumn) return;
+
+    const task = state.tasks[currentModalColumn]?.find(t => t.id === currentModalTask);
+    if (!task) return;
+
+    const newTitle = document.getElementById('edit-title-input')?.value?.trim();
+    if (newTitle) {
+        task.title = newTitle;
+        saveState('Edited task title');
+        renderTasks();
+    }
+    closeEditTitleModal();
+}
+
+function modalCyclePriority() {
+    if (!currentModalTask || !currentModalColumn) return;
+
+    const task = state.tasks[currentModalColumn]?.find(t => t.id === currentModalTask);
+    if (!task) return;
+
+    task.priority = (task.priority + 1) % 3;
+    document.getElementById('action-priority-text').textContent = `Change Priority (P${task.priority})`;
+    saveState('Changed priority');
+    renderTasks();
+}
+
+function modalDeleteTask() {
+    document.getElementById('delete-modal-task-title').textContent =
+        state.tasks[currentModalColumn]?.find(t => t.id === currentModalTask)?.title || '';
+    closeActionModal();
+    document.getElementById('confirm-delete-modal')?.classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('confirm-delete-modal')?.classList.add('hidden');
+}
+
+function confirmDeleteTask() {
+    if (!currentModalTask || !currentModalColumn) return;
+
+    const taskIndex = state.tasks[currentModalColumn].findIndex(t => t.id === currentModalTask);
+    if (taskIndex !== -1) {
+        state.tasks[currentModalColumn].splice(taskIndex, 1);
+        saveState('Deleted task');
+        renderTasks();
+    }
+    closeDeleteModal();
+}
+
+function quickMoveTask(taskId, fromColumn, toColumn, event) {
+    event?.stopPropagation();
+
+    const taskIndex = state.tasks[fromColumn].findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    const [task] = state.tasks[fromColumn].splice(taskIndex, 1);
+    state.tasks[toColumn].push(task);
+
+    saveState(`Moved task to ${toColumn}`);
+    renderTasks();
+}
+
+function toggleTaskSelection(taskId, event) {
+    event?.stopPropagation();
+
+    if (selectedTasks.has(taskId)) {
+        selectedTasks.delete(taskId);
+    } else {
+        selectedTasks.add(taskId);
+    }
+    renderTasks();
+    renderBulkActionBar();
+}
+
+function selectAllTasks() {
+    ['todo', 'progress', 'done'].forEach(column => {
+        state.tasks[column].forEach(task => selectedTasks.add(task.id));
+    });
+    renderTasks();
+    renderBulkActionBar();
+}
+
+function clearSelection() {
+    selectedTasks.clear();
+    renderTasks();
+    renderBulkActionBar();
+}
+
+function clearDone() {
+    // Move all done tasks to archive
+    const doneTasks = state.tasks.done.splice(0);
+    state.tasks.archive.push(...doneTasks);
+    saveState('Archived done tasks');
+    renderTasks();
+    updateArchiveBadge();
+}
+
+function openArchiveModal() {
+    const modal = document.getElementById('archive-modal');
+    const list = document.getElementById('archive-tasks-list');
+    const countEl = document.getElementById('archive-modal-count');
+
+    if (!modal || !list) return;
+
+    const archived = state.tasks.archive || [];
+    countEl.textContent = archived.length;
+
+    list.innerHTML = archived.map(task => `
+        <div class="bg-solo-dark rounded-lg p-3 flex items-center justify-between">
+            <div>
+                <span class="text-sm">${escapeHtml(task.title)}</span>
+                <div class="text-xs text-gray-500">${formatTime(task.created)}</div>
+            </div>
+            <button onclick="restoreFromArchive('${task.id}')"
+                    class="text-xs text-solo-primary hover:text-solo-accent px-2 py-1 rounded hover:bg-slate-700">
+                Restore
+            </button>
+        </div>
+    `).join('') || '<div class="text-gray-500 text-sm text-center py-8">No archived tasks</div>';
+
+    modal.classList.remove('hidden');
+}
+
+function closeArchiveModal() {
+    document.getElementById('archive-modal')?.classList.add('hidden');
+}
+
+function restoreFromArchive(taskId) {
+    const taskIndex = state.tasks.archive.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    const [task] = state.tasks.archive.splice(taskIndex, 1);
+    state.tasks.todo.push(task);
+
+    saveState('Restored task from archive');
+    openArchiveModal(); // Refresh the modal
+    renderTasks();
+    updateArchiveBadge();
+}
+
+function clearArchive() {
+    if (confirm('Delete all archived tasks permanently?')) {
+        state.tasks.archive = [];
+        saveState('Cleared archive');
+        openArchiveModal();
+        updateArchiveBadge();
+    }
+}
+
+function addNote() {
+    const input = document.getElementById('note-input');
+    const text = input?.value?.trim();
+    if (!text) return;
+
+    state.notes.push({
+        id: 'n' + Date.now(),
+        text,
+        created: Date.now(),
+        seen: false
+    });
+
+    input.value = '';
+    saveState('Added note');
+    renderNotes();
+}
+
+function clearConsole() {
+    if (state.console) state.console.logs = [];
+    saveState();
+    renderConsole();
+}
+
+function toggleConsoleExpand() {
+    const section = document.getElementById('console-section');
+    const output = document.getElementById('console-output');
+    const btn = document.getElementById('console-expand-btn');
+
+    if (!section || !output || !btn) return;
+
+    const isExpanded = output.classList.contains('h-[500px]');
+
+    if (isExpanded) {
+        output.classList.remove('h-[500px]');
+        output.classList.add('h-[250px]');
+        btn.textContent = 'Expand';
+    } else {
+        output.classList.remove('h-[250px]');
+        output.classList.add('h-[500px]');
+        btn.textContent = 'Collapse';
+    }
+}
+
+function updateSetting(key, value) {
+    // Settings are stored in localStorage
+    localStorage.setItem(`setting_${key}`, JSON.stringify(value));
+    console.log(`Setting ${key} = ${value}`);
+}
+
+function resetToServerState() {
+    if (confirm('This will reload all data from the server. Continue?')) {
+        localStorage.removeItem('solovision-dashboard');
+        location.reload();
+    }
+}
+
+function clearAllData() {
+    if (confirm('This will delete ALL local data. Are you sure?')) {
+        localStorage.clear();
+        state = {
+            status: 'idle',
+            model: 'opus 4.5',
+            tasks: { todo: [], progress: [], done: [], archive: [] },
+            notes: [],
+            activity: [],
+            docs: [],
+            console: { logs: [] },
+            chat: { messages: [] }
+        };
+        saveState();
+        render();
+    }
+}
+
+// Drag and drop handlers
+let draggedTaskId = null;
+let draggedFromColumn = null;
+
+function handleDragStart(event, taskId, column) {
+    draggedTaskId = taskId;
+    draggedFromColumn = column;
+    event.dataTransfer.effectAllowed = 'move';
+    event.target.classList.add('opacity-50');
+}
+
+function handleDragEnd(event) {
+    event.target.classList.remove('opacity-50');
+    draggedTaskId = null;
+    draggedFromColumn = null;
+
+    // Remove all drag-over styling
+    document.querySelectorAll('.drop-zone').forEach(zone => {
+        zone.classList.remove('bg-slate-600/30', 'ring-2', 'ring-solo-primary');
+    });
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function handleDragEnter(event, column) {
+    event.preventDefault();
+    const zone = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
+    zone?.classList.add('bg-slate-600/30', 'ring-2', 'ring-solo-primary');
+}
+
+function handleDragLeave(event, column) {
+    const zone = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
+    zone?.classList.remove('bg-slate-600/30', 'ring-2', 'ring-solo-primary');
+}
+
+function handleDrop(event, targetColumn) {
+    event.preventDefault();
+
+    const zone = document.getElementById(`${targetColumn === 'progress' ? 'progress' : targetColumn}-tasks`);
+    zone?.classList.remove('bg-slate-600/30', 'ring-2', 'ring-solo-primary');
+
+    if (!draggedTaskId || !draggedFromColumn || draggedFromColumn === targetColumn) return;
+
+    const taskIndex = state.tasks[draggedFromColumn].findIndex(t => t.id === draggedTaskId);
+    if (taskIndex === -1) return;
+
+    const [task] = state.tasks[draggedFromColumn].splice(taskIndex, 1);
+    state.tasks[targetColumn].push(task);
+
+    saveState(`Moved task to ${targetColumn}`);
+    renderTasks();
+}
+
+function closeAllTaskMenus() {
+    document.querySelectorAll('.task-menu').forEach(menu => menu.classList.add('hidden'));
+}
+
+// ===================
 // PUBLIC API
 // ===================
 
