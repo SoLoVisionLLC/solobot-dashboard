@@ -142,7 +142,7 @@ let currentModalColumn = null;
 let refreshIntervalId = null;
 
 // DEBUG: Set to true to disable all filtering and show EVERYTHING in chat
-const DISABLE_SYSTEM_FILTER = true; // TEMPORARY - set to false after debugging
+const DISABLE_SYSTEM_FILTER = false;
 
 // Classify messages as system/heartbeat noise vs real chat
 function isSystemMessage(text, from) {
