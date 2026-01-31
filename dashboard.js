@@ -554,6 +554,29 @@ function clearConsole() {
     renderConsole();
 }
 
+// Sync full state from VPS (pulls SoLoBot's updates including task movements)
+async function syncFromVPS() {
+    try {
+        addConsoleLog('🔄 Syncing from VPS...', 'info');
+        const response = await fetch('http://51.81.202.92:3456/api/state', { cache: 'no-store' });
+        if (response.ok) {
+            const vpsState = await response.json();
+            // Clear local modified flag so we accept VPS state
+            delete vpsState.localModified;
+            // Merge VPS state (this will include task updates from SoLoBot)
+            state = { ...state, ...vpsState };
+            // Save to localStorage without localModified flag
+            localStorage.setItem('solovision-dashboard', JSON.stringify(state));
+            render();
+            addConsoleLog('✅ Synced from VPS successfully', 'success');
+        } else {
+            addConsoleLog('❌ VPS sync failed: ' + response.status, 'error');
+        }
+    } catch (e) {
+        addConsoleLog('❌ VPS sync error: ' + e.message, 'error');
+    }
+}
+
 function toggleConsoleExpand() {
     const output = document.getElementById('console-output');
     const btn = document.getElementById('console-expand-btn');
