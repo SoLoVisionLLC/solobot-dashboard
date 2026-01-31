@@ -85,9 +85,10 @@ async function fetchMemoryFiles() {
     }
 }
 
-// Render memory files in Docs Hub
+// Render memory files in Docs Hub (or Memory page)
 async function renderMemoryFiles(filter = '') {
-    const container = document.getElementById('docs-grid');
+    // Try both possible containers
+    let container = document.getElementById('memory-files-grid') || document.getElementById('docs-grid');
     if (!container) return;
     
     // Show loading state
