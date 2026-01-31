@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.7.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.8.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -649,13 +649,49 @@ function handlePaste(event) {
     }
 }
 
+// Compress image to reduce size for WebSocket transmission
+async function compressImage(dataUrl, maxWidth = 1200, quality = 0.8) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            
+            // Scale down if too large
+            if (width > maxWidth) {
+                height = (height * maxWidth) / width;
+                width = maxWidth;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to JPEG for better compression (unless PNG transparency needed)
+            const compressed = canvas.toDataURL('image/jpeg', quality);
+            console.log(`[Dashboard] Image compressed: ${Math.round(dataUrl.length/1024)}KB -> ${Math.round(compressed.length/1024)}KB`);
+            resolve(compressed);
+        };
+        img.src = dataUrl;
+    });
+}
+
 function processImageFile(file) {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
+        // Compress image if larger than 200KB
+        let imageData = e.target.result;
+        if (imageData.length > 200 * 1024) {
+            imageData = await compressImage(imageData);
+        }
+        
         pendingImage = {
-            data: e.target.result,
+            data: imageData,
             name: file.name,
-            type: file.type
+            type: 'image/jpeg'
         };
         showImagePreview(pendingImage.data);
     };
@@ -1173,11 +1209,17 @@ function handleChatPagePaste(event) {
 
 function processChatPageImageFile(file) {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
+        // Compress image if larger than 200KB
+        let imageData = e.target.result;
+        if (imageData.length > 200 * 1024) {
+            imageData = await compressImage(imageData);
+        }
+        
         chatPagePendingImage = {
-            data: e.target.result,
+            data: imageData,
             name: file.name,
-            type: file.type
+            type: 'image/jpeg'
         };
         showChatPageImagePreview(chatPagePendingImage.data);
     };
