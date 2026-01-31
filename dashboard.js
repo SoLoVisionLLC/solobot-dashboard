@@ -48,7 +48,7 @@ let state = {
 // Load persisted system messages from localStorage (chat comes from Gateway)
 function loadPersistedMessages() {
     try {
-        // System messages are local-only (UI noise), safe to persist
+        // System messages are local-only (UI noise)
         const savedSystem = localStorage.getItem('solobot-system-messages');
         if (savedSystem) {
             const parsed = JSON.parse(savedSystem);
@@ -59,8 +59,16 @@ function loadPersistedMessages() {
             }
         }
 
-        // Chat messages come from Gateway - don't load from localStorage
-        // (Gateway history is the single source of truth for chat)
+        // Chat messages - persist locally because Gateway doesn't save user messages (bug #5735)
+        const savedChat = localStorage.getItem('solobot-chat-messages');
+        if (savedChat) {
+            const parsed = JSON.parse(savedChat);
+            if (Array.isArray(parsed)) {
+                const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+                state.chat.messages = parsed.filter(m => m.time > cutoff);
+                console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
+            }
+        }
     } catch (e) {
         console.log('[Dashboard] Failed to load persisted messages:', e.message);
     }
@@ -74,6 +82,17 @@ function persistSystemMessages() {
         localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
     } catch (e) {
         console.log('[Dashboard] Failed to persist system messages:', e.message);
+    }
+}
+
+// Save chat messages to localStorage (workaround for Gateway bug #5735)
+// Gateway doesn't save user messages from operator WebSocket to transcript
+function persistChatMessages() {
+    try {
+        const chatToSave = state.chat.messages.slice(-100);
+        localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
+    } catch (e) {
+        console.log('[Dashboard] Failed to persist chat messages:', e.message);
     }
 }
 
@@ -406,10 +425,8 @@ function handleChatEvent(event) {
 
 function loadHistoryMessages(messages) {
     // Convert gateway history format and classify as chat vs system
-    // Preserve any very recent local messages (within 10 seconds) to avoid losing in-flight messages
-    const recentLocalChatMessages = state.chat.messages.filter(m =>
-        (Date.now() - m.time) < 10000 && m.id.startsWith('m')
-    );
+    // IMPORTANT: Preserve ALL local messages since Gateway doesn't save user messages (bug #5735)
+    const allLocalChatMessages = state.chat.messages.filter(m => m.id.startsWith('m'));
 
     const chatMessages = [];
     const systemMessages = [];
@@ -439,13 +456,14 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    // Merge chat: start with history, add any recent local messages not in history
+    // Merge chat: combine gateway history with ALL local messages, dedupe by text snippet
     const historyTexts = new Set(chatMessages.map(m => m.text.substring(0, 100)));
-    const uniqueRecentLocal = recentLocalChatMessages.filter(m =>
-        !historyTexts.has(m.text.substring(0, 100))
-    );
+    const uniqueLocalMessages = allLocalChatMessages.filter(m => {
+        const textSnippet = m.text.substring(0, 100);
+        return !historyTexts.has(textSnippet);
+    });
 
-    state.chat.messages = [...chatMessages, ...uniqueRecentLocal];
+    state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
 
     // Sort chat by time and trim
     state.chat.messages.sort((a, b) => a.time - b.time);
@@ -460,8 +478,9 @@ function loadHistoryMessages(messages) {
         state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
 
-    // Persist system messages (chat comes from Gateway)
+    // Persist both system and chat messages locally (workaround for Gateway bug #5735)
     persistSystemMessages();
+    persistChatMessages();
 
     renderChat();
     renderChatPage();
@@ -933,7 +952,8 @@ function addLocalChatMessage(text, from, image = null) {
             notifyChatPageNewMessage();
         }
 
-        // Don't persist chat to localStorage - Gateway is source of truth
+        // Persist chat to localStorage (workaround for Gateway bug #5735)
+        persistChatMessages();
         renderChat();
         renderChatPage();
     }
