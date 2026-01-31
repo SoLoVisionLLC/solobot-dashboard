@@ -1,10 +1,10 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.19.0 - Gateway-synced chat with conservative system filtering
+// Version: 3.20.0 - DEBUG: Filtering temporarily disabled
 //
 // Message Architecture:
 // - Chat messages: Synced via Gateway (single source of truth across all devices)
 // - System messages: Local UI noise (heartbeats, errors) - persisted to localStorage only
-// - Filtering: Very conservative - only filters obvious heartbeat/system patterns
+// - DEBUG: DISABLE_SYSTEM_FILTER = true (all messages go to Chat tab for debugging)
 
 // ===================
 // STATE MANAGEMENT
@@ -141,8 +141,17 @@ let currentModalTask = null;
 let currentModalColumn = null;
 let refreshIntervalId = null;
 
+// DEBUG: Set to true to disable all filtering and show EVERYTHING in chat
+const DISABLE_SYSTEM_FILTER = true; // TEMPORARY - set to false after debugging
+
 // Classify messages as system/heartbeat noise vs real chat
 function isSystemMessage(text, from) {
+    // DEBUG MODE: Show everything in chat
+    if (DISABLE_SYSTEM_FILTER) {
+        console.log('[isSystemMessage] FILTER DISABLED - routing all to CHAT');
+        return false; // Everything goes to chat
+    }
+
     if (!text) return false;
 
     const trimmed = text.trim();
