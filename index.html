@@ -1259,6 +1259,108 @@
         
         .sync-status.synced {
             color: var(--success);
+
+        /* =================== CHAT PAGE STYLES =================== */
+        .chat-page-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 60px);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: var(--space-4);
+        }
+        
+        .chat-page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-4);
+            background: var(--surface-2);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--space-4);
+            border: 1px solid var(--border-default);
+        }
+        
+        .chat-page-title {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+        
+        .chat-page-title h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .chat-page-status {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        
+        .chat-page-actions {
+            display: flex;
+            gap: var(--space-2);
+        }
+        
+        .chat-page-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--space-4);
+            background: var(--surface-1);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-default);
+            margin-bottom: var(--space-4);
+        }
+        
+        .chat-page-input-area {
+            background: var(--surface-2);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            border: 1px solid var(--border-default);
+        }
+        
+        .chat-page-input-row {
+            display: flex;
+            gap: var(--space-3);
+            align-items: center;
+        }
+        
+        .chat-page-input-row input {
+            flex: 1;
+        }
+        
+        #chat-page-image-preview {
+            position: relative;
+            margin-bottom: var(--space-3);
+            display: inline-block;
+        }
+        
+        #chat-page-image-preview img {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-default);
+        }
+        
+        /* Chat message styles for full page */
+        .chat-page-messages .chat-msg {
+            margin-bottom: var(--space-4);
+            max-width: 80%;
+        }
+        
+        .chat-page-messages .chat-msg.user {
+            margin-left: auto;
+        }
+        
+        .chat-page-messages .chat-msg.bot {
+            margin-right: auto;
+        }
+
         }
     </style>
 </head>
@@ -1628,18 +1730,57 @@
         
         <!-- =================== CHAT PAGE =================== -->
         <div id="page-chat" class="page">
-            <div class="container" style="padding: var(--space-6); max-width: 900px;">
-                <div class="page-header" style="margin-bottom: var(--space-6);">
-                    <h1 class="page-title" style="font-size: 24px; font-weight: 700;">
-                        💬 Chat with SoLoBot
-                    </h1>
-                    <p class="page-subtitle" style="color: var(--text-secondary); margin-top: var(--space-2);">
-                        Full conversation view
-                    </p>
+            <div class="chat-page-wrapper">
+                <!-- Chat Header -->
+                <div class="chat-page-header">
+                    <div class="chat-page-title">
+                        <span style="font-size: 20px;">💬</span>
+                        <div>
+                            <h1>Chat with SoLoBot</h1>
+                            <div class="chat-page-status">
+                                <span id="chat-page-status-dot" class="status-dot idle"></span>
+                                <span id="chat-page-status-text">Disconnected</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-page-actions">
+                        <button onclick="clearChatHistory()" class="btn btn-ghost" title="Clear chat">
+                            🗑️ Clear
+                        </button>
+                        <button onclick="openSettingsModal()" class="btn btn-secondary" title="Settings">
+                            ⚙️ Settings
+                        </button>
+                    </div>
                 </div>
-                <div id="chat-page-container">
-                    <!-- Chat will be rendered here when page is active -->
-                    <p style="color: var(--text-muted);">Chat functionality coming soon. Use the chat widget on the Dashboard for now.</p>
+                
+                <!-- Chat Messages Area -->
+                <div id="chat-page-messages" class="chat-page-messages">
+                    <!-- Messages rendered here -->
+                </div>
+                
+                <!-- Chat Input Area -->
+                <div class="chat-page-input-area">
+                    <!-- Image Preview -->
+                    <div id="chat-page-image-preview" class="image-preview-container hidden">
+                        <img id="chat-page-image-preview-img" />
+                        <button onclick="clearChatPageImagePreview()" class="btn-icon" style="position: absolute; top: 4px; right: 4px;">✕</button>
+                    </div>
+                    
+                    <div class="chat-page-input-row">
+                        <input type="file" id="chat-page-image-upload" accept="image/*" class="hidden" onchange="handleChatPageImageSelect(event)">
+                        <button onclick="document.getElementById('chat-page-image-upload').click()" class="btn btn-ghost" title="Attach image">
+                            📎
+                        </button>
+                        <input type="text" 
+                               id="chat-page-input" 
+                               class="input flex-1" 
+                               placeholder="Type a message..." 
+                               onkeypress="if(event.key==='Enter') sendChatPageMessage()"
+                               onpaste="handleChatPagePaste(event)">
+                        <button onclick="sendChatPageMessage()" class="btn btn-primary">
+                            Send →
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1992,7 +2133,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.4.0"></script>
+    <script src="dashboard.js?v=3.5.0"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
@@ -2017,6 +2158,11 @@
             
             // If showing memory page, load files
             if (pageName === 'memory') {
+            
+            // If showing chat page, render chat
+            if (pageName === 'chat' && typeof renderChatPage === 'function') {
+                renderChatPage();
+            }
                 renderMemoryFilesForPage();
             }
         }

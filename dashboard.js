@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.4.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.5.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -239,6 +239,7 @@ function updateConnectionUI(status, message) {
 
     // Re-render chat to update placeholder message
     renderChat();
+    renderChatPage();
 }
 
 function handleChatEvent(event) {
@@ -274,6 +275,7 @@ function handleChatEvent(event) {
             streamingText = content;
             isProcessing = true;
             renderChat();
+    renderChatPage();
             break;
 
         case 'final':
@@ -289,6 +291,7 @@ function handleChatEvent(event) {
             streamingText = '';
             isProcessing = false;
             renderChat();
+    renderChatPage();
             break;
 
         case 'error':
@@ -297,6 +300,7 @@ function handleChatEvent(event) {
             streamingText = '';
             isProcessing = false;
             renderChat();
+    renderChatPage();
             break;
 
         default:
@@ -325,6 +329,7 @@ function loadHistoryMessages(messages) {
     });
 
     renderChat();
+    renderChatPage();
 }
 
 function startHistoryPolling() {
@@ -393,6 +398,7 @@ function mergeHistoryMessages(messages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
         renderChat();
+    renderChatPage();
     }
 }
 
@@ -705,6 +711,7 @@ function addLocalChatMessage(text, from, image = null) {
     }
     
     renderChat();
+    renderChatPage();
 }
 
 // ===================
@@ -888,6 +895,178 @@ function openImageModal(src) {
 }
 
 // ===================
+// CHAT PAGE FUNCTIONS
+// ===================
+
+// Pending image for chat page
+let chatPagePendingImage = null;
+
+function renderChatPage() {
+    const container = document.getElementById('chat-page-messages');
+    if (!container) return;
+    
+    // Update connection status
+    const statusDot = document.getElementById('chat-page-status-dot');
+    const statusText = document.getElementById('chat-page-status-text');
+    const isConnected = gateway?.isConnected();
+    
+    if (statusDot) {
+        statusDot.className = `status-dot ${isConnected ? 'success' : 'idle'}`;
+    }
+    if (statusText) {
+        statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
+    }
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    const messages = state.chat?.messages || [];
+    
+    // Show placeholder if no messages
+    if (messages.length === 0 && !streamingText) {
+        const placeholder = document.createElement('div');
+        placeholder.style.cssText = 'color: var(--text-muted); text-align: center; padding: var(--space-8) 0;';
+        placeholder.innerHTML = isConnected
+            ? '💬 Connected! Send a message to start chatting.'
+            : '🔌 Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;" style="color: var(--brand-red);">Settings</a> to start chatting';
+        container.appendChild(placeholder);
+        return;
+    }
+    
+    // Check scroll position before rendering
+    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+    
+    // Render each message
+    messages.forEach(msg => {
+        const msgEl = createChatMessageElement(msg);
+        if (msgEl) container.appendChild(msgEl);
+    });
+    
+    // Render streaming message if active
+    if (streamingText) {
+        const streamingMsg = createChatMessageElement({
+            id: 'streaming',
+            from: 'solobot',
+            text: streamingText,
+            time: Date.now(),
+            isStreaming: true
+        });
+        if (streamingMsg) container.appendChild(streamingMsg);
+    }
+    
+    // Auto-scroll if was at bottom
+    if (wasAtBottom) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function handleChatPageImageSelect(event) {
+    const file = event.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+        processChatPageImageFile(file);
+    }
+}
+
+function handleChatPagePaste(event) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    
+    for (const item of items) {
+        if (item.type.startsWith('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (file) processChatPageImageFile(file);
+            return;
+        }
+    }
+}
+
+function processChatPageImageFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        chatPagePendingImage = {
+            data: e.target.result,
+            name: file.name,
+            type: file.type
+        };
+        showChatPageImagePreview(chatPagePendingImage.data);
+    };
+    reader.readAsDataURL(file);
+}
+
+function showChatPageImagePreview(dataUrl) {
+    const container = document.getElementById('chat-page-image-preview');
+    const img = document.getElementById('chat-page-image-preview-img');
+    if (container && img) {
+        img.src = dataUrl;
+        container.classList.remove('hidden');
+    }
+}
+
+function clearChatPageImagePreview() {
+    chatPagePendingImage = null;
+    const container = document.getElementById('chat-page-image-preview');
+    const input = document.getElementById('chat-page-image-upload');
+    if (container) container.classList.add('hidden');
+    if (input) input.value = '';
+}
+
+async function sendChatPageMessage() {
+    const input = document.getElementById('chat-page-input');
+    const text = input.value.trim();
+    if (!text && !chatPagePendingImage) return;
+    
+    if (!gateway || !gateway.isConnected()) {
+        alert('Not connected to Gateway. Please connect first in Settings.');
+        return;
+    }
+    
+    // Build message with optional image
+    let messageText = text;
+    let imageData = null;
+    
+    if (chatPagePendingImage) {
+        imageData = chatPagePendingImage.data;
+        addLocalChatMessage(text || '📷 Image', 'user', imageData);
+    } else {
+        addLocalChatMessage(text, 'user');
+    }
+    
+    input.value = '';
+    clearChatPageImagePreview();
+    
+    // Render both chat areas
+    renderChat();
+    renderChatPage();
+    renderChatPage();
+    
+    // Send via Gateway WebSocket
+    try {
+        if (imageData) {
+            await gateway.sendMessageWithImage(text || 'Image', imageData);
+        } else {
+            await gateway.sendMessage(text);
+        }
+    } catch (err) {
+        console.error('Failed to send message:', err);
+        addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
+        renderChat();
+    renderChatPage();
+        renderChatPage();
+    }
+}
+
+function clearChatHistory() {
+    if (confirm('Clear all chat messages? This cannot be undone.')) {
+        state.chat.messages = [];
+        renderChat();
+    renderChatPage();
+        renderChatPage();
+    }
+}
+
+
+// ===================
 // RENDERING (OTHER FUNCTIONS REMAIN THE SAME)
 // ===================
 
@@ -899,6 +1078,7 @@ function render() {
     renderActivity();
     renderDocs();
     renderChat();
+    renderChatPage();
     renderBulkActionBar();
     updateArchiveBadge();
 
