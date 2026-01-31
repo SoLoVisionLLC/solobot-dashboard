@@ -5,11 +5,4 @@ services:
     build: .
     ports:
       - "3000:3000"
-    volumes:
-      # Persistent storage for dashboard state AND memory files
-      - dashboard-data:/app/data
     restart: unless-stopped
-
-volumes:
-  dashboard-data:
-    # Dashboard's persistent storage - includes state.json and memory/ folder
