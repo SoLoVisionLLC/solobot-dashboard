@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.1.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.4.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -457,7 +457,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Docs search
-    document.getElementById('docs-search').addEventListener('input', (e) => {
+    const docsSearch = document.getElementById('docs-search'); if (docsSearch) docsSearch.addEventListener('input', (e) => {
         renderDocs(e.target.value);
     });
     
