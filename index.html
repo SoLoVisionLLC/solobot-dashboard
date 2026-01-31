@@ -12,12 +12,15 @@
                 extend: {
                     colors: {
                         solo: {
-                            primary: '#6366f1',    // Indigo
-                            secondary: '#8b5cf6',  // Purple
-                            accent: '#22d3ee',     // Cyan
-                            dark: '#0f172a',       // Slate 900
-                            darker: '#020617',     // Slate 950
-                            card: '#1e293b',       // Slate 800
+                            primary: '#BC2026',    // Deep Red - accent/buttons
+                            secondary: '#A9B2BC',  // Cool Light Grey
+                            accent: '#BC2026',     // Deep Red
+                            dark: '#1B2232',       // Dark Navy Blue
+                            darker: '#121820',     // Darker Navy
+                            card: '#232D3F',       // Lighter Navy for cards
+                            grey: '#A9B2BC',       // Cool Light Grey
+                            red: '#BC2026',        // Deep Red
+                            navy: '#1B2232',       // Dark Navy Blue
                         }
                     }
                 }
@@ -37,11 +40,11 @@
         }
         
         .scrollbar-thin::-webkit-scrollbar { width: 6px; }
-        .scrollbar-thin::-webkit-scrollbar-track { background: #1e293b; }
-        .scrollbar-thin::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #1B2232; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #A9B2BC; border-radius: 3px; }
         
-        .priority-p0 { border-left: 4px solid #ef4444; }
-        .priority-p1 { border-left: 4px solid #eab308; }
+        .priority-p0 { border-left: 4px solid #BC2026; }
+        .priority-p1 { border-left: 4px solid #A9B2BC; }
         .priority-p2 { border-left: 4px solid #3b82f6; }
         
         /* Task card hover effects */
@@ -55,12 +58,12 @@
         
         /* Checkbox styling */
         input[type="checkbox"] {
-            accent-color: #6366f1;
+            accent-color: #BC2026;
         }
         
         /* Selected task glow */
         .task-card.ring-2 {
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 0 0 2px rgba(188, 32, 38, 0.3);
         }
         
         /* Bulk action bar animation */
@@ -76,10 +79,10 @@
 <body class="bg-solo-darker text-gray-100 min-h-screen">
     
     <!-- Header -->
-    <header class="bg-solo-dark border-b border-slate-700 px-6 py-4">
+    <header class="bg-solo-dark border-b border-solo-grey/20 px-6 py-4">
         <div class="flex items-center justify-between max-w-7xl mx-auto">
             <div class="flex items-center gap-4">
-                <div class="text-2xl font-bold bg-gradient-to-r from-solo-primary to-solo-secondary bg-clip-text text-transparent">
+                <div class="text-2xl font-bold text-white">
                     SoLoVision Command Center
                 </div>
             </div>
@@ -90,17 +93,17 @@
                     <div id="status-indicator" class="w-3 h-3 rounded-full bg-green-500 status-pulse"></div>
                     <span id="status-text" class="text-sm font-medium">IDLE</span>
                 </div>
-                <div class="text-sm text-gray-400">
-                    <span class="text-gray-500">Provider:</span> 
-                    <span id="provider-name" class="text-solo-accent">anthropic</span>
+                <div class="text-sm text-solo-grey">
+                    <span class="text-solo-grey/70">Provider:</span> 
+                    <span id="provider-name" class="text-white">anthropic</span>
                 </div>
-                <div class="text-sm text-gray-400">
-                    <span class="text-gray-500">Model:</span> 
-                    <span id="model-name" class="text-solo-accent">opus 4.5</span>
+                <div class="text-sm text-solo-grey">
+                    <span class="text-solo-grey/70">Model:</span> 
+                    <span id="model-name" class="text-white">opus 4.5</span>
                 </div>
-                <div id="current-task" class="text-sm text-gray-400 max-w-xs truncate hidden">
-                    <span class="text-gray-500">Task:</span>
-                    <span id="task-name" class="text-gray-300"></span>
+                <div id="current-task" class="text-sm text-solo-grey max-w-xs truncate hidden">
+                    <span class="text-solo-grey/70">Task:</span>
+                    <span id="task-name" class="text-white"></span>
                 </div>
             </div>
         </div>
@@ -114,7 +117,7 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             <span class="text-solo-secondary font-medium">Sub-agent active:</span>
-            <span id="subagent-task" class="text-gray-300">Researching...</span>
+            <span id="subagent-task" class="text-white">Researching...</span>
         </div>
     </div>
 
@@ -127,19 +130,19 @@
         <section class="mb-8">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold flex items-center gap-2">
-                    <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                     </svg>
                     Task Board
                 </h2>
                 <div class="flex items-center gap-2">
-                    <button onclick="openArchiveModal()" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition">
-                        📦 Archive <span id="archive-badge" class="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full hidden">0</span>
+                    <button onclick="openArchiveModal()" class="text-sm text-solo-grey hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-solo-card transition">
+                        📦 Archive <span id="archive-badge" class="text-xs bg-solo-red/20 text-solo-red px-2 py-0.5 rounded-full hidden">0</span>
                     </button>
-                    <button onclick="syncFromVPS()" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition" title="Pull latest state from VPS">
+                    <button onclick="syncFromVPS()" class="text-sm text-solo-grey hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-solo-card transition" title="Pull latest state from VPS">
                         🔄 Sync
                     </button>
-                    <button onclick="openSettingsModal()" class="text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition">
+                    <button onclick="openSettingsModal()" class="text-sm text-solo-grey hover:text-white flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-solo-card transition">
                         ⚙️ Settings
                     </button>
                 </div>
@@ -149,12 +152,12 @@
                 <!-- To-Do Column -->
                 <div class="bg-solo-card rounded-lg p-4">
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                        <h3 class="font-medium text-white flex items-center gap-2">
                             <span class="w-2 h-2 rounded-full bg-slate-500"></span>
                             To-Do
                             <span id="todo-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
                         </h3>
-                        <button onclick="openAddTask('todo')" class="text-gray-500 hover:text-gray-300 transition">
+                        <button onclick="openAddTask('todo')" class="text-solo-grey/70 hover:text-white transition">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                             </svg>
@@ -172,7 +175,7 @@
                 <!-- In Progress Column -->
                 <div class="bg-solo-card rounded-lg p-4">
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                        <h3 class="font-medium text-white flex items-center gap-2">
                             <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
                             In Progress
                             <span id="progress-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
@@ -190,12 +193,12 @@
                 <!-- Done Column -->
                 <div class="bg-solo-card rounded-lg p-4">
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-medium text-gray-300 flex items-center gap-2">
+                        <h3 class="font-medium text-white flex items-center gap-2">
                             <span class="w-2 h-2 rounded-full bg-green-500"></span>
                             Done
                             <span id="done-count" class="text-xs bg-slate-600 px-2 py-0.5 rounded-full">0</span>
                         </h3>
-                        <button onclick="clearDone()" class="text-gray-500 hover:text-gray-300 transition text-xs">
+                        <button onclick="clearDone()" class="text-solo-grey/70 hover:text-white transition text-xs">
                             Clear
                         </button>
                     </div>
@@ -213,32 +216,32 @@
         <!-- Row 1: Terminal + Activity Log side by side -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <!-- Terminal -->
-            <div class="bg-black rounded-xl border border-slate-700 overflow-hidden" id="console-section">
-                <div class="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-slate-700">
+            <div class="bg-black rounded-xl border border-solo-grey/20 overflow-hidden" id="console-section">
+                <div class="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-solo-grey/20">
                     <div class="flex items-center gap-3">
                         <div class="flex gap-1.5">
                             <div class="w-3 h-3 rounded-full bg-red-500"></div>
                             <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
                             <div class="w-3 h-3 rounded-full bg-green-500"></div>
                         </div>
-                        <span class="text-sm text-gray-400 font-mono">SoLoBot Terminal</span>
+                        <span class="text-sm text-solo-grey font-mono">SoLoBot Terminal</span>
                         <span id="console-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-mono">IDLE</span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button onclick="clearConsole()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-slate-700 transition">Clear</button>
-                        <button onclick="toggleConsoleExpand()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 rounded hover:bg-slate-700 transition" id="console-expand-btn">Expand</button>
+                        <button onclick="clearConsole()" class="text-xs text-solo-grey/70 hover:text-white px-2 py-1 rounded hover:bg-solo-card transition">Clear</button>
+                        <button onclick="toggleConsoleExpand()" class="text-xs text-solo-grey/70 hover:text-white px-2 py-1 rounded hover:bg-solo-card transition" id="console-expand-btn">Expand</button>
                     </div>
                 </div>
-                <div id="console-output" class="p-4 font-mono text-sm h-[250px] overflow-y-auto scrollbar-thin bg-[#0d1117]" style="font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;">
+                <div id="console-output" class="p-4 font-mono text-sm h-[250px] overflow-y-auto scrollbar-thin bg-solo-darker" style="font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;">
                     <div class="text-green-400">$ solobot --init</div>
-                    <div class="text-gray-400">Ready for commands...</div>
+                    <div class="text-solo-grey">Ready for commands...</div>
                 </div>
             </div>
 
             <!-- Activity Log -->
             <div class="bg-solo-card rounded-lg p-4">
                 <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                     Activity Log
@@ -253,29 +256,29 @@
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <!-- Chat -->
             <div class="bg-solo-card rounded-lg overflow-hidden">
-                <div class="p-4 border-b border-slate-700">
+                <div class="p-4 border-b border-solo-grey/20">
                     <div class="flex items-center justify-between">
                         <h2 class="text-lg font-semibold flex items-center gap-2">
-                            <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                             </svg>
                             Chat with SoLoBot
                         </h2>
                         <div class="flex items-center gap-2">
                             <span id="gateway-status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                            <span id="gateway-status" class="text-xs text-gray-400">Disconnected</span>
+                            <span id="gateway-status" class="text-xs text-solo-grey">Disconnected</span>
                         </div>
                     </div>
                 </div>
-                <div id="chat-messages" class="h-[250px] overflow-y-auto p-4 space-y-3 scrollbar-thin bg-[#0d1117]">
-                    <div class="text-gray-500 text-sm text-center py-4">🔌 Connect to Gateway in Settings to start chatting</div>
+                <div id="chat-messages" class="h-[250px] overflow-y-auto p-4 space-y-3 scrollbar-thin bg-solo-darker">
+                    <div class="text-solo-grey/70 text-sm text-center py-4">🔌 Connect to Gateway in Settings to start chatting</div>
                 </div>
-                <div class="border-t border-slate-700 p-3 bg-slate-800">
+                <div class="border-t border-solo-grey/20 p-3 bg-slate-800">
                     <div class="flex gap-2">
                         <input type="text" id="chat-input" placeholder="Type a message..."
-                               class="flex-1 bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-primary transition"
+                               class="flex-1 bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-red transition"
                                onkeypress="if(event.key==='Enter')sendChatMessage()">
-                        <button onclick="sendChatMessage()" class="bg-solo-primary hover:bg-solo-primary/80 px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
+                        <button onclick="sendChatMessage()" class="bg-solo-red hover:bg-solo-red/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
                     </div>
                 </div>
             </div>
@@ -283,7 +286,7 @@
             <!-- Notes -->
             <div class="bg-solo-card rounded-lg p-4">
                 <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                     </svg>
                     Notes for SoLoBot
@@ -291,8 +294,8 @@
                 <div class="mb-4">
                     <div class="flex gap-2">
                         <input type="text" id="note-input" placeholder="Leave a note for SoLoBot..." 
-                               class="flex-1 bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-primary transition">
-                        <button onclick="addNote()" class="bg-solo-primary hover:bg-solo-primary/80 px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
+                               class="flex-1 bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-red transition">
+                        <button onclick="addNote()" class="bg-solo-red hover:bg-solo-red/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
                     </div>
                 </div>
                 <div id="notes-list" class="space-y-2 h-[200px] overflow-y-auto scrollbar-thin">
@@ -304,7 +307,7 @@
         <!-- Product Status Cards -->
         <section class="mb-8">
             <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                 </svg>
                 Product Status
@@ -316,8 +319,8 @@
                         <span class="font-medium">SoLoLink</span>
                         <span class="w-3 h-3 rounded-full bg-green-500"></span>
                     </div>
-                    <p class="text-sm text-gray-400">Link/widget tool</p>
-                    <p class="text-xs text-gray-500 mt-2">Last update: Active</p>
+                    <p class="text-sm text-solo-grey">Link/widget tool</p>
+                    <p class="text-xs text-solo-grey/70 mt-2">Last update: Active</p>
                 </div>
 
                 <div class="bg-solo-card rounded-lg p-4">
@@ -325,8 +328,8 @@
                         <span class="font-medium">SoLoRecall</span>
                         <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
                     </div>
-                    <p class="text-sm text-gray-400">AI productivity app</p>
-                    <p class="text-xs text-gray-500 mt-2">Last update: In dev</p>
+                    <p class="text-sm text-solo-grey">AI productivity app</p>
+                    <p class="text-xs text-solo-grey/70 mt-2">Last update: In dev</p>
                 </div>
 
                 <div class="bg-solo-card rounded-lg p-4">
@@ -334,8 +337,8 @@
                         <span class="font-medium">SoLoVoice</span>
                         <span class="w-3 h-3 rounded-full bg-green-500"></span>
                     </div>
-                    <p class="text-sm text-gray-400">Voice/audio tool</p>
-                    <p class="text-xs text-gray-500 mt-2">Last update: Active</p>
+                    <p class="text-sm text-solo-grey">Voice/audio tool</p>
+                    <p class="text-xs text-solo-grey/70 mt-2">Last update: Active</p>
                 </div>
 
                 <div class="bg-solo-card rounded-lg p-4">
@@ -343,8 +346,8 @@
                         <span class="font-medium">SoLoFamilyPlan</span>
                         <span class="w-3 h-3 rounded-full bg-green-500"></span>
                     </div>
-                    <p class="text-sm text-gray-400">Family organizer</p>
-                    <p class="text-xs text-gray-500 mt-2">Last update: Stable</p>
+                    <p class="text-sm text-solo-grey">Family organizer</p>
+                    <p class="text-xs text-solo-grey/70 mt-2">Last update: Stable</p>
                 </div>
             </div>
         </section>
@@ -352,12 +355,12 @@
         <!-- Docs Hub -->
         <section>
             <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-solo-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-solo-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                 </svg>
                 Docs Hub
                 <input type="text" id="docs-search" placeholder="Search docs..." 
-                       class="ml-auto bg-solo-dark border border-slate-600 rounded-lg px-3 py-1 text-sm w-48 focus:outline-none focus:border-solo-primary transition">
+                       class="ml-auto bg-solo-dark border border-solo-grey/30 rounded-lg px-3 py-1 text-sm w-48 focus:outline-none focus:border-solo-red transition">
             </h2>
             <div id="docs-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <!-- Docs will be inserted here -->
@@ -371,28 +374,28 @@
         <div class="bg-solo-card rounded-lg p-6 w-full max-w-md mx-4">
             <h3 class="text-lg font-semibold mb-4">Add New Task</h3>
             <input type="text" id="new-task-title" placeholder="Task title..." 
-                   class="w-full bg-solo-dark border border-slate-600 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-solo-primary transition">
+                   class="w-full bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-solo-red transition">
             <div class="flex gap-2 mb-4">
                 <button onclick="setTaskPriority(0)" id="priority-btn-0" class="flex-1 py-2 rounded-lg border-2 border-red-500 text-red-500 hover:bg-red-500/20 transition">P0</button>
                 <button onclick="setTaskPriority(1)" id="priority-btn-1" class="flex-1 py-2 rounded-lg border-2 border-yellow-500 text-yellow-500 hover:bg-yellow-500/20 transition">P1</button>
                 <button onclick="setTaskPriority(2)" id="priority-btn-2" class="flex-1 py-2 rounded-lg border-2 border-blue-500 text-blue-500 hover:bg-blue-500/20 transition">P2</button>
             </div>
             <div class="flex gap-2">
-                <button onclick="closeAddTask()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
-                <button onclick="submitTask()" class="flex-1 py-2 rounded-lg bg-solo-primary hover:bg-solo-primary/80 transition">Add Task</button>
+                <button onclick="closeAddTask()" class="flex-1 py-2 rounded-lg border border-solo-grey/30 hover:bg-solo-card transition">Cancel</button>
+                <button onclick="submitTask()" class="flex-1 py-2 rounded-lg bg-solo-red hover:bg-solo-red/80 text-white transition">Add Task</button>
             </div>
         </div>
     </div>
 
     <!-- Task Action Modal -->
     <div id="task-action-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-slate-600">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-solo-grey/30">
             <div class="flex items-start justify-between mb-4">
                 <div>
                     <h3 class="text-lg font-semibold text-white">Task Actions</h3>
-                    <p id="action-modal-task-title" class="text-sm text-gray-400 mt-1 truncate max-w-[250px]"></p>
+                    <p id="action-modal-task-title" class="text-sm text-solo-grey mt-1 truncate max-w-[250px]"></p>
                 </div>
-                <button onclick="closeActionModal()" class="text-gray-500 hover:text-white transition p-1">
+                <button onclick="closeActionModal()" class="text-solo-grey/70 hover:text-white transition p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -400,36 +403,36 @@
             </div>
             
             <div class="space-y-2 mb-4">
-                <button id="action-move-todo" onclick="modalMoveTask('todo')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                <button id="action-move-todo" onclick="modalMoveTask('todo')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
                     <span class="w-3 h-3 rounded-full bg-slate-500"></span>
                     <span>Move to To-Do</span>
                 </button>
-                <button id="action-move-progress" onclick="modalMoveTask('progress')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                <button id="action-move-progress" onclick="modalMoveTask('progress')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
                     <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
                     <span>Move to In Progress</span>
                 </button>
-                <button id="action-move-done" onclick="modalMoveTask('done')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                <button id="action-move-done" onclick="modalMoveTask('done')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
                     <span class="w-3 h-3 rounded-full bg-green-500"></span>
                     <span>Move to Done</span>
                 </button>
-                <button id="action-move-archive" onclick="modalMoveTask('archive')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                <button id="action-move-archive" onclick="modalMoveTask('archive')" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-solo-red"></span>
                     <span>📦 Archive</span>
                 </button>
             </div>
             
-            <div class="border-t border-slate-600 pt-4 space-y-2">
-                <button onclick="modalEditTitle()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+            <div class="border-t border-solo-grey/30 pt-4 space-y-2">
+                <button onclick="modalEditTitle()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
                     <span>✏️</span>
                     <span>Edit Title</span>
                 </button>
-                <button onclick="modalCyclePriority()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-slate-700 transition flex items-center gap-3">
+                <button onclick="modalCyclePriority()" class="w-full text-left px-4 py-3 rounded-lg bg-solo-dark hover:bg-solo-card transition flex items-center gap-3">
                     <span>🔄</span>
                     <span id="action-priority-text">Change Priority (P1)</span>
                 </button>
             </div>
             
-            <div class="border-t border-slate-600 pt-4 mt-4">
+            <div class="border-t border-solo-grey/30 pt-4 mt-4">
                 <button onclick="modalDeleteTask()" class="w-full text-left px-4 py-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition flex items-center gap-3">
                     <span>🗑️</span>
                     <span>Delete Task</span>
@@ -440,24 +443,24 @@
 
     <!-- Edit Title Modal -->
     <div id="edit-title-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-slate-600">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-solo-grey/30">
             <h3 class="text-lg font-semibold mb-4">Edit Task Title</h3>
             <input type="text" id="edit-title-input" placeholder="Task title..." 
-                   class="w-full bg-solo-dark border border-slate-600 rounded-lg px-4 py-3 mb-4 focus:outline-none focus:border-solo-primary transition">
+                   class="w-full bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-3 mb-4 focus:outline-none focus:border-solo-red transition">
             <div class="flex gap-2">
-                <button onclick="closeEditTitleModal()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
-                <button onclick="saveEditedTitle()" class="flex-1 py-2 rounded-lg bg-solo-primary hover:bg-solo-primary/80 transition">Save</button>
+                <button onclick="closeEditTitleModal()" class="flex-1 py-2 rounded-lg border border-solo-grey/30 hover:bg-solo-card transition">Cancel</button>
+                <button onclick="saveEditedTitle()" class="flex-1 py-2 rounded-lg bg-solo-red hover:bg-solo-red/80 text-white transition">Save</button>
             </div>
         </div>
     </div>
 
     <!-- Confirm Delete Modal -->
     <div id="confirm-delete-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-slate-600">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-solo-grey/30">
             <h3 class="text-lg font-semibold mb-2">Delete Task?</h3>
-            <p id="delete-modal-task-title" class="text-sm text-gray-400 mb-6 truncate"></p>
+            <p id="delete-modal-task-title" class="text-sm text-solo-grey mb-6 truncate"></p>
             <div class="flex gap-2">
-                <button onclick="closeDeleteModal()" class="flex-1 py-2 rounded-lg border border-slate-600 hover:bg-slate-700 transition">Cancel</button>
+                <button onclick="closeDeleteModal()" class="flex-1 py-2 rounded-lg border border-solo-grey/30 hover:bg-solo-card transition">Cancel</button>
                 <button onclick="confirmDeleteTask()" class="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 transition">Delete</button>
             </div>
         </div>
@@ -465,12 +468,12 @@
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl border border-slate-600 max-h-[85vh] overflow-y-auto">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl border border-solo-grey/30 max-h-[85vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-lg font-semibold flex items-center gap-2">
                     ⚙️ Dashboard Settings
                 </h3>
-                <button onclick="closeSettingsModal()" class="text-gray-500 hover:text-white transition p-1">
+                <button onclick="closeSettingsModal()" class="text-solo-grey/70 hover:text-white transition p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -479,35 +482,35 @@
             
             <!-- Gateway Connection -->
             <div class="mb-6">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     🔌 Gateway Connection
                 </h4>
                 <div class="space-y-4 bg-solo-dark rounded-lg p-4">
                     <div class="flex items-center gap-2 mb-3">
                         <span id="settings-gateway-dot" class="w-3 h-3 rounded-full bg-gray-500"></span>
-                        <span id="settings-gateway-status" class="text-sm text-gray-400">Disconnected</span>
+                        <span id="settings-gateway-status" class="text-sm text-solo-grey">Disconnected</span>
                     </div>
                     <div>
-                        <label class="text-xs text-gray-500 mb-1 block">Gateway Host</label>
+                        <label class="text-xs text-solo-grey/70 mb-1 block">Gateway Host</label>
                         <input type="text" id="gateway-host" placeholder="e.g., moltbot.local or 192.168.1.100"
-                               class="w-full bg-solo-card border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-primary">
+                               class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="text-xs text-gray-500 mb-1 block">Port</label>
+                            <label class="text-xs text-solo-grey/70 mb-1 block">Port</label>
                             <input type="number" id="gateway-port" placeholder="443" value="443"
-                                   class="w-full bg-solo-card border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-primary">
+                                   class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
                         </div>
                         <div>
-                            <label class="text-xs text-gray-500 mb-1 block">Session Key</label>
+                            <label class="text-xs text-solo-grey/70 mb-1 block">Session Key</label>
                             <input type="text" id="gateway-session" placeholder="main" value="main"
-                                   class="w-full bg-solo-card border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-primary">
+                                   class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
                         </div>
                     </div>
                     <div>
-                        <label class="text-xs text-gray-500 mb-1 block">Token (optional)</label>
+                        <label class="text-xs text-solo-grey/70 mb-1 block">Token (optional)</label>
                         <input type="password" id="gateway-token" placeholder="Gateway auth token"
-                               class="w-full bg-solo-card border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-primary">
+                               class="w-full bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-solo-red">
                     </div>
                     <div class="flex gap-2 pt-2">
                         <button id="gateway-connect-btn" onclick="connectToGateway()"
@@ -515,7 +518,7 @@
                         <button id="gateway-disconnect-btn" onclick="disconnectFromGateway()"
                                 class="flex-1 bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg text-sm font-medium transition hidden">Disconnect</button>
                     </div>
-                    <p class="text-xs text-gray-500 mt-2">
+                    <p class="text-xs text-solo-grey/70 mt-2">
                         Connect to the same session as Telegram/Android for mirrored chat.
                     </p>
                 </div>
@@ -523,16 +526,16 @@
 
             <!-- SoLoBot Settings -->
             <div class="mb-6">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     🤖 SoLoBot Behavior
                 </h4>
                 <div class="space-y-4 bg-solo-dark rounded-lg p-4">
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Task Pickup Frequency</div>
-                            <div class="text-xs text-gray-500">How often SoLoBot checks for In Progress tasks</div>
+                            <div class="text-xs text-solo-grey/70">How often SoLoBot checks for In Progress tasks</div>
                         </div>
-                        <select id="setting-pickup-freq" onchange="updateSetting('pickupFreq', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-pickup-freq" onchange="updateSetting('pickupFreq', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
                             <option value="disabled">Disabled</option>
                             <option value="60000">Every 1 min</option>
                             <option value="300000">Every 5 min</option>
@@ -542,9 +545,9 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Work Priority Order</div>
-                            <div class="text-xs text-gray-500">How tasks are prioritized</div>
+                            <div class="text-xs text-solo-grey/70">How tasks are prioritized</div>
                         </div>
-                        <select id="setting-priority-order" onchange="updateSetting('priorityOrder', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-priority-order" onchange="updateSetting('priorityOrder', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
                             <option value="priority">P0 → P1 → P2</option>
                             <option value="fifo">First In, First Out</option>
                             <option value="lifo">Last In, First Out</option>
@@ -555,16 +558,16 @@
             
             <!-- Dashboard Settings -->
             <div class="mb-6">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     📊 Dashboard
                 </h4>
                 <div class="space-y-4 bg-solo-dark rounded-lg p-4">
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Auto-Refresh</div>
-                            <div class="text-xs text-gray-500">How often dashboard reloads data</div>
+                            <div class="text-xs text-solo-grey/70">How often dashboard reloads data</div>
                         </div>
-                        <select id="setting-refresh" onchange="updateSetting('refreshInterval', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-refresh" onchange="updateSetting('refreshInterval', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
                             <option value="5000">Every 5 sec</option>
                             <option value="10000">Every 10 sec</option>
                             <option value="30000">Every 30 sec</option>
@@ -575,9 +578,9 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Default New Task Priority</div>
-                            <div class="text-xs text-gray-500">Priority for new tasks</div>
+                            <div class="text-xs text-solo-grey/70">Priority for new tasks</div>
                         </div>
-                        <select id="setting-default-priority" onchange="updateSetting('defaultPriority', this.value)" class="bg-solo-card border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="setting-default-priority" onchange="updateSetting('defaultPriority', this.value)" class="bg-solo-card border border-solo-grey/30 rounded-lg px-3 py-1.5 text-sm">
                             <option value="0">P0 (Urgent)</option>
                             <option value="1">P1 (Normal)</option>
                             <option value="2">P2 (Low)</option>
@@ -586,7 +589,7 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Compact Mode</div>
-                            <div class="text-xs text-gray-500">Denser task cards</div>
+                            <div class="text-xs text-solo-grey/70">Denser task cards</div>
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" id="setting-compact" onchange="updateSetting('compactMode', this.checked)" class="sr-only peer">
@@ -598,7 +601,7 @@
             
             <!-- Show/Hide Panels -->
             <div class="mb-6">
-                <h4 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     👁️ Visible Panels
                 </h4>
                 <div class="space-y-3 bg-solo-dark rounded-lg p-4">
@@ -634,21 +637,21 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Reset Local Data</div>
-                            <div class="text-xs text-gray-500">Reload all data from server</div>
+                            <div class="text-xs text-solo-grey/70">Reload all data from server</div>
                         </div>
                         <button onclick="resetToServerState()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">Reset</button>
                     </div>
                     <div class="flex items-center justify-between">
                         <div>
                             <div class="text-sm text-white">Clear All Data</div>
-                            <div class="text-xs text-gray-500">Delete all local data and tasks</div>
+                            <div class="text-xs text-solo-grey/70">Delete all local data and tasks</div>
                         </div>
                         <button onclick="clearAllData()" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded-lg transition">Clear</button>
                     </div>
                 </div>
             </div>
             
-            <div class="mt-6 pt-4 border-t border-slate-600 text-center text-xs text-gray-500">
+            <div class="mt-6 pt-4 border-t border-solo-grey/30 text-center text-xs text-solo-grey/70">
                 Dashboard v3.1.0 • Gateway WebSocket Chat
             </div>
         </div>
@@ -656,15 +659,15 @@
 
     <!-- Archive Modal -->
     <div id="archive-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
-        <div class="bg-solo-card rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl border border-slate-600 max-h-[80vh] flex flex-col">
+        <div class="bg-solo-card rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl border border-solo-grey/30 max-h-[80vh] flex flex-col">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold flex items-center gap-2">
                     📦 Archived Tasks
-                    <span id="archive-modal-count" class="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">0</span>
+                    <span id="archive-modal-count" class="text-xs bg-solo-red/20 text-solo-red px-2 py-0.5 rounded-full">0</span>
                 </h3>
                 <div class="flex items-center gap-2">
                     <button onclick="clearArchive()" class="text-sm text-red-400 hover:text-red-300 px-3 py-1 rounded hover:bg-red-500/10 transition">Clear All</button>
-                    <button onclick="closeArchiveModal()" class="text-gray-500 hover:text-white transition p-1">
+                    <button onclick="closeArchiveModal()" class="text-solo-grey/70 hover:text-white transition p-1">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
@@ -678,8 +681,8 @@
     </div>
 
     <!-- Footer -->
-    <footer class="bg-solo-dark border-t border-slate-700 px-6 py-3 mt-8">
-        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-500">
+    <footer class="bg-solo-dark border-t border-solo-grey/20 px-6 py-3 mt-8">
+        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm text-solo-grey/70">
             <span>SoLoVision LLC © 2026</span>
             <span class="flex items-center gap-2">
                 <span class="flex items-center gap-1">
@@ -687,7 +690,7 @@
                     <span class="text-green-400">LIVE</span>
                 </span>
                 <span class="text-gray-600">|</span>
-                <span>Last sync: <span id="last-sync" class="text-gray-400">--:--</span></span>
+                <span>Last sync: <span id="last-sync" class="text-solo-grey">--:--</span></span>
             </span>
         </div>
     </footer>
