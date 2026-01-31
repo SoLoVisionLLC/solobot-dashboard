@@ -1707,22 +1707,36 @@
         document.documentElement.setAttribute('data-theme', savedTheme);
         updateThemeIcon(savedTheme);
 
-        // Strict scroll containment - capture wheel events immediately
-        function setupScrollContainment() {
-            document.querySelectorAll('.chat-messages, .activity-list, .notes-list, .terminal-output, .drop-zone').forEach(el => {
-                if (!el.dataset.scrollContained) {
-                    el.dataset.scrollContained = 'true';
-                    el.addEventListener('wheel', (e) => {
-                        // Only stop propagation, let the element scroll naturally
-                        e.stopPropagation();
-                    }, { passive: false });
-                }
-            });
+        // Strict scroll containment - route scroll to element under cursor
+        let currentScrollTarget = null;
+        const scrollableSelectors = '.chat-messages, .activity-list, .notes-list, .terminal-output, .drop-zone';
+
+        function updateScrollTarget(e) {
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            if (el) {
+                currentScrollTarget = el.closest(scrollableSelectors);
+            } else {
+                currentScrollTarget = null;
+            }
         }
 
-        // Run on load and expose for re-running after dynamic content
-        document.addEventListener('DOMContentLoaded', setupScrollContainment);
-        window.setupScrollContainment = setupScrollContainment;
+        document.addEventListener('mousemove', updateScrollTarget, { passive: true });
+
+        document.addEventListener('wheel', (e) => {
+            // Find scrollable element under cursor RIGHT NOW
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const scrollable = el?.closest(scrollableSelectors);
+
+            if (scrollable) {
+                // Prevent default page scroll
+                e.preventDefault();
+                // Manually scroll the correct container
+                scrollable.scrollTop += e.deltaY;
+            }
+            // If not over a scrollable area, let page scroll normally
+        }, { passive: false });
+
+        window.setupScrollContainment = () => {}; // No-op now, handled globally
 
         // Modal helpers for the new class system
         function showModal(id) {
