@@ -289,16 +289,34 @@ class GatewayClient {
         const mimeType = matches[1];
         const base64Data = matches[2];
 
+        // Build content array in Anthropic/Claude API format
+        const content = [];
+
+        // Add image content block first
+        content.push({
+            type: 'image',
+            source: {
+                type: 'base64',
+                media_type: mimeType,
+                data: base64Data
+            }
+        });
+
+        // Add text content block if there's text
+        if (text && text.trim()) {
+            content.push({
+                type: 'text',
+                text: text.trim()
+            });
+        }
+
         const params = {
-            message: text,
             sessionKey: this.sessionKey,
             idempotencyKey: crypto.randomUUID(),
-            attachments: [{
-                type: 'image',
-                mimeType: mimeType,
-                data: base64Data
-            }]
+            content: content
         };
+
+        console.log('[Gateway] Sending message with image, content blocks:', content.length);
 
         return this._request('chat.send', params).then(result => {
             console.log('[Gateway] chat.send (with image) result:', result);
