@@ -61,6 +61,9 @@ function saveGatewaySettings(host, port, token, sessionKey) {
 
 // Function to load gateway settings from server state (called after loadState)
 function loadGatewaySettingsFromServer() {
+    console.log('[Dashboard] loadGatewaySettingsFromServer called');
+    console.log('[Dashboard] state.gatewayConfig:', state.gatewayConfig);
+    
     if (state.gatewayConfig && state.gatewayConfig.host) {
         // Always prefer server settings if they exist (server is source of truth)
         GATEWAY_CONFIG.host = state.gatewayConfig.host;
@@ -74,7 +77,9 @@ function loadGatewaySettingsFromServer() {
         localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
         localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
         
-        console.log('[Dashboard] Loaded gateway settings from server state:', GATEWAY_CONFIG.host);
+        console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host);
+    } else {
+        console.log('[Dashboard] ✗ No gateway config in server state');
     }
 }
 
