@@ -1,5 +1,9 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.17.0 - Separate System tab for system messages/heartbeats
+// Version: 3.18.0 - Gateway-synced chat with separate System tab
+//
+// Message Architecture:
+// - Chat messages: Synced via Gateway (single source of truth across all devices)
+// - System messages: Local UI noise (heartbeats, errors) - persisted to localStorage only
 
 // ===================
 // STATE MANAGEMENT
@@ -40,22 +44,10 @@ let state = {
     }
 };
 
-// Load persisted chat and system messages from localStorage on init
+// Load persisted system messages from localStorage (chat comes from Gateway)
 function loadPersistedMessages() {
     try {
-        // Load chat messages
-        const savedChat = localStorage.getItem('solobot-chat-messages');
-        if (savedChat) {
-            const parsed = JSON.parse(savedChat);
-            if (Array.isArray(parsed)) {
-                // Only keep messages from last 24 hours
-                const cutoff = Date.now() - (24 * 60 * 60 * 1000);
-                state.chat.messages = parsed.filter(m => m.time > cutoff);
-                console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
-            }
-        }
-
-        // Load system messages
+        // System messages are local-only (UI noise), safe to persist
         const savedSystem = localStorage.getItem('solobot-system-messages');
         if (savedSystem) {
             const parsed = JSON.parse(savedSystem);
@@ -65,23 +57,22 @@ function loadPersistedMessages() {
                 console.log(`[Dashboard] Restored ${state.system.messages.length} system messages from localStorage`);
             }
         }
+
+        // Chat messages come from Gateway - don't load from localStorage
+        // (Gateway history is the single source of truth for chat)
     } catch (e) {
         console.log('[Dashboard] Failed to load persisted messages:', e.message);
     }
 }
 
-// Save chat and system messages to localStorage
-function persistMessages() {
+// Save system messages to localStorage (chat is synced via Gateway)
+function persistSystemMessages() {
     try {
-        // Save chat messages (last 100)
-        const chatToSave = state.chat.messages.slice(-100);
-        localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
-
-        // Save system messages (last 100)
+        // Only persist system messages - they're local UI noise
         const systemToSave = state.system.messages.slice(-100);
         localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
     } catch (e) {
-        console.log('[Dashboard] Failed to persist messages:', e.message);
+        console.log('[Dashboard] Failed to persist system messages:', e.message);
     }
 }
 
@@ -412,13 +403,16 @@ function handleChatEvent(event) {
 }
 
 function loadHistoryMessages(messages) {
-    // Convert gateway history format to our format
+    // Convert gateway history format and classify as chat vs system
     // Preserve any very recent local messages (within 10 seconds) to avoid losing in-flight messages
-    const recentLocalMessages = state.chat.messages.filter(m => 
+    const recentLocalChatMessages = state.chat.messages.filter(m =>
         (Date.now() - m.time) < 10000 && m.id.startsWith('m')
     );
-    
-    const historyMessages = messages.map(msg => {
+
+    const chatMessages = [];
+    const systemMessages = [];
+
+    messages.forEach(msg => {
         let textContent = '';
         if (msg.content) {
             for (const part of msg.content) {
@@ -428,33 +422,48 @@ function loadHistoryMessages(messages) {
             }
         }
 
-        return {
+        const message = {
             id: msg.id || 'm' + Date.now() + Math.random(),
             from: msg.role === 'user' ? 'user' : 'solobot',
             text: textContent,
             time: msg.timestamp || Date.now()
         };
+
+        // Classify and route
+        if (isSystemMessage(textContent, message.from)) {
+            systemMessages.push(message);
+        } else {
+            chatMessages.push(message);
+        }
     });
-    
-    // Merge: start with history, add any recent local messages not in history
-    const historyTexts = new Set(historyMessages.map(m => m.text.substring(0, 100)));
-    const uniqueRecentLocal = recentLocalMessages.filter(m => 
+
+    // Merge chat: start with history, add any recent local messages not in history
+    const historyTexts = new Set(chatMessages.map(m => m.text.substring(0, 100)));
+    const uniqueRecentLocal = recentLocalChatMessages.filter(m =>
         !historyTexts.has(m.text.substring(0, 100))
     );
-    
-    state.chat.messages = [...historyMessages, ...uniqueRecentLocal];
-    
-    // Sort by time and trim
+
+    state.chat.messages = [...chatMessages, ...uniqueRecentLocal];
+
+    // Sort chat by time and trim
     state.chat.messages.sort((a, b) => a.time - b.time);
     if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
         state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
 
-    // Persist merged messages
-    persistMessages();
+    // Merge system messages with existing (they're local noise, but good to show from history too)
+    state.system.messages = [...state.system.messages, ...systemMessages];
+    state.system.messages.sort((a, b) => a.time - b.time);
+    if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
+        state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
+    }
+
+    // Persist system messages (chat comes from Gateway)
+    persistSystemMessages();
 
     renderChat();
     renderChatPage();
+    renderSystemPage();
 }
 
 function startHistoryPolling() {
@@ -485,15 +494,22 @@ function stopHistoryPolling() {
 }
 
 function mergeHistoryMessages(messages) {
-    // Merge new messages from history without duplicates
+    // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
     const existingIds = new Set(state.chat.messages.map(m => m.id));
-    let newCount = 0;
+    const existingSystemIds = new Set(state.system.messages.map(m => m.id));
+    let newChatCount = 0;
+    let newSystemCount = 0;
 
     for (const msg of messages) {
         const msgId = msg.id || 'm' + msg.timestamp;
 
-        if (!existingIds.has(msgId)) {
+        // Skip if already exists in either array
+        if (existingIds.has(msgId) || existingSystemIds.has(msgId)) {
+            continue;
+        }
+
+        {
             let textContent = '';
             if (msg.content) {
                 for (const part of msg.content) {
@@ -505,30 +521,47 @@ function mergeHistoryMessages(messages) {
 
             // Only add if we have content
             if (textContent) {
-                state.chat.messages.push({
+                const message = {
                     id: msgId,
                     from: msg.role === 'user' ? 'user' : 'solobot',
                     text: textContent,
                     time: msg.timestamp || Date.now()
-                });
-                existingIds.add(msgId);
-                newCount++;
+                };
+
+                // Classify and route
+                if (isSystemMessage(textContent, message.from)) {
+                    state.system.messages.push(message);
+                    newSystemCount++;
+                } else {
+                    state.chat.messages.push(message);
+                    existingIds.add(msgId);
+                    newChatCount++;
+                }
             }
         }
     }
 
-    if (newCount > 0) {
-        console.log(`[Dashboard] Merged ${newCount} new messages from history`);
-        // Sort by time
+    if (newChatCount > 0 || newSystemCount > 0) {
+        console.log(`[Dashboard] Merged ${newChatCount} chat, ${newSystemCount} system messages from history`);
+
+        // Sort and trim chat
         state.chat.messages.sort((a, b) => a.time - b.time);
-        // Trim to max
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
-        // Persist merged messages
-        persistMessages();
+
+        // Sort and trim system
+        state.system.messages.sort((a, b) => a.time - b.time);
+        if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
+            state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
+        }
+
+        // Persist system messages (chat comes from Gateway)
+        persistSystemMessages();
+
         renderChat();
         renderChatPage();
+        renderSystemPage();
     }
 }
 
@@ -872,14 +905,15 @@ function addLocalChatMessage(text, from, image = null) {
 
     // Route to appropriate message array
     if (isSystemMessage(text, from)) {
-        // System message - goes to system tab
+        // System message - goes to system tab (local UI noise)
         state.system.messages.push(message);
         if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
+        persistSystemMessages(); // Persist system messages locally
         renderSystemPage();
     } else {
-        // Real chat message - goes to chat tab
+        // Real chat message - goes to chat tab (synced via Gateway)
         state.chat.messages.push(message);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -890,12 +924,10 @@ function addLocalChatMessage(text, from, image = null) {
             notifyChatPageNewMessage();
         }
 
+        // Don't persist chat to localStorage - Gateway is source of truth
         renderChat();
         renderChatPage();
     }
-
-    // Persist both arrays to localStorage
-    persistMessages();
 }
 
 // ===================
@@ -1405,13 +1437,13 @@ async function sendChatPageMessage() {
 }
 
 function clearChatHistory() {
-    if (confirm('Clear all chat messages?')) {
+    if (confirm('Clear all chat messages? Note: They will reload from Gateway on next sync.')) {
         state.chat.messages = [];
         chatPageNewMessageCount = 0;
         chatPageUserScrolled = false;
         renderChat();
         renderChatPage();
-        persistMessages();
+        // Note: Don't need to persist - chat comes from Gateway
     }
 }
 
@@ -1489,8 +1521,8 @@ function createSystemMessage(msg) {
 function clearSystemHistory() {
     if (confirm('Clear all system messages?')) {
         state.system.messages = [];
+        persistSystemMessages();
         renderSystemPage();
-        persistMessages();
     }
 }
 
