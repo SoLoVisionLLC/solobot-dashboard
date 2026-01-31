@@ -1074,6 +1074,9 @@ function renderActivity() {
 function renderDocs(filter = '') {
     const container = document.getElementById('docs-grid');
     
+    // If docs-grid doesn't exist (moved to Memory page), skip
+    if (!container) return;
+    
     // First, render the memory files from our local documentation
     renderMemoryFiles(filter);
     
