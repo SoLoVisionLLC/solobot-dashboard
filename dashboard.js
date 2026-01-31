@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.6.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.7.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -736,6 +736,11 @@ function addLocalChatMessage(text, from, image = null) {
         state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
     
+    // Notify chat page of new message (for indicator when scrolled up)
+    if (from !== 'user' && typeof notifyChatPageNewMessage === 'function') {
+        notifyChatPageNewMessage();
+    }
+    
     renderChat();
     renderChatPage();
 }
@@ -920,16 +925,99 @@ function openImageModal(src) {
     document.body.appendChild(modal);
 }
 
+
 // ===================
 // CHAT PAGE FUNCTIONS
 // ===================
 
-// Pending image for chat page
+// Chat page state
 let chatPagePendingImage = null;
+let chatPageScrollPosition = null;
+let chatPageUserScrolled = false;
+let chatPageNewMessageCount = 0;
+
+// Save scroll position to sessionStorage
+function saveChatScrollPosition() {
+    const container = document.getElementById('chat-page-messages');
+    if (container) {
+        sessionStorage.setItem('chatScrollPosition', container.scrollTop);
+        sessionStorage.setItem('chatScrollHeight', container.scrollHeight);
+    }
+}
+
+// Restore scroll position from sessionStorage
+function restoreChatScrollPosition() {
+    const container = document.getElementById('chat-page-messages');
+    if (!container) return;
+    
+    const savedPosition = sessionStorage.getItem('chatScrollPosition');
+    const savedHeight = sessionStorage.getItem('chatScrollHeight');
+    
+    if (savedPosition && savedHeight) {
+        // Calculate relative position and apply
+        const ratio = parseFloat(savedPosition) / parseFloat(savedHeight);
+        container.scrollTop = ratio * container.scrollHeight;
+    }
+}
+
+// Check if user is near the bottom
+function isNearBottom(container) {
+    if (!container) return true;
+    const threshold = 100;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+}
+
+// Scroll to bottom
+function scrollChatToBottom() {
+    const container = document.getElementById('chat-page-messages');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+        chatPageUserScrolled = false;
+        chatPageNewMessageCount = 0;
+        updateNewMessageIndicator();
+    }
+}
+
+// Update new message indicator visibility
+function updateNewMessageIndicator() {
+    const indicator = document.getElementById('chat-page-new-indicator');
+    if (!indicator) return;
+    
+    if (chatPageUserScrolled && chatPageNewMessageCount > 0) {
+        indicator.textContent = `↓ ${chatPageNewMessageCount} new message${chatPageNewMessageCount > 1 ? 's' : ''}`;
+        indicator.classList.remove('hidden');
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
+// Setup scroll listener for chat page
+function setupChatPageScrollListener() {
+    const container = document.getElementById('chat-page-messages');
+    if (!container || container.dataset.scrollListenerAttached) return;
+    
+    container.addEventListener('scroll', () => {
+        const nearBottom = isNearBottom(container);
+        chatPageUserScrolled = !nearBottom;
+        
+        if (nearBottom) {
+            chatPageNewMessageCount = 0;
+            updateNewMessageIndicator();
+        }
+        
+        // Save position periodically
+        saveChatScrollPosition();
+    });
+    
+    container.dataset.scrollListenerAttached = 'true';
+}
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
     if (!container) return;
+    
+    // Setup scroll listener
+    setupChatPageScrollListener();
     
     // Update connection status
     const statusDot = document.getElementById('chat-page-status-dot');
@@ -943,34 +1031,40 @@ function renderChatPage() {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
     
-    // Clear container
-    container.innerHTML = '';
-    
     const messages = state.chat?.messages || [];
     
-    // Show placeholder if no messages
+    // Check if near bottom BEFORE clearing
+    const wasNearBottom = isNearBottom(container);
+    const previousScrollTop = container.scrollTop;
+    const previousScrollHeight = container.scrollHeight;
+    
+    // Clear and re-render
+    container.innerHTML = '';
+    
+    // Show empty state if no messages
     if (messages.length === 0 && !streamingText) {
-        const placeholder = document.createElement('div');
-        placeholder.style.cssText = 'color: var(--text-muted); text-align: center; padding: var(--space-8) 0;';
-        placeholder.innerHTML = isConnected
-            ? '💬 Connected! Send a message to start chatting.'
-            : '🔌 Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;" style="color: var(--brand-red);">Settings</a> to start chatting';
-        container.appendChild(placeholder);
+        container.innerHTML = `
+            <div class="chat-page-empty">
+                <div class="chat-page-empty-icon">💬</div>
+                <div class="chat-page-empty-text">
+                    ${isConnected 
+                        ? 'Start a conversation with SoLoBot' 
+                        : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
+                </div>
+            </div>
+        `;
         return;
     }
     
-    // Check scroll position before rendering
-    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-    
-    // Render each message
+    // Render messages
     messages.forEach(msg => {
-        const msgEl = createChatMessageElement(msg);
+        const msgEl = createChatPageMessage(msg);
         if (msgEl) container.appendChild(msgEl);
     });
     
-    // Render streaming message if active
+    // Render streaming message
     if (streamingText) {
-        const streamingMsg = createChatMessageElement({
+        const streamingMsg = createChatPageMessage({
             id: 'streaming',
             from: 'solobot',
             text: streamingText,
@@ -980,9 +1074,79 @@ function renderChatPage() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
     
-    // Auto-scroll if was at bottom
-    if (wasAtBottom) {
+    // Smart scroll behavior
+    if (wasNearBottom || !chatPageUserScrolled) {
+        // Auto-scroll to bottom
         container.scrollTop = container.scrollHeight;
+    } else {
+        // Maintain position - adjust for new content above
+        const heightDiff = container.scrollHeight - previousScrollHeight;
+        container.scrollTop = previousScrollTop + heightDiff;
+    }
+}
+
+// Create a chat page message element (different styling from widget)
+function createChatPageMessage(msg) {
+    if (!msg || typeof msg.text !== 'string') return null;
+    
+    const isUser = msg.from === 'user';
+    const isSystem = msg.from === 'system';
+    const isBot = !isUser && !isSystem;
+    
+    // Message wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
+    
+    // Bubble
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-page-bubble';
+    
+    // Image if present
+    if (msg.image) {
+        const img = document.createElement('img');
+        img.src = msg.image;
+        img.className = 'chat-page-bubble-image';
+        img.onclick = () => openImageModal(msg.image);
+        bubble.appendChild(img);
+    }
+    
+    // Header with sender and time
+    const header = document.createElement('div');
+    header.className = 'chat-page-bubble-header';
+    
+    const sender = document.createElement('span');
+    sender.className = 'chat-page-sender';
+    if (isUser) {
+        sender.textContent = 'You';
+    } else if (isSystem) {
+        sender.textContent = 'System';
+    } else {
+        sender.textContent = msg.isStreaming ? 'SoLoBot is typing...' : 'SoLoBot';
+    }
+    
+    const time = document.createElement('span');
+    time.className = 'chat-page-bubble-time';
+    time.textContent = formatTime(msg.time);
+    
+    header.appendChild(sender);
+    header.appendChild(time);
+    bubble.appendChild(header);
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'chat-page-bubble-content';
+    content.textContent = msg.text;
+    bubble.appendChild(content);
+    
+    wrapper.appendChild(bubble);
+    return wrapper;
+}
+
+// Notify of new message (for indicator)
+function notifyChatPageNewMessage() {
+    if (chatPageUserScrolled) {
+        chatPageNewMessageCount++;
+        updateNewMessageIndicator();
     }
 }
 
@@ -1047,8 +1211,6 @@ async function sendChatPageMessage() {
         return;
     }
     
-    // Build message with optional image
-    let messageText = text;
     let imageData = null;
     
     if (chatPagePendingImage) {
@@ -1061,12 +1223,14 @@ async function sendChatPageMessage() {
     input.value = '';
     clearChatPageImagePreview();
     
-    // Render both chat areas
+    // Force scroll to bottom when user sends
+    chatPageUserScrolled = false;
+    
+    // Render both areas
     renderChat();
     renderChatPage();
-    renderChatPage();
     
-    // Send via Gateway WebSocket
+    // Send via Gateway
     try {
         if (imageData) {
             await gateway.sendMessageWithImage(text || 'Image', imageData);
@@ -1074,25 +1238,23 @@ async function sendChatPageMessage() {
             await gateway.sendMessage(text);
         }
     } catch (err) {
-        console.error('Failed to send message:', err);
-        addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
+        console.error('Failed to send:', err);
+        addLocalChatMessage(`Failed: ${err.message}`, 'system');
         renderChat();
-    renderChatPage();
         renderChatPage();
     }
 }
 
 function clearChatHistory() {
-    if (confirm('Clear all chat messages? This cannot be undone.')) {
+    if (confirm('Clear all chat messages?')) {
         state.chat.messages = [];
+        chatPageNewMessageCount = 0;
+        chatPageUserScrolled = false;
         renderChat();
-    renderChatPage();
         renderChatPage();
     }
 }
 
-
-// ===================
 // RENDERING (OTHER FUNCTIONS REMAIN THE SAME)
 // ===================
 

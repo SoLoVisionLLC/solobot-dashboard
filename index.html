@@ -1265,20 +1265,21 @@
             display: flex;
             flex-direction: column;
             height: calc(100vh - 60px);
-            max-width: 900px;
-            margin: 0 auto;
-            padding: var(--space-4);
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            position: relative;
         }
         
+        /* Minimal header - just status */
         .chat-page-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: var(--space-4);
-            background: var(--surface-2);
-            border-radius: var(--radius-lg);
-            margin-bottom: var(--space-4);
-            border: 1px solid var(--border-default);
+            padding: var(--space-3) var(--space-5);
+            background: var(--surface-1);
+            border-bottom: 1px solid var(--border-default);
+            flex-shrink: 0;
         }
         
         .chat-page-title {
@@ -1288,9 +1289,10 @@
         }
         
         .chat-page-title h1 {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             margin: 0;
+            color: var(--text-primary);
         }
         
         .chat-page-status {
@@ -1299,7 +1301,6 @@
             gap: var(--space-2);
             font-size: 12px;
             color: var(--text-muted);
-            margin-top: 2px;
         }
         
         .chat-page-actions {
@@ -1307,31 +1308,94 @@
             gap: var(--space-2);
         }
         
+        .chat-page-actions .btn {
+            font-size: 13px;
+            padding: var(--space-2) var(--space-3);
+        }
+        
+        /* Messages container - takes remaining space */
         .chat-page-messages {
             flex: 1;
             overflow-y: auto;
-            padding: var(--space-4);
-            background: var(--surface-1);
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border-default);
-            margin-bottom: var(--space-4);
+            padding: var(--space-4) var(--space-5);
+            background: linear-gradient(180deg, var(--surface-1) 0%, rgba(27, 34, 50, 0.95) 100%);
+            scroll-behavior: auto;
         }
         
+        .chat-page-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-page-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .chat-page-messages::-webkit-scrollbar-thumb {
+            background: var(--border-default);
+            border-radius: 3px;
+        }
+        
+        .chat-page-messages::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        /* Fixed input area at bottom */
         .chat-page-input-area {
+            flex-shrink: 0;
             background: var(--surface-2);
-            border-radius: var(--radius-lg);
-            padding: var(--space-4);
-            border: 1px solid var(--border-default);
+            border-top: 1px solid var(--border-default);
+            padding: var(--space-4) var(--space-5);
+        }
+        
+        .chat-page-input-container {
+            max-width: 900px;
+            margin: 0 auto;
         }
         
         .chat-page-input-row {
             display: flex;
             gap: var(--space-3);
             align-items: center;
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-2) var(--space-3);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .chat-page-input-row:focus-within {
+            border-color: var(--brand-red);
+            box-shadow: 0 0 0 3px rgba(188, 32, 38, 0.1);
         }
         
         .chat-page-input-row input {
             flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 15px;
+            color: var(--text-primary);
+            padding: var(--space-2);
+        }
+        
+        .chat-page-input-row input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .chat-page-input-row .btn {
+            flex-shrink: 0;
+        }
+        
+        .chat-page-input-row .btn-ghost {
+            padding: var(--space-2);
+            font-size: 18px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .chat-page-input-row .btn-ghost:hover {
+            opacity: 1;
+            background: transparent;
         }
         
         #chat-page-image-preview {
@@ -1342,23 +1406,180 @@
         
         #chat-page-image-preview img {
             max-width: 200px;
-            max-height: 150px;
+            max-height: 120px;
             border-radius: var(--radius-md);
-            border: 1px solid var(--border-default);
+            border: 2px solid var(--border-default);
+            object-fit: cover;
         }
         
-        /* Chat message styles for full page */
-        .chat-page-messages .chat-msg {
+        #chat-page-image-preview .btn-icon {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--error);
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+            border: 2px solid var(--surface-2);
+        }
+        
+        /* Message bubbles in chat page */
+        .chat-page-message {
+            display: flex;
             margin-bottom: var(--space-4);
-            max-width: 80%;
-        }
-        
-        .chat-page-messages .chat-msg.user {
+            max-width: 900px;
             margin-left: auto;
+            margin-right: auto;
         }
         
-        .chat-page-messages .chat-msg.bot {
-            margin-right: auto;
+        .chat-page-message.user {
+            justify-content: flex-end;
+        }
+        
+        .chat-page-message.bot,
+        .chat-page-message.system {
+            justify-content: flex-start;
+        }
+        
+        .chat-page-bubble {
+            max-width: 70%;
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-lg);
+            position: relative;
+        }
+        
+        .chat-page-message.user .chat-page-bubble {
+            background: linear-gradient(135deg, var(--brand-red) 0%, #8B1419 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .chat-page-message.bot .chat-page-bubble {
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            border-bottom-left-radius: 4px;
+        }
+        
+        .chat-page-message.system .chat-page-bubble {
+            background: var(--warning-muted);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            font-size: 13px;
+        }
+        
+        .chat-page-message.streaming .chat-page-bubble {
+            opacity: 0.9;
+            border-color: var(--brand-red);
+        }
+        
+        .chat-page-bubble-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-2);
+            font-size: 12px;
+        }
+        
+        .chat-page-message.user .chat-page-bubble-header {
+            justify-content: flex-end;
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .chat-page-message.bot .chat-page-bubble-header .chat-page-sender {
+            color: var(--success);
+            font-weight: 500;
+        }
+        
+        .chat-page-message.user .chat-page-bubble-header .chat-page-sender {
+            color: rgba(255,255,255,0.9);
+        }
+        
+        .chat-page-bubble-time {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+        
+        .chat-page-message.user .chat-page-bubble-time {
+            color: rgba(255,255,255,0.5);
+        }
+        
+        .chat-page-bubble-content {
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .chat-page-bubble-image {
+            max-width: 250px;
+            max-height: 200px;
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-2);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .chat-page-bubble-image:hover {
+            transform: scale(1.02);
+        }
+        
+        /* Empty state */
+        .chat-page-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            text-align: center;
+            padding: var(--space-8);
+        }
+        
+        .chat-page-empty-icon {
+            font-size: 48px;
+            margin-bottom: var(--space-4);
+            opacity: 0.5;
+        }
+        
+        .chat-page-empty-text {
+            font-size: 15px;
+            max-width: 300px;
+        }
+        
+        .chat-page-empty a {
+            color: var(--brand-red);
+            text-decoration: none;
+        }
+        
+        .chat-page-empty a:hover {
+            text-decoration: underline;
+        }
+        
+        /* New message indicator */
+        .chat-page-new-message-indicator {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--brand-red);
+            color: white;
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 10;
+        }
+        
+        .chat-page-new-message-indicator:hover {
+            transform: translateX(-50%) scale(1.05);
+        }
+        
+        .chat-page-new-message-indicator.hidden {
+            opacity: 0;
+            pointer-events: none;
         }
 
         }
@@ -1731,55 +1952,62 @@
         <!-- =================== CHAT PAGE =================== -->
         <div id="page-chat" class="page">
             <div class="chat-page-wrapper">
-                <!-- Chat Header -->
+                <!-- Minimal Header -->
                 <div class="chat-page-header">
                     <div class="chat-page-title">
-                        <span style="font-size: 20px;">💬</span>
-                        <div>
-                            <h1>Chat with SoLoBot</h1>
-                            <div class="chat-page-status">
-                                <span id="chat-page-status-dot" class="status-dot idle"></span>
-                                <span id="chat-page-status-text">Disconnected</span>
-                            </div>
+                        <h1>💬 SoLoBot</h1>
+                        <div class="chat-page-status">
+                            <span id="chat-page-status-dot" class="status-dot idle"></span>
+                            <span id="chat-page-status-text">Disconnected</span>
                         </div>
                     </div>
                     <div class="chat-page-actions">
+                        <button onclick="scrollChatToBottom()" class="btn btn-ghost" title="Scroll to bottom">
+                            ↓ Latest
+                        </button>
                         <button onclick="clearChatHistory()" class="btn btn-ghost" title="Clear chat">
-                            🗑️ Clear
+                            🗑️
                         </button>
-                        <button onclick="openSettingsModal()" class="btn btn-secondary" title="Settings">
-                            ⚙️ Settings
+                        <button onclick="openSettingsModal()" class="btn btn-ghost" title="Settings">
+                            ⚙️
                         </button>
                     </div>
                 </div>
                 
-                <!-- Chat Messages Area -->
+                <!-- Messages Area -->
                 <div id="chat-page-messages" class="chat-page-messages">
-                    <!-- Messages rendered here -->
+                    <!-- Messages rendered by JS -->
                 </div>
                 
-                <!-- Chat Input Area -->
+                <!-- New message indicator (shown when scrolled up) -->
+                <div id="chat-page-new-indicator" class="chat-page-new-message-indicator hidden" onclick="scrollChatToBottom()">
+                    ↓ New messages
+                </div>
+                
+                <!-- Fixed Input Area -->
                 <div class="chat-page-input-area">
-                    <!-- Image Preview -->
-                    <div id="chat-page-image-preview" class="image-preview-container hidden">
-                        <img id="chat-page-image-preview-img" />
-                        <button onclick="clearChatPageImagePreview()" class="btn-icon" style="position: absolute; top: 4px; right: 4px;">✕</button>
-                    </div>
-                    
-                    <div class="chat-page-input-row">
-                        <input type="file" id="chat-page-image-upload" accept="image/*" class="hidden" onchange="handleChatPageImageSelect(event)">
-                        <button onclick="document.getElementById('chat-page-image-upload').click()" class="btn btn-ghost" title="Attach image">
-                            📎
-                        </button>
-                        <input type="text" 
-                               id="chat-page-input" 
-                               class="input flex-1" 
-                               placeholder="Type a message..." 
-                               onkeypress="if(event.key==='Enter') sendChatPageMessage()"
-                               onpaste="handleChatPagePaste(event)">
-                        <button onclick="sendChatPageMessage()" class="btn btn-primary">
-                            Send →
-                        </button>
+                    <div class="chat-page-input-container">
+                        <!-- Image Preview -->
+                        <div id="chat-page-image-preview" class="hidden">
+                            <img id="chat-page-image-preview-img" />
+                            <button onclick="clearChatPageImagePreview()" class="btn-icon">✕</button>
+                        </div>
+                        
+                        <div class="chat-page-input-row">
+                            <input type="file" id="chat-page-image-upload" accept="image/*" class="hidden" onchange="handleChatPageImageSelect(event)">
+                            <button onclick="document.getElementById('chat-page-image-upload').click()" class="btn btn-ghost" title="Attach image">
+                                📎
+                            </button>
+                            <input type="text" 
+                                   id="chat-page-input" 
+                                   placeholder="Message SoLoBot..." 
+                                   onkeypress="if(event.key==='Enter' && !event.shiftKey) sendChatPageMessage()"
+                                   onpaste="handleChatPagePaste(event)"
+                                   autocomplete="off">
+                            <button onclick="sendChatPageMessage()" class="btn btn-primary">
+                                Send
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2133,7 +2361,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.6.0"></script>
+    <script src="dashboard.js?v=3.7.0"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
