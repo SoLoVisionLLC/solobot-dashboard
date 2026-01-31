@@ -29,8 +29,11 @@ class GatewayClient {
         if (!this.desiredConnection) return;
 
         const { host, port, token, password } = this.desiredConnection;
-        const protocol = port === 443 || host.includes('https') ? 'wss' : 'ws';
         const cleanHost = host.replace(/^(wss?|https?):\/\//, '');
+
+        // Use wss:// if page is HTTPS, port is 443, or host explicitly includes wss/https
+        const pageIsSecure = window.location.protocol === 'https:';
+        const protocol = pageIsSecure || port === 443 || host.includes('wss') || host.includes('https') ? 'wss' : 'ws';
         const url = `${protocol}://${cleanHost}:${port}`;
 
         console.log(`[Gateway] Connecting to ${url}...`);
