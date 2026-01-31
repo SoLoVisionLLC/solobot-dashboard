@@ -669,127 +669,160 @@ function addLocalChatMessage(text, from, image = null) {
     renderChat();
 }
 
+// ===================
+// CHAT RENDERING (Clean rewrite)
+// ===================
+
 function renderChat() {
     const container = document.getElementById('chat-messages');
     if (!container) return;
 
-    const hasMessages = state.chat?.messages?.length > 0;
-    const hasStreaming = streamingText.length > 0;
+    // Clear container
+    container.innerHTML = '';
 
-    if (!hasMessages && !hasStreaming) {
-        const isConnected = gateway?.isConnected();
-        container.innerHTML = `
-            <div class="text-solo-grey text-sm text-center py-8">
-                ${isConnected
-                    ? '💬 Connected! Chat mirrors your Telegram session.'
-                    : '🔌 Connect to Gateway in Settings to start chatting'}
-            </div>
-        `;
+    const messages = state.chat?.messages || [];
+    const isConnected = gateway?.isConnected();
+
+    // Show placeholder if no messages
+    if (messages.length === 0 && !streamingText) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'text-gray-500 text-sm text-center py-8';
+        placeholder.textContent = isConnected
+            ? 'Connected! Send a message to start chatting.'
+            : 'Connect to Gateway in Settings to start chatting';
+        container.appendChild(placeholder);
         return;
     }
 
-    // Check if user is at bottom before rendering
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    const wasAtBottom = scrollHeight - scrollTop <= clientHeight + 50;
+    // Check scroll position before rendering
+    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
 
-    let html = state.chat.messages.map(msg => renderChatMessage(msg)).join('');
+    // Render each message
+    messages.forEach(msg => {
+        const msgEl = createChatMessageElement(msg);
+        if (msgEl) container.appendChild(msgEl);
+    });
 
-    // Add streaming message if active
+    // Render streaming message if active
     if (streamingText) {
-        html += renderChatMessage({
+        const streamingMsg = createChatMessageElement({
             id: 'streaming',
             from: 'solobot',
             text: streamingText,
             time: Date.now(),
             isStreaming: true
         });
+        if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    container.innerHTML = html;
-
-    // Only auto-scroll if user was already at bottom
+    // Auto-scroll if was at bottom
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     }
 }
 
-function renderChatMessage(msg) {
+function createChatMessageElement(msg) {
+    if (!msg || typeof msg.text !== 'string') return null;
+
     const isUser = msg.from === 'user';
     const isSystem = msg.from === 'system';
-    const timeStr = formatTime(msg.time);
 
-    let bgClass, alignClass, nameClass, name;
+    // Create message container
+    const wrapper = document.createElement('div');
+    wrapper.style.marginBottom = '12px';
+
+    // Create message bubble
+    const bubble = document.createElement('div');
+    bubble.style.padding = '12px';
+    bubble.style.borderRadius = '8px';
+    bubble.style.maxWidth = '85%';
+    bubble.style.wordWrap = 'break-word';
 
     if (isUser) {
-        bgClass = 'bg-solo-red/20 ml-8 border border-solo-red/30';
-        alignClass = 'text-right';
-        nameClass = 'text-solo-red';
-        name = 'You';
+        // User message - right aligned, red tint
+        bubble.style.backgroundColor = 'rgba(188, 32, 38, 0.2)';
+        bubble.style.border = '1px solid rgba(188, 32, 38, 0.3)';
+        bubble.style.marginLeft = 'auto';
+        bubble.style.textAlign = 'right';
     } else if (isSystem) {
-        bgClass = 'bg-yellow-500/10 border border-yellow-500/20';
-        alignClass = 'text-left';
-        nameClass = 'text-yellow-400';
-        name = '⚠️ System';
+        // System message - yellow tint
+        bubble.style.backgroundColor = 'rgba(234, 179, 8, 0.1)';
+        bubble.style.border = '1px solid rgba(234, 179, 8, 0.2)';
     } else {
-        bgClass = msg.isStreaming ? 'bg-solo-card/50 mr-8 border border-solo-grey/30' : 'bg-solo-card mr-8 border border-solo-grey/20';
-        alignClass = 'text-left';
-        nameClass = 'text-green-400';
-        name = msg.isStreaming ? '🤖 SoLoBot (typing...)' : '🤖 SoLoBot';
+        // Bot message - left aligned, card color
+        bubble.style.backgroundColor = msg.isStreaming ? 'rgba(35, 45, 63, 0.5)' : '#232D3F';
+        bubble.style.border = '1px solid rgba(169, 178, 188, 0.2)';
+        bubble.style.marginRight = 'auto';
     }
 
-    // Format message with markdown-like support
-    let formattedText = formatMarkdown(msg.text);
-    
-    // Add image if present
-    let imageHtml = '';
+    // Header with name and time
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.gap = '8px';
+    header.style.marginBottom = '8px';
+    header.style.fontSize = '12px';
+    if (isUser) header.style.justifyContent = 'flex-end';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.style.fontWeight = '500';
+    if (isUser) {
+        nameSpan.style.color = '#BC2026';
+        nameSpan.textContent = 'You';
+    } else if (isSystem) {
+        nameSpan.style.color = '#facc15';
+        nameSpan.textContent = 'System';
+    } else {
+        nameSpan.style.color = '#4ade80';
+        nameSpan.textContent = msg.isStreaming ? 'SoLoBot (typing...)' : 'SoLoBot';
+    }
+
+    const timeSpan = document.createElement('span');
+    timeSpan.style.color = '#6b7280';
+    timeSpan.textContent = formatTime(msg.time);
+
+    header.appendChild(nameSpan);
+    header.appendChild(timeSpan);
+
+    // Message content
+    const content = document.createElement('div');
+    content.style.fontSize = '14px';
+    content.style.color = '#e5e7eb';
+    content.style.lineHeight = '1.5';
+    content.style.whiteSpace = 'pre-wrap';
+    content.textContent = msg.text; // Use textContent for safety - no HTML injection
+
+    // Image if present
     if (msg.image) {
-        imageHtml = `<img src="${msg.image}" class="max-w-full max-h-48 rounded-lg mb-2 cursor-pointer" onclick="openImageModal(this.src)" />`;
+        const img = document.createElement('img');
+        img.src = msg.image;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '200px';
+        img.style.borderRadius = '8px';
+        img.style.marginBottom = '8px';
+        img.style.cursor = 'pointer';
+        img.onclick = () => openImageModal(msg.image);
+        bubble.appendChild(img);
     }
 
-    return `
-        <div class="${bgClass} rounded-lg p-3 ${alignClass} mb-3" style="display:block; clear:both;" data-time="${msg.time}">
-            <div class="flex items-center gap-2 mb-2 ${isUser ? 'justify-end' : ''}">
-                <span class="text-xs ${nameClass} font-medium">${name}</span>
-                <span class="text-xs text-gray-500">${timeStr}</span>
-            </div>
-            ${imageHtml}
-            <div class="text-sm text-gray-200 leading-relaxed break-words">${formattedText}</div>
-        </div>
-    `;
+    bubble.appendChild(header);
+    bubble.appendChild(content);
+    wrapper.appendChild(bubble);
+
+    return wrapper;
 }
 
 function openImageModal(src) {
     const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 cursor-pointer';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:50;cursor:pointer;';
     modal.onclick = () => modal.remove();
-    modal.innerHTML = `<img src="${src}" class="max-w-[90vw] max-h-[90vh] rounded-lg" />`;
+
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;';
+    modal.appendChild(img);
+
     document.body.appendChild(modal);
-}
-
-function formatMarkdown(text) {
-    if (!text) return '';
-
-    return text
-        // Headers
-        .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold text-white mb-2">$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-white mb-3">$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-white mb-4">$1</h1>')
-        // Bold
-        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
-        // Italic
-        .replace(/\*(.+?)\*/g, '<em class="text-solo-grey">$1</em>')
-        // Code blocks
-        .replace(/```([\s\S]*?)```/g, '<pre class="bg-solo-darker p-3 rounded-lg text-sm overflow-x-auto my-3 border border-solo-grey/30"><code class="text-solo-red font-mono">$1</code></pre>')
-        // Inline code
-        .replace(/`(.+?)`/g, '<code class="bg-solo-darker px-1.5 py-0.5 rounded text-sm text-solo-red font-mono">$1</code>')
-        // Lists
-        .replace(/^[*-] (.+)$/gm, '<li class="ml-4 text-white list-disc">$1</li>')
-        // Links
-        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-solo-red hover:underline">$1</a>')
-        // Line breaks
-        .replace(/\n/g, '<br>');
 }
 
 // ===================
