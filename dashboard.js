@@ -61,22 +61,20 @@ function saveGatewaySettings(host, port, token, sessionKey) {
 
 // Function to load gateway settings from server state (called after loadState)
 function loadGatewaySettingsFromServer() {
-    if (state.gatewayConfig) {
-        // Only use server settings if localStorage is empty
-        if (!GATEWAY_CONFIG.host && state.gatewayConfig.host) {
-            GATEWAY_CONFIG.host = state.gatewayConfig.host;
-            GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
-            GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
-            GATEWAY_CONFIG.sessionKey = state.gatewayConfig.sessionKey || 'main';
-            
-            // Also save to localStorage for faster loading next time
-            localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
-            localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
-            localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
-            localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
-            
-            console.log('[Dashboard] Restored gateway settings from server state');
-        }
+    if (state.gatewayConfig && state.gatewayConfig.host) {
+        // Always prefer server settings if they exist (server is source of truth)
+        GATEWAY_CONFIG.host = state.gatewayConfig.host;
+        GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
+        GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
+        GATEWAY_CONFIG.sessionKey = state.gatewayConfig.sessionKey || 'main';
+        
+        // Also save to localStorage for faster loading next time
+        localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
+        localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
+        localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
+        localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
+        
+        console.log('[Dashboard] Loaded gateway settings from server state:', GATEWAY_CONFIG.host);
     }
 }
 
