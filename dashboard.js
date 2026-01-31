@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.15.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.16.0 - Chat persistence fix (localStorage backup)
 
 // ===================
 // STATE MANAGEMENT
@@ -36,6 +36,38 @@ let state = {
         messages: []
     }
 };
+
+// Load persisted chat messages from localStorage on init
+function loadPersistedChat() {
+    try {
+        const saved = localStorage.getItem('solobot-chat-messages');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+                // Only keep messages from last 24 hours
+                const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+                state.chat.messages = parsed.filter(m => m.time > cutoff);
+                console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
+            }
+        }
+    } catch (e) {
+        console.log('[Dashboard] Failed to load persisted chat:', e.message);
+    }
+}
+
+// Save chat messages to localStorage
+function persistChat() {
+    try {
+        // Keep only last 100 messages to avoid localStorage bloat
+        const toSave = state.chat.messages.slice(-100);
+        localStorage.setItem('solobot-chat-messages', JSON.stringify(toSave));
+    } catch (e) {
+        console.log('[Dashboard] Failed to persist chat:', e.message);
+    }
+}
+
+// Load persisted chat immediately
+loadPersistedChat();
 
 // Gateway connection configuration - load from localStorage first, server state as fallback
 const GATEWAY_CONFIG = {
@@ -414,6 +446,9 @@ function loadHistoryMessages(messages) {
         state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
 
+    // Persist merged messages
+    persistChat();
+
     renderChat();
     renderChatPage();
 }
@@ -486,8 +521,10 @@ function mergeHistoryMessages(messages) {
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
+        // Persist merged messages
+        persistChat();
         renderChat();
-    renderChatPage();
+        renderChatPage();
     }
 }
 
@@ -834,6 +871,9 @@ function addLocalChatMessage(text, from, image = null) {
     if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
         state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
+    
+    // Persist to localStorage so messages survive page refresh
+    persistChat();
     
     // Notify chat page of new message (for indicator when scrolled up)
     if (from !== 'user' && typeof notifyChatPageNewMessage === 'function') {
