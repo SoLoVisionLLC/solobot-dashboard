@@ -76,7 +76,7 @@ class GatewayClient {
 
     _sendConnect(token, password) {
         const clientInfo = {
-            id: 'solobot-dashboard',
+            id: 'gateway-client',
             displayName: 'SoLoBot Dashboard',
             version: '3.1.0',
             platform: 'web',

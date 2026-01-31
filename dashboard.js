@@ -40,7 +40,7 @@ let state = {
 // Gateway connection configuration
 const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
-    port: parseInt(localStorage.getItem('gateway_port')) || 18789,
+    port: parseInt(localStorage.getItem('gateway_port')) || 443,
     token: localStorage.getItem('gateway_token') || '',
     sessionKey: localStorage.getItem('gateway_session') || 'main',
     maxMessages: 100
