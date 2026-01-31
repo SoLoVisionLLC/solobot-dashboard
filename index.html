@@ -2459,7 +2459,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.20.0"></script>
+    <script src="dashboard.js?v=3.21.0"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
@@ -2484,7 +2484,9 @@
             
             // If showing memory page, load files
             if (pageName === 'memory') {
-            
+                renderMemoryFilesForPage();
+            }
+
             // If showing chat page, render chat
             if (pageName === 'chat' && typeof renderChatPage === 'function') {
                 renderChatPage();
@@ -2493,8 +2495,6 @@
             // If showing system page, render system messages
             if (pageName === 'system' && typeof renderSystemPage === 'function') {
                 renderSystemPage();
-            }
-                renderMemoryFilesForPage();
             }
         }
         

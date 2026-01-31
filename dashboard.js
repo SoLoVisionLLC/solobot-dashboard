@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.20.0 - DEBUG: Filtering temporarily disabled
+// Version: 3.21.0 - FIXED: renderChatPage() not being called (showPage bug)
 //
 // Message Architecture:
 // - Chat messages: Synced via Gateway (single source of truth across all devices)
@@ -1210,23 +1210,28 @@ function setupChatPageScrollListener() {
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
-    if (!container) return;
-    
+    if (!container) {
+        console.log('[renderChatPage] ❌ Container #chat-page-messages not found!');
+        return;
+    }
+
+    console.log(`[renderChatPage] Rendering ${state.chat?.messages?.length || 0} messages to Chat PAGE`);
+
     // Setup scroll listener
     setupChatPageScrollListener();
-    
+
     // Update connection status
     const statusDot = document.getElementById('chat-page-status-dot');
     const statusText = document.getElementById('chat-page-status-text');
     const isConnected = gateway?.isConnected();
-    
+
     if (statusDot) {
         statusDot.className = `status-dot ${isConnected ? 'success' : 'idle'}`;
     }
     if (statusText) {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
-    
+
     const messages = state.chat?.messages || [];
     
     // Check if near bottom BEFORE clearing
