@@ -672,12 +672,12 @@ function renderChatMessage(msg) {
     let formattedText = formatMarkdown(msg.text);
 
     return `
-        <div class="${bgClass} rounded-lg p-3 ${alignClass} message-item" data-time="${msg.time}">
+        <div class="${bgClass} rounded-lg p-3 ${alignClass} message-item w-full shrink-0" data-time="${msg.time}">
             <div class="flex items-center gap-2 mb-2 ${isUser ? 'justify-end' : ''}">
                 <span class="text-xs ${nameClass} font-medium">${name}</span>
                 <span class="text-xs text-gray-500">${timeStr}</span>
             </div>
-            <div class="text-sm text-gray-200 leading-relaxed">${formattedText}</div>
+            <div class="text-sm text-gray-200 leading-relaxed break-words">${formattedText}</div>
         </div>
     `;
 }
