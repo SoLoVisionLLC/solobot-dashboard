@@ -1467,7 +1467,7 @@
             justify-content: flex-end;
         }
         
-        .chat-page-message.bot,
+        .chat-page-message.solobot,
         .chat-page-message.system {
             justify-content: flex-start;
         }
@@ -1485,7 +1485,7 @@
             border-bottom-right-radius: 4px;
         }
         
-        .chat-page-message.bot .chat-page-bubble {
+        .chat-page-message.solobot .chat-page-bubble {
             background: linear-gradient(135deg, #1B2232 0%, #2a3548 100%);
             border: 1px solid rgba(169, 178, 188, 0.2);
             border-bottom-left-radius: 4px;
@@ -1516,7 +1516,7 @@
             color: rgba(255,255,255,0.7);
         }
         
-        .chat-page-message.bot .chat-page-bubble-header .chat-page-sender {
+        .chat-page-message.solobot .chat-page-bubble-header .chat-page-sender {
             color: var(--success);
             font-weight: 500;
         }
@@ -1530,7 +1530,7 @@
             font-size: 11px;
         }
         
-        .chat-page-message.bot .chat-page-bubble-time {
+        .chat-page-message.solobot .chat-page-bubble-time {
             color: rgba(169, 178, 188, 0.7);
         }
         
@@ -2395,7 +2395,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.7.3"></script>
+    <script src="dashboard.js?v=3.7.4"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
