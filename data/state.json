@@ -1,6 +1,7 @@
 {
   "status": "idle",
-  "model": "opus 4.5",
+  "model": null,
+  "provider": null,
   "currentTask": null,
   "subagent": null,
   "lastHeartbeat": 1769794441424,

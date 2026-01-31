@@ -7,7 +7,8 @@
 
 let state = {
     status: 'idle',
-    model: 'opus 4.5',
+    model: null,             // Current model - set dynamically by SoLoBot
+    provider: null,          // Current provider - set dynamically by SoLoBot
     currentTask: null,
     subagent: null,
     tasks: {
@@ -675,12 +676,12 @@ function renderStatus() {
             text.textContent = 'IDLE';
     }
     
-    modelEl.textContent = state.model || 'opus 4.5';
-    
+    modelEl.textContent = state.model || 'Not set';
+
     // Update provider if element exists
     const providerEl = document.getElementById('provider-name');
     if (providerEl) {
-        providerEl.textContent = state.provider || 'anthropic';
+        providerEl.textContent = state.provider || 'Not set';
     }
     
     if (state.currentTask) {
@@ -1542,7 +1543,21 @@ window.dashboardAPI = {
             });
         });
         return list;
-    }
+    },
+
+    // Model/Provider API
+    setModel: (model, provider = null) => {
+        state.model = model;
+        if (provider) state.provider = provider;
+        saveState();
+        renderStatus();
+    },
+    setProvider: (provider) => {
+        state.provider = provider;
+        saveState();
+        renderStatus();
+    },
+    getModel: () => ({ model: state.model, provider: state.provider })
 };
 
 console.log('SoLoVision Dashboard v2.0 loaded');
