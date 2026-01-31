@@ -1,7 +1,5 @@
-// Gateway WebSocket Client
-// Mirrors the SoLoBot Android app approach for shared session chat
-
-console.log('[Gateway] gateway-client.js loaded - v2 with debug logging');
+// Gateway WebSocket Client v3
+// Connects to OpenClaw Gateway for shared session chat
 
 const GATEWAY_PROTOCOL_VERSION = 3;
 
@@ -10,7 +8,7 @@ class GatewayClient {
         this.socket = null;
         this.connected = false;
         this.sessionKey = options.sessionKey || 'main';
-        this.pending = new Map(); // id -> { resolve, reject }
+        this.pending = new Map();
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.desiredConnection = null;
@@ -32,13 +30,11 @@ class GatewayClient {
 
         const { host, port, token, password } = this.desiredConnection;
         const cleanHost = host.replace(/^(wss?|https?):\/\//, '');
-
-        // Use wss:// if page is HTTPS, port is 443, or host explicitly includes wss/https
         const pageIsSecure = window.location.protocol === 'https:';
         const protocol = pageIsSecure || port === 443 || host.includes('wss') || host.includes('https') ? 'wss' : 'ws';
         const url = `${protocol}://${cleanHost}:${port}`;
 
-        console.log(`[Gateway] Connecting to ${url}...`);
+        console.log(`[Gateway] Connecting to ${url}`);
 
         try {
             this.socket = new WebSocket(url);
@@ -52,22 +48,20 @@ class GatewayClient {
 
     _setupListeners(token, password) {
         this.socket.onopen = () => {
-            console.log('[Gateway] WebSocket opened, sending connect...');
             this._sendConnect(token, password);
         };
 
         this.socket.onmessage = (event) => {
-            console.log('[Gateway] RAW message received, length:', event.data?.length);
             this._handleMessage(event.data);
         };
 
         this.socket.onerror = (err) => {
-            console.error('[Gateway] WebSocket error:', err);
+            console.error('[Gateway] WebSocket error');
             this.onError('WebSocket error');
         };
 
         this.socket.onclose = (event) => {
-            console.log(`[Gateway] WebSocket closed: ${event.code} ${event.reason}`);
+            console.log(`[Gateway] Disconnected: ${event.code}`);
             this.connected = false;
             this.onDisconnected(event.reason || 'Connection closed');
 
@@ -95,7 +89,6 @@ class GatewayClient {
             caps: ['chat.subscribe']
         };
 
-        // Add auth
         if (token) {
             params.auth = { token };
         } else if (password) {
@@ -103,37 +96,28 @@ class GatewayClient {
         }
 
         this._request('connect', params).then(result => {
-            console.log('[Gateway] Connected:', result);
             this.connected = true;
             this.reconnectAttempts = 0;
 
-            // Extract server info - but keep user's configured sessionKey
             const serverName = result?.server?.host || 'moltbot';
-            const serverSuggestedSession = result?.snapshot?.sessionDefaults?.mainSessionKey;
-
-            console.log('[Gateway] Server suggested session:', serverSuggestedSession, '| Using configured:', this.sessionKey);
+            console.log(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
 
             this.onConnected(serverName, this.sessionKey);
-
-            // Subscribe to chat events for our configured session
             this._subscribeToSession(this.sessionKey);
 
         }).catch(err => {
-            console.error('[Gateway] Connect failed:', err);
+            console.error('[Gateway] Auth failed:', err.message);
             this.onError(`Auth failed: ${err.message}`);
             this.socket?.close();
         });
     }
 
     _subscribeToSession(sessionKey) {
-        // Subscribe to chat events using node.event (same as Android app)
         this._request('node.event', {
             event: 'chat.subscribe',
             payload: { sessionKey }
-        }).then(() => {
-            console.log('[Gateway] Subscribed to chat for session:', sessionKey);
-        }).catch(err => {
-            console.log('[Gateway] chat.subscribe via node.event:', err.message);
+        }).catch(() => {
+            // Subscription may fail but chat events still work
         });
     }
 
@@ -172,18 +156,13 @@ class GatewayClient {
         try {
             const frame = JSON.parse(data);
 
-            // Log ALL incoming frames for debugging
-            console.log('[Gateway] Frame received:', frame.type, frame.event || frame.method || frame.id);
-
             if (frame.type === 'res') {
                 this._handleResponse(frame);
             } else if (frame.type === 'event') {
                 this._handleEvent(frame);
-            } else {
-                console.log('[Gateway] Unknown frame type:', frame.type, JSON.stringify(frame).substring(0, 200));
             }
         } catch (err) {
-            console.error('[Gateway] Failed to parse message:', err);
+            console.error('[Gateway] Parse error:', err);
         }
     }
 
@@ -205,27 +184,18 @@ class GatewayClient {
         const event = frame.event;
         const payload = frame.payload || (frame.payloadJSON ? JSON.parse(frame.payloadJSON) : null);
 
-        // Log ALL events for debugging
-        console.log('[Gateway] Event:', event, 'payload keys:', payload ? Object.keys(payload) : 'null');
-
         if (event === 'chat') {
             this._handleChatEvent(payload);
-        } else {
-            // Log non-chat events we might be missing
-            console.log('[Gateway] Non-chat event:', event, JSON.stringify(payload).substring(0, 300));
         }
+        // Ignore other events (health, tick, agent, etc.)
     }
 
     _handleChatEvent(payload) {
         if (!payload) return;
 
-        // Log all chat events for debugging
-        console.log('[Gateway] Chat event received:', JSON.stringify(payload, null, 2));
-
-        // Filter by session key - strict match only
+        // Filter by session key
         const eventSessionKey = payload.sessionKey || 'main';
         if (eventSessionKey !== this.sessionKey) {
-            console.log(`[Gateway] Ignoring chat for session ${eventSessionKey} (current: ${this.sessionKey})`);
             return;
         }
 
@@ -244,21 +214,17 @@ class GatewayClient {
             }
         }
 
-        const chatEvent = {
+        this.onChatEvent({
             state,
             content: contentText,
             role,
             sessionKey: eventSessionKey,
             errorMessage: payload.errorMessage
-        };
-
-        console.log('[Gateway] Calling onChatEvent with:', JSON.stringify(chatEvent));
-        this.onChatEvent(chatEvent);
+        });
     }
 
     sendMessage(text) {
         if (!this.connected) {
-            console.warn('[Gateway] Not connected, cannot send message');
             return Promise.reject(new Error('Not connected'));
         }
 
@@ -268,15 +234,11 @@ class GatewayClient {
             idempotencyKey: crypto.randomUUID()
         };
 
-        return this._request('chat.send', params).then(result => {
-            console.log('[Gateway] chat.send result:', result);
-            return result;
-        });
+        return this._request('chat.send', params);
     }
 
     sendMessageWithImage(text, imageDataUrl) {
         if (!this.connected) {
-            console.warn('[Gateway] Not connected, cannot send message');
             return Promise.reject(new Error('Not connected'));
         }
 
@@ -289,39 +251,20 @@ class GatewayClient {
         const mimeType = matches[1];
         const base64Data = matches[2];
 
-        // Build content array in Anthropic/Claude API format
-        const content = [];
-
-        // Add image content block first
-        content.push({
-            type: 'image',
-            source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: base64Data
-            }
-        });
-
-        // Add text content block if there's text
-        if (text && text.trim()) {
-            content.push({
-                type: 'text',
-                text: text.trim()
-            });
-        }
-
         const params = {
+            message: text || 'Attached image',
             sessionKey: this.sessionKey,
             idempotencyKey: crypto.randomUUID(),
-            content: content
+            attachments: [{
+                type: 'image',
+                mimeType: mimeType,
+                content: base64Data
+            }]
         };
 
-        console.log('[Gateway] Sending message with image, content blocks:', content.length);
+        console.log('[Gateway] Sending image, mimeType:', mimeType, 'size:', Math.round(base64Data.length / 1024), 'KB');
 
-        return this._request('chat.send', params).then(result => {
-            console.log('[Gateway] chat.send (with image) result:', result);
-            return result;
-        });
+        return this._request('chat.send', params);
     }
 
     loadHistory() {
@@ -332,10 +275,7 @@ class GatewayClient {
         return this._request('chat.history', {
             sessionKey: this.sessionKey,
             limit: 50
-        }).catch(err => {
-            console.warn('[Gateway] chat.history failed:', err.message);
-            return { messages: [] };
-        });
+        }).catch(() => ({ messages: [] }));
     }
 
     setSessionKey(key) {
@@ -357,14 +297,13 @@ class GatewayClient {
     _scheduleReconnect() {
         if (!this.desiredConnection) return;
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('[Gateway] Max reconnect attempts reached');
             this.onError('Max reconnect attempts reached');
             return;
         }
 
         this.reconnectAttempts++;
         const delay = Math.min(8000, 350 * Math.pow(1.7, this.reconnectAttempts));
-        console.log(`[Gateway] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`);
+        console.log(`[Gateway] Reconnecting in ${Math.round(delay)}ms`);
 
         setTimeout(() => this._doConnect(), delay);
     }
@@ -374,5 +313,4 @@ class GatewayClient {
     }
 }
 
-// Export for use in dashboard.js
 window.GatewayClient = GatewayClient;

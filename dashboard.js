@@ -792,15 +792,17 @@ function createChatMessageElement(msg) {
     content.style.whiteSpace = 'pre-wrap';
     content.textContent = msg.text; // Use textContent for safety - no HTML injection
 
-    // Image if present
+    // Image if present - small thumbnail
     if (msg.image) {
         const img = document.createElement('img');
         img.src = msg.image;
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '200px';
-        img.style.borderRadius = '8px';
+        img.style.maxWidth = '150px';
+        img.style.maxHeight = '100px';
+        img.style.borderRadius = '6px';
         img.style.marginBottom = '8px';
         img.style.cursor = 'pointer';
+        img.style.objectFit = 'cover';
+        img.style.border = '1px solid rgba(255,255,255,0.1)';
         img.onclick = () => openImageModal(msg.image);
         bubble.appendChild(img);
     }
@@ -814,13 +816,34 @@ function createChatMessageElement(msg) {
 
 function openImageModal(src) {
     const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:50;cursor:pointer;';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:1000;cursor:pointer;padding:40px;';
     modal.onclick = () => modal.remove();
+
+    // Close button
+    const closeBtn = document.createElement('div');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'position:absolute;top:20px;right:30px;color:white;font-size:28px;cursor:pointer;opacity:0.7;transition:opacity 0.2s;';
+    closeBtn.onmouseenter = () => closeBtn.style.opacity = '1';
+    closeBtn.onmouseleave = () => closeBtn.style.opacity = '0.7';
+    modal.appendChild(closeBtn);
+
+    // Image container for shadow effect
+    const imgContainer = document.createElement('div');
+    imgContainer.style.cssText = 'max-width:85vw;max-height:85vh;box-shadow:0 25px 50px rgba(0,0,0,0.5);border-radius:8px;overflow:hidden;';
 
     const img = document.createElement('img');
     img.src = src;
-    img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;';
-    modal.appendChild(img);
+    img.style.cssText = 'display:block;max-width:85vw;max-height:85vh;object-fit:contain;';
+    img.onclick = (e) => e.stopPropagation(); // Don't close when clicking image
+
+    imgContainer.appendChild(img);
+    modal.appendChild(imgContainer);
+
+    // Click hint
+    const hint = document.createElement('div');
+    hint.textContent = 'Click anywhere to close';
+    hint.style.cssText = 'position:absolute;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font-size:12px;';
+    modal.appendChild(hint);
 
     document.body.appendChild(modal);
 }
