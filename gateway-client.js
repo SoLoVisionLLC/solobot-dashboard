@@ -107,15 +107,16 @@ class GatewayClient {
             this.connected = true;
             this.reconnectAttempts = 0;
 
-            // Extract session info
+            // Extract server info - but keep user's configured sessionKey
             const serverName = result?.server?.host || 'moltbot';
-            const sessionKey = result?.snapshot?.sessionDefaults?.mainSessionKey || this.sessionKey;
-            this.sessionKey = sessionKey;
+            const serverSuggestedSession = result?.snapshot?.sessionDefaults?.mainSessionKey;
 
-            this.onConnected(serverName, sessionKey);
+            console.log('[Gateway] Server suggested session:', serverSuggestedSession, '| Using configured:', this.sessionKey);
 
-            // Subscribe to chat events for this session
-            this._subscribeToSession(sessionKey);
+            this.onConnected(serverName, this.sessionKey);
+
+            // Subscribe to chat events for our configured session
+            this._subscribeToSession(this.sessionKey);
 
         }).catch(err => {
             console.error('[Gateway] Connect failed:', err);
@@ -221,9 +222,9 @@ class GatewayClient {
         // Log all chat events for debugging
         console.log('[Gateway] Chat event received:', JSON.stringify(payload, null, 2));
 
-        // Filter by session key
+        // Filter by session key - strict match only
         const eventSessionKey = payload.sessionKey || 'main';
-        if (eventSessionKey !== this.sessionKey && eventSessionKey !== 'main') {
+        if (eventSessionKey !== this.sessionKey) {
             console.log(`[Gateway] Ignoring chat for session ${eventSessionKey} (current: ${this.sessionKey})`);
             return;
         }
