@@ -2284,30 +2284,47 @@
 
     <!-- Memory File Viewer Modal -->
     <div id="memory-file-modal" class="modal-overlay">
-        <div class="modal modal-lg" style="max-width: 900px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-            <div class="modal-header" style="flex-shrink: 0; padding: var(--space-4) var(--space-6);">
+        <div class="modal modal-lg" style="max-width: 1100px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+            <div class="modal-header" style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--border-default);">
                 <h3 class="modal-title" id="memory-file-title">Memory File</h3>
                 <button onclick="closeMemoryModal()" class="modal-close">✕</button>
             </div>
-            <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0; min-height: 0;">
-                <textarea id="memory-file-content" 
-                    style="flex: 1; 
-                           width: 100%;
-                           min-height: 0;
-                           font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; 
-                           font-size: 13px; 
-                           line-height: 1.6; 
-                           padding: var(--space-4) var(--space-6);
-                           border: none;
-                           resize: none;
-                           background: var(--surface-2);
-                           color: var(--text-primary);
-                           outline: none;"
-                    placeholder="Loading..."></textarea>
+            <div class="modal-body" style="flex: 1; display: flex; overflow: hidden; padding: 0; min-height: 0;">
+                <!-- Editor panel -->
+                <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                    <textarea id="memory-file-content" 
+                        style="flex: 1; 
+                               width: 100%;
+                               min-height: 0;
+                               font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; 
+                               font-size: 13px; 
+                               line-height: 1.6; 
+                               padding: var(--space-4) var(--space-6);
+                               border: none;
+                               resize: none;
+                               background: var(--surface-2);
+                               color: var(--text-primary);
+                               outline: none;"
+                        placeholder="Loading..."></textarea>
+                </div>
+                <!-- Version history sidebar -->
+                <div class="version-history-panel" style="width: 280px; flex-shrink: 0; border-left: 1px solid var(--border-default); background: var(--surface-1); display: flex; flex-direction: column;">
+                    <div style="padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                        📜 Version History
+                    </div>
+                    <div id="version-history-list" style="flex: 1; overflow-y: auto; padding: var(--space-2);">
+                        <div style="color: var(--text-muted); font-size: 12px; padding: var(--space-3);">No versions yet</div>
+                    </div>
+                </div>
             </div>
-            <div class="modal-footer" style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default);">
-                <button onclick="closeMemoryModal()" class="btn btn-secondary">Close</button>
-                <button id="memory-save-btn" onclick="saveMemoryFile()" class="btn btn-primary">💾 Save</button>
+            <div class="modal-footer" style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default); display: flex; justify-content: space-between;">
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    💡 Changes are saved with version history
+                </div>
+                <div style="display: flex; gap: var(--space-2);">
+                    <button onclick="closeMemoryModal()" class="btn btn-ghost">Close</button>
+                    <button id="memory-save-btn" onclick="saveMemoryFile()" class="btn btn-primary">💾 Save</button>
+                </div>
             </div>
         </div>
     </div>
@@ -2503,8 +2520,8 @@
     </div><!-- END app-layout -->
 
     <script src="gateway-client.js?v=3.3.0"></script>
-    <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.21.0"></script>
+    <script src="docs-hub-memory-files.js?v=2.0.0"></script>
+    <script src="dashboard.js?v=3.22.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
@@ -2842,6 +2859,35 @@
             font-size: 11px;
             color: var(--text-faint);
             margin-top: var(--space-1);
+        }
+        
+        /* Bot-updated file styling */
+        .memory-file.bot-updated {
+            border-color: var(--brand-red);
+            background: rgba(188, 32, 38, 0.05);
+        }
+        
+        .memory-file.bot-updated:hover {
+            border-color: var(--brand-red);
+            background: rgba(188, 32, 38, 0.1);
+        }
+        
+        .bot-updated-badge {
+            animation: pulse-badge 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* Version history panel */
+        .version-item:hover {
+            background: var(--surface-2);
+        }
+        
+        .version-item:last-child {
+            border-bottom: none;
         }
     </style>
 </body>

@@ -6,9 +6,49 @@ const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
 const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
+const VERSIONS_DIR = './data/versions';  // Version history storage
+const META_FILE = './data/file-meta.json';  // Track bot updates
 
-// Ensure data directory exists (memory is mounted from OpenClaw workspace)
+// Ensure data directories exist
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
+if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
+
+// Load or initialize file metadata (tracks bot updates)
+let fileMeta = {};
+try {
+  if (fs.existsSync(META_FILE)) {
+    fileMeta = JSON.parse(fs.readFileSync(META_FILE, 'utf8'));
+  }
+} catch (e) {
+  console.log('Starting with fresh file metadata');
+}
+
+function saveFileMeta() {
+  fs.writeFileSync(META_FILE, JSON.stringify(fileMeta, null, 2));
+}
+
+// Create a version backup of a file
+function createVersion(filename, content) {
+  const timestamp = Date.now();
+  const safeFilename = filename.replace(/\//g, '__');
+  const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
+  fs.writeFileSync(versionPath, content, 'utf8');
+  
+  // Keep only last 20 versions per file
+  const prefix = `${safeFilename}.`;
+  const versions = fs.readdirSync(VERSIONS_DIR)
+    .filter(f => f.startsWith(prefix))
+    .sort()
+    .reverse();
+  
+  if (versions.length > 20) {
+    versions.slice(20).forEach(v => {
+      fs.unlinkSync(path.join(VERSIONS_DIR, v));
+    });
+  }
+  
+  return timestamp;
+}
 
 // Load or initialize state
 let state = {};
@@ -138,7 +178,7 @@ const server = http.createServer((req, res) => {
   // MEMORY FILES API (reads from mounted OpenClaw workspace)
   // ===================
   
-  // List all memory files
+  // List all memory files (with bot-update metadata)
   if (url.pathname === '/api/memory' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
@@ -154,12 +194,16 @@ const server = http.createServer((req, res) => {
         const stat = fs.statSync(itemPath);
         
         if (stat.isFile() && item.endsWith('.md')) {
+          const meta = fileMeta[item] || {};
           files.push({
             name: item,
             path: item,
             size: stat.size,
             modified: stat.mtime.toISOString(),
-            type: 'file'
+            type: 'file',
+            botUpdated: meta.botUpdated || false,
+            botUpdatedAt: meta.botUpdatedAt || null,
+            acknowledged: meta.acknowledged || false
           });
         } else if (stat.isDirectory() && item === 'memory') {
           // Also list files in memory/ subdirectory
@@ -168,24 +212,57 @@ const server = http.createServer((req, res) => {
             const subPath = path.join(itemPath, subItem);
             const subStat = fs.statSync(subPath);
             if (subStat.isFile() && subItem.endsWith('.md')) {
+              const filePath = `memory/${subItem}`;
+              const meta = fileMeta[filePath] || {};
               files.push({
                 name: subItem,
-                path: `memory/${subItem}`,
+                path: filePath,
                 size: subStat.size,
                 modified: subStat.mtime.toISOString(),
                 type: 'file',
-                category: 'Daily Logs'
+                category: 'Daily Logs',
+                botUpdated: meta.botUpdated || false,
+                botUpdatedAt: meta.botUpdatedAt || null,
+                acknowledged: meta.acknowledged || false
               });
             }
           }
         }
       }
       
-      return res.end(JSON.stringify({ files }));
+      return res.end(JSON.stringify({ files, meta: fileMeta }));
     } catch (e) {
       res.writeHead(500);
       return res.end(JSON.stringify({ error: e.message }));
     }
+  }
+  
+  // Get file metadata (bot updates)
+  if (url.pathname === '/api/memory-meta' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify(fileMeta));
+  }
+  
+  // Acknowledge bot update (clear badge)
+  if (url.pathname === '/api/memory-meta/acknowledge' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { filename } = JSON.parse(body);
+        if (fileMeta[filename]) {
+          fileMeta[filename].acknowledged = true;
+          fileMeta[filename].botUpdated = false;
+          saveFileMeta();
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
   }
   
   // Get a specific memory file
@@ -222,7 +299,7 @@ const server = http.createServer((req, res) => {
     }
   }
   
-  // Update a memory file
+  // Update a memory file (with version history)
   if (url.pathname.startsWith('/api/memory/') && req.method === 'PUT') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
     const filePath = path.resolve(MEMORY_DIR, filename);
@@ -238,7 +315,7 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { content } = JSON.parse(body);
+        const { content, updatedBy } = JSON.parse(body);
         
         // Ensure directory exists for nested paths
         const dir = path.dirname(filePath);
@@ -246,10 +323,139 @@ const server = http.createServer((req, res) => {
           fs.mkdirSync(dir, { recursive: true });
         }
         
+        // Create version backup if file exists
+        let versionTimestamp = null;
+        if (fs.existsSync(filePath)) {
+          const oldContent = fs.readFileSync(filePath, 'utf8');
+          versionTimestamp = createVersion(filename, oldContent);
+        }
+        
+        // Write new content
         fs.writeFileSync(filePath, content, 'utf8');
         
+        // Track if bot made the update
+        if (updatedBy === 'bot') {
+          fileMeta[filename] = {
+            botUpdated: true,
+            botUpdatedAt: Date.now(),
+            acknowledged: false
+          };
+          saveFileMeta();
+        } else if (updatedBy === 'user') {
+          // User edit clears the bot-updated flag
+          if (fileMeta[filename]) {
+            fileMeta[filename].botUpdated = false;
+            fileMeta[filename].acknowledged = true;
+            saveFileMeta();
+          }
+        }
+        
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, saved: filename }));
+        res.end(JSON.stringify({ ok: true, saved: filename, versionCreated: versionTimestamp }));
+      } catch (e) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+  
+  // List versions for a file
+  if (url.pathname.match(/^\/api\/memory\/(.+)\/versions$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions$/);
+    const filename = decodeURIComponent(match[1]);
+    const safeFilename = filename.replace(/\//g, '__');
+    
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const prefix = `${safeFilename}.`;
+      const versions = fs.readdirSync(VERSIONS_DIR)
+        .filter(f => f.startsWith(prefix))
+        .map(f => {
+          const timestamp = parseInt(f.replace(prefix, ''));
+          const versionPath = path.join(VERSIONS_DIR, f);
+          const stat = fs.statSync(versionPath);
+          return {
+            timestamp,
+            date: new Date(timestamp).toISOString(),
+            size: stat.size,
+            filename: f
+          };
+        })
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      return res.end(JSON.stringify({ versions }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  
+  // Get a specific version content
+  if (url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/);
+    const filename = decodeURIComponent(match[1]);
+    const timestamp = match[2];
+    const safeFilename = filename.replace(/\//g, '__');
+    const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
+    
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      if (!fs.existsSync(versionPath)) {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ error: 'Version not found' }));
+      }
+      
+      const content = fs.readFileSync(versionPath, 'utf8');
+      return res.end(JSON.stringify({ 
+        content, 
+        timestamp: parseInt(timestamp),
+        date: new Date(parseInt(timestamp)).toISOString()
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  
+  // Restore a version
+  if (url.pathname.match(/^\/api\/memory\/(.+)\/restore$/) && req.method === 'POST') {
+    const match = url.pathname.match(/^\/api\/memory\/(.+)\/restore$/);
+    const filename = decodeURIComponent(match[1]);
+    const filePath = path.resolve(MEMORY_DIR, filename);
+    const memoryDirResolved = path.resolve(MEMORY_DIR);
+    
+    // Security: prevent path traversal
+    if (!filePath.startsWith(memoryDirResolved)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+    
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { timestamp } = JSON.parse(body);
+        const safeFilename = filename.replace(/\//g, '__');
+        const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
+        
+        if (!fs.existsSync(versionPath)) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Version not found' }));
+        }
+        
+        // Create backup of current before restoring
+        if (fs.existsSync(filePath)) {
+          const currentContent = fs.readFileSync(filePath, 'utf8');
+          createVersion(filename, currentContent);
+        }
+        
+        // Restore the version
+        const versionContent = fs.readFileSync(versionPath, 'utf8');
+        fs.writeFileSync(filePath, versionContent, 'utf8');
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, restored: timestamp }));
       } catch (e) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: e.message }));

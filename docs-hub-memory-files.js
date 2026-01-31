@@ -1,4 +1,5 @@
 // docs-hub-memory-files.js - Live memory files from OpenClaw workspace
+// Version 2.0.0 - Added version history and bot-update badges
 
 // Local escapeHtml function
 function escapeHtmlLocal(str) {
@@ -15,6 +16,9 @@ function escapeHtmlLocal(str) {
 let memoryFilesCache = [];
 let lastFetchTime = 0;
 const CACHE_DURATION = 30000; // 30 seconds
+
+// Current file being edited
+window.currentMemoryFile = null;
 
 // Categorize files based on name
 function categorizeFile(filename) {
@@ -87,14 +91,11 @@ async function fetchMemoryFiles() {
 
 // Render memory files in Docs Hub (or Memory page)
 async function renderMemoryFiles(filter = '') {
-    // Try both possible containers
     let container = document.getElementById('memory-files-grid') || document.getElementById('docs-grid');
     if (!container) return;
     
-    // Show loading state
     container.innerHTML = '<div class="loading-state">Loading memory files...</div>';
     
-    // Fetch files from API
     const files = await fetchMemoryFiles();
     
     if (files.length === 0) {
@@ -119,20 +120,17 @@ async function renderMemoryFiles(filter = '') {
     // Group by category
     const grouped = filtered.reduce((groups, file) => {
         const category = file.category;
-        if (!groups[category]) {
-            groups[category] = [];
-        }
+        if (!groups[category]) groups[category] = [];
         groups[category].push(file);
         return groups;
     }, {});
     
-    // Sort categories (Core Identity first, then Guides, Daily Logs, Others)
+    // Sort categories
     const categoryOrder = ['Core Identity', 'Guides & Reference', 'Daily Logs', 'Other Documents'];
     const sortedCategories = Object.keys(grouped).sort((a, b) => {
         return categoryOrder.indexOf(a) - categoryOrder.indexOf(b);
     });
     
-    // Render grouped files
     const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
     let html = '';
     
@@ -141,23 +139,28 @@ async function renderMemoryFiles(filter = '') {
         html += `<h3 class="category-title">${escape(category)}</h3>`;
         html += `<div class="docs-category-grid">`;
         
-        // Sort files within category
         const sortedFiles = grouped[category].sort((a, b) => {
-            // For daily logs, sort by date descending
-            if (category === 'Daily Logs') {
-                return b.name.localeCompare(a.name);
-            }
+            if (category === 'Daily Logs') return b.name.localeCompare(a.name);
             return a.name.localeCompare(b.name);
         });
         
         sortedFiles.forEach(file => {
             const modifiedDate = new Date(file.modified).toLocaleDateString();
+            const botBadge = file.botUpdated && !file.acknowledged 
+                ? `<span class="badge badge-warning bot-updated-badge" title="Updated by SoLoBot - click to acknowledge">🤖 Updated</span>` 
+                : '';
+            
             html += `
-                <div class="doc-card memory-file" onclick="viewMemoryFile('${escape(file.path)}')">
+                <div class="doc-card memory-file ${file.botUpdated && !file.acknowledged ? 'bot-updated' : ''}" 
+                     onclick="viewMemoryFile('${escape(file.path)}')"
+                     data-filepath="${escape(file.path)}">
                     <div style="display: flex; align-items: center; gap: var(--space-3);">
                         <div class="doc-icon icon-md">📄</div>
                         <div style="min-width: 0; flex: 1;">
-                            <div class="doc-title">${escape(file.name)}</div>
+                            <div class="doc-title" style="display: flex; align-items: center; gap: var(--space-2);">
+                                ${escape(file.name)}
+                                ${botBadge}
+                            </div>
                             <div class="doc-description">${escape(file.description)}</div>
                             <div class="doc-meta">Modified: ${modifiedDate}</div>
                         </div>
@@ -169,7 +172,6 @@ async function renderMemoryFiles(filter = '') {
         html += `</div></div>`;
     });
     
-    // If no results after filter
     if (filtered.length === 0) {
         html = '<p class="empty-state">No memory files match your search</p>';
     }
@@ -181,139 +183,264 @@ async function renderMemoryFiles(filter = '') {
 async function viewMemoryFile(filepath) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
+    const saveBtn = document.getElementById('memory-save-btn');
     
     if (titleEl) titleEl.textContent = filepath;
-    if (contentEl) contentEl.textContent = 'Loading...';
+    if (contentEl) contentEl.value = 'Loading...';
+    if (saveBtn) saveBtn.textContent = '💾 Save';
     
     showModal('memory-file-modal');
     
     try {
+        // Fetch file content
         const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`);
         const data = await response.json();
         
         if (data.error) {
-            contentEl.textContent = `Error: ${data.error}`;
+            contentEl.value = `Error: ${data.error}`;
             return;
         }
         
         if (titleEl) titleEl.textContent = data.name;
-        if (contentEl) contentEl.textContent = data.content;
+        if (contentEl) contentEl.value = data.content;
         
         // Store current file for editing
         window.currentMemoryFile = {
             path: filepath,
-            content: data.content
+            content: data.content,
+            botUpdated: data.botUpdated
         };
+        
+        // Load version history
+        loadVersionHistory(filepath);
+        
+        // If bot-updated, show acknowledge option in title
+        const file = memoryFilesCache.find(f => f.path === filepath);
+        if (file && file.botUpdated && !file.acknowledged) {
+            titleEl.innerHTML = `
+                ${escapeHtmlLocal(data.name)}
+                <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
+                <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" 
+                        class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
+                    ✓ Mark as Read
+                </button>
+            `;
+        }
     } catch (e) {
-        contentEl.textContent = `Failed to load file: ${e.message}`;
+        contentEl.value = `Failed to load file: ${e.message}`;
     }
 }
 
-// Edit memory file - switch to edit mode
-function editMemoryFile() {
-    const contentEl = document.getElementById('memory-file-content');
-    if (!contentEl || !window.currentMemoryFile) return;
-    
-    // Convert to textarea for editing
-    const content = window.currentMemoryFile.content;
-    const textarea = document.createElement('textarea');
-    textarea.id = 'memory-file-editor';
-    textarea.value = content;
-    textarea.style.cssText = `
-        width: 100%;
-        height: 60vh;
-        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-        font-size: 13px;
-        line-height: 1.5;
-        padding: 12px;
-        border: 1px solid var(--border-default);
-        border-radius: 4px;
-        background: var(--surface-1);
-        color: var(--text-primary);
-        resize: vertical;
-    `;
-    
-    contentEl.parentNode.replaceChild(textarea, contentEl);
-    
-    // Update buttons
-    const footer = document.querySelector('#memory-file-modal .modal-footer');
-    if (footer) {
-        footer.innerHTML = `
-            <button onclick="cancelEditMemoryFile()" class="btn btn-secondary">Cancel</button>
-            <button onclick="saveMemoryFile()" class="btn btn-primary">💾 Save Changes</button>
-        `;
+// Acknowledge bot update
+async function acknowledgeUpdate(filepath) {
+    try {
+        await fetch('/api/memory-meta/acknowledge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filepath })
+        });
+        
+        // Update cache
+        const file = memoryFilesCache.find(f => f.path === filepath);
+        if (file) {
+            file.botUpdated = false;
+            file.acknowledged = true;
+        }
+        
+        // Update title
+        const titleEl = document.getElementById('memory-file-title');
+        if (titleEl && window.currentMemoryFile) {
+            titleEl.textContent = window.currentMemoryFile.path;
+        }
+        
+        // Refresh file list
+        renderMemoryFiles(document.getElementById('memory-search')?.value || '');
+    } catch (e) {
+        console.error('Failed to acknowledge:', e);
     }
 }
 
-// Cancel edit mode
-function cancelEditMemoryFile() {
+// Load version history for a file
+async function loadVersionHistory(filepath) {
+    const container = document.getElementById('version-history-list');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Loading versions...</div>';
+    
+    try {
+        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/versions`);
+        const data = await response.json();
+        
+        if (!data.versions || data.versions.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">No previous versions</div>';
+            return;
+        }
+        
+        let html = '';
+        data.versions.forEach((version, index) => {
+            const date = new Date(version.timestamp);
+            const timeAgo = getTimeAgo(date);
+            const dateStr = date.toLocaleString();
+            
+            html += `
+                <div class="version-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-subtle);">
+                    <div>
+                        <div style="font-size: 13px; color: var(--text-primary);">${timeAgo}</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">${dateStr}</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="previewVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp})" 
+                                class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
+                            👁️ View
+                        </button>
+                        <button onclick="restoreVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp})" 
+                                class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
+                            ↩️ Restore
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = `<div style="color: var(--error); font-size: 12px;">Failed to load versions</div>`;
+    }
+}
+
+// Get human-readable time ago
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+    return date.toLocaleDateString();
+}
+
+// Preview a specific version
+async function previewVersion(filepath, timestamp) {
+    try {
+        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/versions/${timestamp}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            alert(`Error: ${data.error}`);
+            return;
+        }
+        
+        // Show in a simple alert or separate modal
+        const date = new Date(timestamp).toLocaleString();
+        const preview = data.content.substring(0, 500) + (data.content.length > 500 ? '...' : '');
+        
+        if (confirm(`Version from ${date}:\n\n${preview}\n\nRestore this version?`)) {
+            restoreVersion(filepath, timestamp);
+        }
+    } catch (e) {
+        alert(`Failed to load version: ${e.message}`);
+    }
+}
+
+// Restore a specific version
+async function restoreVersion(filepath, timestamp) {
+    if (!confirm(`Restore file to version from ${new Date(timestamp).toLocaleString()}?\n\nA backup of the current version will be created.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timestamp })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            alert(`Error: ${data.error}`);
+            return;
+        }
+        
+        alert('✅ Version restored successfully!');
+        
+        // Reload the file
+        viewMemoryFile(filepath);
+        
+        // Clear cache
+        memoryFilesCache = [];
+        lastFetchTime = 0;
+    } catch (e) {
+        alert(`Failed to restore: ${e.message}`);
+    }
+}
+
+// Close memory modal
+function closeMemoryModal() {
     hideModal('memory-file-modal');
-    
-    // Restore original content element
-    const editor = document.getElementById('memory-file-editor');
-    if (editor) {
-        const pre = document.createElement('pre');
-        pre.id = 'memory-file-content';
-        pre.style.cssText = `
-            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        `;
-        editor.parentNode.replaceChild(pre, editor);
-    }
-    
-    // Restore buttons
-    const footer = document.querySelector('#memory-file-modal .modal-footer');
-    if (footer) {
-        footer.innerHTML = `
-            <button onclick="hideModal('memory-file-modal')" class="btn btn-secondary">Close</button>
-            <button onclick="editMemoryFile()" class="btn btn-primary">✏️ Edit</button>
-        `;
-    }
-    
     window.currentMemoryFile = null;
 }
 
-// Save memory file
+// Save memory file (with updatedBy tracking)
 async function saveMemoryFile() {
-    const editor = document.getElementById('memory-file-editor');
-    if (!editor || !window.currentMemoryFile) return;
+    const contentEl = document.getElementById('memory-file-content');
+    const saveBtn = document.getElementById('memory-save-btn');
     
-    const newContent = editor.value;
+    if (!contentEl || !window.currentMemoryFile) return;
+    
+    const newContent = contentEl.value;
     const filepath = window.currentMemoryFile.path;
+    
+    if (saveBtn) saveBtn.textContent = '⏳ Saving...';
     
     try {
         const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: newContent })
+            body: JSON.stringify({ 
+                content: newContent,
+                updatedBy: 'user'  // Track that user made this edit
+            })
         });
         
         const data = await response.json();
         
         if (data.error) {
             alert(`Failed to save: ${data.error}`);
+            if (saveBtn) saveBtn.textContent = '💾 Save';
             return;
         }
         
-        alert(`✅ Saved ${filepath}`);
+        if (saveBtn) saveBtn.textContent = '✓ Saved!';
+        setTimeout(() => {
+            if (saveBtn) saveBtn.textContent = '💾 Save';
+        }, 2000);
         
-        // Clear cache to force refresh
+        // Update stored content
+        window.currentMemoryFile.content = newContent;
+        
+        // Clear cache and refresh
         memoryFilesCache = [];
         lastFetchTime = 0;
         
-        cancelEditMemoryFile();
-        renderMemoryFiles();
+        // Reload version history
+        loadVersionHistory(filepath);
+        
+        // Refresh file list in background
+        renderMemoryFiles(document.getElementById('memory-search')?.value || '');
     } catch (e) {
         alert(`Failed to save: ${e.message}`);
+        if (saveBtn) saveBtn.textContent = '💾 Save';
     }
 }
 
 // Make functions globally available
 window.viewMemoryFile = viewMemoryFile;
-window.editMemoryFile = editMemoryFile;
-window.cancelEditMemoryFile = cancelEditMemoryFile;
 window.saveMemoryFile = saveMemoryFile;
+window.closeMemoryModal = closeMemoryModal;
 window.renderMemoryFiles = renderMemoryFiles;
+window.fetchMemoryFiles = fetchMemoryFiles;
+window.acknowledgeUpdate = acknowledgeUpdate;
+window.loadVersionHistory = loadVersionHistory;
+window.previewVersion = previewVersion;
+window.restoreVersion = restoreVersion;
