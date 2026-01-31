@@ -621,10 +621,17 @@
     <footer class="bg-solo-dark border-t border-slate-700 px-6 py-3 mt-8">
         <div class="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-500">
             <span>SoLoVision LLC © 2026</span>
-            <span>Last sync: <span id="last-sync">--:--</span></span>
+            <span class="flex items-center gap-2">
+                <span class="flex items-center gap-1">
+                    <span id="live-dot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    <span class="text-green-400">LIVE</span>
+                </span>
+                <span class="text-gray-600">|</span>
+                <span>Last sync: <span id="last-sync" class="text-gray-400">--:--</span></span>
+            </span>
         </div>
     </footer>
 
-    <script src="dashboard.js?v=2.8.0"></script>
+    <script src="dashboard.js?v=3.0.0"></script>
 </body>
 </html>

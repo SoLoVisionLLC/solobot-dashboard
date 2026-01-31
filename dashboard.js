@@ -65,12 +65,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     render();
     updateLastSync();
     
-    // Auto-refresh every 5 seconds (pulls from VPS)
+    // Auto-refresh every 3 seconds (pulls from VPS) - LIVE DASHBOARD
     setInterval(async () => {
-        await loadState();
-        render();
-        updateLastSync();
-    }, 5000);
+        try {
+            await loadState();
+            render();
+            updateLastSync();
+            // Flash the sync indicator
+            const syncEl = document.getElementById('last-sync');
+            if (syncEl) {
+                syncEl.style.color = '#22d3ee';
+                setTimeout(() => syncEl.style.color = '', 300);
+            }
+        } catch (e) {
+            console.error('Auto-refresh error:', e);
+        }
+    }, 3000);
     
     // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {
