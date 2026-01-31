@@ -4,6 +4,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
+const DEFAULT_STATE_FILE = './data/default-state.json';
 
 // Ensure data directory exists
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
@@ -12,10 +13,19 @@ if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 let state = {};
 try {
   if (fs.existsSync(STATE_FILE)) {
+    // Use existing state (from persistent volume)
     state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    console.log('Loaded existing state from persistent storage');
+  } else if (fs.existsSync(DEFAULT_STATE_FILE)) {
+    // First run with volume - copy default state
+    state = JSON.parse(fs.readFileSync(DEFAULT_STATE_FILE, 'utf8'));
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    console.log('Initialized state from default template');
+  } else {
+    console.log('Starting with fresh state');
   }
 } catch (e) {
-  console.log('Starting with fresh state');
+  console.log('Error loading state, starting fresh:', e.message);
 }
 
 function saveState() {

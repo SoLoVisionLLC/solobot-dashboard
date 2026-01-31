@@ -15,3 +15,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Runtime state (use persistent volume in production)
+# Only default-state.json is tracked as a template
+data/state.json

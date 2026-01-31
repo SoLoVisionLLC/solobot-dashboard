@@ -148,3 +148,34 @@ Then access at `http://51.81.202.92:8080`
 ## Version
 
 - **v1.0.0** - Initial MVP (2026-01-30)
+
+## Coolify Deployment with Persistent Storage
+
+**IMPORTANT**: To preserve your tasks, notes, and settings across redeploys, you MUST configure persistent storage.
+
+### Option 1: Docker Compose (Recommended)
+
+1. In Coolify, set **Build Pack** to "Docker Compose"
+2. Set **Docker Compose Location** to `/docker-compose.coolify.yml`
+3. This automatically creates a persistent volume for `/app/data`
+
+### Option 2: Manual Volume Mount
+
+If using Dockerfile build pack:
+1. Go to your application settings in Coolify
+2. Under **Persistent Storage**, add a volume:
+   - **Source**: `dashboard-data` (or any name)
+   - **Destination**: `/app/data`
+3. Redeploy
+
+### How It Works
+
+- `data/state.json` - Runtime state (tasks, notes, activity) - NOT tracked in git
+- `data/default-state.json` - Template for first-run initialization - tracked in git
+- On first run with empty volume, default-state.json is copied to state.json
+- Subsequent runs use the persistent state.json
+
+### Backup
+
+Your state is automatically backed up to Google Drive daily at 4 AM EST via cron job.
+Backup location: https://drive.google.com/drive/folders/1VEOcQA_bgfPmwDhYHd1lqMzZom1sO869
