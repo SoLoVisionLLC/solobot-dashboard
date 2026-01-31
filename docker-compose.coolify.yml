@@ -8,10 +8,15 @@ services:
     volumes:
       # Persistent storage for dashboard state (tasks, notes, etc.)
       - dashboard-data:/app/data
-      # Mount OpenClaw's actual workspace - THIS IS THE LIVE MEMORY FILES
-      - /var/lib/docker/volumes/a88sw4go8wc8wo4k4okg48cs_moltbot-openclaw/_data/workspace:/app/memory:rw
+      # Mount OpenClaw's workspace volume - THIS IS THE LIVE MEMORY FILES
+      # Using external named volume that OpenClaw created
+      - moltbot-openclaw:/app/openclaw:ro
     restart: unless-stopped
 
 volumes:
   dashboard-data:
-    # This creates a named volume that persists across redeploys
+    # Dashboard's own persistent storage
+  moltbot-openclaw:
+    # External volume created by OpenClaw/MoltBot
+    external: true
+    name: a88sw4go8wc8wo4k4okg48cs_moltbot-openclaw

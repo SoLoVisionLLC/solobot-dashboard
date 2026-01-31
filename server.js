@@ -5,7 +5,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace
+const MEMORY_DIR = './openclaw/workspace';  // Mounted from OpenClaw's Docker volume
 
 // Ensure data directory exists
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
