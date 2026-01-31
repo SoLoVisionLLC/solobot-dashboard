@@ -1109,8 +1109,13 @@
             border-bottom: 1px solid var(--border-default);
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: var(--space-3);
             height: 60px;
+        }
+        
+        .sidebar:hover .sidebar-logo {
+            justify-content: flex-start;
         }
         
         .sidebar-logo-icon {
@@ -1131,11 +1136,14 @@
             font-size: 14px;
             white-space: nowrap;
             opacity: 0;
-            transition: opacity var(--transition-normal);
+            width: 0;
+            overflow: hidden;
+            transition: opacity var(--transition-normal), width var(--transition-normal);
         }
         
         .sidebar:hover .sidebar-logo-text {
             opacity: 1;
+            width: auto;
         }
         
         .sidebar-nav {
@@ -1188,11 +1196,14 @@
             font-weight: 500;
             white-space: nowrap;
             opacity: 0;
-            transition: opacity var(--transition-normal);
+            width: 0;
+            overflow: hidden;
+            transition: opacity var(--transition-normal), width var(--transition-normal);
         }
         
         .sidebar:hover .sidebar-item-text {
             opacity: 1;
+            width: auto;
         }
         
         .sidebar-footer {
