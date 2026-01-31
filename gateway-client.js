@@ -122,12 +122,11 @@ class GatewayClient {
     }
 
     _subscribeToSession(sessionKey) {
-        // Send node.event to subscribe to chat
-        this._request('node.event', {
-            event: 'chat.subscribe',
-            payload: { sessionKey }
-        }).catch(err => {
-            console.warn('[Gateway] chat.subscribe failed:', err.message);
+        // Try to subscribe to chat events for this session
+        // The Gateway may send events automatically, but we try subscribing just in case
+        this._request('chat.subscribe', { sessionKey }).catch(err => {
+            // If subscribe fails, events may still come through automatically
+            console.log('[Gateway] chat.subscribe:', err.message, '(events may still work)');
         });
     }
 

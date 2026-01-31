@@ -482,8 +482,8 @@ function addLocalChatMessage(text, from) {
     state.chat.messages.push(message);
     
     // Keep only last N messages
-    if (state.chat.messages.length > SESSION_SYNC.maxMessages) {
-        state.chat.messages = state.chat.messages.slice(-SESSION_SYNC.maxMessages);
+    if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
+        state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
     
     renderChat();
