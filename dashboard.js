@@ -2437,62 +2437,101 @@ window.dashboardAPI = {
 // MEMORY FILE FUNCTIONS
 // ===================
 
+// Current file being edited
+let currentMemoryFile = null;
+
 // View a memory file in the modal
-window.viewMemoryFile = function(fileId) {
-    const file = memoryFiles.find(f => f.id === fileId);
-    if (!file) return;
+window.viewMemoryFile = async function(filePath) {
+    const titleEl = document.getElementById('memory-file-title');
+    const contentEl = document.getElementById('memory-file-content');
+    const saveBtn = document.getElementById('memory-save-btn');
     
-    // Set title
-    document.getElementById('memory-file-title').textContent = file.name;
+    if (!titleEl || !contentEl) return;
     
-    // For now, show placeholder content
-    // In full implementation, this would fetch from Google Drive
-    const placeholderContent = `# ${file.name}
-
-${file.description}
-
----
-
-**Note**: In the full implementation, this would load the actual content from Google Drive.
-
-The file content would be fetched using the Google Drive API and displayed here for viewing and editing.
-
-File ID: ${fileId}
-Category: ${file.category}
-
----
-
-To implement this fully:
-1. Integrate Google Drive API to fetch file content
-2. Add edit functionality with save back to Drive
-3. Handle authentication and permissions
-4. Add version control for changes
-`;
+    // Show loading state
+    titleEl.textContent = filePath;
+    contentEl.value = 'Loading...';
+    contentEl.disabled = true;
+    if (saveBtn) saveBtn.disabled = true;
     
-    document.getElementById('memory-file-content').textContent = placeholderContent;
+    currentMemoryFile = filePath;
     showModal('memory-file-modal');
-};
-
-// Edit memory file in Google Drive
-window.editMemoryFile = function() {
-    // For now, open the Google Drive folder
-    // In full implementation, this would open the specific file for editing
-    window.open('https://drive.google.com/drive/folders/1VEOcQA_bgfPmwDhYHd1lqMzZom1sO869', '_blank');
-    hideModal('memory-file-modal');
-};
-
-// Load memory file content from Google Drive (placeholder for future implementation)
-async function loadMemoryFileContent(fileId) {
+    
     try {
-        // This would integrate with Google Drive API
-        // For now, return placeholder content
-        const file = memoryFiles.find(f => f.id === fileId);
-        if (file) {
-            return `# ${file.name}\n\n${file.description}\n\n[Content would be loaded from Google Drive]`;
+        // Fetch file content from API
+        const response = await fetch(`/api/memory/${encodeURIComponent(filePath)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            contentEl.value = `Error: ${data.error}`;
+            return;
         }
-        return '# File not found';
+        
+        contentEl.value = data.content || '';
+        contentEl.disabled = false;
+        if (saveBtn) saveBtn.disabled = false;
+        
     } catch (error) {
         console.error('Error loading memory file:', error);
-        return '# Error loading file content';
+        contentEl.value = `Error loading file: ${error.message}`;
     }
-}
+};
+
+// Save memory file changes
+window.saveMemoryFile = async function() {
+    if (!currentMemoryFile) return;
+    
+    const contentEl = document.getElementById('memory-file-content');
+    const saveBtn = document.getElementById('memory-save-btn');
+    
+    if (!contentEl) return;
+    
+    const content = contentEl.value;
+    
+    // Show saving state
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+    }
+    
+    try {
+        const response = await fetch(`/api/memory/${encodeURIComponent(currentMemoryFile)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        
+        const data = await response.json();
+        
+        if (data.ok) {
+            // Success feedback
+            if (saveBtn) {
+                saveBtn.textContent = '✓ Saved!';
+                setTimeout(() => {
+                    saveBtn.textContent = 'Save';
+                    saveBtn.disabled = false;
+                }, 1500);
+            }
+            // Refresh the memory files list
+            if (typeof renderMemoryFilesForPage === 'function') {
+                renderMemoryFilesForPage('');
+            }
+        } else {
+            throw new Error(data.error || 'Save failed');
+        }
+        
+    } catch (error) {
+        console.error('Error saving memory file:', error);
+        alert(`Failed to save: ${error.message}`);
+        if (saveBtn) {
+            saveBtn.textContent = 'Save';
+            saveBtn.disabled = false;
+        }
+    }
+};
+
+// Close memory modal
+window.closeMemoryModal = function() {
+    currentMemoryFile = null;
+    hideModal('memory-file-modal');
+};

@@ -2262,17 +2262,28 @@
 
     <!-- Memory File Viewer Modal -->
     <div id="memory-file-modal" class="modal-overlay">
-        <div class="modal modal-lg" style="max-width: 900px;">
+        <div class="modal modal-lg" style="max-width: 900px; height: 85vh;">
             <div class="modal-header">
                 <h3 class="modal-title" id="memory-file-title">Memory File</h3>
-                <button onclick="hideModal('memory-file-modal')" class="modal-close">✕</button>
+                <button onclick="closeMemoryModal()" class="modal-close">✕</button>
             </div>
-            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-                <pre id="memory-file-content" style="font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;">Loading...</pre>
+            <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
+                <textarea id="memory-file-content" 
+                    style="flex: 1; 
+                           font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; 
+                           font-size: 13px; 
+                           line-height: 1.6; 
+                           padding: var(--space-4);
+                           border: none;
+                           resize: none;
+                           background: var(--surface-1);
+                           color: var(--text-primary);
+                           outline: none;"
+                    placeholder="Loading..."></textarea>
             </div>
             <div class="modal-footer">
-                <button onclick="hideModal('memory-file-modal')" class="btn btn-secondary">Close</button>
-                <button onclick="editMemoryFile()" class="btn btn-primary">✏️ Edit</button>
+                <button onclick="closeMemoryModal()" class="btn btn-secondary">Close</button>
+                <button id="memory-save-btn" onclick="saveMemoryFile()" class="btn btn-primary">💾 Save</button>
             </div>
         </div>
     </div>
