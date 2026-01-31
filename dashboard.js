@@ -202,6 +202,9 @@ function updateConnectionUI(status, message) {
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage } = event;
 
+    // Log for debugging
+    console.log('[Dashboard] Chat event:', { eventState, role, content: content?.substring(0, 50) });
+
     // Handle user messages from other clients (WebUI, Telegram, etc.)
     if (role === 'user' && eventState === 'final' && content) {
         // Check if we already have this message (to avoid duplicates from our own sends)

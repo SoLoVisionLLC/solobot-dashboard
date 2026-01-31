@@ -201,6 +201,9 @@ class GatewayClient {
     _handleChatEvent(payload) {
         if (!payload) return;
 
+        // Log all chat events for debugging
+        console.log('[Gateway] Chat event received:', JSON.stringify(payload, null, 2));
+
         // Filter by session key
         const eventSessionKey = payload.sessionKey || 'main';
         if (eventSessionKey !== this.sessionKey && eventSessionKey !== 'main') {
