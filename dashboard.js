@@ -426,10 +426,8 @@ function handleChatEvent(event) {
 
 function loadHistoryMessages(messages) {
     // Convert gateway history format and classify as chat vs system
-    // Preserve any very recent local messages (within 10 seconds) to avoid losing in-flight messages
-    const recentLocalChatMessages = state.chat.messages.filter(m =>
-        (Date.now() - m.time) < 10000 && m.id.startsWith('m')
-    );
+    // IMPORTANT: Preserve ALL local messages since Gateway doesn't save user messages (bug #5735)
+    const allLocalChatMessages = state.chat.messages.filter(m => m.id.startsWith('m'));
 
     const chatMessages = [];
     const systemMessages = [];
@@ -459,13 +457,15 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    // Merge chat: start with history, add any recent local messages not in history
+    // Merge chat: combine gateway history with ALL local messages, dedupe by text snippet + time window
     const historyTexts = new Set(chatMessages.map(m => m.text.substring(0, 100)));
-    const uniqueRecentLocal = recentLocalChatMessages.filter(m =>
-        !historyTexts.has(m.text.substring(0, 100))
-    );
+    const uniqueLocalMessages = allLocalChatMessages.filter(m => {
+        // Keep local message if text doesn't match any history message
+        const textSnippet = m.text.substring(0, 100);
+        return !historyTexts.has(textSnippet);
+    });
 
-    state.chat.messages = [...chatMessages, ...uniqueRecentLocal];
+    state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
 
     // Sort chat by time and trim
     state.chat.messages.sort((a, b) => a.time - b.time);
