@@ -63,17 +63,17 @@ The dashboard exposes `window.dashboardAPI` for testing:
 
 ```javascript
 // Set status
-dashboardAPI.setStatus('working', 'Building something');
-dashboardAPI.setStatus('idle');
+dashboardAPI.setStatus("working", "Building something");
+dashboardAPI.setStatus("idle");
 
 // Sub-agent
-dashboardAPI.setSubagent('Researching...');
+dashboardAPI.setSubagent("Researching...");
 
 // Add activity
-dashboardAPI.addActivity('Did something', 'success');
+dashboardAPI.addActivity("Did something", "success");
 
 // Mark note as seen
-dashboardAPI.markNoteSeen('n123');
+dashboardAPI.markNoteSeen("n123");
 ```
 
 ## Heartbeat Workflow
@@ -97,14 +97,14 @@ Deploy to Coolify with Docker:
    - Connect your Git repository
    - Set Build Pack: `Dockerfile`
    - Expose Port: `80`
-   - Add domain (e.g., `dashboard.sololink.cloud`)
+   - Add domain (e.g., `solobotdash.sololink.cloud`)
    - Enable HTTPS
 
 2. **Click Deploy** - Coolify will build and deploy automatically
 
 3. **Verify:** Visit your domain or run health check:
    ```bash
-   curl https://dashboard.sololink.cloud/health
+   curl https://solobotdash.sololink.cloud/health
    ```
 
 See [COOLIFY-CHEATSHEET.md](./COOLIFY-CHEATSHEET.md) for detailed commands.

@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.0.0 - Unified Chat with Web UI
+// Version: 3.1.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -33,27 +33,23 @@ let state = {
         expanded: false
     },
     chat: {
-        messages: [],
-        sessionId: null // Track which session we're synced to
-    },
-    pendingChat: null
+        messages: []
+    }
 };
 
-// Session sync configuration
-const SESSION_SYNC = {
-    apiUrl: 'http://51.81.202.92:3456/api',
-    currentSessionKey: 'agent:main:main', // Default to main session
-    syncInterval: 3000, // Sync every 3 seconds
-    maxMessages: 100 // Keep last 100 messages
+// Gateway connection configuration
+const GATEWAY_CONFIG = {
+    host: localStorage.getItem('gateway_host') || '',
+    port: parseInt(localStorage.getItem('gateway_port')) || 18789,
+    token: localStorage.getItem('gateway_token') || '',
+    sessionKey: localStorage.getItem('gateway_session') || 'main',
+    maxMessages: 100
 };
 
-// Unified chat system
-const CHAT_SYSTEM = {
-    // Messages are synced via the VPS API state
-    // Both web UI and dashboard read/write to the same state.chat object
-    messageQueue: [],
-    lastSyncTime: 0
-};
+// Gateway client instance
+let gateway = null;
+let streamingText = '';
+let isProcessing = false;
 
 let newTaskPriority = 1;
 let newTaskColumn = 'todo';
@@ -78,43 +74,183 @@ const defaultSettings = {
 };
 
 // ===================
-// SESSION CHAT SYNC
+// GATEWAY CONNECTION
 // ===================
 
-// Unified chat system - just display ALL messages from the shared stream
-async function syncUnifiedChat() {
-    try {
-        // Simply render whatever is in the shared state
-        // Both web UI and dashboard show the same message stream
-        if (state.chat && state.chat.messages) {
-            renderChat();
+function initGateway() {
+    gateway = new GatewayClient({
+        sessionKey: GATEWAY_CONFIG.sessionKey,
+        onConnected: (serverName, sessionKey) => {
+            console.log(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
+            updateConnectionUI('connected', serverName);
+            GATEWAY_CONFIG.sessionKey = sessionKey;
+
+            // Load chat history
+            gateway.loadHistory().then(result => {
+                if (result?.messages) {
+                    loadHistoryMessages(result.messages);
+                }
+            });
+        },
+        onDisconnected: (message) => {
+            console.log(`[Dashboard] Disconnected: ${message}`);
+            updateConnectionUI('disconnected', message);
+            isProcessing = false;
+            streamingText = '';
+        },
+        onChatEvent: (event) => {
+            handleChatEvent(event);
+        },
+        onError: (error) => {
+            console.error(`[Dashboard] Gateway error: ${error}`);
+            updateConnectionUI('error', error);
         }
-    } catch (error) {
-        console.error('Chat sync error:', error);
+    });
+}
+
+function connectToGateway() {
+    const host = document.getElementById('gateway-host')?.value || GATEWAY_CONFIG.host;
+    const port = parseInt(document.getElementById('gateway-port')?.value) || GATEWAY_CONFIG.port;
+    const token = document.getElementById('gateway-token')?.value || GATEWAY_CONFIG.token;
+    const sessionKey = document.getElementById('gateway-session')?.value || GATEWAY_CONFIG.sessionKey || 'main';
+
+    if (!host) {
+        alert('Please enter a gateway host in Settings');
+        return;
+    }
+
+    // Save settings
+    GATEWAY_CONFIG.host = host;
+    GATEWAY_CONFIG.port = port;
+    GATEWAY_CONFIG.token = token;
+    GATEWAY_CONFIG.sessionKey = sessionKey;
+    localStorage.setItem('gateway_host', host);
+    localStorage.setItem('gateway_port', port.toString());
+    localStorage.setItem('gateway_token', token);
+    localStorage.setItem('gateway_session', sessionKey);
+
+    updateConnectionUI('connecting', 'Connecting...');
+
+    if (!gateway) {
+        initGateway();
+    }
+
+    gateway.sessionKey = sessionKey;
+    gateway.connect(host, port, token);
+}
+
+function disconnectFromGateway() {
+    if (gateway) {
+        gateway.disconnect();
+    }
+    updateConnectionUI('disconnected', 'Disconnected');
+}
+
+function updateConnectionUI(status, message) {
+    // Update chat header status
+    const statusEl = document.getElementById('gateway-status');
+    const statusDot = document.getElementById('gateway-status-dot');
+
+    // Update settings modal status
+    const settingsStatusEl = document.getElementById('settings-gateway-status');
+    const settingsDot = document.getElementById('settings-gateway-dot');
+    const connectBtn = document.getElementById('gateway-connect-btn');
+    const disconnectBtn = document.getElementById('gateway-disconnect-btn');
+
+    const displayMessage = message || status;
+
+    if (statusEl) statusEl.textContent = displayMessage;
+    if (settingsStatusEl) settingsStatusEl.textContent = displayMessage;
+
+    // Get color class based on status
+    const getColorClass = () => {
+        switch (status) {
+            case 'connected': return 'bg-green-500';
+            case 'connecting': return 'bg-yellow-500 animate-pulse';
+            case 'error': return 'bg-red-500';
+            default: return 'bg-gray-500';
+        }
+    };
+
+    const colorClass = getColorClass();
+
+    // Update chat header dot (w-2 h-2)
+    if (statusDot) {
+        statusDot.className = `w-2 h-2 rounded-full ${colorClass}`;
+    }
+
+    // Update settings modal dot (w-3 h-3)
+    if (settingsDot) {
+        settingsDot.className = `w-3 h-3 rounded-full ${colorClass}`;
+    }
+
+    // Update buttons
+    if (connectBtn && disconnectBtn) {
+        if (status === 'connected') {
+            connectBtn.classList.add('hidden');
+            disconnectBtn.classList.remove('hidden');
+        } else {
+            connectBtn.classList.remove('hidden');
+            disconnectBtn.classList.add('hidden');
+        }
+    }
+
+    // Re-render chat to update placeholder message
+    renderChat();
+}
+
+function handleChatEvent(event) {
+    const { state: eventState, content, errorMessage } = event;
+
+    switch (eventState) {
+        case 'delta':
+            // Streaming response
+            streamingText += content;
+            isProcessing = true;
+            renderChat();
+            break;
+
+        case 'final':
+            // Final response
+            const finalContent = content || streamingText;
+            if (finalContent) {
+                addLocalChatMessage(finalContent, 'solobot');
+            }
+            streamingText = '';
+            isProcessing = false;
+            renderChat();
+            break;
+
+        case 'error':
+            addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
+            streamingText = '';
+            isProcessing = false;
+            renderChat();
+            break;
     }
 }
 
-// Send message through the sync API
-async function sendChatMessageUnified(text) {
-    try {
-        // Add message to local state first
-        addLocalChatMessage(text, 'user');
-        
-        // Set pending chat for SoLoBot to pick up
-        state.pendingChat = {
-            text,
-            time: Date.now(),
-            from: 'user'
+function loadHistoryMessages(messages) {
+    // Convert gateway history format to our format
+    state.chat.messages = messages.map(msg => {
+        let textContent = '';
+        if (msg.content) {
+            for (const part of msg.content) {
+                if (part.type === 'text') {
+                    textContent += part.text || '';
+                }
+            }
+        }
+
+        return {
+            id: msg.id || 'm' + Date.now() + Math.random(),
+            from: msg.role === 'user' ? 'user' : 'solobot',
+            text: textContent,
+            time: msg.timestamp || Date.now()
         };
-        
-        // Save state to trigger SoLoBot response
-        saveState(`Chat: ${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`);
-        
-        return true;
-    } catch (error) {
-        console.error('Failed to send chat message:', error);
-        return false;
-    }
+    });
+
+    renderChat();
 }
 
 // ===================
@@ -125,27 +261,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
     render();
     updateLastSync();
-    
-    // Simple scroll handling - only auto-scroll if user is at bottom
-    const chatContainer = document.getElementById('chat-messages');
-    if (chatContainer) {
-        // Store reference for renderChat
-        chatContainer._wasAtBottom = true;
+
+    // Initialize Gateway client
+    initGateway();
+
+    // Populate saved gateway settings
+    const hostEl = document.getElementById('gateway-host');
+    const portEl = document.getElementById('gateway-port');
+    const tokenEl = document.getElementById('gateway-token');
+    const sessionEl = document.getElementById('gateway-session');
+
+    if (hostEl) hostEl.value = GATEWAY_CONFIG.host || '';
+    if (portEl) portEl.value = GATEWAY_CONFIG.port || 18789;
+    if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
+    if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
+
+    // Auto-connect if we have saved host
+    if (GATEWAY_CONFIG.host) {
+        setTimeout(() => connectToGateway(), 500);
     }
-    
-    // Start unified chat sync
-    setInterval(syncUnifiedChat, SESSION_SYNC.syncInterval);
-    
-    // Initial chat sync
-    await syncUnifiedChat();
-    
-    // Auto-refresh state from VPS
+
+    // Auto-refresh dashboard state from VPS (for tasks, notes, etc. - NOT chat)
     setInterval(async () => {
         try {
             await loadState();
+            // Don't overwrite chat - that comes from Gateway now
             render();
             updateLastSync();
-            
+
             // Flash sync indicator
             const syncEl = document.getElementById('last-sync');
             if (syncEl) {
@@ -155,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             console.error('Auto-refresh error:', e);
         }
-    }, 3000);
+    }, 10000); // Slower refresh since chat is real-time now
     
     // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {
@@ -205,6 +348,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ===================
 
 async function loadState() {
+    // Preserve chat messages - they come from Gateway WebSocket, not VPS
+    const currentChat = state.chat;
+
     // Load from VPS first
     try {
         const response = await fetch('/api/state', { cache: 'no-store' });
@@ -212,22 +358,29 @@ async function loadState() {
             const vpsState = await response.json();
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
             if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
-            if (!vpsState.chat) vpsState.chat = { messages: [] };
-            state = { ...state, ...vpsState };
+
+            // Don't overwrite chat - it's managed by Gateway now
+            delete vpsState.chat;
+            delete vpsState.pendingChat;
+
+            state = { ...state, ...vpsState, chat: currentChat };
             delete state.localModified;
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
-            console.log('Loaded state from VPS');
+            console.log('Loaded state from VPS (chat preserved)');
             return;
         }
     } catch (e) {
         console.log('VPS not available:', e.message);
     }
-    
+
     // Fallback: localStorage
     const localSaved = localStorage.getItem('solovision-dashboard');
     if (localSaved) {
-        state = { ...state, ...JSON.parse(localSaved) };
-        console.log('Loaded state from localStorage');
+        const parsed = JSON.parse(localSaved);
+        // Don't overwrite chat from localStorage either
+        delete parsed.chat;
+        state = { ...state, ...parsed, chat: currentChat };
+        console.log('Loaded state from localStorage (chat preserved)');
     } else {
         initSampleData();
     }
@@ -279,28 +432,41 @@ function initSampleData() {
     state.tasks = {
         todo: [],
         progress: [],
-        done: []
+        done: [],
+        archive: []
     };
     state.notes = [];
     state.activity = [];
     state.docs = [];
-    state.chat = { messages: [] };
+    // Don't initialize chat - it's managed by Gateway WebSocket
     saveState();
 }
 
 // ===================
-// CHAT FUNCTIONS (UPDATED)
+// CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
 
 async function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
-    
-    // Send through unified chat system
-    await sendChatMessageUnified(text);
-    
+
+    if (!gateway || !gateway.isConnected()) {
+        alert('Not connected to Gateway. Please connect first.');
+        return;
+    }
+
+    // Add user message to local state immediately
+    addLocalChatMessage(text, 'user');
     input.value = '';
+
+    // Send via Gateway WebSocket
+    try {
+        await gateway.sendMessage(text);
+    } catch (err) {
+        console.error('Failed to send message:', err);
+        addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
+    }
 }
 
 function addLocalChatMessage(text, from) {
@@ -326,72 +492,109 @@ function addLocalChatMessage(text, from) {
 function renderChat() {
     const container = document.getElementById('chat-messages');
     if (!container) return;
-    
-    if (!state.chat || !state.chat.messages || state.chat.messages.length === 0) {
+
+    const hasMessages = state.chat?.messages?.length > 0;
+    const hasStreaming = streamingText.length > 0;
+
+    if (!hasMessages && !hasStreaming) {
+        const isConnected = gateway?.isConnected();
         container.innerHTML = `
             <div class="text-gray-500 text-sm text-center py-8">
-                💬 Chat with SoLoBot directly. Messages sync with web UI.
+                ${isConnected
+                    ? '💬 Connected! Chat mirrors your Telegram session.'
+                    : '🔌 Connect to Gateway to start chatting'}
             </div>
         `;
         return;
     }
-    
+
     // Check if user is at bottom before rendering
     const scrollTop = container.scrollTop;
     const scrollHeight = container.scrollHeight;
     const clientHeight = container.clientHeight;
     const wasAtBottom = scrollHeight - scrollTop <= clientHeight + 50;
-    
-    container.innerHTML = state.chat.messages.map(msg => {
-        const isUser = msg.from === 'user';
-        const timeStr = formatTime(msg.time);
-        const bgClass = isUser ? 'bg-solo-primary/20 ml-8' : 'bg-slate-700 mr-8';
-        const alignClass = isUser ? 'text-right' : 'text-left';
-        const nameClass = isUser ? 'text-solo-primary' : msg.isTool ? 'text-yellow-400' : 'text-green-400';
-        const name = isUser ? 'You' : msg.isTool ? '🔧 Action' : '🤖 SoLoBot';
-        
-        // Format message with markdown-like support (same as web UI)
-        let formattedText = msg.text
-            // Headers
-            .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold text-gray-200 mb-2">$1</h3>')
-            .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-gray-100 mb-3">$1</h2>')
-            .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-white mb-4">$1</h1>')
-            // Bold
-            .replace(/\*\*(.+?)\*\*/g, '<strong class="text-gray-100 font-semibold">$1</strong>')
-            // Italic
-            .replace(/\*(.+?)\*/g, '<em class="text-gray-300">$1</em>')
-            // Code blocks
-            .replace(/```([\s\S]*?)```/g, '<pre class="bg-slate-800 p-3 rounded-lg text-sm overflow-x-auto my-3 border border-slate-600"><code class="text-green-400 font-mono">$1</code></pre>')
-            // Inline code
-            .replace(/`(.+?)`/g, '<code class="bg-slate-700 px-1.5 py-0.5 rounded text-sm text-cyan-400 font-mono">$1</code>')
-            // Lists - handle both * and - bullets
-            .replace(/^[*-] (.+)$/gm, '<li class="ml-4 text-gray-200 list-disc">$1</li>')
-            // Fix orphaned list items by wrapping in ul
-            .replace(/(<li>.*<\/li>)/s, '<ul class="my-2">$1</ul>')
-            // Line breaks - preserve paragraph structure
-            .replace(/\n\n/g, '</div><div class="mt-3">')
-            .replace(/^/gm, '<div>')
-            .replace(/$/gm, '</div>')
-            // Clean up empty divs
-            .replace(/<div><\/div>/g, '')
-            // Links
-            .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-solo-primary hover:text-solo-accent underline">$1</a>');
-        
-        return `
-            <div class="${bgClass} rounded-lg p-3 ${alignClass} message-item" data-time="${msg.time}">
-                <div class="flex items-center gap-2 mb-2 ${isUser ? 'justify-end' : ''}">
-                    <span class="text-xs ${nameClass} font-medium">${name}</span>
-                    <span class="text-xs text-gray-500">${timeStr}</span>
-                </div>
-                <div class="text-sm text-gray-200 leading-relaxed ${msg.isTool ? 'font-mono' : ''}">${formattedText}</div>
-            </div>
-        `;
-    }).join('');
-    
+
+    let html = state.chat.messages.map(msg => renderChatMessage(msg)).join('');
+
+    // Add streaming message if active
+    if (streamingText) {
+        html += renderChatMessage({
+            id: 'streaming',
+            from: 'solobot',
+            text: streamingText,
+            time: Date.now(),
+            isStreaming: true
+        });
+    }
+
+    container.innerHTML = html;
+
     // Only auto-scroll if user was already at bottom
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     }
+}
+
+function renderChatMessage(msg) {
+    const isUser = msg.from === 'user';
+    const isSystem = msg.from === 'system';
+    const timeStr = formatTime(msg.time);
+
+    let bgClass, alignClass, nameClass, name;
+
+    if (isUser) {
+        bgClass = 'bg-solo-primary/20 ml-8';
+        alignClass = 'text-right';
+        nameClass = 'text-solo-primary';
+        name = 'You';
+    } else if (isSystem) {
+        bgClass = 'bg-red-500/10 border border-red-500/20';
+        alignClass = 'text-left';
+        nameClass = 'text-red-400';
+        name = '⚠️ System';
+    } else {
+        bgClass = msg.isStreaming ? 'bg-slate-700/50 mr-8 border border-slate-600' : 'bg-slate-700 mr-8';
+        alignClass = 'text-left';
+        nameClass = 'text-green-400';
+        name = msg.isStreaming ? '🤖 SoLoBot (typing...)' : '🤖 SoLoBot';
+    }
+
+    // Format message with markdown-like support
+    let formattedText = formatMarkdown(msg.text);
+
+    return `
+        <div class="${bgClass} rounded-lg p-3 ${alignClass} message-item" data-time="${msg.time}">
+            <div class="flex items-center gap-2 mb-2 ${isUser ? 'justify-end' : ''}">
+                <span class="text-xs ${nameClass} font-medium">${name}</span>
+                <span class="text-xs text-gray-500">${timeStr}</span>
+            </div>
+            <div class="text-sm text-gray-200 leading-relaxed">${formattedText}</div>
+        </div>
+    `;
+}
+
+function formatMarkdown(text) {
+    if (!text) return '';
+
+    return text
+        // Headers
+        .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold text-gray-200 mb-2">$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-gray-100 mb-3">$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-white mb-4">$1</h1>')
+        // Bold
+        .replace(/\*\*(.+?)\*\*/g, '<strong class="text-gray-100 font-semibold">$1</strong>')
+        // Italic
+        .replace(/\*(.+?)\*/g, '<em class="text-gray-300">$1</em>')
+        // Code blocks
+        .replace(/```([\s\S]*?)```/g, '<pre class="bg-slate-800 p-3 rounded-lg text-sm overflow-x-auto my-3 border border-slate-600"><code class="text-green-400 font-mono">$1</code></pre>')
+        // Inline code
+        .replace(/`(.+?)`/g, '<code class="bg-slate-700 px-1.5 py-0.5 rounded text-sm text-cyan-400 font-mono">$1</code>')
+        // Lists
+        .replace(/^[*-] (.+)$/gm, '<li class="ml-4 text-gray-200 list-disc">$1</li>')
+        // Links
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-solo-primary hover:text-solo-accent underline">$1</a>')
+        // Line breaks
+        .replace(/\n/g, '<br>');
 }
 
 // ===================
