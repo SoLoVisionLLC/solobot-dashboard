@@ -258,22 +258,19 @@ const server = http.createServer((req, res) => {
     return;
   }
   
-  if (url.pathname === '/') {
-    res.setHeader('Content-Type', 'text/html');
-    return res.end(fs.readFileSync('./index.html'));
-  }
-  
-  // Serve static files
+  // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
   
-  if (fs.existsSync(filePath)) {
+  if (ext && fs.existsSync(filePath)) {
     res.setHeader('Content-Type', MIME_TYPES[ext] || 'application/octet-stream');
     return res.end(fs.readFileSync(filePath));
   }
   
-  res.writeHead(404);
-  res.end('Not found');
+  // SPA fallback: return index.html for all other routes
+  // This allows client-side routing to handle /chat, /memory, /system, etc.
+  res.setHeader('Content-Type', 'text/html');
+  return res.end(fs.readFileSync('./index.html'));
 });
 
 server.listen(PORT, () => {
