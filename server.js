@@ -5,6 +5,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
+const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace
 
 // Ensure data directory exists
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
@@ -127,6 +128,128 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+  
+  // ===================
+  // MEMORY FILES API (reads from mounted OpenClaw workspace)
+  // ===================
+  
+  // List all memory files
+  if (url.pathname === '/api/memory' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      if (!fs.existsSync(MEMORY_DIR)) {
+        return res.end(JSON.stringify({ files: [], error: 'Memory directory not mounted' }));
+      }
+      
+      const files = [];
+      const items = fs.readdirSync(MEMORY_DIR);
+      
+      for (const item of items) {
+        const itemPath = path.join(MEMORY_DIR, item);
+        const stat = fs.statSync(itemPath);
+        
+        if (stat.isFile() && item.endsWith('.md')) {
+          files.push({
+            name: item,
+            path: item,
+            size: stat.size,
+            modified: stat.mtime.toISOString(),
+            type: 'file'
+          });
+        } else if (stat.isDirectory() && item === 'memory') {
+          // Also list files in memory/ subdirectory
+          const subItems = fs.readdirSync(itemPath);
+          for (const subItem of subItems) {
+            const subPath = path.join(itemPath, subItem);
+            const subStat = fs.statSync(subPath);
+            if (subStat.isFile() && subItem.endsWith('.md')) {
+              files.push({
+                name: subItem,
+                path: `memory/${subItem}`,
+                size: subStat.size,
+                modified: subStat.mtime.toISOString(),
+                type: 'file',
+                category: 'Daily Logs'
+              });
+            }
+          }
+        }
+      }
+      
+      return res.end(JSON.stringify({ files }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  
+  // Get a specific memory file
+  if (url.pathname.startsWith('/api/memory/') && req.method === 'GET') {
+    const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
+    const filePath = path.join(MEMORY_DIR, filename);
+    
+    // Security: prevent path traversal
+    if (!filePath.startsWith(path.resolve(MEMORY_DIR))) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+    
+    try {
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ error: 'File not found' }));
+      }
+      
+      const content = fs.readFileSync(filePath, 'utf8');
+      const stat = fs.statSync(filePath);
+      
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        name: filename,
+        content: content,
+        modified: stat.mtime.toISOString(),
+        size: stat.size
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  
+  // Update a memory file
+  if (url.pathname.startsWith('/api/memory/') && req.method === 'PUT') {
+    const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
+    const filePath = path.join(MEMORY_DIR, filename);
+    
+    // Security: prevent path traversal
+    if (!filePath.startsWith(path.resolve(MEMORY_DIR))) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+    
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { content } = JSON.parse(body);
+        
+        // Ensure directory exists for nested paths
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(filePath, content, 'utf8');
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, saved: filename }));
+      } catch (e) {
+        res.writeHead(500);
         res.end(JSON.stringify({ error: e.message }));
       }
     });
