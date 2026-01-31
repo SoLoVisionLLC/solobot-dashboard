@@ -1147,6 +1147,7 @@
         .sidebar-item {
             display: flex;
             align-items: center;
+            justify-content: center; /* Center icon when collapsed */
             gap: var(--space-3);
             padding: var(--space-3);
             border-radius: var(--radius-md);
@@ -1154,6 +1155,10 @@
             cursor: pointer;
             transition: all var(--transition-fast);
             text-decoration: none;
+        }
+        
+        .sidebar:hover .sidebar-item {
+            justify-content: flex-start; /* Left-align when expanded */
         }
         
         .sidebar-item:hover {
