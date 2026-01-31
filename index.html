@@ -2284,26 +2284,28 @@
 
     <!-- Memory File Viewer Modal -->
     <div id="memory-file-modal" class="modal-overlay">
-        <div class="modal modal-lg" style="max-width: 900px; height: 85vh;">
-            <div class="modal-header">
+        <div class="modal modal-lg" style="max-width: 900px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+            <div class="modal-header" style="flex-shrink: 0; padding: var(--space-4) var(--space-6);">
                 <h3 class="modal-title" id="memory-file-title">Memory File</h3>
                 <button onclick="closeMemoryModal()" class="modal-close">✕</button>
             </div>
-            <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
+            <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0; min-height: 0;">
                 <textarea id="memory-file-content" 
                     style="flex: 1; 
+                           width: 100%;
+                           min-height: 0;
                            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; 
                            font-size: 13px; 
                            line-height: 1.6; 
-                           padding: var(--space-4);
+                           padding: var(--space-4) var(--space-6);
                            border: none;
                            resize: none;
-                           background: var(--surface-1);
+                           background: var(--surface-2);
                            color: var(--text-primary);
                            outline: none;"
                     placeholder="Loading..."></textarea>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default);">
                 <button onclick="closeMemoryModal()" class="btn btn-secondary">Close</button>
                 <button id="memory-save-btn" onclick="saveMemoryFile()" class="btn btn-primary">💾 Save</button>
             </div>
