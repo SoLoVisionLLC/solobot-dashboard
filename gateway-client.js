@@ -168,10 +168,15 @@ class GatewayClient {
         try {
             const frame = JSON.parse(data);
 
+            // Log ALL incoming frames for debugging
+            console.log('[Gateway] Frame received:', frame.type, frame.event || frame.method || frame.id);
+
             if (frame.type === 'res') {
                 this._handleResponse(frame);
             } else if (frame.type === 'event') {
                 this._handleEvent(frame);
+            } else {
+                console.log('[Gateway] Unknown frame type:', frame.type, JSON.stringify(frame).substring(0, 200));
             }
         } catch (err) {
             console.error('[Gateway] Failed to parse message:', err);
@@ -196,8 +201,14 @@ class GatewayClient {
         const event = frame.event;
         const payload = frame.payload || (frame.payloadJSON ? JSON.parse(frame.payloadJSON) : null);
 
+        // Log ALL events for debugging
+        console.log('[Gateway] Event:', event, 'payload keys:', payload ? Object.keys(payload) : 'null');
+
         if (event === 'chat') {
             this._handleChatEvent(payload);
+        } else {
+            // Log non-chat events we might be missing
+            console.log('[Gateway] Non-chat event:', event, JSON.stringify(payload).substring(0, 300));
         }
     }
 
@@ -229,13 +240,16 @@ class GatewayClient {
             }
         }
 
-        this.onChatEvent({
+        const chatEvent = {
             state,
             content: contentText,
             role,
             sessionKey: eventSessionKey,
             errorMessage: payload.errorMessage
-        });
+        };
+
+        console.log('[Gateway] Calling onChatEvent with:', JSON.stringify(chatEvent));
+        this.onChatEvent(chatEvent);
     }
 
     sendMessage(text) {

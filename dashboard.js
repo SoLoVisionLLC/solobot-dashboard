@@ -204,8 +204,14 @@ function updateConnectionUI(status, message) {
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage } = event;
 
-    // Log for debugging
-    console.log('[Dashboard] Chat event:', { eventState, role, content: content?.substring(0, 50) });
+    // Log for debugging - full details
+    console.log('[Dashboard] handleChatEvent called:', JSON.stringify({
+        eventState,
+        role,
+        contentLength: content?.length,
+        contentPreview: content?.substring(0, 100),
+        errorMessage
+    }));
 
     // Handle user messages from other clients (WebUI, Telegram, etc.)
     if (role === 'user' && eventState === 'final' && content) {
@@ -220,9 +226,11 @@ function handleChatEvent(event) {
     }
 
     // Handle assistant messages
+    console.log('[Dashboard] Processing assistant message, state:', eventState);
     switch (eventState) {
         case 'delta':
             // Streaming response
+            console.log('[Dashboard] delta - adding to stream:', content?.length, 'chars');
             streamingText += content;
             isProcessing = true;
             renderChat();
@@ -231,8 +239,12 @@ function handleChatEvent(event) {
         case 'final':
             // Final response from assistant
             const finalContent = content || streamingText;
+            console.log('[Dashboard] final - content:', finalContent?.length, 'chars, role:', role);
             if (finalContent && role !== 'user') {
+                console.log('[Dashboard] Adding final message to chat');
                 addLocalChatMessage(finalContent, 'solobot');
+            } else {
+                console.log('[Dashboard] Skipping final message - no content or user role');
             }
             streamingText = '';
             isProcessing = false;
@@ -240,11 +252,15 @@ function handleChatEvent(event) {
             break;
 
         case 'error':
+            console.log('[Dashboard] error state:', errorMessage);
             addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
             streamingText = '';
             isProcessing = false;
             renderChat();
             break;
+
+        default:
+            console.log('[Dashboard] Unknown event state:', eventState);
     }
 }
 
