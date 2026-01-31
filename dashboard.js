@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.20.0 - DEBUG: Filtering temporarily disabled
+// Version: 3.22.0 - Fix: Persist chat messages locally (Gateway bug #5735 workaround)
 //
 // Message Architecture:
 // - Chat messages: Synced via Gateway (single source of truth across all devices)
@@ -45,10 +45,13 @@ let state = {
     }
 };
 
-// Load persisted system messages from localStorage (chat comes from Gateway)
+// Load persisted messages from localStorage
+// NOTE: Gateway has a bug where user messages from operator WebSocket aren't saved to history
+// (see: https://github.com/openclaw/openclaw/issues/5735)
+// So we MUST persist chat messages locally until that's fixed
 function loadPersistedMessages() {
     try {
-        // System messages are local-only (UI noise), safe to persist
+        // System messages are local-only (UI noise)
         const savedSystem = localStorage.getItem('solobot-system-messages');
         if (savedSystem) {
             const parsed = JSON.parse(savedSystem);
@@ -59,21 +62,38 @@ function loadPersistedMessages() {
             }
         }
 
-        // Chat messages come from Gateway - don't load from localStorage
-        // (Gateway history is the single source of truth for chat)
+        // Chat messages - persist locally because Gateway doesn't save user messages!
+        const savedChat = localStorage.getItem('solobot-chat-messages');
+        if (savedChat) {
+            const parsed = JSON.parse(savedChat);
+            if (Array.isArray(parsed)) {
+                const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+                state.chat.messages = parsed.filter(m => m.time > cutoff);
+                console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
+            }
+        }
     } catch (e) {
         console.log('[Dashboard] Failed to load persisted messages:', e.message);
     }
 }
 
-// Save system messages to localStorage (chat is synced via Gateway)
+// Save messages to localStorage
 function persistSystemMessages() {
     try {
-        // Only persist system messages - they're local UI noise
         const systemToSave = state.system.messages.slice(-100);
         localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
     } catch (e) {
         console.log('[Dashboard] Failed to persist system messages:', e.message);
+    }
+}
+
+// Save chat messages to localStorage (workaround for Gateway bug #5735)
+function persistChatMessages() {
+    try {
+        const chatToSave = state.chat.messages.slice(-100);
+        localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
+    } catch (e) {
+        console.log('[Dashboard] Failed to persist chat messages:', e.message);
     }
 }
 
@@ -460,8 +480,9 @@ function loadHistoryMessages(messages) {
         state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
     }
 
-    // Persist system messages (chat comes from Gateway)
+    // Persist messages locally (workaround for Gateway bug #5735)
     persistSystemMessages();
+    persistChatMessages();
 
     renderChat();
     renderChatPage();
@@ -558,8 +579,9 @@ function mergeHistoryMessages(messages) {
             state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
 
-        // Persist system messages (chat comes from Gateway)
+        // Persist messages locally (workaround for Gateway bug #5735)
         persistSystemMessages();
+        persistChatMessages();
 
         renderChat();
         renderChatPage();
@@ -933,7 +955,8 @@ function addLocalChatMessage(text, from, image = null) {
             notifyChatPageNewMessage();
         }
 
-        // Don't persist chat to localStorage - Gateway is source of truth
+        // Persist chat to localStorage (workaround for Gateway bug #5735)
+        persistChatMessages();
         renderChat();
         renderChatPage();
     }
