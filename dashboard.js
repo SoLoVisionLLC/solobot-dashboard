@@ -184,7 +184,16 @@ function isSystemMessage(text, from) {
 
     // Exact heartbeat matches
     if (trimmed === 'HEARTBEAT_OK') return true;
+    
+    // System timestamped messages (check multiple ways for robustness)
     if (trimmed.startsWith('System: [')) return true;
+    if (trimmed.startsWith('System:')) return true;
+    if (/^System:\s*\[/i.test(trimmed)) return true;
+    
+    // HEARTBEAT messages (cron/scheduled)
+    if (trimmed.includes('] HEARTBEAT:')) return true;
+    if (trimmed.includes('] Cron:')) return true;
+    if (trimmed.includes('] EMAIL CHECK:')) return true;
 
     // Heartbeat prompts (exact match from start)
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
