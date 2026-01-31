@@ -37,7 +37,7 @@ let state = {
     }
 };
 
-// Gateway connection configuration
+// Gateway connection configuration - load from localStorage first, server state as fallback
 const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
@@ -45,6 +45,40 @@ const GATEWAY_CONFIG = {
     sessionKey: localStorage.getItem('gateway_session') || 'main',
     maxMessages: 100
 };
+
+// Function to save gateway settings to both localStorage AND server state
+function saveGatewaySettings(host, port, token, sessionKey) {
+    // Save to localStorage
+    localStorage.setItem('gateway_host', host);
+    localStorage.setItem('gateway_port', port.toString());
+    localStorage.setItem('gateway_token', token);
+    localStorage.setItem('gateway_session', sessionKey);
+    
+    // Also save to server state for persistence across deploys
+    state.gatewayConfig = { host, port, token, sessionKey };
+    saveState('Gateway settings updated');
+}
+
+// Function to load gateway settings from server state (called after loadState)
+function loadGatewaySettingsFromServer() {
+    if (state.gatewayConfig) {
+        // Only use server settings if localStorage is empty
+        if (!GATEWAY_CONFIG.host && state.gatewayConfig.host) {
+            GATEWAY_CONFIG.host = state.gatewayConfig.host;
+            GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
+            GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
+            GATEWAY_CONFIG.sessionKey = state.gatewayConfig.sessionKey || 'main';
+            
+            // Also save to localStorage for faster loading next time
+            localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
+            localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
+            localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
+            localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
+            
+            console.log('[Dashboard] Restored gateway settings from server state');
+        }
+    }
+}
 
 // Gateway client instance
 let gateway = null;
@@ -127,15 +161,12 @@ function connectToGateway() {
         return;
     }
 
-    // Save settings
+    // Save settings to both localStorage AND server state
     GATEWAY_CONFIG.host = host;
     GATEWAY_CONFIG.port = port;
     GATEWAY_CONFIG.token = token;
     GATEWAY_CONFIG.sessionKey = sessionKey;
-    localStorage.setItem('gateway_host', host);
-    localStorage.setItem('gateway_port', port.toString());
-    localStorage.setItem('gateway_token', token);
-    localStorage.setItem('gateway_session', sessionKey);
+    saveGatewaySettings(host, port, token, sessionKey);
 
     updateConnectionUI('connecting', 'Connecting...');
 
@@ -368,6 +399,10 @@ function mergeHistoryMessages(messages) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
+    
+    // Load gateway settings from server state if localStorage is empty
+    loadGatewaySettingsFromServer();
+    
     render();
     updateLastSync();
 
@@ -381,7 +416,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sessionEl = document.getElementById('gateway-session');
 
     if (hostEl) hostEl.value = GATEWAY_CONFIG.host || '';
-    if (portEl) portEl.value = GATEWAY_CONFIG.port || 18789;
+    if (portEl) portEl.value = GATEWAY_CONFIG.port || 443;
     if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
     if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
 
@@ -1231,7 +1266,7 @@ function openSettingsModal() {
     const sessionEl = document.getElementById('gateway-session');
 
     if (hostEl) hostEl.value = GATEWAY_CONFIG.host || '';
-    if (portEl) portEl.value = GATEWAY_CONFIG.port || 18789;
+    if (portEl) portEl.value = GATEWAY_CONFIG.port || 443;
     if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
     if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
 }

@@ -1,5 +1,16 @@
 // docs-hub-memory-files.js - Add memory files to Docs Hub
 
+// Local escapeHtml function (in case dashboard.js hasn't loaded yet)
+function escapeHtmlLocal(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Memory files data structure
 const memoryFiles = [
     {
@@ -97,9 +108,11 @@ function renderMemoryFiles(filter = '') {
     
     // Render grouped files
     let html = '';
+    const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
+    
     Object.keys(grouped).forEach(category => {
         html += `<div class="docs-category">`;
-        html += `<h3 class="category-title">${escapeHtml(category)}</h3>`;
+        html += `<h3 class="category-title">${escape(category)}</h3>`;
         html += `<div class="docs-category-grid">`;
         
         grouped[category].forEach(file => {
@@ -108,8 +121,8 @@ function renderMemoryFiles(filter = '') {
                     <div style="display: flex; align-items: center; gap: var(--space-3);">
                         <div class="doc-icon icon-md">📄</div>
                         <div style="min-width: 0; flex: 1;">
-                            <div class="doc-title">${escapeHtml(file.name)}</div>
-                            <div class="doc-description">${escapeHtml(file.description)}</div>
+                            <div class="doc-title">${escape(file.name)}</div>
+                            <div class="doc-description">${escape(file.description)}</div>
                         </div>
                     </div>
                 </div>
