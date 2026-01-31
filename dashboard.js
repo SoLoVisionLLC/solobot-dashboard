@@ -1,5 +1,5 @@
 // SoLoVision Command Center Dashboard
-// Version: 3.8.0 - Gateway WebSocket Chat (mirrors Android app)
+// Version: 3.9.0 - Gateway WebSocket Chat (mirrors Android app)
 
 // ===================
 // STATE MANAGEMENT
@@ -97,6 +97,22 @@ let editingTaskId = null;
 let currentModalTask = null;
 let currentModalColumn = null;
 let refreshIntervalId = null;
+
+// Filter out heartbeat messages from display
+function isHeartbeatMessage(text) {
+    if (!text) return false;
+    const heartbeatPatterns = [
+        'HEARTBEAT',
+        'Read HEARTBEAT.md',
+        'HEARTBEAT_OK',
+        'heartbeat routine',
+        'heartbeat poll'
+    ];
+    const lowerText = text.toLowerCase();
+    return heartbeatPatterns.some(pattern => 
+        lowerText.includes(pattern.toLowerCase())
+    );
+}
 
 // Default settings
 const defaultSettings = {
@@ -809,8 +825,9 @@ function renderChat() {
     // Check scroll position before rendering
     const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
 
-    // Render each message
+    // Render each message (filter out heartbeat messages)
     messages.forEach(msg => {
+        if (isHeartbeatMessage(msg.text)) return; // Skip heartbeat messages
         const msgEl = createChatMessageElement(msg);
         if (msgEl) container.appendChild(msgEl);
     });
@@ -1092,8 +1109,9 @@ function renderChatPage() {
         return;
     }
     
-    // Render messages
+    // Render messages (filter out heartbeat messages)
     messages.forEach(msg => {
+        if (isHeartbeatMessage(msg.text)) return; // Skip heartbeat messages
         const msgEl = createChatPageMessage(msg);
         if (msgEl) container.appendChild(msgEl);
     });
