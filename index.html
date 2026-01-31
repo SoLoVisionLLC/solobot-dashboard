@@ -1214,17 +1214,10 @@
         /* Memory page specific styles */
         .memory-page {
             padding: var(--space-6);
-            min-height: calc(100vh - 60px);
-            background: linear-gradient(180deg, 
-                rgba(27, 34, 50, 0.3) 0%, 
-                rgba(42, 53, 72, 0.4) 50%,
-                rgba(27, 34, 50, 0.5) 100%);
         }
         
         .memory-page .page-header {
             margin-bottom: var(--space-6);
-            padding-bottom: var(--space-4);
-            border-bottom: 1px solid rgba(169, 178, 188, 0.1);
         }
         
         .memory-page .page-title {
@@ -1239,27 +1232,6 @@
         .memory-page .page-subtitle {
             color: var(--text-secondary);
             margin-top: var(--space-2);
-        }
-        
-        /* Memory file cards */
-        .memory-page .doc-card {
-            background: rgba(27, 34, 50, 0.6);
-            border: 1px solid rgba(169, 178, 188, 0.15);
-            transition: all 0.2s ease;
-        }
-        
-        .memory-page .doc-card:hover {
-            background: rgba(42, 53, 72, 0.8);
-            border-color: rgba(188, 32, 38, 0.3);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-        
-        .memory-page .category-title {
-            color: var(--brand-red);
-            border-bottom: 1px solid rgba(188, 32, 38, 0.2);
-            padding-bottom: var(--space-2);
-            margin-bottom: var(--space-4);
         }
         
         .memory-search-bar {
@@ -2395,7 +2367,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.7.4"></script>
+    <script src="dashboard.js?v=3.7.5"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
