@@ -1458,9 +1458,10 @@
         }
         
         .chat-page-message.bot .chat-page-bubble {
-            background: var(--surface-2);
-            border: 1px solid var(--border-default);
+            background: linear-gradient(135deg, #1B2232 0%, #2a3548 100%);
+            border: 1px solid rgba(169, 178, 188, 0.2);
             border-bottom-left-radius: 4px;
+            color: var(--text-primary);
         }
         
         .chat-page-message.system .chat-page-bubble {
@@ -1499,6 +1500,10 @@
         .chat-page-bubble-time {
             color: var(--text-muted);
             font-size: 11px;
+        }
+        
+        .chat-page-message.bot .chat-page-bubble-time {
+            color: rgba(169, 178, 188, 0.7);
         }
         
         .chat-page-message.user .chat-page-bubble-time {
@@ -2362,7 +2367,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=1.1.0"></script>
-    <script src="dashboard.js?v=3.7.1"></script>
+    <script src="dashboard.js?v=3.7.2"></script>
     <script>
         // Page navigation
         function showPage(pageName) {
