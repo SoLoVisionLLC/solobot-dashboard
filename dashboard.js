@@ -229,9 +229,9 @@ function handleChatEvent(event) {
     console.log('[Dashboard] Processing assistant message, state:', eventState);
     switch (eventState) {
         case 'delta':
-            // Streaming response
-            console.log('[Dashboard] delta - adding to stream:', content?.length, 'chars');
-            streamingText += content;
+            // Streaming response - content is cumulative, so REPLACE not append
+            console.log('[Dashboard] delta - updating stream:', content?.length, 'chars');
+            streamingText = content;
             isProcessing = true;
             renderChat();
             break;
