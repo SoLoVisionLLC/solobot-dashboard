@@ -273,11 +273,28 @@
                 <div id="chat-messages" class="h-[250px] overflow-y-auto p-4 space-y-3 scrollbar-thin bg-solo-darker">
                     <div class="text-solo-grey/70 text-sm text-center py-4">🔌 Connect to Gateway in Settings to start chatting</div>
                 </div>
-                <div class="border-t border-solo-grey/20 p-3 bg-slate-800">
-                    <div class="flex gap-2">
+                <!-- Image Preview Area -->
+                <div id="image-preview-container" class="hidden border-t border-solo-grey/20 p-2 bg-solo-dark">
+                    <div class="relative inline-block">
+                        <img id="image-preview" class="max-h-32 rounded-lg" />
+                        <button onclick="clearImagePreview()" class="absolute -top-2 -right-2 bg-solo-red text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">✕</button>
+                    </div>
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="border-t border-solo-grey/20 p-3 bg-solo-dark">
+                    <div class="flex gap-2 items-center">
+                        <!-- Image Upload Button -->
+                        <label class="cursor-pointer text-solo-grey hover:text-solo-red transition p-2">
+                            <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="handleImageSelect(event)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </label>
                         <input type="text" id="chat-input" placeholder="Type a message..."
-                               class="flex-1 bg-solo-dark border border-solo-grey/30 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-solo-red transition"
-                               onkeypress="if(event.key==='Enter')sendChatMessage()">
+                               class="flex-1 bg-solo-darker border border-solo-grey/30 rounded-lg px-4 py-2 text-sm text-white placeholder-solo-grey focus:outline-none focus:border-solo-red transition"
+                               onkeypress="if(event.key==='Enter')sendChatMessage()"
+                               onpaste="handlePaste(event)">
                         <button onclick="sendChatMessage()" class="bg-solo-red hover:bg-solo-red/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Send</button>
                     </div>
                 </div>
