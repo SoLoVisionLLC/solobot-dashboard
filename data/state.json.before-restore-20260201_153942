@@ -1,0 +1,185 @@
+{
+  "status": "idle",
+  "model": null,
+  "provider": null,
+  "currentTask": null,
+  "subagent": null,
+  "lastHeartbeat": 1769794441424,
+  "tasks": {
+    "todo": [
+      {
+        "id": "t1",
+        "title": "Review PRD v2",
+        "priority": 0,
+        "created": 1738253200000
+      },
+      {
+        "id": "t2",
+        "title": "Set up heartbeat schedule",
+        "priority": 1,
+        "created": 1738253200000
+      },
+      {
+        "id": "t1769794531549",
+        "title": "Deploy dashboard to VPS",
+        "priority": 1,
+        "created": 1769794531549
+      },
+      {
+        "id": "t1769794531629",
+        "title": "Set up heartbeat cron",
+        "priority": 1,
+        "created": 1769794531629
+      }
+    ],
+    "progress": [],
+    "done": [
+      {
+        "id": "t4",
+        "title": "Create Google OAuth",
+        "priority": 1,
+        "created": 1738249600000,
+        "completed": 1738253200000
+      },
+      {
+        "id": "t5",
+        "title": "Write PRD v2",
+        "priority": 0,
+        "created": 1738246000000,
+        "completed": 1738251400000
+      },
+      {
+        "id": "t6",
+        "title": "Build dashboard UI",
+        "priority": 0,
+        "created": 1738253200000,
+        "completed": 1738254000000
+      },
+      {
+        "id": "t3",
+        "title": "Build dashboard integration",
+        "priority": 0,
+        "created": 1738253200000,
+        "started": 1738253200000,
+        "completed": 1769794531480
+      }
+    ]
+  },
+  "notes": [
+    {
+      "id": "n1",
+      "text": "Remember to update RUNNING-CONTEXT.md regularly",
+      "created": 1738251400000,
+      "seen": true,
+      "seenAt": 1738253200000
+    }
+  ],
+  "activity": [
+    {
+      "time": 1738249600000,
+      "action": "Completed Google OAuth setup",
+      "type": "success"
+    },
+    {
+      "time": 1738251400000,
+      "action": "Created PRD v2 with all features",
+      "type": "success"
+    },
+    {
+      "time": 1738252300000,
+      "action": "Uploaded PRD to Google Drive",
+      "type": "info"
+    },
+    {
+      "time": 1738253200000,
+      "action": "Started building dashboard UI",
+      "type": "info"
+    },
+    {
+      "time": 1738254000000,
+      "action": "Completed dashboard UI MVP",
+      "type": "success"
+    },
+    {
+      "time": 1738254100000,
+      "action": "Starting Phase 3: Integration",
+      "type": "info"
+    },
+    {
+      "time": 1769794441424,
+      "action": "Heartbeat: Dashboard sync",
+      "type": "info"
+    },
+    {
+      "time": 1769794531311,
+      "action": "Completed dashboard UI MVP",
+      "type": "success"
+    },
+    {
+      "time": 1769794531356,
+      "action": "Created state.json and CLI tool",
+      "type": "success"
+    },
+    {
+      "time": 1769794531409,
+      "action": "Uploaded all files to Google Drive",
+      "type": "success"
+    },
+    {
+      "time": 1769794531480,
+      "action": "Task moved: \"Build dashboard integration\" \u2192 done",
+      "type": "success"
+    },
+    {
+      "time": 1769794531549,
+      "action": "Task added: Deploy dashboard to VPS",
+      "type": "info"
+    },
+    {
+      "time": 1769794531629,
+      "action": "Task added: Set up heartbeat cron",
+      "type": "info"
+    }
+  ],
+  "docs": [
+    {
+      "id": "d1",
+      "name": "PRD-SoLoVision-Dashboard-v2",
+      "type": "doc",
+      "url": "https://docs.google.com/document/d/17FHVOwZECJTjkLS8XEra0LSt5OXhd_ySzC4CYH0oD1U/edit",
+      "updated": 1738253200000
+    },
+    {
+      "id": "d2",
+      "name": "SoLoBot Dashboard Inspiration",
+      "type": "txt",
+      "url": "https://drive.google.com/file/d/1rf4t1Zo_3dua56pSng5UIAzS7D2Y47Fm/view",
+      "updated": 1738166800000
+    },
+    {
+      "id": "d3",
+      "name": "TASKS.md",
+      "type": "md",
+      "url": "file:///home/node/clawd/projects/dashboard/TASKS.md",
+      "updated": 1738254000000
+    }
+  ],
+  "products": {
+    "sololink": {
+      "status": "active",
+      "lastUpdate": "2026-01-30"
+    },
+    "solorecall": {
+      "status": "development",
+      "lastUpdate": "2026-01-29"
+    },
+    "solovoice": {
+      "status": "active",
+      "lastUpdate": "2026-01-28"
+    },
+    "solofamilyplan": {
+      "status": "stable",
+      "lastUpdate": "2026-01-25"
+    }
+  }
+}
