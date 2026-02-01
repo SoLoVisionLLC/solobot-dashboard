@@ -285,9 +285,9 @@ class GatewayClient {
             idempotencyKey: crypto.randomUUID()
         };
 
-        // Log model info if available
+        // Log model and session info
         const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
-        console.log(`[Gateway] Sending message with ${model}`);
+        console.log(`[Gateway] Sending message to session "${this.sessionKey}" with ${model}`);
 
         return this._request('chat.send', params);
     }
@@ -351,6 +351,7 @@ class GatewayClient {
     }
 
     setSessionKey(key) {
+        console.log(`[Gateway] Switching session from "${this.sessionKey}" to "${key}"`);
         this.sessionKey = key;
         if (this.connected) {
             this._subscribeToSession(key);

@@ -842,18 +842,20 @@ window.switchToSession = async function(sessionKey) {
         await saveCurrentChat();
         
         // 2. Use GatewayClient to switch session (like web UI does)
-        if (gateway && gateway.connected) {
+        if (gateway && gateway.isConnected()) {
             gateway.setSessionKey(sessionKey);
+            GATEWAY_CONFIG.sessionKey = sessionKey;  // Keep config in sync
         }
-        
+
         // 3. Clear current chat (skip confirmation when switching sessions)
         await clearChatHistory(true);
-        
+
         // 4. Load new session's history
         await loadSessionHistory(sessionKey);
-        
+
         // 5. Update current session display
         currentSessionName = sessionKey;
+        GATEWAY_CONFIG.sessionKey = sessionKey;  // Keep config in sync
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
             const session = availableSessions.find(s => s.key === sessionKey);
@@ -2504,9 +2506,10 @@ async function clearChatHistory(skipConfirm = false) {
 }
 
 window.startNewSession = async function() {
-    // Generate a new session name based on timestamp
-    const timestamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
-    const defaultName = `session-${timestamp}`;
+    // Generate a new session name: "Dashboard" + timestamp
+    const now = new Date();
+    const timestamp = now.toISOString().slice(5, 16).replace('T', '-').replace(':', ''); // MM-DD-HHMM
+    const defaultName = `Dashboard-${timestamp}`;
 
     const newSessionKey = prompt('Enter name for new session:', defaultName);
     if (!newSessionKey || !newSessionKey.trim()) return;
@@ -2532,6 +2535,7 @@ window.startNewSession = async function() {
     if (gateway && gateway.isConnected()) {
         gateway.setSessionKey(sessionKey);
         currentSessionName = sessionKey;
+        GATEWAY_CONFIG.sessionKey = sessionKey;  // Keep config in sync
 
         // Update session display
         const nameEl = document.getElementById('chat-page-session-name');
