@@ -629,7 +629,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('selected_provider', currentProvider);
         localStorage.setItem('selected_model', currentModel);
 
-        console.log(`[Dashboard] Current model: ${currentProvider}/${currentModel}`);
+        console.log(`[Dashboard] Current model: ${currentModel}`);
         
         // Update displays (with null checks)
         const providerNameEl = document.getElementById('provider-name');
