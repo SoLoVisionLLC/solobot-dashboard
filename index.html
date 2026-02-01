@@ -120,6 +120,25 @@
             --scrollbar-track: var(--surface-2);
             --scrollbar-thumb: var(--brand-grey);
         }
+        
+        /* Light mode system message overrides */
+        [data-theme="light"] .system-bubble {
+            background: rgba(27, 34, 50, 0.08);
+            border: 1px solid rgba(188, 32, 38, 0.2);
+        }
+        
+        [data-theme="light"] .system-bubble-content {
+            color: #1B2232;
+        }
+        
+        [data-theme="light"] .system-bubble-time {
+            color: #64748b;
+        }
+        
+        [data-theme="light"] .chat-page-message.solobot .chat-page-bubble {
+            background: var(--surface-2);
+            color: var(--text-primary);
+        }
 
         /* ========================================
            BASE STYLES
