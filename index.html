@@ -1478,24 +1478,28 @@
         /* Fixed input area at bottom */
         .chat-page-input-area {
             flex-shrink: 0;
-            background: var(--surface-2);
+            background: var(--surface-1);
             border-top: 1px solid var(--border-default);
             padding: var(--space-2) var(--space-4);
+            height: 52px; /* Match sidebar footer height */
+            display: flex;
+            align-items: center;
         }
         
         .chat-page-input-container {
             max-width: 900px;
             margin: 0 auto;
+            width: 100%;
         }
         
         .chat-page-input-row {
             display: flex;
             gap: var(--space-2);
             align-items: center;
-            background: var(--surface-1);
+            background: var(--surface-2);
             border: 1px solid var(--border-default);
             border-radius: var(--radius-md);
-            padding: var(--space-1) var(--space-2);
+            padding: 6px var(--space-2);
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         
@@ -1509,9 +1513,10 @@
             background: transparent;
             border: none;
             outline: none;
-            font-size: 15px;
+            font-size: 14px;
             color: var(--text-primary);
-            padding: var(--space-2);
+            padding: 4px var(--space-2);
+            height: 28px;
         }
         
         .chat-page-input-row input::placeholder {
