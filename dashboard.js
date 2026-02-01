@@ -2892,8 +2892,9 @@ window.viewMemoryFile = async function(filePath) {
             titleEl.innerHTML = `
                 ${escapeHtml(data.name)}
                 <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
-                <button onclick="window.acknowledgeUpdate && window.acknowledgeUpdate('${escapeHtml(filePath)}')" 
-                        class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
+                <button id="acknowledge-btn" 
+                        onclick="this.style.background='var(--surface-3)'; this.style.color='var(--text-muted)'; this.textContent='✓ Read'; this.disabled=true; window.acknowledgeUpdate && window.acknowledgeUpdate('${escapeHtml(filePath)}')" 
+                        class="btn" style="margin-left: 8px; font-size: 12px; background: var(--error); color: white; border: none;">
                     ✓ Mark as Read
                 </button>
             `;
