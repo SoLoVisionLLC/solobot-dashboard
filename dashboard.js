@@ -1119,13 +1119,15 @@ function initSampleData() {
 // CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
 
-// Image handling
-let pendingImage = null;
+// Image handling - supports multiple images
+let pendingImages = [];
 
 function handleImageSelect(event) {
-    const file = event.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-        processImageFile(file);
+    const files = event.target.files;
+    for (const file of files) {
+        if (file.type.startsWith('image/')) {
+            processImageFile(file);
+        }
     }
 }
 
@@ -1182,63 +1184,85 @@ function processImageFile(file) {
             imageData = await compressImage(imageData);
         }
         
-        pendingImage = {
+        pendingImages.push({
+            id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
             name: file.name,
             type: 'image/jpeg'
-        };
-        showImagePreview(pendingImage.data);
+        });
+        renderImagePreviews();
     };
     reader.readAsDataURL(file);
 }
 
-function showImagePreview(dataUrl) {
+function renderImagePreviews() {
     const container = document.getElementById('image-preview-container');
-    const img = document.getElementById('image-preview');
-    if (container && img) {
-        img.src = dataUrl;
-        container.classList.remove('hidden');
+    if (!container) return;
+    
+    if (pendingImages.length === 0) {
+        container.classList.remove('visible');
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.classList.add('visible');
+    container.innerHTML = pendingImages.map((img, idx) => `
+        <div class="image-preview-wrapper">
+            <img src="${img.data}" alt="Preview ${idx + 1}" />
+            <button onclick="removeImagePreview('${img.id}')" class="image-preview-close">✕</button>
+        </div>
+    `).join('');
+}
+
+function removeImagePreview(imgId) {
+    pendingImages = pendingImages.filter(img => img.id !== imgId);
+    renderImagePreviews();
+    if (pendingImages.length === 0) {
+        const input = document.getElementById('image-upload');
+        if (input) input.value = '';
     }
 }
 
-function clearImagePreview() {
-    pendingImage = null;
-    const container = document.getElementById('image-preview-container');
+function clearImagePreviews() {
+    pendingImages = [];
+    renderImagePreviews();
     const input = document.getElementById('image-upload');
-    if (container) container.classList.add('hidden');
     if (input) input.value = '';
 }
 
 async function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
-    if (!text && !pendingImage) return;
+    if (!text && pendingImages.length === 0) return;
 
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to Gateway. Please connect first.', 'warning');
         return;
     }
 
-    // Build message with optional image
-    let messageText = text;
-    let imageData = null;
+    // Get images to send
+    const imagesToSend = [...pendingImages];
+    const hasImages = imagesToSend.length > 0;
     
-    if (pendingImage) {
-        imageData = pendingImage.data;
-        // Add image indicator to local display
-        addLocalChatMessage(text || '📷 Image', 'user', imageData);
+    // Add to local display
+    if (hasImages) {
+        // Show first image in local preview, note if there are more
+        const imgCount = imagesToSend.length;
+        const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
+        addLocalChatMessage(displayText, 'user', imagesToSend[0].data);
     } else {
         addLocalChatMessage(text, 'user');
     }
     
     input.value = '';
-    clearImagePreview();
+    clearImagePreviews();
 
     // Send via Gateway WebSocket
     try {
-        if (imageData) {
-            // Send with image attachment
-            await gateway.sendMessageWithImage(text || 'Image', imageData);
+        if (hasImages) {
+            // Send with image attachments (send all images)
+            const imageDataArray = imagesToSend.map(img => img.data);
+            await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
             await gateway.sendMessage(text);
         }
@@ -1510,7 +1534,7 @@ function openImageModal(src) {
 // ===================
 
 // Chat page state
-let chatPagePendingImage = null;
+let chatPagePendingImages = [];
 let chatPageScrollPosition = null;
 let chatPageUserScrolled = false;
 let chatPageNewMessageCount = 0;
@@ -1768,9 +1792,11 @@ function notifyChatPageNewMessage() {
 }
 
 function handleChatPageImageSelect(event) {
-    const file = event.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-        processChatPageImageFile(file);
+    const files = event.target.files;
+    for (const file of files) {
+        if (file.type.startsWith('image/')) {
+            processChatPageImageFile(file);
+        }
     }
 }
 
@@ -1797,54 +1823,75 @@ function processChatPageImageFile(file) {
             imageData = await compressImage(imageData);
         }
         
-        chatPagePendingImage = {
+        chatPagePendingImages.push({
+            id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
             name: file.name,
             type: 'image/jpeg'
-        };
-        showChatPageImagePreview(chatPagePendingImage.data);
+        });
+        renderChatPageImagePreviews();
     };
     reader.readAsDataURL(file);
 }
 
-function showChatPageImagePreview(dataUrl) {
+function renderChatPageImagePreviews() {
     const container = document.getElementById('chat-page-image-preview');
-    const img = document.getElementById('chat-page-image-preview-img');
-    if (container && img) {
-        img.src = dataUrl;
-        container.classList.remove('hidden');
+    if (!container) return;
+    
+    if (chatPagePendingImages.length === 0) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.classList.remove('hidden');
+    container.innerHTML = chatPagePendingImages.map((img, idx) => `
+        <div class="image-preview-wrapper">
+            <img src="${img.data}" alt="Preview ${idx + 1}" />
+            <button onclick="removeChatPageImagePreview('${img.id}')" class="image-preview-close">✕</button>
+        </div>
+    `).join('');
+}
+
+function removeChatPageImagePreview(imgId) {
+    chatPagePendingImages = chatPagePendingImages.filter(img => img.id !== imgId);
+    renderChatPageImagePreviews();
+    if (chatPagePendingImages.length === 0) {
+        const input = document.getElementById('chat-page-image-upload');
+        if (input) input.value = '';
     }
 }
 
-function clearChatPageImagePreview() {
-    chatPagePendingImage = null;
-    const container = document.getElementById('chat-page-image-preview');
+function clearChatPageImagePreviews() {
+    chatPagePendingImages = [];
+    renderChatPageImagePreviews();
     const input = document.getElementById('chat-page-image-upload');
-    if (container) container.classList.add('hidden');
     if (input) input.value = '';
 }
 
 async function sendChatPageMessage() {
     const input = document.getElementById('chat-page-input');
     const text = input.value.trim();
-    if (!text && !chatPagePendingImage) return;
+    if (!text && chatPagePendingImages.length === 0) return;
     
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to Gateway. Please connect first in Settings.', 'warning');
         return;
     }
     
-    let imageData = null;
+    const imagesToSend = [...chatPagePendingImages];
+    const hasImages = imagesToSend.length > 0;
     
-    if (chatPagePendingImage) {
-        imageData = chatPagePendingImage.data;
-        addLocalChatMessage(text || '📷 Image', 'user', imageData);
+    if (hasImages) {
+        const imgCount = imagesToSend.length;
+        const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
+        addLocalChatMessage(displayText, 'user', imagesToSend[0].data);
     } else {
         addLocalChatMessage(text, 'user');
     }
     
     input.value = '';
-    clearChatPageImagePreview();
+    clearChatPageImagePreviews();
     
     // Force scroll to bottom when user sends
     chatPageUserScrolled = false;
@@ -1855,8 +1902,9 @@ async function sendChatPageMessage() {
     
     // Send via Gateway
     try {
-        if (imageData) {
-            await gateway.sendMessageWithImage(text || 'Image', imageData);
+        if (hasImages) {
+            const imageDataArray = imagesToSend.map(img => img.data);
+            await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
             await gateway.sendMessage(text);
         }

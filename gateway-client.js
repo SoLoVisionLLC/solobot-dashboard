@@ -281,31 +281,44 @@ class GatewayClient {
     }
 
     sendMessageWithImage(text, imageDataUrl) {
+        return this.sendMessageWithImages(text, [imageDataUrl]);
+    }
+
+    sendMessageWithImages(text, imageDataUrls) {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));
         }
 
-        // Extract base64 data and mime type from data URL
-        const matches = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
-        if (!matches) {
-            return Promise.reject(new Error('Invalid image data URL'));
+        // Build attachments array from all images
+        const attachments = [];
+        for (const imageDataUrl of imageDataUrls) {
+            const matches = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
+            if (!matches) {
+                console.warn('[Gateway] Skipping invalid image data URL');
+                continue;
+            }
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            attachments.push({
+                type: 'image',
+                mimeType: mimeType,
+                content: base64Data
+            });
         }
 
-        const mimeType = matches[1];
-        const base64Data = matches[2];
+        if (attachments.length === 0) {
+            return Promise.reject(new Error('No valid images to send'));
+        }
 
         const params = {
             message: text || 'Attached image',
             sessionKey: this.sessionKey,
             idempotencyKey: crypto.randomUUID(),
-            attachments: [{
-                type: 'image',
-                mimeType: mimeType,
-                content: base64Data
-            }]
+            attachments: attachments
         };
 
-        console.log('[Gateway] Sending image, mimeType:', mimeType, 'size:', Math.round(base64Data.length / 1024), 'KB');
+        console.log('[Gateway] Sending', attachments.length, 'image(s), total size:', 
+            Math.round(attachments.reduce((sum, a) => sum + a.content.length, 0) / 1024), 'KB');
 
         return this._request('chat.send', params);
     }
