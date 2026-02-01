@@ -643,9 +643,15 @@ function loadHistoryMessages(messages) {
     const systemMessages = [];
 
     messages.forEach(msg => {
+        // Skip tool results and tool calls - only show actual text responses
+        if (msg.role === 'toolResult' || msg.role === 'tool') {
+            return;
+        }
+        
         let textContent = '';
         if (msg.content) {
             for (const part of msg.content) {
+                // Only extract actual text, skip tool calls
                 if (part.type === 'text') {
                     textContent += part.text || '';
                 }
@@ -740,6 +746,11 @@ function mergeHistoryMessages(messages) {
 
         // Skip if already exists in either array
         if (existingIds.has(msgId) || existingSystemIds.has(msgId)) {
+            continue;
+        }
+        
+        // Skip tool results and tool calls - only show actual text responses
+        if (msg.role === 'toolResult' || msg.role === 'tool') {
             continue;
         }
 
