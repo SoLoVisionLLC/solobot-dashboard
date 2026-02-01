@@ -3166,6 +3166,13 @@
         };
         
         window.closeTaskDetailModal = function() {
+            // Auto-save changes before closing
+            if (currentDetailTask && currentDetailColumn) {
+                currentDetailTask.title = document.getElementById('task-detail-title').value;
+                currentDetailTask.description = document.getElementById('task-detail-description').value;
+                saveState('Updated task');
+                render();
+            }
             hideModal('task-detail-modal');
             currentDetailTask = null;
             currentDetailColumn = null;
@@ -3209,6 +3216,7 @@
                 if (!currentDetailTask.images) currentDetailTask.images = [];
                 currentDetailTask.images.push(e.target.result);
                 renderTaskImages();
+                saveState('Added image to task');
                 showToast('Image added!', 'success');
             };
             reader.readAsDataURL(file);
@@ -3285,6 +3293,7 @@
             if (currentDetailTask?.images) {
                 currentDetailTask.images.splice(index, 1);
                 renderTaskImages();
+                saveState('Removed image from task');
             }
         };
         
