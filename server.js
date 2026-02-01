@@ -690,22 +690,39 @@ const server = http.createServer((req, res) => {
           return;
         }
         
+        console.log(`[Server] Attempting to change model to: ${modelId}`);
+        
         // Execute the moltbot command to change model
         const exec = require('child_process').execSync;
         const result = exec(`moltbot models set "${modelId}" 2>&1`, { encoding: 'utf8' });
         
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ 
-          ok: true, 
-          message: result,
-          modelId: modelId 
-        }));
+        console.log(`[Server] Model change result: ${result}`);
+        
+        // Check if command succeeded by looking for error indicators
+        const hasError = result.includes('error') || result.includes('Error') || result.includes('Failed');
+        
+        if (hasError) {
+          console.error(`[Server] Model change failed: ${result}`);
+          res.writeHead(500);
+          res.end(JSON.stringify({ 
+            error: 'Model change command failed', 
+            details: result.trim() 
+          }));
+        } else {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ 
+            ok: true, 
+            message: result,
+            modelId: modelId 
+          }));
+        }
         
       } catch (e) {
         console.error('[Server] Failed to change model:', e.message);
+        console.error('[Server] Error stack:', e.stack);
         res.writeHead(500);
         res.end(JSON.stringify({ 
-          error: 'Failed to change model', 
+          error: 'Failed to execute model change command', 
           details: e.message 
         }));
       }

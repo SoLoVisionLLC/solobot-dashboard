@@ -414,7 +414,14 @@ window.changeModel = async function() {
         return;
     }
     
+    if (selectedModel.includes('ERROR')) {
+        showToast('Cannot change model - configuration error', 'error');
+        return;
+    }
+    
     try {
+        console.log(`[Dashboard] Attempting to change model to: ${selectedModel}`);
+        
         const response = await fetch('/api/models/set', {
             method: 'POST',
             headers: {
@@ -426,22 +433,29 @@ window.changeModel = async function() {
         const result = await response.json();
         
         if (response.ok) {
+            console.log(`[Dashboard] Model successfully changed to: ${selectedModel}`);
             showToast(`Model changed to ${selectedModel}`, 'success');
-            console.log(`[Dashboard] Model changed to: ${selectedModel}`);
             
             // Update displays
+            currentModel = selectedModel;
             document.getElementById('model-name').textContent = selectedModel;
             document.getElementById('current-model-display').textContent = selectedModel;
             
             // Refresh model list in settings
-            updateModelDropdown(document.getElementById('provider-select').value);
+            await updateModelDropdown(document.getElementById('provider-select').value);
         } else {
-            showToast(`Failed to change model: ${result.error}`, 'error');
             console.error('[Dashboard] Failed to change model:', result);
+            showToast(`Failed to change model: ${result.error || 'Unknown error'}`, 'error');
+            
+            // Make error visible - don't hide it
+            throw new Error(`Model change failed: ${result.error || 'Unknown error'}`);
         }
     } catch (error) {
-        showToast('Failed to change model', 'error');
         console.error('[Dashboard] Error changing model:', error);
+        showToast(`Failed to change model: ${error.message}`, 'error');
+        
+        // Re-throw to make error visible
+        throw error;
     }
 };
 
@@ -511,9 +525,9 @@ async function getModelsForProvider(provider) {
         console.log(`[Dashboard] Returning ${models.length} models for ${provider}`);
         return models;
     } catch (e) {
-        console.log('[Dashboard] Failed to get models for provider:', provider, e);
-        // Return empty array so dropdown shows nothing rather than breaking
-        return [];
+        console.error('[Dashboard] Failed to get models for provider:', provider, e);
+        // Re-throw to make error visible
+        throw new Error(`Failed to get models for provider ${provider}: ${e.message}`);
     }
 }
 
@@ -579,35 +593,28 @@ document.addEventListener('DOMContentLoaded', async function() {
         console.error('[Dashboard] Failed to get current model:', error);
         console.error('[Dashboard] Error details:', error.message, error.stack);
         
-        // Try to get current model directly from moltbot as fallback
-        try {
-            const exec = require('child_process').execSync;
-            const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
-            
-            if (result) {
-                const parts = result.trim().split(/\s+/);
-                if (parts.length >= 1) {
-                    currentModel = parts[0];
-                    currentProvider = currentModel.split('/')[0] || 'anthropic';
-                    console.log('[Dashboard] Got current model from moltbot:', currentProvider, currentModel);
-                }
-            }
-        } catch (e) {
-            console.log('[Dashboard] Failed to get model from moltbot command:', e.message);
-            // Final fallback
-            currentProvider = 'anthropic';
-            currentModel = 'anthropic/claude-opus-4-5';
-        }
+        // Show error to user instead of fallback
+        console.error('[Dashboard] CRITICAL: Cannot display current model configuration');
         
-        console.log('[Dashboard] Using fallback:', currentProvider, currentModel);
+        // Display error state
+        document.getElementById('provider-name').textContent = 'ERROR';
+        document.getElementById('model-name').textContent = 'Unable to load model';
+        document.getElementById('current-provider-display').textContent = 'ERROR';
+        document.getElementById('current-model-display').textContent = 'Unable to load model';
         
-        document.getElementById('provider-name').textContent = currentProvider;
-        document.getElementById('model-name').textContent = currentModel;
-        document.getElementById('current-provider-display').textContent = currentProvider;
-        document.getElementById('current-model-display').textContent = currentModel;
-        document.getElementById('provider-select').value = currentProvider;
+        // Show error in dropdowns
+        const providerSelect = document.getElementById('provider-select');
+        const modelSelect = document.getElementById('model-select');
         
-        await updateModelDropdown(currentProvider);
+        providerSelect.innerHTML = '<option value="">ERROR: Cannot load providers</option>';
+        modelSelect.innerHTML = '<option value="">ERROR: Cannot load models</option>';
+        
+        // Show error toast
+        showToast('Failed to load AI model configuration', 'error');
+        
+        // Re-throw to make error visible in console
+        throw error;
+    }
     }
 });
 
