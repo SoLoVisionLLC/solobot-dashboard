@@ -752,8 +752,116 @@ window.renameChatPageSession = function() {
 
 window.switchChatPageSession = function() {
     toggleChatPageSessionMenu();
-    showToast('Session switcher coming soon', 'info');
+    showSessionSwitcherModal();
 }
+
+// Session Management
+let availableSessions = [];
+
+async function fetchSessions() {
+    try {
+        const response = await fetch('/api/sessions');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        availableSessions = data.sessions || [];
+        console.log(`[Dashboard] Fetched ${availableSessions.length} sessions`);
+        return availableSessions;
+    } catch (e) {
+        console.error('[Dashboard] Failed to fetch sessions:', e);
+        return [];
+    }
+}
+
+function showSessionSwitcherModal() {
+    if (availableSessions.length === 0) {
+        showToast('No sessions available', 'warning');
+        return;
+    }
+    
+    // Create modal HTML
+    const modal = document.createElement('div');
+    modal.id = 'session-switcher-modal';
+    modal.style.cssText = `
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5); z-index: 10000;
+        display: flex; align-items: center; justify-content: center;
+    `;
+    
+    const sessionList = availableSessions.map(s => `
+        <button onclick="switchToSession('${s.key}')" style="
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%; padding: 12px; margin: 4px 0;
+            background: ${s.key === currentSessionName ? 'var(--accent-color)' : 'var(--surface-elevated)'};
+            color: ${s.key === currentSessionName ? 'white' : 'var(--text-color)'};
+            border: 1px solid var(--border-color); border-radius: 8px;
+            cursor: pointer; text-align: left;
+        ">
+            <span style="font-weight: 600;">${s.displayName || s.name}</span>
+            <span style="font-size: 12px; opacity: 0.7;">${s.model}</span>
+        </button>
+    `).join('');
+    
+    modal.innerHTML = `
+        <div style="
+            background: var(--surface-1); padding: 24px; border-radius: 12px;
+            min-width: 320px; max-width: 90vw; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 18px;">Switch Session</h3>
+                <button onclick="closeSessionModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <div style="margin-bottom: 16px;">${sessionList}</div>
+            <button onclick="refreshSessions()" style="
+                width: 100%; padding: 10px; background: var(--surface-elevated);
+                border: 1px solid var(--border-color); border-radius: 6px;
+                cursor: pointer; color: var(--text-color);
+            ">🔄 Refresh Sessions</button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.onclick = (e) => { if (e.target === modal) closeSessionModal(); };
+}
+
+window.closeSessionModal = function() {
+    const modal = document.getElementById('session-switcher-modal');
+    if (modal) modal.remove();
+}
+
+window.switchToSession = async function(sessionKey) {
+    closeSessionModal();
+    showToast(`Switching to session...`, 'info');
+    
+    try {
+        const response = await fetch('/api/session/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionKey })
+        });
+        
+        const result = await response.json();
+        if (result.ok) {
+            showToast(`Session switch requested: ${sessionKey}`, 'success');
+        } else {
+            showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
+        }
+    } catch (e) {
+        console.error('[Dashboard] Failed to switch session:', e);
+        showToast('Failed to switch session', 'error');
+    }
+}
+
+window.refreshSessions = async function() {
+    await fetchSessions();
+    closeSessionModal();
+    showSessionSwitcherModal();
+}
+
+// Fetch sessions on page load
+document.addEventListener('DOMContentLoaded', () => {
+    fetchSessions();
+});
 
 function initGateway() {
     gateway = new GatewayClient({

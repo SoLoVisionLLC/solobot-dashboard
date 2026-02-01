@@ -917,6 +917,41 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // List sessions endpoint (fetches from OpenClaw)
+  if (url.pathname === '/api/sessions' && req.method === 'GET') {
+    // Return sessions from state, or empty if not cached
+    const sessions = state.sessions || [];
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ sessions, count: sessions.length }));
+    return;
+  }
+
+  // Switch session endpoint
+  if (url.pathname === '/api/session/switch' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { sessionKey } = JSON.parse(body);
+        if (!sessionKey) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'sessionKey is required' }));
+          return;
+        }
+        console.log(`[Server] Session switch requested: ${sessionKey}`);
+        state.sessionSwitchRequest = { sessionKey, requestedAt: Date.now() };
+        saveState();
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, message: 'Session switch requested', sessionKey }));
+      } catch (e) {
+        console.error('[Server] Failed to request session switch:', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to request session switch', details: e.message }));
+      }
+    });
+    return;
+  }
+
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
