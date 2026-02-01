@@ -1174,8 +1174,8 @@ function renderChat() {
         return;
     }
 
-    // Check scroll position before rendering
-    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+    // Check scroll position before rendering - use strict check (5px) to avoid unwanted scrolling
+    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
 
     // Render each message (no filtering needed - system messages are in separate array)
     messages.forEach(msg => {
@@ -1364,7 +1364,14 @@ function restoreChatScrollPosition() {
     }
 }
 
-// Check if user is near the bottom
+// Check if user is at the very bottom (strict check for auto-scroll)
+function isAtBottom(container) {
+    if (!container) return true;
+    // Only consider "at bottom" if within 5px - user must be truly at the bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 5;
+}
+
+// Check if user is near the bottom (looser check for indicator hiding)
 function isNearBottom(container) {
     if (!container) return true;
     const threshold = 100;
@@ -1442,8 +1449,8 @@ function renderChatPage() {
 
     const messages = state.chat?.messages || [];
     
-    // Check if near bottom BEFORE clearing
-    const wasNearBottom = isNearBottom(container);
+    // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
+    const wasAtBottom = isAtBottom(container);
     const previousScrollTop = container.scrollTop;
     const previousScrollHeight = container.scrollHeight;
     
@@ -1483,14 +1490,14 @@ function renderChatPage() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
     
-    // Smart scroll behavior
-    if (wasNearBottom || !chatPageUserScrolled) {
-        // Auto-scroll to bottom
+    // Smart scroll behavior - only auto-scroll if user was truly at the bottom
+    if (wasAtBottom) {
+        // User was at bottom, keep them there
         container.scrollTop = container.scrollHeight;
     } else {
-        // Maintain position - adjust for new content above
-        const heightDiff = container.scrollHeight - previousScrollHeight;
-        container.scrollTop = previousScrollTop + heightDiff;
+        // User was reading - maintain their exact position
+        // Don't adjust for new content, just stay where they were
+        container.scrollTop = previousScrollTop;
     }
 }
 
