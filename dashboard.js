@@ -100,8 +100,8 @@ async function loadChatFromServer() {
 // Save system messages to localStorage (chat is synced via Gateway)
 function persistSystemMessages() {
     try {
-        // Only persist system messages - they're local UI noise
-        const systemToSave = state.system.messages.slice(-100);
+        // Only persist system messages - they're local UI noise (limit to 30 to save space)
+        const systemToSave = state.system.messages.slice(-30);
         localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
     } catch (e) {
         console.log('[Dashboard] Failed to persist system messages:', e.message);
@@ -112,7 +112,8 @@ function persistSystemMessages() {
 // Ensures persistence across browser sessions and deploys
 function persistChatMessages() {
     try {
-        const chatToSave = state.chat.messages.slice(-100);
+        // Limit to 50 messages to prevent localStorage quota exceeded
+        const chatToSave = state.chat.messages.slice(-50);
         localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
         
         // Also sync to server for persistence across deploys
@@ -861,7 +862,33 @@ async function saveState(changeDescription = null) {
         state.lastChange = changeDescription;
     }
     
-    localStorage.setItem('solovision-dashboard', JSON.stringify(state));
+    // Create a trimmed copy for localStorage (limit messages to prevent quota exceeded)
+    try {
+        const stateForStorage = JSON.parse(JSON.stringify(state));
+        // Limit chat messages to last 50 to save space
+        if (stateForStorage.chat && stateForStorage.chat.messages) {
+            stateForStorage.chat.messages = stateForStorage.chat.messages.slice(-50);
+        }
+        // Limit console logs to last 20
+        if (stateForStorage.console && stateForStorage.console.logs) {
+            stateForStorage.console.logs = stateForStorage.console.logs.slice(-20);
+        }
+        // Limit activity to last 30
+        if (stateForStorage.activity) {
+            stateForStorage.activity = stateForStorage.activity.slice(-30);
+        }
+        localStorage.setItem('solovision-dashboard', JSON.stringify(stateForStorage));
+    } catch (e) {
+        if (e.name === 'QuotaExceededError') {
+            console.warn('[Dashboard] localStorage full, clearing old data...');
+            // Clear and try again with minimal data
+            localStorage.removeItem('solovision-dashboard');
+            localStorage.removeItem('solobot-chat');
+            localStorage.removeItem('solobot-system-messages');
+        } else {
+            console.error('[Dashboard] saveState error:', e);
+        }
+    }
     updateLastSync();
     
     // Sync to server
