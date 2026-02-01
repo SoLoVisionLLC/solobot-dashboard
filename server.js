@@ -774,11 +774,32 @@ const server = http.createServer((req, res) => {
     // Get current model from state.json (updated by OpenClaw agent)
     try {
       const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      const modelInfo = state.currentModel || { 
-        modelId: 'anthropic/claude-opus-4-5',
-        provider: 'anthropic',
-        name: 'claude-opus-4-5'
-      };
+      let modelInfo = state.currentModel;
+      
+      // Fallback: if missing, try reading OpenClaw config primary model
+      if (!modelInfo) {
+        try {
+          const oc = JSON.parse(fs.readFileSync('/home/node/.openclaw/openclaw.json', 'utf8'));
+          const primary = oc?.agents?.defaults?.model?.primary;
+          if (primary) {
+            modelInfo = {
+              modelId: primary,
+              provider: primary.split('/')[0],
+              name: primary.split('/').pop()
+            };
+          }
+        } catch (e) {
+          // ignore fallback errors
+        }
+      }
+      
+      if (!modelInfo) {
+        modelInfo = { 
+          modelId: 'anthropic/claude-opus-4-5',
+          provider: 'anthropic',
+          name: 'claude-opus-4-5'
+        };
+      }
       
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(modelInfo));
