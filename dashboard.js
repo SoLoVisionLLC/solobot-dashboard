@@ -464,28 +464,46 @@ function updateModelDropdown(provider) {
 
 async function getModelsForProvider(provider) {
     try {
-        // Fetch all available models from OpenClaw
-        const response = await fetch('/api/models/current');
-        const currentModel = await response.json();
+        // Get models based on provider
+        const modelsByProvider = {
+            'anthropic': [
+                { value: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5' },
+                { value: 'anthropic/claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet' },
+                { value: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet' },
+                { value: 'anthropic/claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku' }
+            ],
+            'openai': [
+                { value: 'openai/gpt-4o', name: 'GPT-4o' },
+                { value: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
+                { value: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' }
+            ],
+            'google': [
+                { value: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+                { value: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+                { value: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
+            ],
+            'moonshot': [
+                { value: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2' },
+                { value: 'moonshot/kimi-k2-thinking', name: 'Kimi K2 Thinking' }
+            ],
+            'openrouter': [
+                { value: 'openrouter/auto', name: 'OpenRouter Auto' },
+                { value: 'openrouter/anthropic/claude-opus-4-5', name: 'Claude Opus 4.5 (OR)' },
+                { value: 'openrouter/openai/gpt-4o', name: 'GPT-4o (OR)' }
+            ]
+        };
         
-        // For now, show a curated list of popular models
-        // In the future, we could fetch the full list via a separate endpoint
-        const popularModels = [
-            { value: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', selected: currentModel.modelId === 'anthropic/claude-opus-4-5' },
-            { value: 'anthropic/claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet', selected: currentModel.modelId === 'anthropic/claude-3-7-sonnet-latest' },
-            { value: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', selected: currentModel.modelId === 'anthropic/claude-3-5-sonnet-latest' },
-            { value: 'anthropic/claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', selected: currentModel.modelId === 'anthropic/claude-3-5-haiku-latest' },
-            { value: 'openai/gpt-4o', name: 'GPT-4o', selected: currentModel.modelId === 'openai/gpt-4o' },
-            { value: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', selected: currentModel.modelId === 'openai/gpt-4o-mini' },
-            { value: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', selected: currentModel.modelId === 'google/gemini-2.5-pro' },
-            { value: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', selected: currentModel.modelId === 'google/gemini-2.5-flash' },
-            { value: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', selected: currentModel.modelId === 'moonshot/kimi-k2-0905-preview' }
-        ];
+        const models = modelsByProvider[provider] || [];
         
-        return popularModels;
+        // Mark current model as selected
+        models.forEach(model => {
+            model.selected = (model.value === currentModel);
+        });
+        
+        return models;
     } catch (e) {
-        console.log('[Dashboard] Failed to get models, using defaults');
-        return getConfiguredModels();
+        console.log('[Dashboard] Failed to get models for provider:', provider, e);
+        return [];
     }
 }
 
@@ -519,37 +537,47 @@ function getConfiguredModels() {
     }
 }
 
+// Current model state
+let currentProvider = 'anthropic';
+let currentModel = 'anthropic/claude-opus-4-5';
+
 // Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', async function() {
-    // Get actual current model from OpenClaw via API
     try {
+        // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
-        const currentModel = await response.json();
+        const modelInfo = await response.json();
         
-        console.log(`[Dashboard] Current model: ${currentModel.provider}/${currentModel.modelId}`);
+        currentProvider = modelInfo.provider;
+        currentModel = modelInfo.modelId;
         
-        // Update navbar display
-        document.getElementById('provider-name').textContent = currentModel.provider;
-        document.getElementById('model-name').textContent = currentModel.modelId;
+        console.log(`[Dashboard] Current model: ${currentProvider}/${currentModel}`);
         
-        // Update settings modal display
-        document.getElementById('current-provider-display').textContent = currentModel.provider;
-        document.getElementById('current-model-display').textContent = currentModel.modelId;
+        // Update displays
+        document.getElementById('provider-name').textContent = currentProvider;
+        document.getElementById('model-name').textContent = currentModel;
+        document.getElementById('current-provider-display').textContent = currentProvider;
+        document.getElementById('current-model-display').textContent = currentModel;
         
-        // Populate model dropdowns
-        const models = await getModelsForProvider(currentModel.provider);
-        updateModelDropdown(currentModel.provider);
+        // Set provider select to current
+        document.getElementById('provider-select').value = currentProvider;
+        
+        // Populate model dropdown for current provider
+        await updateModelDropdown(currentProvider);
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
         // Fallback to defaults
-        const currentModel = 'anthropic/claude-opus-4-5';
-        const currentProvider = 'anthropic';
+        currentProvider = 'anthropic';
+        currentModel = 'anthropic/claude-opus-4-5';
         
         document.getElementById('provider-name').textContent = currentProvider;
         document.getElementById('model-name').textContent = currentModel;
         document.getElementById('current-provider-display').textContent = currentProvider;
         document.getElementById('current-model-display').textContent = currentModel;
+        document.getElementById('provider-select').value = currentProvider;
+        
+        await updateModelDropdown(currentProvider);
     }
 });
 
@@ -2654,31 +2682,32 @@ function hideModal(id) {
     document.getElementById(id)?.classList.remove('visible');
 }
 
-function openSettingsModal() {
+async function openSettingsModal() {
     showModal('settings-modal');
 
-    // Get actual current model from OpenClaw
-    let currentModel = 'anthropic/claude-opus-4-5';
-    let currentProvider = 'anthropic';
-    
     try {
-        const exec = require('child_process').execSync;
-        const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+        // Get current model from OpenClaw
+        const response = await fetch('/api/models/current');
+        const modelInfo = await response.json();
         
-        if (result) {
-            const parts = result.trim().split(/\s+/);
-            if (parts.length >= 1) {
-                currentModel = parts[0];
-                currentProvider = currentModel.split('/')[0] || 'anthropic';
-            }
-        }
-    } catch (e) {
-        console.log('[Dashboard] Failed to get current model from OpenClaw');
+        // Update settings modal display
+        document.getElementById('current-provider-display').textContent = modelInfo.provider;
+        document.getElementById('current-model-display').textContent = modelInfo.modelId;
+        
+        // Set provider select to current
+        document.getElementById('setting-provider').value = modelInfo.provider;
+        
+        // Populate model dropdown for current provider
+        await updateModelDropdown(modelInfo.provider);
+        
+    } catch (error) {
+        console.error('[Dashboard] Failed to get current model:', error);
+        // Fallback
+        document.getElementById('current-provider-display').textContent = 'anthropic';
+        document.getElementById('current-model-display').textContent = 'anthropic/claude-opus-4-5';
+        document.getElementById('setting-provider').value = 'anthropic';
+        await updateModelDropdown('anthropic');
     }
-    
-    // Update settings modal display
-    document.getElementById('current-provider-display').textContent = currentProvider;
-    document.getElementById('current-model-display').textContent = currentModel;
 
     // Populate gateway settings
     const hostEl = document.getElementById('gateway-host');
