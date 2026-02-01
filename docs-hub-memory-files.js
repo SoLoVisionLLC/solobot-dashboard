@@ -331,26 +331,123 @@ function getTimeAgo(date) {
     return date.toLocaleDateString();
 }
 
-// Preview a specific version
+// Store current diff context for restore
+let diffContext = { filepath: null, timestamp: null };
+
+// Preview a specific version with diff view
 async function previewVersion(filepath, timestamp) {
     try {
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/versions/${timestamp}`);
-        const data = await response.json();
+        // Fetch both current and historical versions
+        const [currentRes, historicalRes] = await Promise.all([
+            fetch(`/api/memory/${encodeURIComponent(filepath)}`),
+            fetch(`/api/memory/${encodeURIComponent(filepath)}/versions/${timestamp}`)
+        ]);
         
-        if (data.error) {
-            alert(`Error: ${data.error}`);
+        const currentData = await currentRes.json();
+        const historicalData = await historicalRes.json();
+        
+        if (currentData.error || historicalData.error) {
+            alert(`Error: ${currentData.error || historicalData.error}`);
             return;
         }
         
-        // Show in a simple alert or separate modal
-        const date = new Date(timestamp).toLocaleString();
-        const preview = data.content.substring(0, 500) + (data.content.length > 500 ? '...' : '');
+        // Store context for restore button
+        diffContext = { filepath, timestamp };
         
-        if (confirm(`Version from ${date}:\n\n${preview}\n\nRestore this version?`)) {
-            restoreVersion(filepath, timestamp);
-        }
+        // Update modal title and date
+        const date = new Date(timestamp).toLocaleString();
+        document.getElementById('diff-modal-title').textContent = `Compare: ${filepath}`;
+        document.getElementById('diff-version-date').textContent = `Version from ${date}`;
+        
+        // Render diff
+        renderDiff(currentData.content, historicalData.content);
+        
+        // Show modal
+        showModal('diff-modal');
     } catch (e) {
         alert(`Failed to load version: ${e.message}`);
+    }
+}
+
+// Simple line-by-line diff renderer
+function renderDiff(currentText, historicalText) {
+    const currentLines = currentText.split('\n');
+    const historicalLines = historicalText.split('\n');
+    
+    const currentContainer = document.getElementById('diff-current');
+    const historicalContainer = document.getElementById('diff-historical');
+    
+    // Build a simple LCS-based diff
+    const diff = computeLineDiff(historicalLines, currentLines);
+    
+    let currentHtml = '';
+    let historicalHtml = '';
+    
+    diff.forEach(item => {
+        const escapedLine = escapeHtmlLocal(item.line);
+        if (item.type === 'same') {
+            currentHtml += `<div style="padding: 2px 4px;">${escapedLine || '&nbsp;'}</div>`;
+            historicalHtml += `<div style="padding: 2px 4px;">${escapedLine || '&nbsp;'}</div>`;
+        } else if (item.type === 'added') {
+            currentHtml += `<div style="padding: 2px 4px; background: rgba(46, 160, 67, 0.3); border-left: 3px solid var(--success);">${escapedLine || '&nbsp;'}</div>`;
+            historicalHtml += `<div style="padding: 2px 4px; opacity: 0.3;">&nbsp;</div>`;
+        } else if (item.type === 'removed') {
+            currentHtml += `<div style="padding: 2px 4px; opacity: 0.3;">&nbsp;</div>`;
+            historicalHtml += `<div style="padding: 2px 4px; background: rgba(248, 81, 73, 0.3); border-left: 3px solid var(--error);">${escapedLine || '&nbsp;'}</div>`;
+        }
+    });
+    
+    currentContainer.innerHTML = currentHtml;
+    historicalContainer.innerHTML = historicalHtml;
+}
+
+// Compute line-by-line diff using simple algorithm
+function computeLineDiff(oldLines, newLines) {
+    const result = [];
+    const oldSet = new Set(oldLines);
+    const newSet = new Set(newLines);
+    
+    let oldIdx = 0, newIdx = 0;
+    
+    while (oldIdx < oldLines.length || newIdx < newLines.length) {
+        if (oldIdx >= oldLines.length) {
+            // Remaining new lines are additions
+            result.push({ type: 'added', line: newLines[newIdx++] });
+        } else if (newIdx >= newLines.length) {
+            // Remaining old lines are deletions
+            result.push({ type: 'removed', line: oldLines[oldIdx++] });
+        } else if (oldLines[oldIdx] === newLines[newIdx]) {
+            // Lines match
+            result.push({ type: 'same', line: oldLines[oldIdx] });
+            oldIdx++;
+            newIdx++;
+        } else if (!newSet.has(oldLines[oldIdx])) {
+            // Old line not in new - it was removed
+            result.push({ type: 'removed', line: oldLines[oldIdx++] });
+        } else if (!oldSet.has(newLines[newIdx])) {
+            // New line not in old - it was added
+            result.push({ type: 'added', line: newLines[newIdx++] });
+        } else {
+            // Both exist elsewhere - treat as remove then add
+            result.push({ type: 'removed', line: oldLines[oldIdx++] });
+        }
+    }
+    
+    return result;
+}
+
+// Close diff modal
+function closeDiffModal() {
+    const modal = document.getElementById('diff-modal');
+    if (modal) modal.classList.remove('active');
+    diffContext = { filepath: null, timestamp: null };
+}
+
+// Restore from diff view
+function restoreFromDiff() {
+    if (diffContext.filepath && diffContext.timestamp) {
+        closeDiffModal();
+        restoreVersion(diffContext.filepath, diffContext.timestamp);
     }
 }
 
@@ -456,3 +553,5 @@ window.acknowledgeUpdate = acknowledgeUpdate;
 window.loadVersionHistory = loadVersionHistory;
 window.previewVersion = previewVersion;
 window.restoreVersion = restoreVersion;
+window.closeDiffModal = closeDiffModal;
+window.restoreFromDiff = restoreFromDiff;
