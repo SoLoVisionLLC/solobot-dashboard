@@ -262,14 +262,21 @@ async function acknowledgeUpdate(filepath) {
 
 // Load version history for a file
 async function loadVersionHistory(filepath) {
+    console.log('loadVersionHistory called for:', filepath);
     const container = document.getElementById('version-history-list');
-    if (!container) return;
+    if (!container) {
+        console.log('version-history-list container not found!');
+        return;
+    }
     
     container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Loading versions...</div>';
     
     try {
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/versions`);
+        const url = `/api/memory/${encodeURIComponent(filepath)}/versions`;
+        console.log('Fetching versions from:', url);
+        const response = await fetch(url);
         const data = await response.json();
+        console.log('Versions response:', data);
         
         if (!data.versions || data.versions.length === 0) {
             container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">No previous versions</div>';

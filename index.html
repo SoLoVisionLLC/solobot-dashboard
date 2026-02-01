@@ -2580,7 +2580,7 @@
     </div><!-- END app-layout -->
 
     <script src="gateway-client.js?v=3.3.0"></script>
-    <script src="docs-hub-memory-files.js?v=2.0.0"></script>
+    <script src="docs-hub-memory-files.js?v=2.1.0"></script>
     <script src="dashboard.js?v=3.27.0"></script>
     <script>
         // Valid page names
@@ -2831,6 +2831,13 @@
         function hideModal(id) {
             document.getElementById(id).classList.remove('visible');
         }
+        
+        // Click outside to close modals
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal-overlay') && e.target.classList.contains('visible')) {
+                e.target.classList.remove('visible');
+            }
+        });
 
         // Override modal functions for new system
         const originalOpenSettingsModal = window.openSettingsModal;
