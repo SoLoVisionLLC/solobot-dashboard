@@ -1277,14 +1277,17 @@
         }
         
         .sidebar-footer {
+            margin-top: auto; /* Push to bottom of sidebar */
             padding: var(--space-2) 6px; /* Match sidebar-nav padding exactly */
+            padding-bottom: var(--space-4); /* Extra bottom padding to align with chat input */
             border-top: 1px solid var(--border-default);
             transition: padding var(--transition-normal);
         }
         
         .sidebar:hover .sidebar-footer,
         .sidebar.pinned .sidebar-footer {
-            padding: var(--space-3); /* Match sidebar-nav expanded padding */
+            padding: var(--space-3);
+            padding-bottom: var(--space-4); /* Keep extra bottom padding */
         }
         
         .app-content {
