@@ -3195,16 +3195,91 @@
         window.handleTaskImageUpload = function(event) {
             const file = event.target.files[0];
             if (!file) return;
+            addImageToTask(file);
+            event.target.value = ''; // Reset input
+        };
+        
+        // Shared function to add image to current task
+        function addImageToTask(file) {
+            if (!file || !file.type.startsWith('image/')) return;
+            if (!currentDetailTask) return;
             
             const reader = new FileReader();
             reader.onload = function(e) {
                 if (!currentDetailTask.images) currentDetailTask.images = [];
                 currentDetailTask.images.push(e.target.result);
                 renderTaskImages();
+                showToast('Image added!', 'success');
             };
             reader.readAsDataURL(file);
-            event.target.value = ''; // Reset input
-        };
+        }
+        
+        // Drag and drop support for task detail modal
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('task-detail-modal');
+            if (!modal) return;
+            
+            // Prevent default drag behaviors on the modal
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                modal.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            // Highlight drop zone
+            ['dragenter', 'dragover'].forEach(eventName => {
+                modal.addEventListener(eventName, () => {
+                    if (currentDetailTask) {
+                        modal.querySelector('.modal').style.boxShadow = '0 0 0 3px var(--brand-red)';
+                    }
+                }, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                modal.addEventListener(eventName, () => {
+                    modal.querySelector('.modal').style.boxShadow = '';
+                }, false);
+            });
+            
+            // Handle drop
+            modal.addEventListener('drop', function(e) {
+                if (!currentDetailTask) return;
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    [...files].forEach(file => {
+                        if (file.type.startsWith('image/')) {
+                            addImageToTask(file);
+                        }
+                    });
+                }
+            }, false);
+            
+            // Paste support for description field
+            const descField = document.getElementById('task-detail-description');
+            if (descField) {
+                descField.addEventListener('paste', handleTaskPaste);
+            }
+        });
+        
+        // Handle paste event (Ctrl+V or right-click paste)
+        function handleTaskPaste(e) {
+            if (!currentDetailTask) return;
+            
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    if (file) addImageToTask(file);
+                    return;
+                }
+            }
+        }
         
         window.removeTaskImage = function(index) {
             if (currentDetailTask?.images) {
