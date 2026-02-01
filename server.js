@@ -252,7 +252,13 @@ function createVersion(filename, content) {
 let state = {};
 
 function saveState() {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    console.log(`[Server] State saved to ${STATE_FILE}`);
+  } catch (e) {
+    console.error('[Server] Failed to save state:', e.message);
+    throw e; // Re-throw to make error visible
+  }
 }
 
 // Async state initialization with auto-restore
@@ -752,24 +758,55 @@ const server = http.createServer((req, res) => {
       } else {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({
-          modelId: 'anthropic/claude-opus-4-5',
-          provider: 'anthropic',
-          name: 'claude-opus-4-5',
-          isDefault: true,
-          isConfigured: true
+          error: 'No models found',
+          message: 'Could not determine current model'
         }));
       }
     } catch (e) {
       console.error('[Server] Failed to get current model:', e.message);
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({
-        modelId: 'anthropic/claude-opus-4-5',
-        provider: 'anthropic',
-        name: 'claude-opus-4-5',
-        isDefault: true,
-        isConfigured: true
+        error: 'Failed to get current model',
+        details: e.message
       }));
     }
+    return;
+  }
+  
+  // Manual state backup endpoint
+  if (url.pathname === '/api/state/backup' && req.method === 'POST') {
+    try {
+      const backupFile = `./data/state-backup-${Date.now()}.json`;
+      fs.writeFileSync(backupFile, JSON.stringify(state, null, 2));
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ 
+        ok: true, 
+        backupFile: path.basename(backupFile),
+        timestamp: new Date().toISOString()
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+  
+  // Manual state restore endpoint
+  if (url.pathname === '/api/state/restore' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const backup = JSON.parse(body);
+        state = { ...state, ...backup, lastSync: Date.now() };
+        saveState();
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
   

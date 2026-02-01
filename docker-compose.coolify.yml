@@ -6,3 +6,14 @@ services:
     ports:
       - "3000:3000"
     restart: unless-stopped
+    volumes:
+      # CRITICAL: Persist dashboard state between deployments
+      - dashboard-data:/app/data
+      # Mount memory files from OpenClaw workspace
+      - /home/node/.openclaw/workspace/memory:/app/memory:ro
+      # Mount scripts directory for functionality
+      - /home/node/.openclaw/workspace/scripts:/app/scripts:ro
+
+volumes:
+  dashboard-data:
+    driver: local
