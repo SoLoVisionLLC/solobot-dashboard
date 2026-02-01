@@ -3139,6 +3139,7 @@
             
             currentDetailTask = task;
             currentDetailColumn = column;
+            taskModalOpen = true; // Pause auto-refresh while editing
             
             // Populate modal
             document.getElementById('task-detail-title').value = task.title || '';
@@ -3165,17 +3166,18 @@
             showModal('task-detail-modal');
         };
         
-        window.closeTaskDetailModal = function() {
+        window.closeTaskDetailModal = async function() {
             // Auto-save changes before closing
             if (currentDetailTask && currentDetailColumn) {
                 currentDetailTask.title = document.getElementById('task-detail-title').value;
                 currentDetailTask.description = document.getElementById('task-detail-description').value;
-                saveState('Updated task');
+                await saveState('Updated task');
                 render();
             }
             hideModal('task-detail-modal');
             currentDetailTask = null;
             currentDetailColumn = null;
+            taskModalOpen = false; // Resume auto-refresh
         };
         
         function renderTaskImages() {

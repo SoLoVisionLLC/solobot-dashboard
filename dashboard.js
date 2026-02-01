@@ -203,6 +203,7 @@ let editingTaskId = null;
 let currentModalTask = null;
 let currentModalColumn = null;
 let refreshIntervalId = null;
+let taskModalOpen = false; // Flag to pause auto-refresh while editing tasks
 
 // DEBUG: Set to true to disable all filtering and show EVERYTHING in chat
 const DISABLE_SYSTEM_FILTER = false;
@@ -832,6 +833,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Auto-refresh dashboard state from VPS (for tasks, notes, etc. - NOT chat)
     setInterval(async () => {
+        // Skip auto-refresh while task modal is open (prevents race condition with unsaved changes)
+        if (taskModalOpen) {
+            console.log('[Dashboard] Skipping auto-refresh - task modal open');
+            return;
+        }
         try {
             await loadState();
             // Don't overwrite chat - that comes from Gateway now
@@ -1054,7 +1060,7 @@ async function saveState(changeDescription = null) {
     updateLastSync();
     
     // Sync to server
-    syncToServer();
+    await syncToServer();
 }
 
 async function syncToServer() {
