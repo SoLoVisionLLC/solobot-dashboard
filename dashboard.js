@@ -862,28 +862,26 @@ async function saveCurrentChat() {
 
 async function loadSessionHistory(sessionKey) {
     try {
-        // Fetch session transcript from server
-        const response = await fetch(`/api/session/${encodeURIComponent(sessionKey)}/history`);
-        if (!response.ok) {
-            console.warn('[Dashboard] No history available for session:', sessionKey);
+        // Find session in available sessions (which now includes messages)
+        const session = availableSessions.find(s => s.key === sessionKey);
+        
+        if (session?.messages && session.messages.length > 0) {
+            // Convert to chat format
+            chatHistory = session.messages.map(msg => ({
+                role: msg.role === 'assistant' ? 'model' : msg.role,
+                content: msg.content || '',
+                timestamp: msg.timestamp || Date.now(),
+                name: msg.name
+            }));
+            
+            renderChat();
+            renderChatPage();
+            console.log(`[Dashboard] Loaded ${session.messages.length} messages from ${sessionKey}`);
+        } else {
+            console.warn('[Dashboard] No messages in session:', sessionKey);
             // Try loading from archived chats as fallback
             await loadArchivedChat(sessionKey);
-            return;
         }
-        
-        const data = await response.json();
-        const messages = data.messages || [];
-        
-        // Convert to chat format and add to history
-        chatHistory = messages.map(msg => ({
-            role: msg.role === 'assistant' ? 'model' : msg.role,
-            content: msg.content || '',
-            timestamp: msg.timestamp || Date.now()
-        }));
-        
-        renderChat();
-        renderChatPage();
-        console.log(`[Dashboard] Loaded ${messages.length} messages from ${sessionKey}`);
     } catch (e) {
         console.error('[Dashboard] Failed to load session history:', e);
         // Fallback to archived chat
