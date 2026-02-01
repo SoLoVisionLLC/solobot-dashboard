@@ -683,6 +683,40 @@ const server = http.createServer((req, res) => {
   }
   
   // Change AI Model endpoint
+  // Get available models list (for dropdowns)
+  if (url.pathname === '/api/models/list' && req.method === 'GET') {
+    // Curated list of available models by provider
+    const models = {
+      anthropic: [
+        { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' },
+        { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'balanced' },
+        { id: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', tier: 'balanced' },
+        { id: 'anthropic/claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', tier: 'fast' }
+      ],
+      openai: [
+        { id: 'openai/gpt-4o', name: 'GPT-4o', tier: 'flagship' },
+        { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', tier: 'fast' },
+        { id: 'openai/o1', name: 'o1', tier: 'reasoning' },
+        { id: 'openai/o3-mini', name: 'o3 Mini', tier: 'reasoning' }
+      ],
+      google: [
+        { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', tier: 'fast' },
+        { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', tier: 'flagship' }
+      ],
+      moonshot: [
+        { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }
+      ],
+      openrouter: [
+        { id: 'openrouter/auto', name: 'Auto (Best Match)', tier: 'auto' }
+      ]
+    };
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(models));
+    return;
+  }
+  
+  // Request model change (stored in state, OpenClaw agent handles actual change)
   if (url.pathname === '/api/models/set' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -696,39 +730,31 @@ const server = http.createServer((req, res) => {
           return;
         }
         
-        console.log(`[Server] Attempting to change model to: ${modelId}`);
+        console.log(`[Server] Model change requested: ${modelId}`);
         
-        // Execute the moltbot command to change model
-        const exec = require('child_process').execSync;
-        const result = exec(`moltbot models set "${modelId}" 2>&1`, { encoding: 'utf8' });
+        // Update state with requested model
+        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        state.requestedModel = {
+          modelId: modelId,
+          provider: modelId.split('/')[0],
+          name: modelId.split('/').pop(),
+          requestedAt: Date.now()
+        };
+        state.lastSync = Date.now();
+        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
         
-        console.log(`[Server] Model change result: ${result}`);
-        
-        // Check if command succeeded by looking for error indicators
-        const hasError = result.includes('error') || result.includes('Error') || result.includes('Failed');
-        
-        if (hasError) {
-          console.error(`[Server] Model change failed: ${result}`);
-          res.writeHead(500);
-          res.end(JSON.stringify({ 
-            error: 'Model change command failed', 
-            details: result.trim() 
-          }));
-        } else {
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ 
-            ok: true, 
-            message: result,
-            modelId: modelId 
-          }));
-        }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ 
+          ok: true, 
+          message: 'Model change requested. SoLoBot will apply it.',
+          modelId: modelId 
+        }));
         
       } catch (e) {
-        console.error('[Server] Failed to change model:', e.message);
-        console.error('[Server] Error stack:', e.stack);
+        console.error('[Server] Failed to request model change:', e.message);
         res.writeHead(500);
         res.end(JSON.stringify({ 
-          error: 'Failed to execute model change command', 
+          error: 'Failed to save model change request', 
           details: e.message 
         }));
       }
@@ -738,38 +764,48 @@ const server = http.createServer((req, res) => {
   
   // Get current model endpoint
   if (url.pathname === '/api/models/current' && req.method === 'GET') {
+    // Get current model from state.json (updated by OpenClaw agent)
     try {
-      const exec = require('child_process').execSync;
-      const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+      const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      const modelInfo = state.currentModel || { 
+        modelId: 'anthropic/claude-opus-4-5',
+        provider: 'anthropic',
+        name: 'claude-opus-4-5'
+      };
       
-      if (result) {
-        const parts = result.trim().split(/\s+/);
-        const modelId = parts[0];
-        const tags = parts[parts.length - 1] || '';
-        
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({
-          modelId: modelId,
-          provider: modelId.split('/')[0],
-          name: modelId.split('/').pop(),
-          isDefault: tags.includes('default'),
-          isConfigured: tags.includes('configured')
-        }));
-      } else {
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({
-          error: 'No models found',
-          message: 'Could not determine current model'
-        }));
-      }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(modelInfo));
     } catch (e) {
-      console.error('[Server] Failed to get current model:', e.message);
+      console.error('[Server] Failed to get current model from state:', e.message);
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({
-        error: 'Failed to get current model',
-        details: e.message
+        modelId: 'anthropic/claude-opus-4-5',
+        provider: 'anthropic',
+        name: 'claude-opus-4-5'
       }));
     }
+    return;
+  }
+  
+  // Update current model (called by OpenClaw agent)
+  if (url.pathname === '/api/models/current' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const modelInfo = JSON.parse(body);
+        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        state.currentModel = modelInfo;
+        state.lastSync = Date.now();
+        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, model: modelInfo }));
+      } catch (e) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
   
