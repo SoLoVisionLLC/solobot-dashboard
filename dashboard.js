@@ -841,9 +841,11 @@ window.switchToSession = async function(sessionKey) {
         // 1. Save current chat as safeguard
         await saveCurrentChat();
         
-        // 2. Update session config
+        // 2. Update session config and input field
         currentSessionName = sessionKey;
         GATEWAY_CONFIG.sessionKey = sessionKey;
+        const sessionInput = document.getElementById('gateway-session');
+        if (sessionInput) sessionInput.value = sessionKey;
 
         // 3. Clear current chat (skip confirmation when switching sessions)
         await clearChatHistory(true);
@@ -2535,6 +2537,10 @@ window.startNewSession = async function() {
     // Switch gateway to new session - need to reconnect with new session key
     currentSessionName = sessionKey;
     GATEWAY_CONFIG.sessionKey = sessionKey;
+
+    // Update session input field (so connectToGateway uses it)
+    const sessionInput = document.getElementById('gateway-session');
+    if (sessionInput) sessionInput.value = sessionKey;
 
     // Update session display
     const nameEl = document.getElementById('chat-page-session-name');
