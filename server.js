@@ -697,17 +697,20 @@ const server = http.createServer((req, res) => {
     
     // Default configured models (SoLo's setup as of 2026-02-01)
     const models = {
+      'openai-codex': [
+        { id: 'openai-codex/gpt-5.2-codex', name: 'GPT-5.2 Codex ⭐', tier: 'flagship' }
+      ],
       anthropic: [
-        { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5 ⭐', tier: 'flagship' }
+        { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' }
       ],
       'google-antigravity': [
-        { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking (AG)', tier: 'flagship' }
+        { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking', tier: 'flagship' }
       ],
       moonshot: [
-        { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2 ⭐', tier: 'flagship' }
+        { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }
       ],
       openrouter: [
-        { id: 'openrouter/auto', name: 'Auto (Best Match)', tier: 'auto' }
+        { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
       ]
     };
     
