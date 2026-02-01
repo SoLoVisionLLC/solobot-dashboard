@@ -1279,8 +1279,9 @@
             transition: margin-left 0.2s ease, max-width 0.2s ease;
         }
         
-        /* Adjust content when sidebar is pinned open */
-        .sidebar.pinned ~ .app-content {
+        /* Adjust content when sidebar is expanded (pinned or hovered) */
+        .sidebar.pinned ~ .app-content,
+        .sidebar:hover ~ .app-content {
             margin-left: 200px;
             max-width: calc(100vw - 200px);
         }
@@ -1357,17 +1358,19 @@
             overflow: hidden;
         }
         
-        /* Prevent page-level scroll on chat/system pages */
+        /* Chat/system pages take full height (main header hidden on these pages) */
         #page-chat,
         #page-system {
             overflow: hidden;
-            height: calc(100vh - 60px);
-            max-height: calc(100vh - 60px);
+            height: 100vh;
+            max-height: 100vh;
         }
         
-        /* Hide footer on chat/system pages */
+        /* Hide footer and main header on chat/system pages (they have their own headers) */
         body:has(#page-chat.active) .footer,
-        body:has(#page-system.active) .footer {
+        body:has(#page-system.active) .footer,
+        body:has(#page-chat.active) .header,
+        body:has(#page-system.active) .header {
             display: none;
         }
         
