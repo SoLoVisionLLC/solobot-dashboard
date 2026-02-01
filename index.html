@@ -1882,21 +1882,8 @@
                 </div>
 
                 <div class="header-meta">
-                    <div>
-                        Provider: 
-                        <select id="provider-select" class="header-select" onchange="changeProvider()">
-                            <option value="anthropic">Anthropic</option>
-                            <option value="openai">OpenAI</option>
-                            <option value="google">Google</option>
-                            <option value="openrouter">OpenRouter</option>
-                        </select>
-                    </div>
-                    <div>
-                        Model: 
-                        <select id="model-select" class="header-select" onchange="changeModel()">
-                            <!-- Models populated dynamically based on provider -->
-                        </select>
-                    </div>
+                    <div>Provider: <span id="provider-name">--</span></div>
+                    <div>Model: <span id="model-name">--</span></div>
                 </div>
 
                 <button class="theme-toggle" onclick="openSettingsModal()" title="Settings">
@@ -2661,25 +2648,21 @@
                 <div class="modal-section-content">
                     <div class="setting-row">
                         <div class="setting-info">
-                            <div class="setting-title">AI Provider</div>
-                            <div class="setting-desc">Select AI service provider</div>
+                            <div class="setting-title">Current Provider</div>
+                            <div class="setting-desc">AI service currently in use</div>
                         </div>
-                        <select id="setting-provider" onchange="updateSetting('provider', this.value)" class="select">
-                            <option value="anthropic">Anthropic</option>
-                            <option value="openai">OpenAI</option>
-                            <option value="google">Google</option>
-                            <option value="openrouter">OpenRouter</option>
-                        </select>
+                        <div id="current-provider-display" style="font-weight: 600; color: var(--text-primary);">--</div>
                     </div>
                     <div class="setting-row">
                         <div class="setting-info">
-                            <div class="setting-title">AI Model</div>
-                            <div class="setting-desc">Select specific model</div>
+                            <div class="setting-title">Current Model</div>
+                            <div class="setting-desc">Specific model in use</div>
                         </div>
-                        <select id="setting-model" onchange="updateSetting('model', this.value)" class="select">
-                            <!-- Models populated dynamically -->
-                        </select>
+                        <div id="current-model-display" style="font-weight: 600; color: var(--text-primary);">--</div>
                     </div>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2);">
+                        Provider and model are configured at the OpenClaw gateway level.
+                    </p>
                 </div>
             </div>
 

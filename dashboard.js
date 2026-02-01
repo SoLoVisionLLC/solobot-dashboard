@@ -388,47 +388,15 @@ function isSystemMessage(text, from) {
     return false;
 }
 
-// Provider and Model selection functions
+// Provider and Model selection functions (currently just for display)
 window.changeProvider = function() {
-    const providerSelect = document.getElementById('provider-select');
-    const modelSelect = document.getElementById('model-select');
-    const selectedProvider = providerSelect.value;
-    
-    // Update provider display
-    document.getElementById('provider-name').textContent = selectedProvider;
-    
-    // Update model dropdown based on provider
-    updateModelDropdown(selectedProvider);
-    
-    // Save to localStorage
-    localStorage.setItem('selected_provider', selectedProvider);
-    
-    // Log the change
-    console.log(`[Dashboard] AI Provider changed to: ${selectedProvider}`);
-    
-    // If gateway is connected, we might need to reconnect with new provider
-    if (gateway && gateway.isConnected()) {
-        showToast(`Provider changed to ${selectedProvider}`, 'success');
-    }
+    console.warn('[Dashboard] Provider selection not implemented - providers are configured at OpenClaw gateway level');
+    showToast('Providers must be configured at the OpenClaw gateway level', 'warning');
 };
 
 window.changeModel = function() {
-    const modelSelect = document.getElementById('model-select');
-    const selectedModel = modelSelect.value;
-    
-    // Update model display
-    document.getElementById('model-name').textContent = selectedModel;
-    
-    // Save to localStorage
-    localStorage.setItem('selected_model', selectedModel);
-    
-    // Log the change
-    console.log(`[Dashboard] AI Model changed to: ${selectedModel}`);
-    
-    // If gateway is connected, we might need to reconnect with new model
-    if (gateway && gateway.isConnected()) {
-        showToast(`Model changed to ${selectedModel}`, 'success');
-    }
+    console.warn('[Dashboard] Model selection not implemented - models are configured at OpenClaw gateway level');
+    showToast('Models must be configured at the OpenClaw gateway level', 'warning');
 };
 
 function updateModelDropdown(provider) {
@@ -449,48 +417,28 @@ function updateModelDropdown(provider) {
 }
 
 function getModelsForProvider(provider) {
-    const modelMap = {
-        'anthropic': [
-            { value: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-            { value: 'claude-3-opus', name: 'Claude 3 Opus', selected: true },
-            { value: 'claude-3-haiku', name: 'Claude 3 Haiku' }
-        ],
-        'openai': [
-            { value: 'gpt-4-turbo', name: 'GPT-4 Turbo', selected: true },
-            { value: 'gpt-4', name: 'GPT-4' },
-            { value: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }
-        ],
-        'google': [
-            { value: 'gemini-pro', name: 'Gemini Pro', selected: true },
-            { value: 'gemini-pro-vision', name: 'Gemini Pro Vision' }
-        ],
-        'openrouter': [
-            { value: 'openrouter/auto', name: 'Auto (Best)', selected: true },
-            { value: 'anthropic/claude-3-opus', name: 'Claude 3 Opus' },
-            { value: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' }
-        ]
-    };
-    
-    return modelMap[provider] || modelMap['anthropic'];
+    // For now, return empty list - provider/model should come from OpenClaw configuration
+    // This function will be updated when we know how OpenClaw exposes available models
+    return [];
 }
 
-// Initialize dropdowns on page load
+// Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Load saved preferences
-    const savedProvider = localStorage.getItem('selected_provider') || 'anthropic';
-    const savedModel = localStorage.getItem('selected_model') || 'claude-3-opus';
+    // Check if we have server-provided provider/model info
+    const serverProvider = localStorage.getItem('server_provider');
+    const serverModel = localStorage.getItem('server_model');
+    const displayProvider = serverProvider || localStorage.getItem('selected_provider') || 'anthropic';
+    const displayModel = serverModel || localStorage.getItem('selected_model') || 'claude-3-opus';
     
-    // Log current configuration
-    console.log(`[Dashboard] Initializing with AI Provider: ${savedProvider}, Model: ${savedModel}`);
+    console.log(`[Dashboard] Displaying configuration: ${displayProvider}/${displayModel}`);
     
-    // Set initial values
-    document.getElementById('provider-select').value = savedProvider;
-    updateModelDropdown(savedProvider);
-    document.getElementById('model-select').value = savedModel;
+    // Update navbar display
+    document.getElementById('provider-name').textContent = displayProvider;
+    document.getElementById('model-name').textContent = displayModel;
     
-    // Update displays
-    document.getElementById('provider-name').textContent = savedProvider;
-    document.getElementById('model-name').textContent = savedModel;
+    // Update settings modal display
+    document.getElementById('current-provider-display').textContent = displayProvider;
+    document.getElementById('current-model-display').textContent = displayModel;
 });
 
 // Default settings
@@ -3017,17 +2965,10 @@ function toggleConsoleExpand() {
 }
 
 function updateSetting(key, value) {
-    // Handle provider/model changes specially
-    if (key === 'provider') {
-        // Update navbar dropdown
-        document.getElementById('provider-select').value = value;
-        changeProvider();
-        return;
-    }
-    if (key === 'model') {
-        // Update navbar dropdown
-        document.getElementById('model-select').value = value;
-        changeModel();
+    // Handle provider/model changes specially - just show warning
+    if (key === 'provider' || key === 'model') {
+        console.warn(`[Dashboard] Cannot change ${key} from dashboard - must be configured at OpenClaw gateway level`);
+        showToast(`${key.charAt(0).toUpperCase() + key.slice(1)} must be configured at OpenClaw gateway level`, 'warning');
         return;
     }
     

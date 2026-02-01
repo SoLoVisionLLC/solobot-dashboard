@@ -102,6 +102,14 @@ class GatewayClient {
 
             const serverName = result?.server?.host || 'moltbot';
             console.log(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
+            
+            // Check if provider/model info is available
+            if (result?.provider || result?.model) {
+                console.log(`[Gateway] Server provider: ${result.provider || 'unknown'}, model: ${result.model || 'unknown'}`);
+                // Store in localStorage so dashboard can display it
+                if (result.provider) localStorage.setItem('server_provider', result.provider);
+                if (result.model) localStorage.setItem('server_model', result.model);
+            }
 
             this.onConnected(serverName, this.sessionKey);
             this._subscribeToSession(this.sessionKey);
