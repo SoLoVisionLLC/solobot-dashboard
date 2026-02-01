@@ -473,6 +473,64 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // List versions for a file (MUST be before generic GET)
+  if (url.pathname.match(/^\/api\/memory\/(.+)\/versions$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions$/);
+    const filename = decodeURIComponent(match[1]);
+    const safeFilename = filename.replace(/\//g, '__');
+    
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const prefix = `${safeFilename}.`;
+      const versions = fs.readdirSync(VERSIONS_DIR)
+        .filter(f => f.startsWith(prefix))
+        .map(f => {
+          const timestamp = parseInt(f.replace(prefix, ''));
+          const versionPath = path.join(VERSIONS_DIR, f);
+          const stat = fs.statSync(versionPath);
+          return {
+            timestamp,
+            date: new Date(timestamp).toISOString(),
+            size: stat.size,
+            filename: f
+          };
+        })
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      return res.end(JSON.stringify({ versions }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  
+  // Get a specific version content (MUST be before generic GET)
+  if (url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/);
+    const filename = decodeURIComponent(match[1]);
+    const timestamp = match[2];
+    const safeFilename = filename.replace(/\//g, '__');
+    const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
+    
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      if (!fs.existsSync(versionPath)) {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ error: 'Version not found' }));
+      }
+      
+      const content = fs.readFileSync(versionPath, 'utf8');
+      return res.end(JSON.stringify({ 
+        content, 
+        timestamp: parseInt(timestamp),
+        date: new Date(parseInt(timestamp)).toISOString()
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
   // Get a specific memory file
   if (url.pathname.startsWith('/api/memory/') && req.method === 'GET') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
@@ -566,64 +624,6 @@ const server = http.createServer((req, res) => {
       }
     });
     return;
-  }
-  
-  // List versions for a file
-  if (url.pathname.match(/^\/api\/memory\/(.+)\/versions$/) && req.method === 'GET') {
-    const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions$/);
-    const filename = decodeURIComponent(match[1]);
-    const safeFilename = filename.replace(/\//g, '__');
-    
-    res.setHeader('Content-Type', 'application/json');
-    try {
-      const prefix = `${safeFilename}.`;
-      const versions = fs.readdirSync(VERSIONS_DIR)
-        .filter(f => f.startsWith(prefix))
-        .map(f => {
-          const timestamp = parseInt(f.replace(prefix, ''));
-          const versionPath = path.join(VERSIONS_DIR, f);
-          const stat = fs.statSync(versionPath);
-          return {
-            timestamp,
-            date: new Date(timestamp).toISOString(),
-            size: stat.size,
-            filename: f
-          };
-        })
-        .sort((a, b) => b.timestamp - a.timestamp);
-      
-      return res.end(JSON.stringify({ versions }));
-    } catch (e) {
-      res.writeHead(500);
-      return res.end(JSON.stringify({ error: e.message }));
-    }
-  }
-  
-  // Get a specific version content
-  if (url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
-    const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/);
-    const filename = decodeURIComponent(match[1]);
-    const timestamp = match[2];
-    const safeFilename = filename.replace(/\//g, '__');
-    const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
-    
-    res.setHeader('Content-Type', 'application/json');
-    try {
-      if (!fs.existsSync(versionPath)) {
-        res.writeHead(404);
-        return res.end(JSON.stringify({ error: 'Version not found' }));
-      }
-      
-      const content = fs.readFileSync(versionPath, 'utf8');
-      return res.end(JSON.stringify({ 
-        content, 
-        timestamp: parseInt(timestamp),
-        date: new Date(parseInt(timestamp)).toISOString()
-      }));
-    } catch (e) {
-      res.writeHead(500);
-      return res.end(JSON.stringify({ error: e.message }));
-    }
   }
   
   // Restore a version
