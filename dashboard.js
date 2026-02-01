@@ -1026,7 +1026,11 @@ function mergeHistoryMessages(messages) {
 // ===================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[Dashboard] DOMContentLoaded fired - calling loadState()');
     await loadState();
+    console.log('[Dashboard] loadState() completed');
+    console.log('[Dashboard] state.tasks:', JSON.stringify(state.tasks));
+    console.log('[Dashboard] state.tasks.todo length:', state.tasks?.todo?.length);
     
     // Log summary after state is loaded
     const provider = localStorage.getItem('selected_provider') || 'anthropic';
@@ -1171,6 +1175,7 @@ function setupChatDragDrop() {
 // ===================
 
 async function loadState() {
+    console.log('[loadState] Starting...');
     // Preserve current messages and logs
     const currentChat = state.chat;
     const currentSystem = state.system;
@@ -1178,9 +1183,13 @@ async function loadState() {
 
     // Load from VPS first
     try {
+        console.log('[loadState] Fetching /api/state...');
         const response = await fetch('/api/state', { cache: 'no-store' });
+        console.log('[loadState] Response status:', response.status);
         if (response.ok) {
             const vpsState = await response.json();
+            console.log('[loadState] VPS state tasks:', vpsState.tasks);
+            console.log('[loadState] VPS todo count:', vpsState.tasks?.todo?.length);
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
             if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
 
@@ -2423,6 +2432,8 @@ function renderConsole() {
 }
 
 function renderTasks() {
+    console.log('[renderTasks] Called with state.tasks:', state.tasks);
+    console.log('[renderTasks] todo count:', state.tasks?.todo?.length);
     ['todo', 'progress', 'done'].forEach(column => {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
