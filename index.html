@@ -1348,11 +1348,11 @@
 
         /* =================== CHAT PAGE STYLES =================== */
         
-        /* Chat/system pages: full viewport, no scroll on body */
+        /* Chat/system pages: below header, no scroll on body */
         #page-chat,
         #page-system {
             position: fixed;
-            top: 0;
+            top: 60px; /* header height */
             left: 64px; /* sidebar collapsed width */
             right: 0;
             bottom: 0;
@@ -1379,11 +1379,9 @@
             overflow: hidden;
         }
         
-        /* Hide footer and main header on chat/system pages (they have their own headers) */
+        /* Hide footer on chat/system pages (but keep header for consistent navbar) */
         body:has(#page-chat.active) .footer,
-        body:has(#page-system.active) .footer,
-        body:has(#page-chat.active) .header,
-        body:has(#page-system.active) .header {
+        body:has(#page-system.active) .footer {
             display: none;
         }
         
@@ -2159,14 +2157,11 @@
         <!-- =================== CHAT PAGE =================== -->
         <div id="page-chat" class="page">
             <div class="chat-page-wrapper">
-                <!-- Minimal Header -->
+                <!-- Chat Actions Bar -->
                 <div class="chat-page-header">
                     <div class="chat-page-title">
-                        <h1>💬 SoLoBot</h1>
-                        <div class="chat-page-status">
-                            <span id="chat-page-status-dot" class="status-dot idle"></span>
-                            <span id="chat-page-status-text">Disconnected</span>
-                        </div>
+                        <span id="chat-page-status-dot" class="status-dot idle"></span>
+                        <span id="chat-page-status-text">Disconnected</span>
                     </div>
                     <div class="chat-page-actions">
                         <button onclick="scrollChatToBottom()" class="btn btn-ghost" title="Scroll to bottom">
@@ -2177,9 +2172,6 @@
                         </button>
                         <button onclick="clearChatHistory()" class="btn btn-ghost" title="Clear chat">
                             🗑️
-                        </button>
-                        <button onclick="openSettingsModal()" class="btn btn-ghost" title="Settings">
-                            ⚙️
                         </button>
                     </div>
                 </div>
