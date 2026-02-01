@@ -272,6 +272,31 @@ window.showConfirm = showConfirm;
 window.closeConfirmModal = closeConfirmModal;
 window.showToast = showToast;
 
+// === OVERRIDE NATIVE alert/confirm ===
+// Intercept ALL browser dialogs and use our custom UI instead
+window.alert = function(message) {
+    showToast(message, 'info', 5000);
+};
+
+// Store original confirm for emergency use
+const _originalConfirm = window.confirm;
+
+window.confirm = function(message) {
+    // Show our custom confirm modal
+    // Since confirm() is synchronous, we show the modal but return false
+    // to block the action. Code should be refactored to use showConfirm().
+    console.warn('[Dashboard] Native confirm() intercepted. Use showConfirm() for proper async handling.');
+    
+    // Show toast explaining what happened
+    showToast('Action blocked - please try again', 'warning');
+    
+    // Show the confirm modal (user can see the message)
+    showConfirm(message, 'Confirm');
+    
+    // Return false to block the synchronous action
+    return false;
+};
+
 // Classify messages as system/heartbeat noise vs real chat
 function isSystemMessage(text, from) {
     // DEBUG MODE: Show everything in chat
