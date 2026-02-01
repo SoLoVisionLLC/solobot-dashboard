@@ -798,6 +798,10 @@ window.switchToSession = async function(sessionKey) {
     showToast(`Switching to ${sessionKey}...`, 'info');
     
     try {
+        // 1. Save current chat as safeguard
+        await saveCurrentChat();
+        
+        // 2. Send switch request to server
         const response = await fetch('/api/session/switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -806,8 +810,13 @@ window.switchToSession = async function(sessionKey) {
         
         const result = await response.json();
         if (result.ok) {
-            showToast(`Session switch requested: ${sessionKey}`, 'success');
-            // Update current session display
+            // 3. Clear current chat
+            clearChatHistory();
+            
+            // 4. Load new session's history
+            await loadSessionHistory(sessionKey);
+            
+            // 5. Update current session display
             currentSessionName = sessionKey;
             const nameEl = document.getElementById('chat-page-session-name');
             if (nameEl) {
@@ -816,12 +825,93 @@ window.switchToSession = async function(sessionKey) {
             }
             // Refresh dropdown to show new selection
             populateSessionDropdown();
+            
+            showToast(`Switched to ${sessionKey}`, 'success');
         } else {
             showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
         }
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
+    }
+}
+
+async function saveCurrentChat() {
+    // Save current chat messages to state as safeguard
+    try {
+        const response = await fetch('/api/state');
+        const state = await response.json();
+        
+        // Save chat history to archivedChats
+        if (!state.archivedChats) state.archivedChats = {};
+        state.archivedChats[currentSessionName] = {
+            savedAt: Date.now(),
+            messages: chatHistory.slice(-100) // Last 100 messages
+        };
+        
+        await fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state)
+        });
+        console.log('[Dashboard] Saved current chat as safeguard');
+    } catch (e) {
+        console.warn('[Dashboard] Failed to save chat safeguard:', e);
+    }
+}
+
+async function loadSessionHistory(sessionKey) {
+    try {
+        // Fetch session transcript from server
+        const response = await fetch(`/api/session/${encodeURIComponent(sessionKey)}/history`);
+        if (!response.ok) {
+            console.warn('[Dashboard] No history available for session:', sessionKey);
+            // Try loading from archived chats as fallback
+            await loadArchivedChat(sessionKey);
+            return;
+        }
+        
+        const data = await response.json();
+        const messages = data.messages || [];
+        
+        // Convert to chat format and add to history
+        chatHistory = messages.map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : msg.role,
+            content: msg.content || '',
+            timestamp: msg.timestamp || Date.now()
+        }));
+        
+        renderChat();
+        renderChatPage();
+        console.log(`[Dashboard] Loaded ${messages.length} messages from ${sessionKey}`);
+    } catch (e) {
+        console.error('[Dashboard] Failed to load session history:', e);
+        // Fallback to archived chat
+        await loadArchivedChat(sessionKey);
+    }
+}
+
+async function loadArchivedChat(sessionKey) {
+    try {
+        const response = await fetch('/api/state');
+        const state = await response.json();
+        
+        const archived = state.archivedChats?.[sessionKey];
+        if (archived?.messages) {
+            chatHistory = archived.messages;
+            renderChat();
+            renderChatPage();
+            console.log(`[Dashboard] Loaded ${archived.messages.length} archived messages`);
+        } else {
+            chatHistory = [];
+            renderChat();
+            renderChatPage();
+        }
+    } catch (e) {
+        console.warn('[Dashboard] Failed to load archived chat:', e);
+        chatHistory = [];
+        renderChat();
+        renderChatPage();
     }
 }
 

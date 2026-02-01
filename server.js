@@ -952,6 +952,53 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Get session history endpoint
+  if (url.pathname.startsWith('/api/session/') && url.pathname.endsWith('/history')) {
+    try {
+      const sessionKey = decodeURIComponent(url.pathname.split('/')[3]);
+      const sessionInfo = state.sessions?.find(s => s.key === sessionKey);
+      
+      if (!sessionInfo?.sessionId) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+      
+      // Read transcript file
+      const transcriptPath = path.join('/home/node/.openclaw/agents/main/sessions', `${sessionInfo.sessionId}.jsonl`);
+      
+      if (!fs.existsSync(transcriptPath)) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ error: 'Transcript not found' }));
+        return;
+      }
+      
+      // Parse JSONL file
+      const lines = fs.readFileSync(transcriptPath, 'utf8').split('\n').filter(l => l.trim());
+      const messages = lines.map(line => {
+        try {
+          const msg = JSON.parse(line);
+          return {
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp || msg.createdAt,
+            name: msg.name
+          };
+        } catch (e) {
+          return null;
+        }
+      }).filter(m => m !== null);
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ ok: true, sessionKey, messages, count: messages.length }));
+    } catch (e) {
+      console.error('[Server] Failed to get session history:', e.message);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Failed to get session history', details: e.message }));
+    }
+    return;
+  }
+
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
