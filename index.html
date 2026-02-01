@@ -1116,31 +1116,27 @@
             width: 24px;
             height: 24px;
             border: none;
-            background: transparent;
+            background: var(--surface-2);
             color: var(--text-secondary);
             cursor: pointer;
             border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            opacity: 0;
-            transition: opacity var(--transition-normal), background var(--transition-normal);
+            transition: background var(--transition-normal);
             font-size: 16px;
             font-weight: bold;
-        }
-        
-        .sidebar:hover .sidebar-toggle,
-        .sidebar.pinned .sidebar-toggle {
-            opacity: 1;
+            z-index: 10;
         }
         
         .sidebar-toggle:hover {
-            background: var(--surface-2);
+            background: var(--surface-3);
             color: var(--text-primary);
         }
         
         .sidebar.pinned .sidebar-toggle {
             color: var(--accent);
+            background: var(--surface-3);
         }
         
         .sidebar-logo {
@@ -2592,6 +2588,7 @@
             const isPinned = sidebar.classList.toggle('pinned');
             localStorage.setItem('sidebarPinned', isPinned);
             icon.textContent = isPinned ? '«' : '»';
+            console.log('Sidebar pinned:', isPinned);
         }
         
         // Restore sidebar state on load
