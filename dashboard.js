@@ -2020,7 +2020,7 @@ function renderTasks() {
                             <span class="task-title" style="${doneStyle}">${escapeHtml(task.title)}</span>
                             <span class="badge ${getPriorityBadgeClass(task.priority)}">P${task.priority}</span>
                         </div>
-                        <div class="task-meta">#${index + 1} • ${formatTime(task.created)}</div>
+                        <div class="task-meta">#${index + 1} • ${formatTime(task.created || task.completedAt || task.id?.replace('t',''))}</div>
                     </div>
                 </div>
 
@@ -2140,7 +2140,9 @@ function getDocIconSymbol(type, url) {
 // ===================
 
 function formatTime(timestamp) {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
