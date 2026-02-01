@@ -384,6 +384,29 @@
         .header-meta span {
             color: var(--text-primary);
         }
+        
+        /* Header dropdown selectors */
+        .header-select {
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 12px;
+            padding: 2px 4px;
+            margin-left: 4px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        
+        .header-select:hover {
+            border-color: var(--brand-red);
+        }
+        
+        .header-select:focus {
+            outline: none;
+            border-color: var(--brand-red);
+            box-shadow: 0 0 0 2px rgba(188, 32, 38, 0.2);
+        }
 
         /* Theme toggle */
         .theme-toggle {
@@ -1859,8 +1882,21 @@
                 </div>
 
                 <div class="header-meta">
-                    <div>Provider: <span id="provider-name">anthropic</span></div>
-                    <div>Model: <span id="model-name">opus 4.5</span></div>
+                    <div>
+                        Provider: 
+                        <select id="provider-select" class="header-select" onchange="changeProvider()">
+                            <option value="anthropic">Anthropic</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="google">Google</option>
+                            <option value="openrouter">OpenRouter</option>
+                        </select>
+                    </div>
+                    <div>
+                        Model: 
+                        <select id="model-select" class="header-select" onchange="changeModel()">
+                            <!-- Models populated dynamically based on provider -->
+                        </select>
+                    </div>
                 </div>
 
                 <button class="theme-toggle" onclick="openSettingsModal()" title="Settings">
@@ -2616,6 +2652,34 @@
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2);">
                         Connect to the same session as Telegram/Android for mirrored chat.
                     </p>
+                </div>
+            </div>
+
+            <!-- AI Provider & Model -->
+            <div class="modal-section">
+                <h4 class="modal-section-title">🤖 AI Provider & Model</h4>
+                <div class="modal-section-content">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">AI Provider</div>
+                            <div class="setting-desc">Select AI service provider</div>
+                        </div>
+                        <select id="setting-provider" onchange="updateSetting('provider', this.value)" class="select">
+                            <option value="anthropic">Anthropic</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="google">Google</option>
+                            <option value="openrouter">OpenRouter</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">AI Model</div>
+                            <div class="setting-desc">Select specific model</div>
+                        </div>
+                        <select id="setting-model" onchange="updateSetting('model', this.value)" class="select">
+                            <!-- Models populated dynamically -->
+                        </select>
+                    </div>
                 </div>
             </div>
 

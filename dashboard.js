@@ -389,6 +389,102 @@ function isSystemMessage(text, from) {
     return false;
 }
 
+// Provider and Model selection functions
+window.changeProvider = function() {
+    const providerSelect = document.getElementById('provider-select');
+    const modelSelect = document.getElementById('model-select');
+    const selectedProvider = providerSelect.value;
+    
+    // Update provider display
+    document.getElementById('provider-name').textContent = selectedProvider;
+    
+    // Update model dropdown based on provider
+    updateModelDropdown(selectedProvider);
+    
+    // Save to localStorage
+    localStorage.setItem('selected_provider', selectedProvider);
+    
+    // If gateway is connected, we might need to reconnect with new provider
+    if (gateway && gateway.isConnected()) {
+        showToast(`Provider changed to ${selectedProvider}`, 'success');
+    }
+};
+
+window.changeModel = function() {
+    const modelSelect = document.getElementById('model-select');
+    const selectedModel = modelSelect.value;
+    
+    // Update model display
+    document.getElementById('model-name').textContent = selectedModel;
+    
+    // Save to localStorage
+    localStorage.setItem('selected_model', selectedModel);
+    
+    // If gateway is connected, we might need to reconnect with new model
+    if (gateway && gateway.isConnected()) {
+        showToast(`Model changed to ${selectedModel}`, 'success');
+    }
+};
+
+function updateModelDropdown(provider) {
+    const modelSelect = document.getElementById('model-select');
+    const models = getModelsForProvider(provider);
+    
+    // Clear current options
+    modelSelect.innerHTML = '';
+    
+    // Add new options
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.name;
+        if (model.selected) option.selected = true;
+        modelSelect.appendChild(option);
+    });
+}
+
+function getModelsForProvider(provider) {
+    const modelMap = {
+        'anthropic': [
+            { value: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
+            { value: 'claude-3-opus', name: 'Claude 3 Opus', selected: true },
+            { value: 'claude-3-haiku', name: 'Claude 3 Haiku' }
+        ],
+        'openai': [
+            { value: 'gpt-4-turbo', name: 'GPT-4 Turbo', selected: true },
+            { value: 'gpt-4', name: 'GPT-4' },
+            { value: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }
+        ],
+        'google': [
+            { value: 'gemini-pro', name: 'Gemini Pro', selected: true },
+            { value: 'gemini-pro-vision', name: 'Gemini Pro Vision' }
+        ],
+        'openrouter': [
+            { value: 'openrouter/auto', name: 'Auto (Best)', selected: true },
+            { value: 'anthropic/claude-3-opus', name: 'Claude 3 Opus' },
+            { value: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' }
+        ]
+    };
+    
+    return modelMap[provider] || modelMap['anthropic'];
+}
+
+// Initialize dropdowns on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load saved preferences
+    const savedProvider = localStorage.getItem('selected_provider') || 'anthropic';
+    const savedModel = localStorage.getItem('selected_model') || 'claude-3-opus';
+    
+    // Set initial values
+    document.getElementById('provider-select').value = savedProvider;
+    updateModelDropdown(savedProvider);
+    document.getElementById('model-select').value = savedModel;
+    
+    // Update displays
+    document.getElementById('provider-name').textContent = savedProvider;
+    document.getElementById('model-name').textContent = savedModel;
+});
+
 // Default settings
 const defaultSettings = {
     pickupFreq: 'disabled',
@@ -2488,6 +2584,14 @@ function hideModal(id) {
 function openSettingsModal() {
     showModal('settings-modal');
 
+    // Initialize provider/model dropdowns
+    const savedProvider = localStorage.getItem('selected_provider') || 'anthropic';
+    const savedModel = localStorage.getItem('selected_model') || 'claude-3-opus';
+    
+    document.getElementById('setting-provider').value = savedProvider;
+    updateModelDropdown(savedProvider); // This will populate the model dropdown
+    document.getElementById('setting-model').value = savedModel;
+
     // Populate gateway settings
     const hostEl = document.getElementById('gateway-host');
     const portEl = document.getElementById('gateway-port');
@@ -2900,6 +3004,20 @@ function toggleConsoleExpand() {
 }
 
 function updateSetting(key, value) {
+    // Handle provider/model changes specially
+    if (key === 'provider') {
+        // Update navbar dropdown
+        document.getElementById('provider-select').value = value;
+        changeProvider();
+        return;
+    }
+    if (key === 'model') {
+        // Update navbar dropdown
+        document.getElementById('model-select').value = value;
+        changeModel();
+        return;
+    }
+    
     // Settings are stored in localStorage
     localStorage.setItem(`setting_${key}`, JSON.stringify(value));
     console.log(`Setting ${key} = ${value}`);
