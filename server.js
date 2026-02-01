@@ -321,10 +321,30 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const update = JSON.parse(body);
+        
+        // PROTECT tasks and notes from being wiped by empty client state!
+        // Only update tasks/notes if client has actual content, or if server is empty
+        const serverHasTasks = countTasks(state) > 0;
+        const serverHasNotes = (state.notes?.length || 0) > 0;
+        const clientHasTasks = countTasks(update) > 0;
+        const clientHasNotes = (update.notes?.length || 0) > 0;
+        
+        // If server has tasks but client doesn't, preserve server tasks
+        if (serverHasTasks && !clientHasTasks) {
+          console.log('[Sync] Protecting tasks - server has', countTasks(state), 'tasks, client has 0');
+          delete update.tasks;
+        }
+        
+        // If server has notes but client doesn't, preserve server notes
+        if (serverHasNotes && !clientHasNotes) {
+          console.log('[Sync] Protecting notes - server has', state.notes.length, 'notes, client has 0');
+          delete update.notes;
+        }
+        
         state = { ...state, ...update, lastSync: Date.now() };
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true }));
+        res.end(JSON.stringify({ ok: true, protected: { tasks: serverHasTasks && !clientHasTasks, notes: serverHasNotes && !clientHasNotes } }));
       } catch (e) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: e.message }));
