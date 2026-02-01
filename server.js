@@ -955,21 +955,30 @@ const server = http.createServer((req, res) => {
   // Get session history endpoint
   if (url.pathname.startsWith('/api/session/') && url.pathname.endsWith('/history')) {
     try {
-      const sessionKey = decodeURIComponent(url.pathname.split('/')[3]);
+      // Extract session key from URL (everything between /api/session/ and /history)
+      const pathMatch = url.pathname.match(/\/api\/session\/(.+)\/history$/);
+      const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
+      
+      console.log(`[Server] History request for session: ${sessionKey}`);
+      console.log(`[Server] Available sessions: ${state.sessions?.map(s => s.key).join(', ')}`);
+      
       const sessionInfo = state.sessions?.find(s => s.key === sessionKey);
       
       if (!sessionInfo?.sessionId) {
+        console.log(`[Server] Session not found: ${sessionKey}`);
         res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Session not found' }));
+        res.end(JSON.stringify({ error: 'Session not found', sessionKey }));
         return;
       }
       
       // Read transcript file
       const transcriptPath = path.join('/home/node/.openclaw/agents/main/sessions', `${sessionInfo.sessionId}.jsonl`);
+      console.log(`[Server] Looking for transcript at: ${transcriptPath}`);
       
       if (!fs.existsSync(transcriptPath)) {
+        console.log(`[Server] Transcript not found at: ${transcriptPath}`);
         res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Transcript not found' }));
+        res.end(JSON.stringify({ error: 'Transcript not found', path: transcriptPath }));
         return;
       }
       
