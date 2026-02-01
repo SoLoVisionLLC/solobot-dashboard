@@ -207,6 +207,71 @@ let refreshIntervalId = null;
 // DEBUG: Set to true to disable all filtering and show EVERYTHING in chat
 const DISABLE_SYSTEM_FILTER = false;
 
+// ===================
+// CUSTOM CONFIRM & TOAST (no browser alerts!)
+// ===================
+
+let confirmResolver = null;
+
+// Custom confirm dialog - returns Promise<boolean>
+function showConfirm(message, title = 'Confirm', okText = 'OK') {
+    return new Promise((resolve) => {
+        confirmResolver = resolve;
+        document.getElementById('confirm-modal-title').textContent = title;
+        document.getElementById('confirm-modal-message').innerHTML = message;
+        document.getElementById('confirm-modal-ok').textContent = okText;
+        showModal('confirm-modal');
+    });
+}
+
+function closeConfirmModal(result) {
+    hideModal('confirm-modal');
+    if (confirmResolver) {
+        confirmResolver(result);
+        confirmResolver = null;
+    }
+}
+
+// Toast notification - replaces alert()
+function showToast(message, type = 'info', duration = 4000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease;
+        max-width: 350px;
+        word-wrap: break-word;
+    `;
+    
+    // Set color based on type
+    switch(type) {
+        case 'success': toast.style.background = 'var(--success)'; break;
+        case 'error': toast.style.background = 'var(--error)'; break;
+        case 'warning': toast.style.background = '#f59e0b'; break;
+        default: toast.style.background = 'var(--accent)'; break;
+    }
+    
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    // Auto-remove after duration
+    setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// Make functions globally available
+window.showConfirm = showConfirm;
+window.closeConfirmModal = closeConfirmModal;
+window.showToast = showToast;
+
 // Classify messages as system/heartbeat noise vs real chat
 function isSystemMessage(text, from) {
     // DEBUG MODE: Show everything in chat
@@ -363,7 +428,7 @@ function connectToGateway() {
     const sessionKey = document.getElementById('gateway-session')?.value || GATEWAY_CONFIG.sessionKey || 'main';
 
     if (!host) {
-        alert('Please enter a gateway host in Settings');
+        showToast('Please enter a gateway host in Settings', 'warning');
         return;
     }
 
@@ -1095,7 +1160,7 @@ async function sendChatMessage() {
     if (!text && !pendingImage) return;
 
     if (!gateway || !gateway.isConnected()) {
-        alert('Not connected to Gateway. Please connect first.');
+        showToast('Not connected to Gateway. Please connect first.', 'warning');
         return;
     }
 
@@ -1704,7 +1769,7 @@ async function sendChatPageMessage() {
     if (!text && !chatPagePendingImage) return;
     
     if (!gateway || !gateway.isConnected()) {
-        alert('Not connected to Gateway. Please connect first in Settings.');
+        showToast('Not connected to Gateway. Please connect first in Settings.', 'warning');
         return;
     }
     
@@ -1912,11 +1977,12 @@ function createSystemMessage(msg) {
     return wrapper;
 }
 
-function clearSystemHistory() {
-    if (confirm('Clear all system messages?')) {
+async function clearSystemHistory() {
+    if (await showConfirm('Clear all system messages?', 'Clear History')) {
         state.system.messages = [];
         persistSystemMessages();
         renderSystemPage();
+        showToast('System messages cleared', 'success');
     }
 }
 
@@ -2588,12 +2654,13 @@ function restoreFromArchive(taskId) {
     updateArchiveBadge();
 }
 
-function clearArchive() {
-    if (confirm('Delete all archived tasks permanently?')) {
+async function clearArchive() {
+    if (await showConfirm('Delete all archived tasks permanently?', 'Clear Archive', 'Delete All')) {
         state.tasks.archive = [];
         saveState('Cleared archive');
         renderArchive();
         updateArchiveBadge();
+        showToast('Archive cleared', 'success');
     }
 }
 
@@ -2723,15 +2790,15 @@ function updateSetting(key, value) {
     console.log(`Setting ${key} = ${value}`);
 }
 
-function resetToServerState() {
-    if (confirm('This will reload all data from the server. Continue?')) {
+async function resetToServerState() {
+    if (await showConfirm('This will reload all data from the server. Continue?', 'Reset to Server', 'Reload')) {
         localStorage.removeItem('solovision-dashboard');
         location.reload();
     }
 }
 
-function clearAllData() {
-    if (confirm('This will delete ALL local data. Are you sure?')) {
+async function clearAllData() {
+    if (await showConfirm('This will delete ALL local data. Are you sure?', '⚠️ Delete All Data', 'Delete Everything')) {
         localStorage.clear();
         state = {
             status: 'idle',
@@ -2977,7 +3044,7 @@ window.saveMemoryFile = async function() {
         
     } catch (error) {
         console.error('Error saving memory file:', error);
-        alert(`Failed to save: ${error.message}`);
+        showToast(`Failed to save: ${error.message}`, 'error');
         if (saveBtn) {
             saveBtn.textContent = 'Save';
             saveBtn.disabled = false;

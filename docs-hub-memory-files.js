@@ -347,7 +347,7 @@ async function previewVersion(filepath, timestamp) {
         const historicalData = await historicalRes.json();
         
         if (currentData.error || historicalData.error) {
-            alert(`Error: ${currentData.error || historicalData.error}`);
+            showToast(`Error: ${currentData.error || historicalData.error}`, 'error');
             return;
         }
         
@@ -365,7 +365,7 @@ async function previewVersion(filepath, timestamp) {
         // Show modal
         showModal('diff-modal');
     } catch (e) {
-        alert(`Failed to load version: ${e.message}`);
+        showToast(`Failed to load version: ${e.message}`, 'error');
     }
 }
 
@@ -453,9 +453,12 @@ function restoreFromDiff() {
 
 // Restore a specific version
 async function restoreVersion(filepath, timestamp) {
-    if (!confirm(`Restore file to version from ${new Date(timestamp).toLocaleString()}?\n\nA backup of the current version will be created.`)) {
-        return;
-    }
+    const confirmed = await showConfirm(
+        `Restore file to version from <strong>${new Date(timestamp).toLocaleString()}</strong>?<br><br>A backup of the current version will be created.`,
+        'Restore Version',
+        'Restore'
+    );
+    if (!confirmed) return;
     
     try {
         const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/restore`, {
@@ -467,11 +470,11 @@ async function restoreVersion(filepath, timestamp) {
         const data = await response.json();
         
         if (data.error) {
-            alert(`Error: ${data.error}`);
+            showToast(`Error: ${data.error}`, 'error');
             return;
         }
         
-        alert('✅ Version restored successfully!');
+        showToast('Version restored successfully!', 'success');
         
         // Reload the file
         viewMemoryFile(filepath);
@@ -480,7 +483,7 @@ async function restoreVersion(filepath, timestamp) {
         memoryFilesCache = [];
         lastFetchTime = 0;
     } catch (e) {
-        alert(`Failed to restore: ${e.message}`);
+        showToast(`Failed to restore: ${e.message}`, 'error');
     }
 }
 
@@ -515,7 +518,7 @@ async function saveMemoryFile() {
         const data = await response.json();
         
         if (data.error) {
-            alert(`Failed to save: ${data.error}`);
+            showToast(`Failed to save: ${data.error}`, 'error');
             if (saveBtn) saveBtn.textContent = '💾 Save';
             return;
         }
@@ -538,7 +541,7 @@ async function saveMemoryFile() {
         // Refresh file list in background
         renderMemoryFiles(document.getElementById('memory-search')?.value || '');
     } catch (e) {
-        alert(`Failed to save: ${e.message}`);
+        showToast(`Failed to save: ${e.message}`, 'error');
         if (saveBtn) saveBtn.textContent = '💾 Save';
     }
 }

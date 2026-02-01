@@ -274,6 +274,16 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
 
         /* Section heading */
         .section-title {
@@ -2656,9 +2666,29 @@
     </div><!-- END app-content -->
     </div><!-- END app-layout -->
 
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="confirm-modal-title">Confirm</h3>
+                <button onclick="closeConfirmModal(false)" class="modal-close">✕</button>
+            </div>
+            <div class="modal-body" style="padding: var(--space-4) var(--space-6);">
+                <p id="confirm-modal-message" style="margin: 0; color: var(--text-primary); line-height: 1.5;"></p>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default);">
+                <button onclick="closeConfirmModal(false)" class="btn btn-ghost">Cancel</button>
+                <button onclick="closeConfirmModal(true)" class="btn btn-primary" id="confirm-modal-ok">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 10px;"></div>
+
     <script src="gateway-client.js?v=3.3.0"></script>
-    <script src="docs-hub-memory-files.js?v=2.2.1"></script>
-    <script src="dashboard.js?v=3.34.0"></script>
+    <script src="docs-hub-memory-files.js?v=2.3.0"></script>
+    <script src="dashboard.js?v=3.35.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
