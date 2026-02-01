@@ -453,8 +453,9 @@ function restoreFromDiff() {
 
 // Restore a specific version
 async function restoreVersion(filepath, timestamp) {
+    const dateStr = new Date(timestamp).toLocaleString();
     const confirmed = await showConfirm(
-        `Restore file to version from <strong>${new Date(timestamp).toLocaleString()}</strong>?<br><br>A backup of the current version will be created.`,
+        `Restore to version from ${dateStr}?\n\nA backup of current version will be created.`,
         'Restore Version',
         'Restore'
     );
