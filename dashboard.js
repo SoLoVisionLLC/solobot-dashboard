@@ -908,13 +908,13 @@ async function saveState(changeDescription = null) {
         if (stateForStorage.chat && stateForStorage.chat.messages) {
             stateForStorage.chat.messages = stateForStorage.chat.messages.slice(-50);
         }
-        // Limit console logs to last 20
+        // Keep more console logs for review (last 500)
         if (stateForStorage.console && stateForStorage.console.logs) {
-            stateForStorage.console.logs = stateForStorage.console.logs.slice(-20);
+            stateForStorage.console.logs = stateForStorage.console.logs.slice(-500);
         }
-        // Limit activity to last 30
+        // Keep more activity for review (last 200)
         if (stateForStorage.activity) {
-            stateForStorage.activity = stateForStorage.activity.slice(-30);
+            stateForStorage.activity = stateForStorage.activity.slice(-200);
         }
         localStorage.setItem('solovision-dashboard', JSON.stringify(stateForStorage));
     } catch (e) {
@@ -950,8 +950,8 @@ async function syncToServer() {
                     type: 'info',
                     time: Date.now()
                 });
-                if (state.console.logs.length > 100) {
-                    state.console.logs = state.console.logs.slice(-100);
+                if (state.console.logs.length > 500) {
+                    state.console.logs = state.console.logs.slice(-500);
                 }
                 renderConsole();
             }
@@ -2219,8 +2219,8 @@ function addActivity(action, type = 'info') {
         type
     });
     
-    if (state.activity.length > 100) {
-        state.activity = state.activity.slice(-100);
+    if (state.activity.length > 500) {
+        state.activity = state.activity.slice(-500);
     }
 }
 
@@ -2597,9 +2597,9 @@ function addTerminalLog(text, type = 'info', timestamp = null) {
     
     state.console.logs.push(log);
     
-    // Keep last 100 entries
-    if (state.console.logs.length > 100) {
-        state.console.logs = state.console.logs.slice(-100);
+    // Keep last 500 entries for review
+    if (state.console.logs.length > 500) {
+        state.console.logs = state.console.logs.slice(-500);
     }
     
     renderConsole();
