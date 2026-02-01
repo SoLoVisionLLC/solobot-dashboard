@@ -1394,11 +1394,17 @@ function updateNewMessageIndicator() {
     const indicator = document.getElementById('chat-page-new-indicator');
     if (!indicator) return;
     
-    if (chatPageUserScrolled && chatPageNewMessageCount > 0) {
+    const container = document.getElementById('chat-page-messages');
+    const notAtBottom = container && !isAtBottom(container);
+    
+    if (notAtBottom && chatPageNewMessageCount > 0) {
         indicator.textContent = `↓ ${chatPageNewMessageCount} new message${chatPageNewMessageCount > 1 ? 's' : ''}`;
         indicator.classList.remove('hidden');
     } else {
         indicator.classList.add('hidden');
+        if (!notAtBottom) {
+            chatPageNewMessageCount = 0; // Reset count when at bottom
+        }
     }
 }
 
@@ -1408,13 +1414,8 @@ function setupChatPageScrollListener() {
     if (!container || container.dataset.scrollListenerAttached) return;
     
     container.addEventListener('scroll', () => {
-        const nearBottom = isNearBottom(container);
-        chatPageUserScrolled = !nearBottom;
-        
-        if (nearBottom) {
-            chatPageNewMessageCount = 0;
-            updateNewMessageIndicator();
-        }
+        // Update indicator based on scroll position
+        updateNewMessageIndicator();
         
         // Save position periodically
         saveChatScrollPosition();
@@ -1560,7 +1561,9 @@ function createChatPageMessage(msg) {
 
 // Notify of new message (for indicator)
 function notifyChatPageNewMessage() {
-    if (chatPageUserScrolled) {
+    const container = document.getElementById('chat-page-messages');
+    // Show indicator if user is NOT at the bottom
+    if (container && !isAtBottom(container)) {
         chatPageNewMessageCount++;
         updateNewMessageIndicator();
     }
