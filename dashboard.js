@@ -1194,6 +1194,7 @@ function handleChatEvent(event) {
 }
 
 function loadHistoryMessages(messages) {
+    console.log(`[Dashboard] loadHistoryMessages called with ${messages?.length || 0} messages, session: ${gateway?.sessionKey || 'unknown'}`);
     // Convert gateway history format and classify as chat vs system
     // IMPORTANT: Preserve ALL local messages since Gateway doesn't save user messages (bug #5735)
     const allLocalChatMessages = state.chat.messages.filter(m => m.id.startsWith('m'));
@@ -1242,6 +1243,7 @@ function loadHistoryMessages(messages) {
     });
 
     state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
+    console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local)`);
 
     // Sort chat by time and trim
     state.chat.messages.sort((a, b) => a.time - b.time);
@@ -1300,6 +1302,7 @@ function stopHistoryPolling() {
 }
 
 function mergeHistoryMessages(messages) {
+    console.log(`[Dashboard] mergeHistoryMessages called with ${messages?.length || 0} messages, session: ${gateway?.sessionKey || 'unknown'}`);
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
     const existingIds = new Set(state.chat.messages.map(m => m.id));
@@ -2556,11 +2559,17 @@ window.startNewSession = async function() {
     console.log(`[Dashboard] Session version now ${sessionVersion} (new session)`);
 
     // Clear local chat and cache
+    console.log(`[Dashboard] Clearing chat (had ${state.chat.messages.length} messages)`);
     state.chat.messages = [];
     state.system.messages = [];
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
     localStorage.removeItem('solobot-chat-messages');
+    console.log(`[Dashboard] Chat cleared, now ${state.chat.messages.length} messages`);
+
+    // Render immediately to show empty chat
+    renderChat();
+    renderChatPage();
 
     // Switch gateway to new session - need to reconnect with new session key
     currentSessionName = sessionKey;
