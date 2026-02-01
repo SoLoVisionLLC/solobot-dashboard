@@ -1552,6 +1552,43 @@ function clearChatHistory() {
     }
 }
 
+function startNewSession() {
+    if (!confirm('Start a new session? This will clear chat history and reconnect to the gateway.')) {
+        return;
+    }
+    
+    // Clear local chat
+    state.chat.messages = [];
+    state.system.messages = [];
+    chatPageNewMessageCount = 0;
+    chatPageUserScrolled = false;
+    
+    // Clear localStorage
+    localStorage.removeItem('solobot-chat-messages');
+    localStorage.removeItem('solobot-system-messages');
+    
+    // Clear VPS chat state
+    fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat: { messages: [] } })
+    }).catch(() => {});
+    
+    // Disconnect and reconnect gateway
+    if (gateway && gateway.isConnected()) {
+        disconnectFromGateway();
+        setTimeout(() => {
+            connectToGateway();
+        }, 500);
+    }
+    
+    renderChat();
+    renderChatPage();
+    renderSystemPage();
+    
+    console.log('[Dashboard] Started new session');
+}
+
 // ===================
 // SYSTEM PAGE RENDERING
 // ===================
