@@ -408,6 +408,46 @@ window.updateProviderDisplay = function() {
     updateModelDropdown(selectedProvider);
 };
 
+// Populate provider dropdown dynamically from API
+async function populateProviderDropdown() {
+    const providerSelect = document.getElementById('provider-select');
+    if (!providerSelect) {
+        console.warn('[Dashboard] provider-select element not found');
+        return [];
+    }
+    
+    try {
+        console.log('[Dashboard] Fetching providers from API...');
+        const response = await fetch('/api/models/list');
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
+        
+        const allModels = await response.json();
+        const providers = Object.keys(allModels);
+        
+        console.log('[Dashboard] Got providers:', providers);
+        
+        // Clear existing options
+        providerSelect.innerHTML = '';
+        
+        // Add options for each provider
+        providers.forEach(provider => {
+            const option = document.createElement('option');
+            option.value = provider;
+            // Format display name (capitalize, replace hyphens)
+            option.textContent = provider.split('-').map(w => 
+                w.charAt(0).toUpperCase() + w.slice(1)
+            ).join(' ');
+            providerSelect.appendChild(option);
+        });
+        
+        console.log(`[Dashboard] Populated ${providers.length} providers in dropdown`);
+        return providers;
+    } catch (e) {
+        console.error('[Dashboard] Failed to fetch providers:', e);
+        return [];
+    }
+}
+
 window.changeModel = async function() {
     const modelSelect = document.getElementById('model-select');
     const selectedModel = modelSelect.value;
@@ -563,6 +603,9 @@ let currentModel = 'anthropic/claude-opus-4-5';
 // Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', async function() {
     try {
+        // First populate the provider dropdown dynamically
+        await populateProviderDropdown();
+        
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
         const modelInfo = await response.json();
