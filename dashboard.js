@@ -719,6 +719,42 @@ window.showSessionSwitcher = function() {
     showToast('Session switcher coming soon', 'info');
 }
 
+// Chat Page Session Menu Functions
+window.toggleChatPageSessionMenu = function() {
+    const menu = document.getElementById('chat-page-session-menu');
+    if (!menu) return;
+    menu.classList.toggle('hidden');
+}
+
+window.renameChatPageSession = function() {
+    toggleChatPageSessionMenu();
+    const newName = prompt('Enter new session name:', currentSessionName);
+    if (!newName || newName === currentSessionName) return;
+    
+    fetch('/api/session/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName: currentSessionName, newName })
+    }).then(r => r.json()).then(result => {
+        if (result.ok) {
+            currentSessionName = newName;
+            const nameEl = document.getElementById('chat-page-session-name');
+            if (nameEl) nameEl.textContent = newName;
+            showToast(`Session renamed to "${newName}"`, 'success');
+        } else {
+            showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
+        }
+    }).catch(e => {
+        console.error('[Dashboard] Failed to rename session:', e);
+        showToast('Failed to rename session', 'error');
+    });
+}
+
+window.switchChatPageSession = function() {
+    toggleChatPageSessionMenu();
+    showToast('Session switcher coming soon', 'info');
+}
+
 function initGateway() {
     gateway = new GatewayClient({
         sessionKey: GATEWAY_CONFIG.sessionKey,
@@ -727,10 +763,12 @@ function initGateway() {
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
             
-            // Update session name display
+            // Update session name displays
             currentSessionName = sessionKey;
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) nameEl.textContent = sessionKey;
+            const chatPageNameEl = document.getElementById('chat-page-session-name');
+            if (chatPageNameEl) chatPageNameEl.textContent = sessionKey;
             
             checkRestartToast();
 

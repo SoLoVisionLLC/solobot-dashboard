@@ -2246,6 +2246,25 @@
                     <div class="chat-page-title">
                         <span id="chat-page-status-dot" class="status-dot idle"></span>
                         <span id="chat-page-status-text">Disconnected</span>
+                        <span style="margin: 0 8px; color: var(--border-color);">|</span>
+                        <div style="position: relative; display: inline-flex; align-items: center; gap: 4px;">
+                            <span id="chat-page-session-name" style="font-size: 13px; color: var(--accent-color); font-weight: 600; background: var(--surface-elevated); padding: 2px 8px; border-radius: 4px;">main</span>
+                            <button onclick="toggleChatPageSessionMenu()" style="background: none; border: none; cursor: pointer; padding: 2px; color: var(--text-muted);">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 14px; height: 14px;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="chat-page-session-menu" class="hidden" style="position: absolute; top: 100%; left: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100; min-width: 160px; margin-top: 4px;">
+                                <div style="padding: 8px 0;">
+                                    <button onclick="renameChatPageSession()" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 13px; text-align: left;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='none'">
+                                        ✏️ Rename
+                                    </button>
+                                    <button onclick="switchChatPageSession()" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 13px; text-align: left;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='none'">
+                                        🔄 Switch
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="chat-page-actions">
                         <button onclick="scrollChatToBottom()" class="btn btn-ghost" title="Scroll to bottom">
