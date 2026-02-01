@@ -490,32 +490,28 @@ window.changeModel = async function() {
             // Refresh model list in settings
             if (providerSelectEl) await updateModelDropdown(providerSelectEl.value);
 
-            // Restart gateway to apply new model
-            showToast(`Restarting gateway with ${selectedModel}...`, 'info');
-
-            // Try gateway WebSocket reload first (most reliable if connected)
+            // Directly patch gateway config via WebSocket RPC (no bot involved)
             if (gateway && gateway.isConnected()) {
+                showToast(`Applying ${selectedModel} to gateway...`, 'info');
                 try {
-                    await gateway.reloadConfig();
-                    showToast(`Model changed to ${selectedModel}. Gateway reloading...`, 'success');
-                } catch (wsErr) {
-                    console.warn('[Dashboard] Gateway WS reload failed, trying server restart:', wsErr.message);
-                    // Fall back to server-side restart
-                    try {
-                        await fetch('/api/gateway/restart', { method: 'POST' });
-                        showToast(`Model changed to ${selectedModel}. Gateway restarting...`, 'success');
-                    } catch (restartErr) {
-                        showToast(`Model changed to ${selectedModel}. Please restart gateway manually.`, 'warning');
-                    }
+                    const configPatch = {
+                        agents: {
+                            defaults: {
+                                model: {
+                                    primary: selectedModel
+                                }
+                            }
+                        }
+                    };
+
+                    await gateway.patchConfig(configPatch);
+                    showToast(`Model changed to ${selectedModel}. Gateway restarting...`, 'success');
+                } catch (err) {
+                    console.error('[Dashboard] Config patch failed:', err);
+                    showToast(`Model saved locally. Gateway patch failed: ${err.message}`, 'warning');
                 }
             } else {
-                // Not connected via WS, try server-side restart
-                try {
-                    await fetch('/api/gateway/restart', { method: 'POST' });
-                    showToast(`Model changed to ${selectedModel}. Gateway restarting...`, 'success');
-                } catch (restartErr) {
-                    showToast(`Model changed to ${selectedModel}. Please restart gateway manually.`, 'warning');
-                }
+                showToast(`Model saved. Connect to gateway to apply.`, 'warning');
             }
         } else {
             console.error('[Dashboard] Failed to change model:', result);
@@ -1047,6 +1043,24 @@ function disconnectFromGateway() {
     }
     updateConnectionUI('disconnected', 'Disconnected');
 }
+
+// Restart gateway directly via WebSocket RPC (no bot involved)
+window.requestGatewayRestart = async function() {
+    if (!gateway || !gateway.isConnected()) {
+        showToast('Not connected to gateway', 'warning');
+        return;
+    }
+
+    showToast('Restarting gateway...', 'info');
+
+    try {
+        await gateway.restartGateway('manual restart from dashboard');
+        showToast('Gateway restart initiated. Reconnecting...', 'success');
+    } catch (err) {
+        console.error('[Dashboard] Gateway restart failed:', err);
+        showToast('Restart failed: ' + err.message, 'error');
+    }
+};
 
 function updateConnectionUI(status, message) {
     // Update chat header status

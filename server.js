@@ -801,36 +801,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Restart gateway endpoint (triggers OpenClaw gateway reload)
-  if (url.pathname === '/api/gateway/restart' && req.method === 'POST') {
-    const { exec } = require('child_process');
-
-    console.log('[Server] Gateway restart requested');
-
-    // Restart moltbot docker container
-    const restartCmd = 'sudo docker restart $(sudo docker ps -q --filter name=moltbot)';
-
-    exec(restartCmd, (err, stdout, stderr) => {
-      if (err) {
-        console.error('[Server] Gateway restart failed:', err.message);
-        console.error('[Server] stderr:', stderr);
-      } else {
-        console.log('[Server] Gateway container restarted:', stdout.trim());
-        // Set restart pending flag for toast notification
-        state.restartPending = true;
-        saveState();
-      }
-    });
-
-    // Respond immediately - restart happens async
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({
-      ok: true,
-      message: 'Gateway restart initiated. Please wait for reconnection.'
-    }));
-    return;
-  }
-
   // Get current model endpoint
   if (url.pathname === '/api/models/current' && req.method === 'GET') {
     // Get current model from state.json (updated by OpenClaw agent)

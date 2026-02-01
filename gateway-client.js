@@ -366,23 +366,51 @@ class GatewayClient {
         }
     }
 
-    // Request gateway to reload its configuration (e.g., after model change)
-    reloadConfig() {
+    // Patch gateway config and trigger restart (e.g., for model change)
+    async patchConfig(configPatch) {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log('[Gateway] Requesting config reload...');
-        return this._request('gateway.reload', {}).catch(err => {
-            // If gateway.reload isn't supported, try node.event with reload
-            console.log('[Gateway] gateway.reload not supported, trying node.event...');
-            return this._request('node.event', {
-                event: 'config.reload',
-                payload: {}
-            });
-        }).catch(err => {
-            console.warn('[Gateway] Config reload request failed:', err.message);
-            throw err;
+        console.log('[Gateway] Patching config...', configPatch);
+
+        // First get current config to get the baseHash
+        let baseHash;
+        try {
+            const current = await this._request('config.get', {});
+            baseHash = current?.hash;
+            console.log('[Gateway] Current config hash:', baseHash);
+        } catch (err) {
+            console.warn('[Gateway] Could not get current config hash:', err.message);
+        }
+
+        // Apply the patch - this will merge with existing config and restart
+        const params = {
+            raw: typeof configPatch === 'string' ? configPatch : JSON.stringify(configPatch),
+            baseHash: baseHash,
+            restartDelayMs: 1000  // Give time for response before restart
+        };
+
+        return this._request('config.patch', params).then(result => {
+            console.log('[Gateway] Config patch applied, gateway will restart');
+            return result;
+        });
+    }
+
+    // Request gateway restart directly
+    async restartGateway(reason = 'dashboard request') {
+        if (!this.connected) {
+            return Promise.reject(new Error('Not connected'));
+        }
+
+        console.log('[Gateway] Requesting restart...');
+
+        // Try the restart RPC call
+        return this._request('gateway.restart', { reason, delayMs: 500 }).catch(err => {
+            // If gateway.restart doesn't exist, try via config.patch with empty patch
+            // which still triggers a restart
+            console.log('[Gateway] gateway.restart not available, trying config refresh...');
+            return this._request('config.patch', { raw: '{}', restartDelayMs: 500 });
         });
     }
 
