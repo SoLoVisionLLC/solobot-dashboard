@@ -1683,6 +1683,36 @@
             opacity: 0;
             pointer-events: none;
         }
+        
+        /* Floating scroll to bottom button */
+        .scroll-to-bottom-btn {
+            position: absolute;
+            bottom: 100px;
+            right: 24px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .scroll-to-bottom-btn:hover {
+            transform: scale(1.1);
+            background: var(--accent-hover);
+        }
+        .scroll-to-bottom-btn.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.8);
+        }
 
         /* =================== SYSTEM PAGE STYLES =================== */
         .system-message {
@@ -2136,6 +2166,11 @@
                 <div id="chat-page-messages" class="chat-page-messages">
                     <!-- Messages rendered by JS -->
                 </div>
+                
+                <!-- Floating scroll to bottom button -->
+                <button id="scroll-to-bottom-btn" class="scroll-to-bottom-btn hidden" onclick="scrollChatToBottom()" title="Scroll to latest">
+                    ↓
+                </button>
                 
                 <!-- New message indicator (shown when scrolled up) -->
                 <div id="chat-page-new-indicator" class="chat-page-new-message-indicator hidden" onclick="scrollChatToBottom()">
@@ -2623,7 +2658,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=2.2.1"></script>
-    <script src="dashboard.js?v=3.33.0"></script>
+    <script src="dashboard.js?v=3.34.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];

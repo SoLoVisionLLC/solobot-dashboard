@@ -1472,11 +1472,28 @@ function setupChatPageScrollListener() {
         // Update indicator based on scroll position
         updateNewMessageIndicator();
         
+        // Show/hide floating scroll button
+        updateScrollToBottomButton();
+        
         // Save position periodically
         saveChatScrollPosition();
     });
     
     container.dataset.scrollListenerAttached = 'true';
+}
+
+function updateScrollToBottomButton() {
+    const container = document.getElementById('chat-page-messages');
+    const btn = document.getElementById('scroll-to-bottom-btn');
+    if (!container || !btn) return;
+    
+    // Show button if scrolled up more than 200px from bottom
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom > 200) {
+        btn.classList.remove('hidden');
+    } else {
+        btn.classList.add('hidden');
+    }
 }
 
 function renderChatPage() {
