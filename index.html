@@ -1347,23 +1347,36 @@
         }
 
         /* =================== CHAT PAGE STYLES =================== */
+        
+        /* Chat/system pages: full viewport, no scroll on body */
+        #page-chat,
+        #page-system {
+            position: fixed;
+            top: 0;
+            left: 64px; /* sidebar collapsed width */
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            z-index: 50;
+        }
+        
+        /* Adjust for pinned/hovered sidebar */
+        .sidebar.pinned ~ .app-content #page-chat,
+        .sidebar.pinned ~ .app-content #page-system,
+        .sidebar:hover ~ .app-content #page-chat,
+        .sidebar:hover ~ .app-content #page-system {
+            left: 200px;
+        }
+        
         .chat-page-wrapper {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 60px);
-            max-width: 100%;
+            height: 100%;
+            width: 100%;
             margin: 0;
             padding: 0;
             position: relative;
             overflow: hidden;
-        }
-        
-        /* Chat/system pages take full height (main header hidden on these pages) */
-        #page-chat,
-        #page-system {
-            overflow: hidden;
-            height: 100vh;
-            max-height: 100vh;
         }
         
         /* Hide footer and main header on chat/system pages (they have their own headers) */
@@ -1372,17 +1385,6 @@
         body:has(#page-chat.active) .header,
         body:has(#page-system.active) .header {
             display: none;
-        }
-        
-        /* Prevent body scroll when chat/system page is active */
-        #page-chat.active ~ *,
-        #page-system.active ~ * {
-            overflow: hidden;
-        }
-        
-        body:has(#page-chat.active),
-        body:has(#page-system.active) {
-            overflow: hidden;
         }
         
         /* Minimal header - just status */
