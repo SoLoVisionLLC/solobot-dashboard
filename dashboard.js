@@ -681,13 +681,13 @@ async function checkRestartToast() {
 
 let currentSessionName = 'main';
 
-function toggleSessionMenu() {
+window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
 }
 
-async function renameSession() {
+window.renameSession = async function() {
     toggleSessionMenu();
     const newName = prompt('Enter new session name:', currentSessionName);
     if (!newName || newName === currentSessionName) return;
@@ -714,7 +714,7 @@ async function renameSession() {
     }
 }
 
-function showSessionSwitcher() {
+window.showSessionSwitcher = function() {
     toggleSessionMenu();
     showToast('Session switcher coming soon', 'info');
 }
