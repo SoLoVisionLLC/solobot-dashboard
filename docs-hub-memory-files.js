@@ -181,14 +181,18 @@ async function renderMemoryFiles(filter = '') {
 
 // View a memory file - fetch content and show in modal
 async function viewMemoryFile(filepath) {
+    console.log('[Memory] viewMemoryFile called with:', filepath);
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
+    
+    console.log('[Memory] Elements found:', { titleEl: !!titleEl, contentEl: !!contentEl, saveBtn: !!saveBtn });
     
     if (titleEl) titleEl.textContent = filepath;
     if (contentEl) contentEl.value = 'Loading...';
     if (saveBtn) saveBtn.textContent = '💾 Save';
     
+    console.log('[Memory] Showing modal...');
     showModal('memory-file-modal');
     
     try {
@@ -262,10 +266,11 @@ async function acknowledgeUpdate(filepath) {
 
 // Load version history for a file
 async function loadVersionHistory(filepath) {
-    console.log('loadVersionHistory called for:', filepath);
+    console.log('[Memory] loadVersionHistory called for:', filepath);
     const container = document.getElementById('version-history-list');
+    console.log('[Memory] version-history-list container:', container);
     if (!container) {
-        console.log('version-history-list container not found!');
+        console.error('[Memory] version-history-list container NOT FOUND!');
         return;
     }
     
