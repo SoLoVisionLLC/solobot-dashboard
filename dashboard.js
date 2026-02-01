@@ -2503,45 +2503,50 @@ async function clearChatHistory(skipConfirm = false) {
     renderChatPage();
 }
 
-async function startNewSession() {
-    const confirmed = await showConfirm(
-        'Start New Session',
-        'This will clear all chat history and reconnect to the gateway. Continue?',
-        'Start New',
-        'Cancel',
-        false
-    );
-    
-    if (!confirmed) return;
-    
+window.startNewSession = async function() {
+    // Generate a new session name based on timestamp
+    const timestamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+    const defaultName = `session-${timestamp}`;
+
+    const newSessionKey = prompt('Enter name for new session:', defaultName);
+    if (!newSessionKey || !newSessionKey.trim()) return;
+
+    const sessionKey = newSessionKey.trim();
+
+    // Check if session already exists
+    if (availableSessions.some(s => s.key === sessionKey)) {
+        showToast(`Session "${sessionKey}" already exists. Switching to it.`, 'info');
+        await switchToSession(sessionKey);
+        return;
+    }
+
+    showToast(`Creating new session "${sessionKey}"...`, 'info');
+
     // Clear local chat
     state.chat.messages = [];
     state.system.messages = [];
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
-    
-    // Clear localStorage
-    localStorage.removeItem('solobot-chat-messages');
-    localStorage.removeItem('solobot-system-messages');
-    
-    // Clear VPS chat state
-    fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat: { messages: [] } })
-    }).catch(() => {});
-    
-    // Disconnect and reconnect gateway
+
+    // Switch gateway to new session (gateway creates it if it doesn't exist)
     if (gateway && gateway.isConnected()) {
-        disconnectFromGateway();
-        setTimeout(() => {
-            connectToGateway();
-        }, 500);
+        gateway.setSessionKey(sessionKey);
+        currentSessionName = sessionKey;
+
+        // Update session display
+        const nameEl = document.getElementById('chat-page-session-name');
+        if (nameEl) nameEl.textContent = sessionKey;
+
+        // Refresh sessions list to include the new one
+        await fetchAvailableSessions();
+        populateSessionDropdown();
     }
-    
+
     renderChat();
     renderChatPage();
     renderSystemPage();
+
+    showToast(`New session "${sessionKey}" created`, 'success');
 }
 
 // ===================
