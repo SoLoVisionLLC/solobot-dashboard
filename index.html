@@ -1238,6 +1238,7 @@
             cursor: pointer;
             transition: all var(--transition-fast);
             text-decoration: none;
+            line-height: 1.2; /* Slightly tighter line height */
         }
         
         .sidebar:hover .sidebar-item,
@@ -1284,14 +1285,14 @@
         
         .sidebar-footer {
             margin-top: auto; /* Push to bottom of sidebar */
-            padding: 12px 6px; /* Slightly higher than chat input for visual balance */
+            padding: 4px 6px; /* Reduced to compensate for sidebar-item padding */
             border-top: 1px solid var(--border-default);
             transition: padding var(--transition-normal);
         }
         
         .sidebar:hover .sidebar-footer,
         .sidebar.pinned .sidebar-footer {
-            padding: 12px var(--space-3);
+            padding: 4px var(--space-3);
         }
         
         .app-content {
