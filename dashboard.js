@@ -615,7 +615,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Re-throw to make error visible in console
         throw error;
     }
-    }
 });
 
 // Default settings
