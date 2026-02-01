@@ -1840,11 +1840,13 @@ function renderChatPageImagePreviews() {
     
     if (chatPagePendingImages.length === 0) {
         container.classList.add('hidden');
+        container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
     
     container.classList.remove('hidden');
+    container.classList.add('visible');
     container.innerHTML = chatPagePendingImages.map((img, idx) => `
         <div class="image-preview-wrapper">
             <img src="${img.data}" alt="Preview ${idx + 1}" />
