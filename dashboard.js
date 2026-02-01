@@ -395,8 +395,8 @@ window.changeProvider = function() {
 };
 
 window.changeModel = function() {
-    console.warn('[Dashboard] Model selection not implemented - models are configured at OpenClaw gateway level');
-    showToast('Models must be configured at the OpenClaw gateway level', 'warning');
+    console.warn('[Dashboard] Model selection not implemented - use moltbot models set <model_id>');
+    showToast('Use: moltbot models set <model_id>', 'info');
 };
 
 function updateModelDropdown(provider) {
@@ -417,28 +417,99 @@ function updateModelDropdown(provider) {
 }
 
 function getModelsForProvider(provider) {
-    // For now, return empty list - provider/model should come from OpenClaw configuration
-    // This function will be updated when we know how OpenClaw exposes available models
-    return [];
+    // Get actual models from OpenClaw
+    try {
+        const exec = require('child_process').execSync;
+        const result = exec('moltbot models list --all 2>/dev/null | tail -n +4', { encoding: 'utf8' });
+        
+        // Parse the output - skip header and format: "provider/model  input  ctx  local  auth  tags"
+        const models = [];
+        const lines = result.split('\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 2) {
+                const modelId = parts[0];
+                const tags = parts[parts.length - 1] || '';
+                
+                // Only include models that match the provider or are available
+                if (!provider || modelId.startsWith(provider + '/') || modelId.includes(provider)) {
+                    models.push({
+                        value: modelId,
+                        name: modelId.split('/').pop() || modelId,
+                        selected: tags.includes('default') || tags.includes('configured')
+                    });
+                }
+            }
+        }
+        
+        return models.length > 0 ? models : getConfiguredModels();
+    } catch (e) {
+        console.log('[Dashboard] Failed to get models from OpenClaw, using configured models');
+        return getConfiguredModels();
+    }
+}
+
+function getConfiguredModels() {
+    // Fallback to configured models if command fails
+    try {
+        const exec = require('child_process').execSync;
+        const result = exec('moltbot models list 2>/dev/null | tail -n +4', { encoding: 'utf8' });
+        
+        const models = [];
+        const lines = result.split('\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 2) {
+                const modelId = parts[0];
+                const tags = parts[parts.length - 1] || '';
+                
+                models.push({
+                    value: modelId,
+                    name: modelId.split('/').pop() || modelId,
+                    selected: tags.includes('default') || tags.includes('configured')
+                });
+            }
+        }
+        
+        return models;
+    } catch (e) {
+        console.log('[Dashboard] Failed to get configured models from OpenClaw');
+        return [];
+    }
 }
 
 // Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if we have server-provided provider/model info
-    const serverProvider = localStorage.getItem('server_provider');
-    const serverModel = localStorage.getItem('server_model');
-    const displayProvider = serverProvider || localStorage.getItem('selected_provider') || 'anthropic';
-    const displayModel = serverModel || localStorage.getItem('selected_model') || 'claude-3-opus';
+    // Get actual current model from OpenClaw
+    let currentModel = 'anthropic/claude-opus-4-5'; // Default fallback
+    let currentProvider = 'anthropic';
     
-    console.log(`[Dashboard] Displaying configuration: ${displayProvider}/${displayModel}`);
+    try {
+        const exec = require('child_process').execSync;
+        const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+        
+        if (result) {
+            const parts = result.trim().split(/\s+/);
+            if (parts.length >= 1) {
+                currentModel = parts[0];
+                currentProvider = currentModel.split('/')[0] || 'anthropic';
+            }
+        }
+    } catch (e) {
+        console.log('[Dashboard] Failed to get current model from OpenClaw, using default');
+    }
+    
+    console.log(`[Dashboard] Current model: ${currentProvider}/${currentModel}`);
     
     // Update navbar display
-    document.getElementById('provider-name').textContent = displayProvider;
-    document.getElementById('model-name').textContent = displayModel;
+    document.getElementById('provider-name').textContent = currentProvider;
+    document.getElementById('model-name').textContent = currentModel;
     
     // Update settings modal display
-    document.getElementById('current-provider-display').textContent = displayProvider;
-    document.getElementById('current-model-display').textContent = displayModel;
+    document.getElementById('current-provider-display').textContent = currentProvider;
+    document.getElementById('current-model-display').textContent = currentModel;
 });
 
 // Default settings
@@ -2545,13 +2616,28 @@ function hideModal(id) {
 function openSettingsModal() {
     showModal('settings-modal');
 
-    // Initialize provider/model dropdowns
-    const savedProvider = localStorage.getItem('selected_provider') || 'anthropic';
-    const savedModel = localStorage.getItem('selected_model') || 'claude-3-opus';
+    // Get actual current model from OpenClaw
+    let currentModel = 'anthropic/claude-opus-4-5';
+    let currentProvider = 'anthropic';
     
-    document.getElementById('setting-provider').value = savedProvider;
-    updateModelDropdown(savedProvider); // This will populate the model dropdown
-    document.getElementById('setting-model').value = savedModel;
+    try {
+        const exec = require('child_process').execSync;
+        const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+        
+        if (result) {
+            const parts = result.trim().split(/\s+/);
+            if (parts.length >= 1) {
+                currentModel = parts[0];
+                currentProvider = currentModel.split('/')[0] || 'anthropic';
+            }
+        }
+    } catch (e) {
+        console.log('[Dashboard] Failed to get current model from OpenClaw');
+    }
+    
+    // Update settings modal display
+    document.getElementById('current-provider-display').textContent = currentProvider;
+    document.getElementById('current-model-display').textContent = currentModel;
 
     // Populate gateway settings
     const hostEl = document.getElementById('gateway-host');
