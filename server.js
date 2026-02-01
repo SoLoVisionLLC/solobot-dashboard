@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
@@ -9,9 +10,124 @@ const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
 
+// Google Drive backup config (for auto-restore on startup)
+// Set these in Coolify environment variables for auto-restore to work
+const GDRIVE_BACKUP_FILE_ID = process.env.GDRIVE_BACKUP_FILE_ID;  // The backup file ID in Drive
+const GDRIVE_CLIENT_ID = process.env.GDRIVE_CLIENT_ID;
+const GDRIVE_CLIENT_SECRET = process.env.GDRIVE_CLIENT_SECRET;
+const GDRIVE_REFRESH_TOKEN = process.env.GDRIVE_REFRESH_TOKEN;
+const AUTO_RESTORE_ENABLED = GDRIVE_BACKUP_FILE_ID && GDRIVE_CLIENT_ID && GDRIVE_CLIENT_SECRET && GDRIVE_REFRESH_TOKEN;
+
 // Ensure data directories exist
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
+
+// ============================================
+// Google Drive Auto-Restore on Startup
+// ============================================
+
+function httpsRequest(options, postData = null) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, data: JSON.parse(data) });
+        } catch {
+          resolve({ status: res.statusCode, data: data });
+        }
+      });
+    });
+    req.on('error', reject);
+    if (postData) req.write(postData);
+    req.end();
+  });
+}
+
+async function getGoogleAccessToken() {
+  const postData = new URLSearchParams({
+    client_id: GDRIVE_CLIENT_ID,
+    client_secret: GDRIVE_CLIENT_SECRET,
+    refresh_token: GDRIVE_REFRESH_TOKEN,
+    grant_type: 'refresh_token'
+  }).toString();
+
+  const result = await httpsRequest({
+    hostname: 'oauth2.googleapis.com',
+    path: '/token',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  }, postData);
+
+  if (result.status === 200 && result.data.access_token) {
+    return result.data.access_token;
+  }
+  throw new Error('Failed to get Google access token');
+}
+
+async function fetchBackupFromDrive(accessToken) {
+  const result = await httpsRequest({
+    hostname: 'www.googleapis.com',
+    path: `/drive/v3/files/${GDRIVE_BACKUP_FILE_ID}?alt=media`,
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+
+  if (result.status === 200 && typeof result.data === 'object') {
+    return result.data;
+  }
+  throw new Error(`Failed to fetch backup: ${result.status}`);
+}
+
+function countTasks(stateObj) {
+  if (!stateObj || !stateObj.tasks) return 0;
+  const t = stateObj.tasks;
+  return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0);
+}
+
+async function checkAndRestoreFromBackup(localState) {
+  if (!AUTO_RESTORE_ENABLED) {
+    console.log('[Auto-Restore] Disabled (missing env vars: GDRIVE_BACKUP_FILE_ID, GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN)');
+    return localState;
+  }
+  
+  console.log('[Auto-Restore] Checking if backup restore is needed...');
+  
+  const localTaskCount = countTasks(localState);
+  const localLastSync = localState?.lastSync || 0;
+  
+  console.log(`[Auto-Restore] Local state: ${localTaskCount} tasks, lastSync: ${localLastSync ? new Date(localLastSync).toISOString() : 'never'}`);
+  
+  // If local state has tasks and recent sync, skip restore
+  if (localTaskCount > 0 && localLastSync > Date.now() - 24 * 60 * 60 * 1000) {
+    console.log('[Auto-Restore] Local state looks good, skipping restore');
+    return localState;
+  }
+  
+  try {
+    console.log('[Auto-Restore] Local state empty/stale, fetching backup from Google Drive...');
+    const accessToken = await getGoogleAccessToken();
+    const backupState = await fetchBackupFromDrive(accessToken);
+    
+    const backupTaskCount = countTasks(backupState);
+    const backupLastSync = backupState?.lastSync || 0;
+    
+    console.log(`[Auto-Restore] Backup state: ${backupTaskCount} tasks, lastSync: ${backupLastSync ? new Date(backupLastSync).toISOString() : 'never'}`);
+    
+    // Use backup if it has more tasks or is more recent
+    if (backupTaskCount > localTaskCount || backupLastSync > localLastSync) {
+      console.log('[Auto-Restore] ✓ Restoring from Google Drive backup!');
+      return backupState;
+    } else {
+      console.log('[Auto-Restore] Backup not better than local, keeping local');
+      return localState;
+    }
+  } catch (err) {
+    console.log(`[Auto-Restore] Could not restore from backup: ${err.message}`);
+    return localState;
+  }
+}
 
 // Load or initialize file metadata (tracks bot updates)
 let fileMeta = {};
@@ -50,27 +166,37 @@ function createVersion(filename, content) {
   return timestamp;
 }
 
-// Load or initialize state
+// Load or initialize state (will be populated by async init)
 let state = {};
-try {
-  if (fs.existsSync(STATE_FILE)) {
-    // Use existing state (from persistent volume)
-    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    console.log('Loaded existing state from persistent storage');
-  } else if (fs.existsSync(DEFAULT_STATE_FILE)) {
-    // First run with volume - copy default state
-    state = JSON.parse(fs.readFileSync(DEFAULT_STATE_FILE, 'utf8'));
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-    console.log('Initialized state from default template');
-  } else {
-    console.log('Starting with fresh state');
-  }
-} catch (e) {
-  console.log('Error loading state, starting fresh:', e.message);
-}
 
 function saveState() {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+// Async state initialization with auto-restore
+async function initializeState() {
+  let localState = {};
+  
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      localState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      console.log('Loaded existing state from persistent storage');
+    } else if (fs.existsSync(DEFAULT_STATE_FILE)) {
+      localState = JSON.parse(fs.readFileSync(DEFAULT_STATE_FILE, 'utf8'));
+      console.log('Initialized state from default template');
+    } else {
+      console.log('Starting with fresh state');
+    }
+  } catch (e) {
+    console.log('Error loading state, starting fresh:', e.message);
+  }
+  
+  // Check if we should restore from Google Drive backup
+  state = await checkAndRestoreFromBackup(localState);
+  
+  // Save the (possibly restored) state
+  saveState();
+  console.log(`State initialized with ${countTasks(state)} tasks`);
 }
 
 const MIME_TYPES = {
@@ -479,6 +605,17 @@ const server = http.createServer((req, res) => {
   return res.end(fs.readFileSync('./index.html'));
 });
 
-server.listen(PORT, () => {
-  console.log(`SoLoBot Dashboard running on port ${PORT}`);
+// Start server after async initialization
+async function startServer() {
+  await initializeState();
+  
+  server.listen(PORT, () => {
+    console.log(`SoLoBot Dashboard running on port ${PORT}`);
+    console.log(`Auto-restore from Google Drive: enabled`);
+  });
+}
+
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
