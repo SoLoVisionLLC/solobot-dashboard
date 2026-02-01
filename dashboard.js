@@ -463,6 +463,11 @@ async function updateModelDropdown(provider) {
     console.log(`[Dashboard] Updating model dropdown for provider: ${provider}`);
     
     const modelSelect = document.getElementById('model-select');
+    if (!modelSelect) {
+        console.error('[Dashboard] model-select element not found!');
+        return;
+    }
+    
     const models = await getModelsForProvider(provider);
     
     console.log(`[Dashboard] Got ${models.length} models for provider ${provider}`);
