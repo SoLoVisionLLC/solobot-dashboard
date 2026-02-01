@@ -841,21 +841,22 @@ window.switchToSession = async function(sessionKey) {
         // 1. Save current chat as safeguard
         await saveCurrentChat();
         
-        // 2. Use GatewayClient to switch session (like web UI does)
-        if (gateway && gateway.isConnected()) {
-            gateway.setSessionKey(sessionKey);
-            GATEWAY_CONFIG.sessionKey = sessionKey;  // Keep config in sync
-        }
+        // 2. Update session config
+        currentSessionName = sessionKey;
+        GATEWAY_CONFIG.sessionKey = sessionKey;
 
         // 3. Clear current chat (skip confirmation when switching sessions)
         await clearChatHistory(true);
 
-        // 4. Load new session's history
-        await loadSessionHistory(sessionKey);
+        // 4. Reconnect gateway with new session key
+        if (gateway && gateway.isConnected()) {
+            gateway.disconnect();
+            await new Promise(resolve => setTimeout(resolve, 300));
+            connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
+        }
 
-        // 5. Update current session display
-        currentSessionName = sessionKey;
-        GATEWAY_CONFIG.sessionKey = sessionKey;  // Keep config in sync
+        // 5. Load new session's history
+        await loadSessionHistory(sessionKey);
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
             const session = availableSessions.find(s => s.key === sessionKey);
@@ -2531,20 +2532,25 @@ window.startNewSession = async function() {
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
 
-    // Switch gateway to new session (gateway creates it if it doesn't exist)
+    // Switch gateway to new session - need to reconnect with new session key
+    currentSessionName = sessionKey;
+    GATEWAY_CONFIG.sessionKey = sessionKey;
+
+    // Update session display
+    const nameEl = document.getElementById('chat-page-session-name');
+    if (nameEl) nameEl.textContent = sessionKey;
+
+    // Disconnect and reconnect with new session key
     if (gateway && gateway.isConnected()) {
-        gateway.setSessionKey(sessionKey);
-        currentSessionName = sessionKey;
-        GATEWAY_CONFIG.sessionKey = sessionKey;  // Keep config in sync
-
-        // Update session display
-        const nameEl = document.getElementById('chat-page-session-name');
-        if (nameEl) nameEl.textContent = sessionKey;
-
-        // Refresh sessions list to include the new one
-        await fetchAvailableSessions();
-        populateSessionDropdown();
+        gateway.disconnect();
+        // Short delay then reconnect
+        await new Promise(resolve => setTimeout(resolve, 300));
+        connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
     }
+
+    // Refresh sessions list to include the new one
+    await fetchAvailableSessions();
+    populateSessionDropdown();
 
     renderChat();
     renderChatPage();
