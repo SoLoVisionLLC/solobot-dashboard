@@ -86,7 +86,7 @@ class GatewayClient {
             maxProtocol: GATEWAY_PROTOCOL_VERSION,
             client: clientInfo,
             role: 'operator',
-            scopes: ['operator.read', 'operator.write'],
+            scopes: ['operator.read', 'operator.write', 'operator.admin'],
             caps: ['chat.subscribe']
         };
 

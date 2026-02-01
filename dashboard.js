@@ -1800,7 +1800,7 @@ async function sendChatMessage() {
 
     // Send via Gateway WebSocket
     try {
-        console.log(`[Chat] Sending message with model: ${currentProvider}/${currentModel}`);
+        console.log(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
             // Send with image attachments (send all images)
             const imageDataArray = imagesToSend.map(img => img.data);
@@ -2431,7 +2431,7 @@ async function sendChatPageMessage() {
     
     // Send via Gateway
     try {
-        console.log(`[Chat] Sending message with model: ${currentProvider}/${currentModel}`);
+        console.log(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
             const imageDataArray = imagesToSend.map(img => img.data);
             await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
