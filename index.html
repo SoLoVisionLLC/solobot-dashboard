@@ -1104,8 +1104,41 @@
             transition: width var(--transition-normal);
         }
         
-        .sidebar:hover {
+        .sidebar:hover,
+        .sidebar.pinned {
             width: 200px;
+        }
+        
+        .sidebar-toggle {
+            position: absolute;
+            top: 18px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity var(--transition-normal), background var(--transition-normal);
+        }
+        
+        .sidebar:hover .sidebar-toggle,
+        .sidebar.pinned .sidebar-toggle {
+            opacity: 1;
+        }
+        
+        .sidebar-toggle:hover {
+            background: var(--surface-2);
+            color: var(--text-primary);
+        }
+        
+        .sidebar.pinned .sidebar-toggle {
+            color: var(--accent);
         }
         
         .sidebar-logo {
@@ -1682,7 +1715,10 @@
     <div class="app-layout">
     
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
+        <button class="sidebar-toggle" onclick="toggleSidebarPin()" title="Pin sidebar">
+            <span id="sidebar-pin-icon">📌</span>
+        </button>
         <div class="sidebar-logo">
             <img src="solobot-avatar.png" alt="SoLoBot" class="sidebar-logo-img">
         </div>
@@ -2540,6 +2576,18 @@
                 return path;
             }
             return 'dashboard'; // default
+        }
+
+        // Sidebar pin toggle
+        function toggleSidebarPin() {
+            const sidebar = document.getElementById('sidebar');
+            const isPinned = sidebar.classList.toggle('pinned');
+            localStorage.setItem('sidebarPinned', isPinned);
+        }
+        
+        // Restore sidebar state on load
+        if (localStorage.getItem('sidebarPinned') === 'true') {
+            document.getElementById('sidebar').classList.add('pinned');
         }
 
         // Page navigation with URL update
