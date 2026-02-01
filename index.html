@@ -1451,6 +1451,39 @@
             align-items: center;
             gap: var(--space-3);
         }
+
+        /* Session dropdown menu */
+        .session-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 160px;
+            padding: 4px 0;
+        }
+
+        .session-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 13px;
+            text-align: left;
+            transition: background 0.15s;
+        }
+
+        .session-dropdown-item:hover {
+            background: var(--surface-2);
+        }
         
         .chat-page-title h1 {
             font-size: 16px;
@@ -2246,27 +2279,24 @@
                     <div class="chat-page-title">
                         <span id="chat-page-status-dot" class="status-dot idle"></span>
                         <span id="chat-page-status-text">Disconnected</span>
-                        <span style="margin: 0 8px; color: var(--border-color);">|</span>
-                        <div style="position: relative; display: inline-flex; align-items: center; gap: 4px;">
-                            <span id="chat-page-session-name" style="font-size: 13px; color: var(--accent-color); font-weight: 600; background: var(--surface-elevated); padding: 2px 8px; border-radius: 4px;">main</span>
-                            <button onclick="toggleChatPageSessionMenu()" style="background: none; border: none; cursor: pointer; padding: 2px; color: var(--text-muted);">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 14px; height: 14px;">
+                    </div>
+                    <div class="chat-page-actions">
+                        <div class="session-selector-wrapper" style="position: relative; display: inline-flex; align-items: center; margin-right: 8px;">
+                            <span id="chat-page-session-name" style="font-size: 13px; color: var(--accent-color); font-weight: 600; background: var(--surface-elevated); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-color);">main</span>
+                            <button onclick="toggleChatPageSessionMenu()" class="btn btn-icon" style="padding: 4px; margin-left: 2px;" title="Session options">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
                             </button>
-                            <div id="chat-page-session-menu" class="hidden" style="position: absolute; top: 100%; left: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100; min-width: 160px; margin-top: 4px;">
-                                <div style="padding: 8px 0;">
-                                    <button onclick="renameChatPageSession()" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 13px; text-align: left;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='none'">
-                                        ✏️ Rename
-                                    </button>
-                                    <button onclick="switchChatPageSession()" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 13px; text-align: left;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='none'">
-                                        🔄 Switch
-                                    </button>
-                                </div>
+                            <div id="chat-page-session-menu" class="hidden session-dropdown-menu">
+                                <button onclick="renameChatPageSession()" class="session-dropdown-item">
+                                    <span>✏️</span> Rename Session
+                                </button>
+                                <button onclick="switchChatPageSession()" class="session-dropdown-item">
+                                    <span>🔄</span> Switch Session
+                                </button>
                             </div>
                         </div>
-                    </div>
-                    <div class="chat-page-actions">
                         <button onclick="scrollChatToBottom()" class="btn btn-ghost" title="Scroll to bottom">
                             ↓ Latest
                         </button>
