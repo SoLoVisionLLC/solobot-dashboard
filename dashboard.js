@@ -471,16 +471,23 @@ window.changeModel = async function() {
         if (response.ok) {
             console.log(`[Dashboard] Model successfully changed to: ${selectedModel}`);
             showToast(`Model changed to ${selectedModel}`, 'success');
-            
-            // Update displays (with null checks)
+
+            // Update state (with null checks)
+            const providerSelectEl = document.getElementById('provider-select');
             currentModel = selectedModel;
+            if (providerSelectEl) currentProvider = providerSelectEl.value;
+
+            // Sync to localStorage so gateway client uses correct model
+            localStorage.setItem('selected_provider', currentProvider);
+            localStorage.setItem('selected_model', currentModel);
+
+            // Update displays
             const modelNameEl = document.getElementById('model-name');
             const currentModelDisplay = document.getElementById('current-model-display');
-            const providerSelectEl = document.getElementById('provider-select');
-            
+
             if (modelNameEl) modelNameEl.textContent = selectedModel;
             if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
-            
+
             // Refresh model list in settings
             if (providerSelectEl) await updateModelDropdown(providerSelectEl.value);
         } else {
@@ -594,7 +601,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         currentProvider = modelInfo.provider;
         currentModel = modelInfo.modelId;
-        
+
+        // Sync to localStorage so gateway client uses correct model
+        localStorage.setItem('selected_provider', currentProvider);
+        localStorage.setItem('selected_model', currentModel);
+
         console.log(`[Dashboard] Current model: ${currentProvider}/${currentModel}`);
         
         // Update displays (with null checks)
