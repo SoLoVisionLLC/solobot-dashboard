@@ -445,14 +445,27 @@ function closeDiffModal() {
 
 // Restore from diff view
 function restoreFromDiff() {
+    console.log('[Memory] restoreFromDiff called, diffContext:', diffContext);
     if (diffContext.filepath && diffContext.timestamp) {
+        const { filepath, timestamp } = diffContext;
         closeDiffModal();
-        restoreVersion(diffContext.filepath, diffContext.timestamp);
+        restoreVersion(filepath, timestamp);
+    } else {
+        showToast('Error: No version selected', 'error');
     }
 }
 
 // Restore a specific version
 async function restoreVersion(filepath, timestamp) {
+    console.log('[Memory] restoreVersion called:', { filepath, timestamp, type: typeof timestamp });
+    
+    // Validate timestamp
+    if (!timestamp || timestamp <= 0) {
+        showToast('Error: Invalid version timestamp', 'error');
+        console.error('[Memory] Invalid timestamp:', timestamp);
+        return;
+    }
+    
     const dateStr = new Date(timestamp).toLocaleString();
     const confirmed = await showConfirm(
         `Restore to version from ${dateStr}?\n\nA backup of current version will be created.`,
@@ -462,10 +475,11 @@ async function restoreVersion(filepath, timestamp) {
     if (!confirmed) return;
     
     try {
+        console.log('[Memory] Sending restore request for timestamp:', timestamp);
         const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/restore`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ timestamp })
+            body: JSON.stringify({ timestamp: Number(timestamp) })  // Ensure it's a number
         });
         
         const data = await response.json();
