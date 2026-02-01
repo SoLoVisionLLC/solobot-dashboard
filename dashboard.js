@@ -312,9 +312,18 @@ function initGateway() {
             GATEWAY_CONFIG.sessionKey = sessionKey;
 
             // Load chat history on connect
+            // Use mergeHistoryMessages (additive) instead of loadHistoryMessages (replacement)
+            // to prevent losing messages during reconnections
             gateway.loadHistory().then(result => {
                 if (result?.messages) {
-                    loadHistoryMessages(result.messages);
+                    // Only do full replacement if chat is empty (first load)
+                    if (!state.chat?.messages?.length) {
+                        loadHistoryMessages(result.messages);
+                    } else {
+                        // On reconnect, only merge new messages - don't replace
+                        console.log('[Dashboard] Reconnect detected - using merge instead of replace');
+                        mergeHistoryMessages(result.messages);
+                    }
                 }
             }).catch(err => {
                 console.log('[Dashboard] chat.history failed:', err.message);
@@ -466,10 +475,18 @@ function handleChatEvent(event) {
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
             console.log('[Dashboard] delta - updating stream:', content?.length, 'chars');
+            
+            // Safety: If we have significant streaming content and new content is much shorter,
+            // this might be a new response starting. Finalize the old one first.
+            if (streamingText && streamingText.length > 100 && content.length < streamingText.length * 0.5) {
+                console.log('[Dashboard] New response detected mid-stream, finalizing previous');
+                addLocalChatMessage(streamingText, 'solobot');
+            }
+            
             streamingText = content;
             isProcessing = true;
             renderChat();
-    renderChatPage();
+            renderChatPage();
             break;
 
         case 'final':
