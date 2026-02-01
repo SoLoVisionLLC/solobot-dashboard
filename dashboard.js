@@ -223,13 +223,37 @@ function isSystemMessage(text, from) {
     // Only mark as system if from='system' explicitly
     if (from === 'system') return true;
 
-    // VERY specific patterns only - don't be too aggressive
-    // Only filter obvious heartbeat/system noise
-
+    // === TOOL OUTPUT FILTERING ===
+    // Filter out obvious tool results that shouldn't appear in chat
+    
+    // JSON outputs (API responses, fetch results)
+    if (trimmed.startsWith('{') && trimmed.includes('"')) return true;
+    
+    // Command outputs
+    if (trimmed.startsWith('Successfully replaced text in')) return true;
+    if (trimmed.startsWith('Successfully wrote')) return true;
+    if (trimmed === '(no output)') return true;
+    if (trimmed.startsWith('[main ') && trimmed.includes('file changed')) return true;
+    if (trimmed.startsWith('To https://github.com')) return true;
+    
+    // Git/file operation outputs  
+    if (/^\[main [a-f0-9]+\]/.test(trimmed)) return true;
+    if (trimmed.startsWith('Exported ') && trimmed.includes(' activities')) return true;
+    if (trimmed.startsWith('Posted ') && trimmed.includes(' activities')) return true;
+    
+    // Token/key outputs (security - never show these)
+    if (/^ghp_[A-Za-z0-9]+$/.test(trimmed)) return true;
+    if (/^sk_[A-Za-z0-9]+$/.test(trimmed)) return true;
+    
+    // File content dumps (markdown files being read)
+    if (trimmed.startsWith('# ') && trimmed.length > 500) return true;
+    
+    // === HEARTBEAT FILTERING ===
+    
     // Exact heartbeat matches
     if (trimmed === 'HEARTBEAT_OK') return true;
     
-    // System timestamped messages (check multiple ways for robustness)
+    // System timestamped messages
     if (trimmed.startsWith('System: [')) return true;
     if (trimmed.startsWith('System:')) return true;
     if (/^System:\s*\[/i.test(trimmed)) return true;
@@ -239,12 +263,11 @@ function isSystemMessage(text, from) {
     if (trimmed.includes('] Cron:')) return true;
     if (trimmed.includes('] EMAIL CHECK:')) return true;
 
-    // Heartbeat prompts (exact match from start)
+    // Heartbeat prompts
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
 
-    // Only filter if message is VERY short and matches exact heartbeat patterns
+    // Short heartbeat patterns
     if (from === 'solobot' && trimmed.length < 200) {
-        // Only exact start-of-message matches for very specific heartbeat phrases
         const exactStartPatterns = [
             'following heartbeat routine',
             'following the heartbeat routine',
@@ -258,7 +281,7 @@ function isSystemMessage(text, from) {
         }
     }
 
-    // Don't filter anything else - better to show too much than hide real messages
+    // Don't filter anything else
     return false;
 }
 
@@ -455,8 +478,16 @@ function handleChatEvent(event) {
             const finalContent = streamingText || content;
             console.log('[Dashboard] final - content:', finalContent?.length, 'chars, role:', role);
             if (finalContent && role !== 'user') {
-                console.log('[Dashboard] Adding final message to chat');
-                addLocalChatMessage(finalContent, 'solobot');
+                // Check for duplicate - same content within 10 seconds
+                const isDuplicate = state.chat.messages.some(m =>
+                    m.from === 'solobot' && m.text === finalContent && (Date.now() - m.time) < 10000
+                );
+                if (!isDuplicate) {
+                    console.log('[Dashboard] Adding final message to chat');
+                    addLocalChatMessage(finalContent, 'solobot');
+                } else {
+                    console.log('[Dashboard] Skipping duplicate message');
+                }
             } else {
                 console.log('[Dashboard] Skipping final message - no content or user role');
             }
