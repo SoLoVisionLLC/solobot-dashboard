@@ -470,7 +470,6 @@ window.changeModel = async function() {
         
         if (response.ok) {
             console.log(`[Dashboard] Model successfully changed to: ${selectedModel}`);
-            showToast(`Model changed to ${selectedModel}`, 'success');
 
             // Update state (with null checks)
             const providerSelectEl = document.getElementById('provider-select');
@@ -490,6 +489,34 @@ window.changeModel = async function() {
 
             // Refresh model list in settings
             if (providerSelectEl) await updateModelDropdown(providerSelectEl.value);
+
+            // Restart gateway to apply new model
+            showToast(`Restarting gateway with ${selectedModel}...`, 'info');
+
+            // Try gateway WebSocket reload first (most reliable if connected)
+            if (gateway && gateway.isConnected()) {
+                try {
+                    await gateway.reloadConfig();
+                    showToast(`Model changed to ${selectedModel}. Gateway reloading...`, 'success');
+                } catch (wsErr) {
+                    console.warn('[Dashboard] Gateway WS reload failed, trying server restart:', wsErr.message);
+                    // Fall back to server-side restart
+                    try {
+                        await fetch('/api/gateway/restart', { method: 'POST' });
+                        showToast(`Model changed to ${selectedModel}. Gateway restarting...`, 'success');
+                    } catch (restartErr) {
+                        showToast(`Model changed to ${selectedModel}. Please restart gateway manually.`, 'warning');
+                    }
+                }
+            } else {
+                // Not connected via WS, try server-side restart
+                try {
+                    await fetch('/api/gateway/restart', { method: 'POST' });
+                    showToast(`Model changed to ${selectedModel}. Gateway restarting...`, 'success');
+                } catch (restartErr) {
+                    showToast(`Model changed to ${selectedModel}. Please restart gateway manually.`, 'warning');
+                }
+            }
         } else {
             console.error('[Dashboard] Failed to change model:', result);
             showToast(`Failed to change model: ${result.error || 'Unknown error'}`, 'error');

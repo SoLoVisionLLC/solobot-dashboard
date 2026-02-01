@@ -768,7 +768,75 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
+  // Restart gateway endpoint (triggers OpenClaw gateway reload)
+  if (url.pathname === '/api/gateway/restart' && req.method === 'POST') {
+    const { exec } = require('child_process');
+
+    console.log('[Server] Gateway restart requested');
+
+    // Try pm2 first (most common), then systemctl, then docker
+    const restartCommands = [
+      'pm2 restart openclaw-gateway 2>/dev/null || pm2 restart gateway 2>/dev/null || pm2 restart openclaw 2>/dev/null',
+      'systemctl --user restart openclaw-gateway 2>/dev/null || systemctl restart openclaw-gateway 2>/dev/null'
+    ];
+
+    let restarted = false;
+
+    // Try to find and restart the gateway process
+    exec('pm2 jlist 2>/dev/null', (err, stdout) => {
+      if (!err && stdout) {
+        try {
+          const processes = JSON.parse(stdout);
+          const gatewayProcess = processes.find(p =>
+            p.name.includes('openclaw') || p.name.includes('gateway') || p.name.includes('solobot')
+          );
+
+          if (gatewayProcess) {
+            console.log(`[Server] Found gateway process: ${gatewayProcess.name}, restarting...`);
+            exec(`pm2 restart ${gatewayProcess.name}`, (restartErr) => {
+              if (restartErr) {
+                console.error('[Server] PM2 restart failed:', restartErr.message);
+              } else {
+                console.log('[Server] Gateway restarted via PM2');
+                // Set restart pending flag
+                state.restartPending = true;
+                saveState();
+              }
+            });
+            restarted = true;
+          }
+        } catch (parseErr) {
+          console.warn('[Server] Could not parse PM2 process list');
+        }
+      }
+
+      // If PM2 didn't work, try direct signal to gateway
+      if (!restarted) {
+        // Send HUP signal to trigger config reload if we can find the PID
+        exec('pgrep -f "openclaw.*gateway" || pgrep -f "node.*gateway"', (pgrepErr, pid) => {
+          if (!pgrepErr && pid.trim()) {
+            exec(`kill -HUP ${pid.trim()}`, (killErr) => {
+              if (!killErr) {
+                console.log('[Server] Sent HUP signal to gateway');
+                state.restartPending = true;
+                saveState();
+              }
+            });
+          }
+        });
+      }
+    });
+
+    // Respond immediately - restart happens async
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      ok: true,
+      message: 'Gateway restart initiated. Please wait for reconnection.'
+    }));
+    return;
+  }
+
   // Get current model endpoint
   if (url.pathname === '/api/models/current' && req.method === 'GET') {
     // Get current model from state.json (updated by OpenClaw agent)

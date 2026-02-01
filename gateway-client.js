@@ -368,6 +368,26 @@ class GatewayClient {
         }
     }
 
+    // Request gateway to reload its configuration (e.g., after model change)
+    reloadConfig() {
+        if (!this.connected) {
+            return Promise.reject(new Error('Not connected'));
+        }
+
+        console.log('[Gateway] Requesting config reload...');
+        return this._request('gateway.reload', {}).catch(err => {
+            // If gateway.reload isn't supported, try node.event with reload
+            console.log('[Gateway] gateway.reload not supported, trying node.event...');
+            return this._request('node.event', {
+                event: 'config.reload',
+                payload: {}
+            });
+        }).catch(err => {
+            console.warn('[Gateway] Config reload request failed:', err.message);
+            throw err;
+        });
+    }
+
     _scheduleReconnect() {
         if (!this.desiredConnection) return;
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
