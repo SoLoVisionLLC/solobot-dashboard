@@ -1129,10 +1129,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background var(--transition-normal);
+            transition: background var(--transition-normal), opacity var(--transition-normal);
             font-size: 16px;
             font-weight: bold;
             z-index: 10;
+            opacity: 0;
+        }
+        
+        .sidebar:hover .sidebar-toggle,
+        .sidebar.pinned .sidebar-toggle {
+            opacity: 1;
         }
         
         .sidebar-toggle:hover {
