@@ -2820,15 +2820,26 @@
             const scrollable = el?.closest(scrollableSelectors);
 
             if (scrollable) {
-                // Only capture scroll if the element actually has overflow content
                 const hasOverflow = scrollable.scrollHeight > scrollable.clientHeight;
-                if (hasOverflow) {
-                    // Prevent default page scroll
-                    e.preventDefault();
-                    // Manually scroll the correct container
-                    scrollable.scrollTop += e.deltaY;
+                if (!hasOverflow) {
+                    // No overflow - let page scroll
+                    return;
                 }
-                // If no overflow, let the event bubble up to scroll the page normally
+                
+                const atTop = scrollable.scrollTop <= 0;
+                const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 1;
+                const scrollingUp = e.deltaY < 0;
+                const scrollingDown = e.deltaY > 0;
+                
+                // If at boundary and trying to scroll past it, let page scroll
+                if ((atTop && scrollingUp) || (atBottom && scrollingDown)) {
+                    // Don't prevent default - let page scroll take over
+                    return;
+                }
+                
+                // Otherwise, scroll the module
+                e.preventDefault();
+                scrollable.scrollTop += e.deltaY;
             }
             // If not over a scrollable area, let page scroll normally
         }, { passive: false });
