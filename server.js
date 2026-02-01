@@ -685,29 +685,52 @@ const server = http.createServer((req, res) => {
   // Change AI Model endpoint
   // Get available models list (for dropdowns)
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
-    // Curated list of available models by provider
+    // Real models from OpenClaw - updated 2026-02-01
     const models = {
       anthropic: [
-        { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' },
-        { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'balanced' },
+        { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5 (Current)', tier: 'flagship' },
+        { id: 'anthropic/claude-opus-4-1', name: 'Claude Opus 4.1', tier: 'flagship' },
+        { id: 'anthropic/claude-sonnet-4-5', name: 'Claude Sonnet 4.5', tier: 'balanced' },
+        { id: 'anthropic/claude-sonnet-4-0', name: 'Claude Sonnet 4.0', tier: 'balanced' },
+        { id: 'anthropic/claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet', tier: 'balanced' },
         { id: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', tier: 'balanced' },
+        { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', tier: 'fast' },
         { id: 'anthropic/claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', tier: 'fast' }
       ],
       openai: [
+        { id: 'openai/gpt-5', name: 'GPT-5', tier: 'flagship' },
+        { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', tier: 'balanced' },
+        { id: 'openai/gpt-4.1', name: 'GPT-4.1', tier: 'flagship' },
+        { id: 'openai/gpt-4.1-mini', name: 'GPT-4.1 Mini', tier: 'balanced' },
         { id: 'openai/gpt-4o', name: 'GPT-4o', tier: 'flagship' },
         { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', tier: 'fast' },
-        { id: 'openai/o1', name: 'o1', tier: 'reasoning' },
-        { id: 'openai/o3-mini', name: 'o3 Mini', tier: 'reasoning' }
+        { id: 'openai/o1', name: 'o1 (Reasoning)', tier: 'reasoning' },
+        { id: 'openai/o3-mini', name: 'o3 Mini (Reasoning)', tier: 'reasoning' }
       ],
       google: [
+        { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview)', tier: 'flagship' },
+        { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash (Preview)', tier: 'fast' },
+        { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'flagship' },
+        { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'balanced' },
+        { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', tier: 'fast' },
         { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', tier: 'fast' },
-        { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', tier: 'flagship' }
+        { id: 'google/gemini-1.5-pro', name: 'Gemini 1.5 Pro', tier: 'balanced' },
+        { id: 'google/gemini-1.5-flash', name: 'Gemini 1.5 Flash', tier: 'fast' }
       ],
       moonshot: [
-        { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }
+        { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2 (Configured)', tier: 'flagship' },
+        { id: 'moonshot/kimi-k2.5', name: 'Kimi K2.5', tier: 'flagship' }
       ],
       openrouter: [
-        { id: 'openrouter/auto', name: 'Auto (Best Match)', tier: 'auto' }
+        { id: 'openrouter/auto', name: 'Auto (Best Match)', tier: 'auto' },
+        { id: 'openrouter/anthropic/claude-opus-4.5', name: 'Claude Opus 4.5 (OR)', tier: 'flagship' },
+        { id: 'openrouter/anthropic/claude-3.7-sonnet', name: 'Claude 3.7 Sonnet (OR)', tier: 'balanced' },
+        { id: 'openrouter/google/gemini-2.5-pro', name: 'Gemini 2.5 Pro (OR)', tier: 'flagship' },
+        { id: 'openrouter/google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (OR)', tier: 'fast' },
+        { id: 'openrouter/openai/gpt-4o', name: 'GPT-4o (OR)', tier: 'flagship' },
+        { id: 'openrouter/openai/o1', name: 'o1 (OR)', tier: 'reasoning' },
+        { id: 'openrouter/deepseek/deepseek-chat-v3', name: 'DeepSeek V3 (OR)', tier: 'balanced' },
+        { id: 'openrouter/deepseek/deepseek-r1', name: 'DeepSeek R1 (OR)', tier: 'reasoning' }
       ]
     };
     
