@@ -445,9 +445,13 @@ window.changeModel = async function() {
     }
 };
 
-function updateModelDropdown(provider) {
+async function updateModelDropdown(provider) {
+    console.log(`[Dashboard] Updating model dropdown for provider: ${provider}`);
+    
     const modelSelect = document.getElementById('model-select');
-    const models = getModelsForProvider(provider);
+    const models = await getModelsForProvider(provider);
+    
+    console.log(`[Dashboard] Got ${models.length} models for provider ${provider}`);
     
     // Clear current options
     modelSelect.innerHTML = '';
@@ -460,10 +464,14 @@ function updateModelDropdown(provider) {
         if (model.selected) option.selected = true;
         modelSelect.appendChild(option);
     });
+    
+    console.log(`[Dashboard] Populated dropdown with ${models.length} options`);
 }
 
 async function getModelsForProvider(provider) {
     try {
+        console.log(`[Dashboard] Getting models for provider: ${provider}`);
+        
         // Get models based on provider
         const modelsByProvider = {
             'anthropic': [
@@ -500,9 +508,11 @@ async function getModelsForProvider(provider) {
             model.selected = (model.value === currentModel);
         });
         
+        console.log(`[Dashboard] Returning ${models.length} models for ${provider}`);
         return models;
     } catch (e) {
         console.log('[Dashboard] Failed to get models for provider:', provider, e);
+        // Return empty array so dropdown shows nothing rather than breaking
         return [];
     }
 }
@@ -567,9 +577,29 @@ document.addEventListener('DOMContentLoaded', async function() {
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
-        // Fallback to defaults
-        currentProvider = 'anthropic';
-        currentModel = 'anthropic/claude-opus-4-5';
+        console.error('[Dashboard] Error details:', error.message, error.stack);
+        
+        // Try to get current model directly from moltbot as fallback
+        try {
+            const exec = require('child_process').execSync;
+            const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+            
+            if (result) {
+                const parts = result.trim().split(/\s+/);
+                if (parts.length >= 1) {
+                    currentModel = parts[0];
+                    currentProvider = currentModel.split('/')[0] || 'anthropic';
+                    console.log('[Dashboard] Got current model from moltbot:', currentProvider, currentModel);
+                }
+            }
+        } catch (e) {
+            console.log('[Dashboard] Failed to get model from moltbot command:', e.message);
+            // Final fallback
+            currentProvider = 'anthropic';
+            currentModel = 'anthropic/claude-opus-4-5';
+        }
+        
+        console.log('[Dashboard] Using fallback:', currentProvider, currentModel);
         
         document.getElementById('provider-name').textContent = currentProvider;
         document.getElementById('model-name').textContent = currentModel;
