@@ -694,8 +694,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ===================
 
 async function loadState() {
-    // Preserve chat messages - they come from Gateway WebSocket, not VPS
+    // Preserve current chat messages
     const currentChat = state.chat;
+    const currentSystem = state.system;
 
     // Load from VPS first
     try {
@@ -705,13 +706,49 @@ async function loadState() {
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
             if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
 
-            // Don't overwrite chat - it's managed by Gateway now
-            delete vpsState.chat;
+            // MERGE chat from VPS with current local chat (for cross-computer sync)
+            const vpsChat = vpsState.chat?.messages || [];
+            const localChat = currentChat?.messages || [];
+            
+            // Merge and deduplicate by ID
+            const allChatIds = new Set();
+            const mergedChat = [];
+            
+            // Add VPS messages first (they may have older messages from other computers)
+            for (const msg of vpsChat) {
+                if (msg.id && !allChatIds.has(msg.id)) {
+                    allChatIds.add(msg.id);
+                    mergedChat.push(msg);
+                }
+            }
+            
+            // Add local messages (dedup)
+            for (const msg of localChat) {
+                if (msg.id && !allChatIds.has(msg.id)) {
+                    allChatIds.add(msg.id);
+                    mergedChat.push(msg);
+                }
+            }
+            
+            // Sort by time and trim
+            mergedChat.sort((a, b) => (a.time || 0) - (b.time || 0));
+            const finalChat = mergedChat.slice(-200); // Keep last 200
+            
+            // Don't overwrite pendingChat
             delete vpsState.pendingChat;
 
-            state = { ...state, ...vpsState, chat: currentChat };
+            state = { 
+                ...state, 
+                ...vpsState, 
+                chat: { messages: finalChat },
+                system: currentSystem  // Keep system messages local
+            };
             delete state.localModified;
+            
+            // Save merged chat to localStorage
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
+            persistChatMessages(); // Also persist to dedicated chat storage
+            
             console.log('Loaded state from VPS (chat preserved)');
             return;
         }
@@ -723,9 +760,9 @@ async function loadState() {
     const localSaved = localStorage.getItem('solovision-dashboard');
     if (localSaved) {
         const parsed = JSON.parse(localSaved);
-        // Don't overwrite chat from localStorage either
-        delete parsed.chat;
-        state = { ...state, ...parsed, chat: currentChat };
+        // Keep system messages local
+        delete parsed.system;
+        state = { ...state, ...parsed, chat: currentChat, system: currentSystem };
         console.log('Loaded state from localStorage (chat preserved)');
     } else {
         initSampleData();
@@ -963,9 +1000,32 @@ function addLocalChatMessage(text, from, image = null) {
 
         // Persist chat to localStorage (workaround for Gateway bug #5735)
         persistChatMessages();
+        
+        // Also sync chat to VPS for cross-computer access
+        syncChatToVPS();
+        
         renderChat();
         renderChatPage();
     }
+}
+
+// Debounced sync of chat messages to VPS (so messages persist across computers)
+let chatSyncTimeout = null;
+function syncChatToVPS() {
+    // Debounce - wait 2 seconds after last message before syncing
+    if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
+    chatSyncTimeout = setTimeout(async () => {
+        try {
+            await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: state.chat.messages.slice(-100) })
+            });
+            console.log('[Dashboard] Chat synced to VPS for cross-computer access');
+        } catch (e) {
+            console.log('[Dashboard] Chat sync failed:', e.message);
+        }
+    }, 2000);
 }
 
 // ===================
