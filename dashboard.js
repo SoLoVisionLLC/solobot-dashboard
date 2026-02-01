@@ -1155,13 +1155,17 @@ function renderChat() {
     const container = document.getElementById('chat-messages');
     if (!container) return;
 
-    // Clear container
-    container.innerHTML = '';
-
     const messages = state.chat?.messages || [];
     const isConnected = gateway?.isConnected();
 
     console.log(`[renderChat] Rendering ${messages.length} chat messages, streaming: ${!!streamingText}`);
+    
+    // Save scroll state BEFORE clearing
+    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    // Clear container
+    container.innerHTML = '';
 
     // Show placeholder if no messages
     if (messages.length === 0 && !streamingText) {
@@ -1173,9 +1177,6 @@ function renderChat() {
         container.appendChild(placeholder);
         return;
     }
-
-    // Check scroll position before rendering - use strict check (5px) to avoid unwanted scrolling
-    const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
 
     // Render each message (no filtering needed - system messages are in separate array)
     messages.forEach(msg => {
@@ -1195,9 +1196,12 @@ function renderChat() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Auto-scroll if was at bottom
+    // Auto-scroll if was at bottom, otherwise maintain position
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
+    } else {
+        // Restore position by maintaining same distance from bottom
+        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
     }
 }
 
@@ -1452,8 +1456,8 @@ function renderChatPage() {
     
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
-    const previousScrollTop = container.scrollTop;
-    const previousScrollHeight = container.scrollHeight;
+    // Save distance from bottom (how far up the user has scrolled)
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     
     // Clear and re-render
     container.innerHTML = '';
@@ -1496,9 +1500,9 @@ function renderChatPage() {
         // User was at bottom, keep them there
         container.scrollTop = container.scrollHeight;
     } else {
-        // User was reading - maintain their exact position
-        // Don't adjust for new content, just stay where they were
-        container.scrollTop = previousScrollTop;
+        // Restore position by maintaining same distance from bottom
+        // This keeps the user looking at the same messages even as new ones arrive
+        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
     }
 }
 
