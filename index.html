@@ -1109,45 +1109,29 @@
         }
         
         .sidebar-logo {
-            padding: var(--space-4);
+            padding: var(--space-2);
             border-bottom: 1px solid var(--border-default);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: var(--space-3);
             height: 60px;
         }
         
-        .sidebar:hover .sidebar-logo {
-            justify-content: flex-start;
-        }
-        
-        .sidebar-logo-icon {
-            width: 32px;
-            height: 32px;
-            background: var(--brand-red);
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 14px;
-            flex-shrink: 0;
-        }
-        
-        .sidebar-logo-text {
-            font-weight: 600;
-            font-size: 14px;
-            white-space: nowrap;
-            opacity: 0;
-            width: 0;
-            overflow: hidden;
-            transition: opacity var(--transition-normal), width var(--transition-normal);
-        }
-        
-        .sidebar:hover .sidebar-logo-text {
-            opacity: 1;
+        .sidebar-logo-img {
+            height: 40px;
             width: auto;
+            object-fit: contain;
+            transition: height var(--transition-normal);
+        }
+        
+        .sidebar:hover .sidebar-logo-img {
+            height: 48px;
+        }
+        
+        .header-logo-img {
+            height: 36px;
+            width: auto;
+            object-fit: contain;
         }
         
         .sidebar-nav {
@@ -1700,19 +1684,7 @@
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-logo">
-            <div class="sidebar-logo-icon">
-                <svg viewBox="0 0 32 32" class="logo-svg" style="height: 24px; width: 24px;">
-                    <!-- SoLoVision Logo -->
-                    <rect width="32" height="32" rx="6" fill="#1B2232"/>
-                    <!-- S shape -->
-                    <path d="M 10 10 Q 10 16, 14 16 Q 18 16, 18 22" stroke="#A9B2BC" stroke-width="2" fill="none" stroke-linecap="round"/>
-                    <!-- V shape -->
-                    <path d="M 22 10 L 26 16 L 22 22" stroke="#BC2026" stroke-width="2" fill="none" stroke-linecap="round"/>
-                    <!-- Accent dot -->
-                    <circle cx="16" cy="6" r="1.5" fill="#BC2026"/>
-                </svg>
-            </div>
-            <span class="sidebar-logo-text">SoLoVision</span>
+            <img src="logo.png" alt="SoLoVision" class="sidebar-logo-img">
         </div>
         
         <nav class="sidebar-nav">
@@ -1753,18 +1725,7 @@
     <header class="header">
         <div class="container header-inner">
             <div class="logo">
-                <svg viewBox="0 0 100 30" class="logo-svg" style="height: 24px; width: 80px; margin-top: 3px;">
-                    <!-- SoLoVision Logo -->
-                    <rect width="100" height="30" rx="4" fill="#1B2232"/>
-                    <!-- S shape -->
-                    <path d="M 15 7 Q 15 15, 22 15 Q 29 15, 29 23" stroke="#A9B2BC" stroke-width="2" fill="none" stroke-linecap="round"/>
-                    <!-- V shape -->
-                    <path d="M 35 7 L 42 15 L 35 23" stroke="#BC2026" stroke-width="2" fill="none" stroke-linecap="round"/>
-                    <!-- Vision text -->
-                    <text x="48" y="19" fill="#FFFFFF" font-family="Inter" font-size="12" font-weight="600">Vision</text>
-                    <!-- Accent dot -->
-                    <circle cx="50" cy="5" r="2" fill="#BC2026"/>
-                </svg>
+                <img src="logo.png" alt="SoLoVision" class="header-logo-img">
             </div>
 
             <div class="header-status">
