@@ -1909,7 +1909,11 @@ function syncChatToVPS() {
 
 function renderChat() {
     const container = document.getElementById('chat-messages');
-    if (!container) return;
+    if (!container) {
+        console.log('[Dashboard] renderChat: container not found');
+        return;
+    }
+    console.log(`[Dashboard] renderChat: rendering ${state.chat?.messages?.length || 0} messages`);
 
     const messages = state.chat?.messages || [];
     const isConnected = gateway?.isConnected();
@@ -2205,7 +2209,11 @@ function updateScrollToBottomButton() {
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
-    if (!container) return;
+    if (!container) {
+        console.log('[Dashboard] renderChatPage: container not found');
+        return;
+    }
+    console.log(`[Dashboard] renderChatPage: rendering ${state.chat?.messages?.length || 0} messages`);
 
     // Setup scroll listener
     setupChatPageScrollListener();
