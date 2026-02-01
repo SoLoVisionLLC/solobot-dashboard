@@ -484,50 +484,33 @@ async function updateModelDropdown(provider) {
 
 async function getModelsForProvider(provider) {
     try {
-        console.log(`[Dashboard] Getting models for provider: ${provider}`);
+        console.log(`[Dashboard] Fetching models from API for provider: ${provider}`);
         
-        // Get models based on provider
-        const modelsByProvider = {
-            'anthropic': [
-                { value: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5' },
-                { value: 'anthropic/claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet' },
-                { value: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet' },
-                { value: 'anthropic/claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku' }
-            ],
-            'openai': [
-                { value: 'openai/gpt-4o', name: 'GPT-4o' },
-                { value: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
-                { value: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' }
-            ],
-            'google': [
-                { value: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
-                { value: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-                { value: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
-            ],
-            'moonshot': [
-                { value: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2' },
-                { value: 'moonshot/kimi-k2-thinking', name: 'Kimi K2 Thinking' }
-            ],
-            'openrouter': [
-                { value: 'openrouter/auto', name: 'OpenRouter Auto' },
-                { value: 'openrouter/anthropic/claude-opus-4-5', name: 'Claude Opus 4.5 (OR)' },
-                { value: 'openrouter/openai/gpt-4o', name: 'GPT-4o (OR)' }
-            ]
-        };
+        // Fetch models from server API
+        const response = await fetch('/api/models/list');
+        if (!response.ok) {
+            throw new Error(`API returned ${response.status}`);
+        }
         
-        const models = modelsByProvider[provider] || [];
+        const allModels = await response.json();
+        console.log(`[Dashboard] Got models from API:`, Object.keys(allModels));
         
-        // Mark current model as selected
-        models.forEach(model => {
-            model.selected = (model.value === currentModel);
-        });
+        // Get models for the requested provider
+        const providerModels = allModels[provider] || [];
         
-        console.log(`[Dashboard] Returning ${models.length} models for ${provider}`);
+        // Transform to expected format and mark current as selected
+        const models = providerModels.map(m => ({
+            value: m.id,
+            name: m.name,
+            selected: (m.id === currentModel)
+        }));
+        
+        console.log(`[Dashboard] Returning ${models.length} models for ${provider}:`, models);
         return models;
     } catch (e) {
-        console.error('[Dashboard] Failed to get models for provider:', provider, e);
-        // Re-throw to make error visible
-        throw new Error(`Failed to get models for provider ${provider}: ${e.message}`);
+        console.error('[Dashboard] Failed to get models from API:', e);
+        // Return empty array on error - don't hide the problem
+        return [];
     }
 }
 
