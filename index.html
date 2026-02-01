@@ -1882,8 +1882,22 @@
                 </div>
 
                 <div class="header-meta">
-                    <div>Provider: <span id="provider-name">--</span></div>
-                    <div>Model: <span id="model-name">--</span></div>
+                    <div>
+                        Provider: 
+                        <select id="provider-select" class="header-select" onchange="updateProviderDisplay()">
+                            <option value="anthropic">Anthropic</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="google">Google</option>
+                            <option value="moonshot">Moonshot</option>
+                            <option value="openrouter">OpenRouter</option>
+                        </select>
+                    </div>
+                    <div>
+                        Model: 
+                        <select id="model-select" class="header-select" onchange="changeModel()">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
                 </div>
 
                 <button class="theme-toggle" onclick="openSettingsModal()" title="Settings">
@@ -2660,8 +2674,17 @@
                         </div>
                         <div id="current-model-display" style="font-weight: 600; color: var(--text-primary);">--</div>
                     </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <div class="setting-title">Change Model</div>
+                            <div class="setting-desc">Select a different AI model</div>
+                        </div>
+                        <select id="setting-model" onchange="changeModel()" class="select">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2);">
-                        To change model: Run <code style="background: var(--surface-2); padding: 2px 4px; border-radius: 3px;">moltbot models set &lt;model_id&gt;</code> in terminal
+                        Model changes take effect immediately for new conversations
                     </p>
                 </div>
             </div>

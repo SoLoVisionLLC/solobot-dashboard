@@ -676,6 +676,86 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Change AI Model endpoint
+  if (url.pathname === '/api/models/set' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { modelId } = JSON.parse(body);
+        
+        if (!modelId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'modelId is required' }));
+          return;
+        }
+        
+        // Execute the moltbot command to change model
+        const exec = require('child_process').execSync;
+        const result = exec(`moltbot models set "${modelId}" 2>&1`, { encoding: 'utf8' });
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ 
+          ok: true, 
+          message: result,
+          modelId: modelId 
+        }));
+        
+      } catch (e) {
+        console.error('[Server] Failed to change model:', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ 
+          error: 'Failed to change model', 
+          details: e.message 
+        }));
+      }
+    });
+    return;
+  }
+  
+  // Get current model endpoint
+  if (url.pathname === '/api/models/current' && req.method === 'GET') {
+    try {
+      const exec = require('child_process').execSync;
+      const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+      
+      if (result) {
+        const parts = result.trim().split(/\s+/);
+        const modelId = parts[0];
+        const tags = parts[parts.length - 1] || '';
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          modelId: modelId,
+          provider: modelId.split('/')[0],
+          name: modelId.split('/').pop(),
+          isDefault: tags.includes('default'),
+          isConfigured: tags.includes('configured')
+        }));
+      } else {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          modelId: 'anthropic/claude-opus-4-5',
+          provider: 'anthropic',
+          name: 'claude-opus-4-5',
+          isDefault: true,
+          isConfigured: true
+        }));
+      }
+    } catch (e) {
+      console.error('[Server] Failed to get current model:', e.message);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        modelId: 'anthropic/claude-opus-4-5',
+        provider: 'anthropic',
+        name: 'claude-opus-4-5',
+        isDefault: true,
+        isConfigured: true
+      }));
+    }
+    return;
+  }
+  
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);

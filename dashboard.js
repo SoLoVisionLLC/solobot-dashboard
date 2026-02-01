@@ -394,9 +394,55 @@ window.changeProvider = function() {
     showToast('Providers must be configured at the OpenClaw gateway level', 'warning');
 };
 
-window.changeModel = function() {
-    console.warn('[Dashboard] Model selection not implemented - use moltbot models set <model_id>');
-    showToast('Use: moltbot models set <model_id>', 'info');
+window.updateProviderDisplay = function() {
+    const providerSelect = document.getElementById('provider-select');
+    const selectedProvider = providerSelect.value;
+    
+    // Update display
+    document.getElementById('provider-name').textContent = selectedProvider;
+    
+    // Update model dropdown for this provider
+    updateModelDropdown(selectedProvider);
+};
+
+window.changeModel = async function() {
+    const modelSelect = document.getElementById('model-select');
+    const selectedModel = modelSelect.value;
+    
+    if (!selectedModel) {
+        showToast('Please select a model', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/models/set', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ modelId: selectedModel })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast(`Model changed to ${selectedModel}`, 'success');
+            console.log(`[Dashboard] Model changed to: ${selectedModel}`);
+            
+            // Update displays
+            document.getElementById('model-name').textContent = selectedModel;
+            document.getElementById('current-model-display').textContent = selectedModel;
+            
+            // Refresh model list in settings
+            updateModelDropdown(document.getElementById('provider-select').value);
+        } else {
+            showToast(`Failed to change model: ${result.error}`, 'error');
+            console.error('[Dashboard] Failed to change model:', result);
+        }
+    } catch (error) {
+        showToast('Failed to change model', 'error');
+        console.error('[Dashboard] Error changing model:', error);
+    }
 };
 
 function updateModelDropdown(provider) {
@@ -416,36 +462,29 @@ function updateModelDropdown(provider) {
     });
 }
 
-function getModelsForProvider(provider) {
-    // Get actual models from OpenClaw
+async function getModelsForProvider(provider) {
     try {
-        const exec = require('child_process').execSync;
-        const result = exec('moltbot models list --all 2>/dev/null | tail -n +4', { encoding: 'utf8' });
+        // Fetch all available models from OpenClaw
+        const response = await fetch('/api/models/current');
+        const currentModel = await response.json();
         
-        // Parse the output - skip header and format: "provider/model  input  ctx  local  auth  tags"
-        const models = [];
-        const lines = result.split('\n').filter(line => line.trim());
+        // For now, show a curated list of popular models
+        // In the future, we could fetch the full list via a separate endpoint
+        const popularModels = [
+            { value: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', selected: currentModel.modelId === 'anthropic/claude-opus-4-5' },
+            { value: 'anthropic/claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet', selected: currentModel.modelId === 'anthropic/claude-3-7-sonnet-latest' },
+            { value: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', selected: currentModel.modelId === 'anthropic/claude-3-5-sonnet-latest' },
+            { value: 'anthropic/claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', selected: currentModel.modelId === 'anthropic/claude-3-5-haiku-latest' },
+            { value: 'openai/gpt-4o', name: 'GPT-4o', selected: currentModel.modelId === 'openai/gpt-4o' },
+            { value: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', selected: currentModel.modelId === 'openai/gpt-4o-mini' },
+            { value: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', selected: currentModel.modelId === 'google/gemini-2.5-pro' },
+            { value: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', selected: currentModel.modelId === 'google/gemini-2.5-flash' },
+            { value: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', selected: currentModel.modelId === 'moonshot/kimi-k2-0905-preview' }
+        ];
         
-        for (const line of lines) {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length >= 2) {
-                const modelId = parts[0];
-                const tags = parts[parts.length - 1] || '';
-                
-                // Only include models that match the provider or are available
-                if (!provider || modelId.startsWith(provider + '/') || modelId.includes(provider)) {
-                    models.push({
-                        value: modelId,
-                        name: modelId.split('/').pop() || modelId,
-                        selected: tags.includes('default') || tags.includes('configured')
-                    });
-                }
-            }
-        }
-        
-        return models.length > 0 ? models : getConfiguredModels();
+        return popularModels;
     } catch (e) {
-        console.log('[Dashboard] Failed to get models from OpenClaw, using configured models');
+        console.log('[Dashboard] Failed to get models, using defaults');
         return getConfiguredModels();
     }
 }
@@ -481,35 +520,37 @@ function getConfiguredModels() {
 }
 
 // Initialize provider/model display on page load
-document.addEventListener('DOMContentLoaded', function() {
-    // Get actual current model from OpenClaw
-    let currentModel = 'anthropic/claude-opus-4-5'; // Default fallback
-    let currentProvider = 'anthropic';
-    
+document.addEventListener('DOMContentLoaded', async function() {
+    // Get actual current model from OpenClaw via API
     try {
-        const exec = require('child_process').execSync;
-        const result = exec('moltbot models list 2>/dev/null | grep "default\|configured" | head -1', { encoding: 'utf8' });
+        const response = await fetch('/api/models/current');
+        const currentModel = await response.json();
         
-        if (result) {
-            const parts = result.trim().split(/\s+/);
-            if (parts.length >= 1) {
-                currentModel = parts[0];
-                currentProvider = currentModel.split('/')[0] || 'anthropic';
-            }
-        }
-    } catch (e) {
-        console.log('[Dashboard] Failed to get current model from OpenClaw, using default');
+        console.log(`[Dashboard] Current model: ${currentModel.provider}/${currentModel.modelId}`);
+        
+        // Update navbar display
+        document.getElementById('provider-name').textContent = currentModel.provider;
+        document.getElementById('model-name').textContent = currentModel.modelId;
+        
+        // Update settings modal display
+        document.getElementById('current-provider-display').textContent = currentModel.provider;
+        document.getElementById('current-model-display').textContent = currentModel.modelId;
+        
+        // Populate model dropdowns
+        const models = await getModelsForProvider(currentModel.provider);
+        updateModelDropdown(currentModel.provider);
+        
+    } catch (error) {
+        console.error('[Dashboard] Failed to get current model:', error);
+        // Fallback to defaults
+        const currentModel = 'anthropic/claude-opus-4-5';
+        const currentProvider = 'anthropic';
+        
+        document.getElementById('provider-name').textContent = currentProvider;
+        document.getElementById('model-name').textContent = currentModel;
+        document.getElementById('current-provider-display').textContent = currentProvider;
+        document.getElementById('current-model-display').textContent = currentModel;
     }
-    
-    console.log(`[Dashboard] Current model: ${currentProvider}/${currentModel}`);
-    
-    // Update navbar display
-    document.getElementById('provider-name').textContent = currentProvider;
-    document.getElementById('model-name').textContent = currentModel;
-    
-    // Update settings modal display
-    document.getElementById('current-provider-display').textContent = currentProvider;
-    document.getElementById('current-model-display').textContent = currentModel;
 });
 
 // Default settings
