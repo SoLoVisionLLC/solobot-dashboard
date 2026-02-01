@@ -2887,9 +2887,26 @@ window.viewMemoryFile = async function(filePath) {
         contentEl.disabled = false;
         if (saveBtn) saveBtn.disabled = false;
         
+        // Show bot-update badge and acknowledge button if applicable
+        if (data.botUpdated && !data.acknowledged) {
+            titleEl.innerHTML = `
+                ${escapeHtml(data.name)}
+                <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
+                <button onclick="window.acknowledgeUpdate && window.acknowledgeUpdate('${escapeHtml(filePath)}')" 
+                        class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
+                    ✓ Mark as Read
+                </button>
+            `;
+        } else {
+            titleEl.textContent = data.name;
+        }
+        
         // Load version history (function from docs-hub-memory-files.js)
-        if (typeof loadVersionHistory === 'function') {
-            loadVersionHistory(filePath);
+        if (typeof window.loadVersionHistory === 'function') {
+            console.log('[Dashboard] Calling loadVersionHistory for:', filePath);
+            window.loadVersionHistory(filePath);
+        } else {
+            console.warn('[Dashboard] loadVersionHistory not found!');
         }
         
     } catch (error) {

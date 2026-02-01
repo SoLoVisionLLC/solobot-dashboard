@@ -551,13 +551,17 @@ const server = http.createServer((req, res) => {
       
       const content = fs.readFileSync(filePath, 'utf8');
       const stat = fs.statSync(filePath);
+      const meta = fileMeta[filename] || {};
       
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({
         name: filename,
         content: content,
         modified: stat.mtime.toISOString(),
-        size: stat.size
+        size: stat.size,
+        botUpdated: meta.botUpdated || false,
+        botUpdatedAt: meta.botUpdatedAt || null,
+        acknowledged: meta.acknowledged || false
       }));
     } catch (e) {
       res.writeHead(500);
