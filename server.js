@@ -800,6 +800,17 @@ const server = http.createServer((req, res) => {
           name: 'claude-opus-4-5'
         };
       }
+
+      // Normalize bad modelId like "anthropic/anthropic/claude-opus-4-5"
+      if (modelInfo?.modelId) {
+        const parts = modelInfo.modelId.split('/');
+        if (parts.length >= 3 && parts[0] === parts[1]) {
+          modelInfo.modelId = parts.slice(1).join('/');
+        }
+        // Ensure provider/name are consistent with modelId
+        modelInfo.provider = modelInfo.modelId.split('/')[0];
+        modelInfo.name = modelInfo.modelId.split('/').pop();
+      }
       
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(modelInfo));
