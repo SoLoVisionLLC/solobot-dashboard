@@ -1541,21 +1541,72 @@ async function sendChatPageMessage() {
     }
 }
 
-function clearChatHistory() {
-    if (confirm('Clear all chat messages? Note: They will reload from Gateway on next sync.')) {
+// ===================
+// THEMED CONFIRM MODAL (replaces browser confirm)
+// ===================
+
+let confirmModalCallback = null;
+
+function showConfirm(title, message, okText = 'OK', cancelText = 'Cancel', isDanger = false) {
+    return new Promise((resolve) => {
+        const titleEl = document.getElementById('confirm-modal-title');
+        const messageEl = document.getElementById('confirm-modal-message');
+        const okBtn = document.getElementById('confirm-modal-ok');
+        const cancelBtn = document.getElementById('confirm-modal-cancel');
+        
+        if (titleEl) titleEl.textContent = title;
+        if (messageEl) messageEl.textContent = message;
+        if (okBtn) {
+            okBtn.textContent = okText;
+            okBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+        }
+        if (cancelBtn) cancelBtn.textContent = cancelText;
+        
+        confirmModalCallback = resolve;
+        showModal('confirm-modal');
+    });
+}
+
+function closeConfirmModal(result) {
+    hideModal('confirm-modal');
+    if (confirmModalCallback) {
+        confirmModalCallback(result);
+        confirmModalCallback = null;
+    }
+}
+
+// Make globally available
+window.showConfirm = showConfirm;
+window.closeConfirmModal = closeConfirmModal;
+
+async function clearChatHistory() {
+    const confirmed = await showConfirm(
+        'Clear Chat History',
+        'Clear all chat messages? They may reload from Gateway on next sync.',
+        'Clear',
+        'Cancel',
+        true
+    );
+    
+    if (confirmed) {
         state.chat.messages = [];
         chatPageNewMessageCount = 0;
         chatPageUserScrolled = false;
         renderChat();
         renderChatPage();
-        // Note: Don't need to persist - chat comes from Gateway
     }
 }
 
-function startNewSession() {
-    if (!confirm('Start a new session? This will clear chat history and reconnect to the gateway.')) {
-        return;
-    }
+async function startNewSession() {
+    const confirmed = await showConfirm(
+        'Start New Session',
+        'This will clear all chat history and reconnect to the gateway. Continue?',
+        'Start New',
+        'Cancel',
+        false
+    );
+    
+    if (!confirmed) return;
     
     // Clear local chat
     state.chat.messages = [];
