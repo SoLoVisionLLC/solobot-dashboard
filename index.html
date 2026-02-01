@@ -1720,7 +1720,7 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <button class="sidebar-toggle" onclick="toggleSidebarPin()" title="Pin sidebar">
-            <span id="sidebar-pin-icon">»</span>
+            <span id="sidebar-pin-icon">🔓</span>
         </button>
         <div class="sidebar-logo">
             <img src="solobot-avatar.png" alt="SoLoBot" class="sidebar-logo-img">
@@ -2587,14 +2587,14 @@
             const icon = document.getElementById('sidebar-pin-icon');
             const isPinned = sidebar.classList.toggle('pinned');
             localStorage.setItem('sidebarPinned', isPinned);
-            icon.textContent = isPinned ? '«' : '»';
+            icon.textContent = isPinned ? '🔒' : '🔓';
             console.log('Sidebar pinned:', isPinned);
         }
         
         // Restore sidebar state on load
         if (localStorage.getItem('sidebarPinned') === 'true') {
             document.getElementById('sidebar').classList.add('pinned');
-            document.getElementById('sidebar-pin-icon').textContent = '«';
+            document.getElementById('sidebar-pin-icon').textContent = '🔒';
         }
 
         // Page navigation with URL update
