@@ -2283,18 +2283,13 @@
                     <div class="chat-page-actions">
                         <div class="session-selector-wrapper" style="position: relative; display: inline-flex; align-items: center; margin-right: 8px;">
                             <span id="chat-page-session-name" style="font-size: 13px; color: var(--accent-color); font-weight: 600; background: var(--surface-elevated); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-color);">main</span>
-                            <button onclick="toggleChatPageSessionMenu()" class="btn btn-icon" style="padding: 4px; margin-left: 2px;" title="Session options">
+                            <button onclick="toggleChatPageSessionMenu()" class="btn btn-icon" style="padding: 4px; margin-left: 2px;" title="Switch session">
                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
                             </button>
-                            <div id="chat-page-session-menu" class="hidden session-dropdown-menu">
-                                <button onclick="renameChatPageSession()" class="session-dropdown-item">
-                                    <span>✏️</span> Rename Session
-                                </button>
-                                <button onclick="switchChatPageSession()" class="session-dropdown-item">
-                                    <span>🔄</span> Switch Session
-                                </button>
+                            <div id="chat-page-session-menu" class="hidden session-dropdown-menu" style="max-height: 300px; overflow-y: auto;">
+                                <!-- Sessions populated dynamically -->
                             </div>
                         </div>
                         <button onclick="scrollChatToBottom()" class="btn btn-ghost" title="Scroll to bottom">

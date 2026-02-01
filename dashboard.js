@@ -750,11 +750,6 @@ window.renameChatPageSession = function() {
     });
 }
 
-window.switchChatPageSession = function() {
-    toggleChatPageSessionMenu();
-    showSessionSwitcherModal();
-}
-
 // Session Management
 let availableSessions = [];
 
@@ -765,6 +760,7 @@ async function fetchSessions() {
         const data = await response.json();
         availableSessions = data.sessions || [];
         console.log(`[Dashboard] Fetched ${availableSessions.length} sessions`);
+        populateSessionDropdown();
         return availableSessions;
     } catch (e) {
         console.error('[Dashboard] Failed to fetch sessions:', e);
@@ -772,66 +768,34 @@ async function fetchSessions() {
     }
 }
 
-function showSessionSwitcherModal() {
+function populateSessionDropdown() {
+    const menu = document.getElementById('chat-page-session-menu');
+    if (!menu) return;
+    
     if (availableSessions.length === 0) {
-        showToast('No sessions available', 'warning');
+        menu.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">No sessions available</div>';
         return;
     }
     
-    // Create modal HTML
-    const modal = document.createElement('div');
-    modal.id = 'session-switcher-modal';
-    modal.style.cssText = `
-        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.5); z-index: 10000;
-        display: flex; align-items: center; justify-content: center;
-    `;
-    
-    const sessionList = availableSessions.map(s => `
-        <button onclick="switchToSession('${s.key}')" style="
-            display: flex; align-items: center; justify-content: space-between;
-            width: 100%; padding: 12px; margin: 4px 0;
-            background: ${s.key === currentSessionName ? 'var(--accent-color)' : 'var(--surface-elevated)'};
-            color: ${s.key === currentSessionName ? 'white' : 'var(--text-color)'};
-            border: 1px solid var(--border-color); border-radius: 8px;
-            cursor: pointer; text-align: left;
+    menu.innerHTML = availableSessions.map(s => `
+        <button onclick="switchToSession('${s.key}')" class="session-dropdown-item" style="
+            ${s.key === currentSessionName ? 'background: var(--accent-color); color: white;' : ''}
         ">
             <span style="font-weight: 600;">${s.displayName || s.name}</span>
-            <span style="font-size: 12px; opacity: 0.7;">${s.model}</span>
+            <span style="font-size: 11px; opacity: 0.7; margin-left: auto; padding-left: 8px;">${s.model}</span>
         </button>
     `).join('');
-    
-    modal.innerHTML = `
-        <div style="
-            background: var(--surface-1); padding: 24px; border-radius: 12px;
-            min-width: 320px; max-width: 90vw; max-height: 80vh; overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        ">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="margin: 0; font-size: 18px;">Switch Session</h3>
-                <button onclick="closeSessionModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted);">&times;</button>
-            </div>
-            <div style="margin-bottom: 16px;">${sessionList}</div>
-            <button onclick="refreshSessions()" style="
-                width: 100%; padding: 10px; background: var(--surface-elevated);
-                border: 1px solid var(--border-color); border-radius: 6px;
-                cursor: pointer; color: var(--text-color);
-            ">🔄 Refresh Sessions</button>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    modal.onclick = (e) => { if (e.target === modal) closeSessionModal(); };
-}
-
-window.closeSessionModal = function() {
-    const modal = document.getElementById('session-switcher-modal');
-    if (modal) modal.remove();
 }
 
 window.switchToSession = async function(sessionKey) {
-    closeSessionModal();
-    showToast(`Switching to session...`, 'info');
+    toggleChatPageSessionMenu();
+    
+    if (sessionKey === currentSessionName) {
+        showToast('Already on this session', 'info');
+        return;
+    }
+    
+    showToast(`Switching to ${sessionKey}...`, 'info');
     
     try {
         const response = await fetch('/api/session/switch', {
@@ -843,6 +807,15 @@ window.switchToSession = async function(sessionKey) {
         const result = await response.json();
         if (result.ok) {
             showToast(`Session switch requested: ${sessionKey}`, 'success');
+            // Update current session display
+            currentSessionName = sessionKey;
+            const nameEl = document.getElementById('chat-page-session-name');
+            if (nameEl) {
+                const session = availableSessions.find(s => s.key === sessionKey);
+                nameEl.textContent = session ? (session.displayName || session.name) : sessionKey;
+            }
+            // Refresh dropdown to show new selection
+            populateSessionDropdown();
         } else {
             showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
         }
@@ -850,12 +823,6 @@ window.switchToSession = async function(sessionKey) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
     }
-}
-
-window.refreshSessions = async function() {
-    await fetchSessions();
-    closeSessionModal();
-    showSessionSwitcherModal();
 }
 
 // Fetch sessions on page load
