@@ -719,50 +719,82 @@ const server = http.createServer((req, res) => {
     return;
   }
   
-  // Request model change (stored in state, OpenClaw agent handles actual change)
+  // Change model (updates OpenClaw config directly)
   if (url.pathname === '/api/models/set' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const { modelId } = JSON.parse(body);
-        
+
         if (!modelId) {
           res.writeHead(400);
           res.end(JSON.stringify({ error: 'modelId is required' }));
           return;
         }
-        
+
         console.log(`[Server] Model change requested: ${modelId}`);
-        
-        // Update state with requested model
-        const fileState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-        fileState.requestedModel = {
+
+        const modelInfo = {
           modelId: modelId,
           provider: modelId.split('/')[0],
           name: modelId.split('/').pop(),
-          requestedAt: Date.now()
+          changedAt: Date.now()
         };
+
+        // Update OpenClaw config file directly
+        const openclawConfigPath = '/home/node/.openclaw/openclaw.json';
+        let configUpdated = false;
+
+        try {
+          if (fs.existsSync(openclawConfigPath)) {
+            const ocConfig = JSON.parse(fs.readFileSync(openclawConfigPath, 'utf8'));
+
+            // Update the primary model in config
+            if (!ocConfig.agents) ocConfig.agents = {};
+            if (!ocConfig.agents.defaults) ocConfig.agents.defaults = {};
+            if (!ocConfig.agents.defaults.model) ocConfig.agents.defaults.model = {};
+
+            ocConfig.agents.defaults.model.primary = modelId;
+
+            fs.writeFileSync(openclawConfigPath, JSON.stringify(ocConfig, null, 2));
+            console.log(`[Server] Updated OpenClaw config with model: ${modelId}`);
+            configUpdated = true;
+          } else {
+            console.warn('[Server] OpenClaw config not found at:', openclawConfigPath);
+          }
+        } catch (ocErr) {
+          console.error('[Server] Failed to update OpenClaw config:', ocErr.message);
+        }
+
+        // Update dashboard state with current model
+        const fileState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        fileState.currentModel = modelInfo;
+        fileState.requestedModel = modelInfo;
         fileState.lastSync = Date.now();
         fs.writeFileSync(STATE_FILE, JSON.stringify(fileState, null, 2));
-        
+
         // Update global in-memory state
-        state.requestedModel = fileState.requestedModel;
+        state.currentModel = modelInfo;
+        state.requestedModel = modelInfo;
         state.lastSync = fileState.lastSync;
-        
+
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ 
-          ok: true, 
-          message: 'Model change requested. SoLoBot will apply it.',
-          modelId: modelId 
+        res.end(JSON.stringify({
+          ok: true,
+          message: configUpdated
+            ? 'Model changed. Restart gateway to apply.'
+            : 'Model saved locally. OpenClaw config not found - may need manual update.',
+          modelId: modelId,
+          configUpdated: configUpdated
         }));
-        
+
       } catch (e) {
-        console.error('[Server] Failed to request model change:', e.message);
+        console.error('[Server] Failed to change model:', e.message);
         res.writeHead(500);
-        res.end(JSON.stringify({ 
-          error: 'Failed to save model change request', 
-          details: e.message 
+        res.end(JSON.stringify({
+          error: 'Failed to change model',
+          details: e.message
         }));
       }
     });

@@ -286,9 +286,8 @@ class GatewayClient {
         };
 
         // Log model info if available
-        const provider = localStorage.getItem('selected_provider') || 'anthropic';
-        const model = localStorage.getItem('selected_model') || 'claude-3-opus';
-        console.log(`[Gateway] Sending message with ${provider}/${model}`);
+        const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
+        console.log(`[Gateway] Sending message with ${model}`);
 
         return this._request('chat.send', params);
     }
@@ -334,9 +333,8 @@ class GatewayClient {
             Math.round(attachments.reduce((sum, a) => sum + a.content.length, 0) / 1024), 'KB');
 
         // Log model info if available
-        const provider = localStorage.getItem('selected_provider') || 'anthropic';
-        const model = localStorage.getItem('selected_model') || 'claude-3-opus';
-        console.log(`[Gateway] Sending with ${provider}/${model}`);
+        const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
+        console.log(`[Gateway] Sending with ${model}`);
 
         return this._request('chat.send', params);
     }
