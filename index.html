@@ -1125,6 +1125,8 @@
             justify-content: center;
             opacity: 0;
             transition: opacity var(--transition-normal), background var(--transition-normal);
+            font-size: 16px;
+            font-weight: bold;
         }
         
         .sidebar:hover .sidebar-toggle,
@@ -1157,7 +1159,8 @@
             transition: height var(--transition-normal);
         }
         
-        .sidebar:hover .sidebar-logo-img {
+        .sidebar:hover .sidebar-logo-img,
+        .sidebar.pinned .sidebar-logo-img {
             height: 48px;
         }
         
@@ -1176,7 +1179,8 @@
             transition: padding var(--transition-normal);
         }
         
-        .sidebar:hover .sidebar-nav {
+        .sidebar:hover .sidebar-nav,
+        .sidebar.pinned .sidebar-nav {
             padding: var(--space-3); /* More padding when expanded */
         }
         
@@ -1193,7 +1197,8 @@
             text-decoration: none;
         }
         
-        .sidebar:hover .sidebar-item {
+        .sidebar:hover .sidebar-item,
+        .sidebar.pinned .sidebar-item {
             justify-content: flex-start;
             padding: var(--space-3);
         }
@@ -1228,7 +1233,8 @@
             transition: opacity var(--transition-normal), width var(--transition-normal);
         }
         
-        .sidebar:hover .sidebar-item-text {
+        .sidebar:hover .sidebar-item-text,
+        .sidebar.pinned .sidebar-item-text {
             opacity: 1;
             width: auto;
         }
@@ -1239,7 +1245,8 @@
             transition: padding var(--transition-normal);
         }
         
-        .sidebar:hover .sidebar-footer {
+        .sidebar:hover .sidebar-footer,
+        .sidebar.pinned .sidebar-footer {
             padding: var(--space-3);
         }
         
@@ -1717,7 +1724,7 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <button class="sidebar-toggle" onclick="toggleSidebarPin()" title="Pin sidebar">
-            <span id="sidebar-pin-icon">📌</span>
+            <span id="sidebar-pin-icon">»</span>
         </button>
         <div class="sidebar-logo">
             <img src="solobot-avatar.png" alt="SoLoBot" class="sidebar-logo-img">
@@ -2581,13 +2588,16 @@
         // Sidebar pin toggle
         function toggleSidebarPin() {
             const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('sidebar-pin-icon');
             const isPinned = sidebar.classList.toggle('pinned');
             localStorage.setItem('sidebarPinned', isPinned);
+            icon.textContent = isPinned ? '«' : '»';
         }
         
         // Restore sidebar state on load
         if (localStorage.getItem('sidebarPinned') === 'true') {
             document.getElementById('sidebar').classList.add('pinned');
+            document.getElementById('sidebar-pin-icon').textContent = '«';
         }
 
         // Page navigation with URL update
