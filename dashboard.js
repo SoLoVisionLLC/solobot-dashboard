@@ -1094,7 +1094,7 @@ function addLocalChatMessage(text, from, image = null) {
 }
 
 // Debounced sync of chat messages to VPS (so messages persist across computers)
-let chatSyncTimeout = null;
+// Note: reuses chatSyncTimeout declared above
 function syncChatToVPS() {
     // Debounce - wait 2 seconds after last message before syncing
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
