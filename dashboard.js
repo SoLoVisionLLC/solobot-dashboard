@@ -801,35 +801,28 @@ window.switchToSession = async function(sessionKey) {
         // 1. Save current chat as safeguard
         await saveCurrentChat();
         
-        // 2. Send switch request to server
-        const response = await fetch('/api/session/switch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionKey })
-        });
-        
-        const result = await response.json();
-        if (result.ok) {
-            // 3. Clear current chat
-            clearChatHistory();
-            
-            // 4. Load new session's history
-            await loadSessionHistory(sessionKey);
-            
-            // 5. Update current session display
-            currentSessionName = sessionKey;
-            const nameEl = document.getElementById('chat-page-session-name');
-            if (nameEl) {
-                const session = availableSessions.find(s => s.key === sessionKey);
-                nameEl.textContent = session ? (session.displayName || session.name) : sessionKey;
-            }
-            // Refresh dropdown to show new selection
-            populateSessionDropdown();
-            
-            showToast(`Switched to ${sessionKey}`, 'success');
-        } else {
-            showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
+        // 2. Use GatewayClient to switch session (like web UI does)
+        if (gateway && gateway.connected) {
+            gateway.setSessionKey(sessionKey);
         }
+        
+        // 3. Clear current chat
+        clearChatHistory();
+        
+        // 4. Load new session's history
+        await loadSessionHistory(sessionKey);
+        
+        // 5. Update current session display
+        currentSessionName = sessionKey;
+        const nameEl = document.getElementById('chat-page-session-name');
+        if (nameEl) {
+            const session = availableSessions.find(s => s.key === sessionKey);
+            nameEl.textContent = session ? (session.displayName || session.name) : sessionKey;
+        }
+        // Refresh dropdown to show new selection
+        populateSessionDropdown();
+        
+        showToast(`Switched to ${sessionKey}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
