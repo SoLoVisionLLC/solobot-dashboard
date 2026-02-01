@@ -55,7 +55,7 @@ function loadPersistedMessages() {
             if (Array.isArray(parsed)) {
                 const cutoff = Date.now() - (24 * 60 * 60 * 1000);
                 state.system.messages = parsed.filter(m => m.time > cutoff);
-                console.log(`[Dashboard] Restored ${state.system.messages.length} system messages from localStorage`);
+                // console.log(`[Dashboard] Restored ${state.system.messages.length} system messages from localStorage`);
             }
         }
 
@@ -66,7 +66,7 @@ function loadPersistedMessages() {
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const cutoff = Date.now() - (24 * 60 * 60 * 1000);
                 state.chat.messages = parsed.filter(m => m.time > cutoff);
-                console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
+                // console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
                 return; // Have local messages, no need to fetch from server
             }
         }
@@ -87,7 +87,7 @@ async function loadChatFromServer() {
         if (serverState.chat?.messages?.length > 0) {
             state.chat.messages = serverState.chat.messages;
             localStorage.setItem('solobot-chat-messages', JSON.stringify(state.chat.messages));
-            console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`);
+            // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
             // Re-render if on chat page
             if (typeof renderChatMessages === 'function') renderChatMessages();
             if (typeof renderChatPage === 'function') renderChatPage();
@@ -167,8 +167,7 @@ function saveGatewaySettings(host, port, token, sessionKey) {
 
 // Function to load gateway settings from server state (called after loadState)
 function loadGatewaySettingsFromServer() {
-    console.log('[Dashboard] loadGatewaySettingsFromServer called');
-    console.log('[Dashboard] state.gatewayConfig:', state.gatewayConfig);
+    // console.log('[Dashboard] loadGatewaySettingsFromServer called'); // Keep quiet
     
     if (state.gatewayConfig && state.gatewayConfig.host) {
         // Always prefer server settings if they exist (server is source of truth)
@@ -183,7 +182,7 @@ function loadGatewaySettingsFromServer() {
         localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
         localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
         
-        console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host);
+        // console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host); // Keep quiet
     } else {
         console.log('[Dashboard] ✗ No gateway config in server state');
     }
@@ -404,6 +403,9 @@ window.changeProvider = function() {
     // Save to localStorage
     localStorage.setItem('selected_provider', selectedProvider);
     
+    // Log the change
+    console.log(`[Dashboard] AI Provider changed to: ${selectedProvider}`);
+    
     // If gateway is connected, we might need to reconnect with new provider
     if (gateway && gateway.isConnected()) {
         showToast(`Provider changed to ${selectedProvider}`, 'success');
@@ -419,6 +421,9 @@ window.changeModel = function() {
     
     // Save to localStorage
     localStorage.setItem('selected_model', selectedModel);
+    
+    // Log the change
+    console.log(`[Dashboard] AI Model changed to: ${selectedModel}`);
     
     // If gateway is connected, we might need to reconnect with new model
     if (gateway && gateway.isConnected()) {
@@ -474,6 +479,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load saved preferences
     const savedProvider = localStorage.getItem('selected_provider') || 'anthropic';
     const savedModel = localStorage.getItem('selected_model') || 'claude-3-opus';
+    
+    // Log current configuration
+    console.log(`[Dashboard] Initializing with AI Provider: ${savedProvider}, Model: ${savedModel}`);
     
     // Set initial values
     document.getElementById('provider-select').value = savedProvider;
@@ -912,6 +920,11 @@ function mergeHistoryMessages(messages) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
+    
+    // Log summary after state is loaded
+    const provider = localStorage.getItem('selected_provider') || 'anthropic';
+    const model = localStorage.getItem('selected_model') || 'claude-3-opus';
+    console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}, Tasks: ${Object.values(state.tasks).flat().length}`);
     
     // Load gateway settings from server state if localStorage is empty
     loadGatewaySettingsFromServer();
