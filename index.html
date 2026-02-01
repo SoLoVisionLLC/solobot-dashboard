@@ -1276,6 +1276,13 @@
             min-height: 100vh;
             max-width: calc(100vw - 64px);
             overflow-x: hidden;
+            transition: margin-left 0.2s ease, max-width 0.2s ease;
+        }
+        
+        /* Adjust content when sidebar is pinned open */
+        .sidebar.pinned ~ .app-content {
+            margin-left: 200px;
+            max-width: calc(100vw - 200px);
         }
         
         /* Page containers */
@@ -2688,7 +2695,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=2.3.0"></script>
-    <script src="dashboard.js?v=3.35.0"></script>
+    <script src="dashboard.js?v=3.36.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];

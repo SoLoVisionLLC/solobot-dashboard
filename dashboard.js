@@ -313,6 +313,19 @@ function isSystemMessage(text, from) {
     // File content dumps (markdown files being read)
     if (trimmed.startsWith('# ') && trimmed.length > 500) return true;
     
+    // Grep/search output (line numbers with code)
+    if (/^\d+:\s*(if|const|let|var|function|class|return|import|export)\s/.test(trimmed)) return true;
+    if (/^\d+[-:].*\.(js|ts|py|md|json|html|css)/.test(trimmed)) return true;
+    
+    // Multiple line number prefixes (grep output)
+    const lineNumberPattern = /^\d+:/;
+    const lines = trimmed.split('\n');
+    if (lines.length > 2 && lines.filter(l => lineNumberPattern.test(l.trim())).length > lines.length / 2) return true;
+    
+    // Code blocks with state/config references
+    if (trimmed.includes('state.chat.messages') || trimmed.includes('GATEWAY_CONFIG')) return true;
+    if (trimmed.includes('maxMessages:') && /\d+:/.test(trimmed)) return true;
+    
     // === HEARTBEAT FILTERING ===
     
     // Exact heartbeat matches
