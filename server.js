@@ -848,6 +848,38 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Session rename endpoint
+  if (url.pathname === '/api/session/rename' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { oldName, newName } = JSON.parse(body);
+        if (!oldName || !newName) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'oldName and newName are required' }));
+          return;
+        }
+        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'Session name must be alphanumeric with hyphens/underscores only' }));
+          return;
+        }
+        console.log(`[Server] Session rename requested: ${oldName} -> ${newName}`);
+        // Store rename request in state for agent to apply
+        state.sessionRenameRequest = { oldName, newName, requestedAt: Date.now() };
+        saveState();
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, message: 'Rename requested. SoLoBot will apply it.' }));
+      } catch (e) {
+        console.error('[Server] Failed to request session rename:', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to request session rename', details: e.message }));
+      }
+    });
+    return;
+  }
+  
   // Manual state backup endpoint
   if (url.pathname === '/api/state/backup' && req.method === 'POST') {
     try {

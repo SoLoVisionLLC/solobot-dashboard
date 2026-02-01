@@ -675,6 +675,50 @@ async function checkRestartToast() {
     }
 }
 
+// ===================
+// SESSION MANAGEMENT
+// ===================
+
+let currentSessionName = 'main';
+
+function toggleSessionMenu() {
+    const menu = document.getElementById('session-menu');
+    if (!menu) return;
+    menu.classList.toggle('hidden');
+}
+
+async function renameSession() {
+    toggleSessionMenu();
+    const newName = prompt('Enter new session name:', currentSessionName);
+    if (!newName || newName === currentSessionName) return;
+    
+    try {
+        const response = await fetch('/api/session/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldName: currentSessionName, newName })
+        });
+        
+        if (response.ok) {
+            currentSessionName = newName;
+            const nameEl = document.getElementById('current-session-name');
+            if (nameEl) nameEl.textContent = newName;
+            showToast(`Session renamed to "${newName}"`, 'success');
+        } else {
+            const err = await response.json();
+            showToast(`Failed to rename: ${err.error || 'Unknown error'}`, 'error');
+        }
+    } catch (e) {
+        console.error('[Dashboard] Failed to rename session:', e);
+        showToast('Failed to rename session', 'error');
+    }
+}
+
+function showSessionSwitcher() {
+    toggleSessionMenu();
+    showToast('Session switcher coming soon', 'info');
+}
+
 function initGateway() {
     gateway = new GatewayClient({
         sessionKey: GATEWAY_CONFIG.sessionKey,
@@ -682,6 +726,12 @@ function initGateway() {
             console.log(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
+            
+            // Update session name display
+            currentSessionName = sessionKey;
+            const nameEl = document.getElementById('current-session-name');
+            if (nameEl) nameEl.textContent = sessionKey;
+            
             checkRestartToast();
 
             // Load chat history on connect
