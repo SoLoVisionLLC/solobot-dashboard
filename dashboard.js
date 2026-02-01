@@ -2870,6 +2870,11 @@ window.viewMemoryFile = async function(filePath) {
         contentEl.disabled = false;
         if (saveBtn) saveBtn.disabled = false;
         
+        // Load version history (function from docs-hub-memory-files.js)
+        if (typeof loadVersionHistory === 'function') {
+            loadVersionHistory(filePath);
+        }
+        
     } catch (error) {
         console.error('Error loading memory file:', error);
         contentEl.value = `Error loading file: ${error.message}`;
