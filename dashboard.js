@@ -1501,9 +1501,10 @@ let chatPageNewMessageCount = 0;
 // Save scroll position to sessionStorage
 function saveChatScrollPosition() {
     const container = document.getElementById('chat-page-messages');
-    if (container) {
+    if (container && container.scrollTop > 0) {
         sessionStorage.setItem('chatScrollPosition', container.scrollTop);
         sessionStorage.setItem('chatScrollHeight', container.scrollHeight);
+        console.log('[Chat] Saved scroll position:', container.scrollTop, 'of', container.scrollHeight);
     }
 }
 
@@ -1519,8 +1520,13 @@ function restoreChatScrollPosition() {
         // Calculate relative position and apply
         const ratio = parseFloat(savedPosition) / parseFloat(savedHeight);
         container.scrollTop = ratio * container.scrollHeight;
+        console.log('[Chat] Restored scroll position:', container.scrollTop);
     }
 }
+
+// Expose scroll functions globally for page navigation
+window.saveChatScrollPosition = saveChatScrollPosition;
+window.restoreChatScrollPosition = restoreChatScrollPosition;
 
 // Check if user is at the very bottom (strict check for auto-scroll)
 function isAtBottom(container) {

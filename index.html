@@ -2687,7 +2687,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=2.5.0"></script>
-    <script src="dashboard.js?v=3.37.0"></script>
+    <script src="dashboard.js?v=3.38.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
@@ -2724,6 +2724,14 @@
                 pageName = 'dashboard';
             }
 
+            // Save chat scroll position before leaving chat page
+            const currentActivePage = document.querySelector('.page.active');
+            if (currentActivePage && currentActivePage.id === 'page-chat') {
+                if (typeof saveChatScrollPosition === 'function') {
+                    saveChatScrollPosition();
+                }
+            }
+            
             // Hide all pages
             document.querySelectorAll('.page').forEach(page => {
                 page.classList.remove('active');
@@ -2754,6 +2762,15 @@
             // If showing memory page, load files
             if (pageName === 'memory') {
                 renderMemoryFilesForPage();
+            }
+            
+            // If showing chat page, restore scroll position
+            if (pageName === 'chat') {
+                setTimeout(() => {
+                    if (typeof restoreChatScrollPosition === 'function') {
+                        restoreChatScrollPosition();
+                    }
+                }, 50); // Small delay to ensure DOM is ready
             }
 
             // If showing chat page, render chat
