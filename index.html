@@ -2820,10 +2820,15 @@
             const scrollable = el?.closest(scrollableSelectors);
 
             if (scrollable) {
-                // Prevent default page scroll
-                e.preventDefault();
-                // Manually scroll the correct container
-                scrollable.scrollTop += e.deltaY;
+                // Only capture scroll if the element actually has overflow content
+                const hasOverflow = scrollable.scrollHeight > scrollable.clientHeight;
+                if (hasOverflow) {
+                    // Prevent default page scroll
+                    e.preventDefault();
+                    // Manually scroll the correct container
+                    scrollable.scrollTop += e.deltaY;
+                }
+                // If no overflow, let the event bubble up to scroll the page normally
             }
             // If not over a scrollable area, let page scroll normally
         }, { passive: false });
