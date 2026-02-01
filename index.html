@@ -2418,6 +2418,84 @@
             </div>
         </div>
     </div>
+    
+    <!-- Task Detail Modal (Trello-like) -->
+    <div id="task-detail-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="border-bottom: 1px solid var(--border-default);">
+                <div style="flex: 1;">
+                    <input type="text" id="task-detail-title" class="input" 
+                           style="font-size: 18px; font-weight: 600; border: none; background: transparent; padding: 0; width: 100%;"
+                           placeholder="Task title...">
+                    <div style="display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2);">
+                        <span id="task-detail-status" class="badge">To-Do</span>
+                        <span id="task-detail-priority" class="badge badge-primary">P1</span>
+                        <span id="task-detail-date" style="font-size: 12px; color: var(--text-muted);"></span>
+                    </div>
+                </div>
+                <button onclick="closeTaskDetailModal()" class="modal-close">✕</button>
+            </div>
+            
+            <div class="modal-body" style="flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-6);">
+                <!-- Description -->
+                <div style="margin-bottom: var(--space-5);">
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: var(--space-2);">
+                        📝 Description
+                    </label>
+                    <textarea id="task-detail-description" 
+                              class="input" 
+                              placeholder="Add a more detailed description..."
+                              style="min-height: 100px; resize: vertical; font-size: 14px; line-height: 1.6;"></textarea>
+                </div>
+                
+                <!-- Attachments -->
+                <div style="margin-bottom: var(--space-5);">
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2);">
+                        📎 Attachments
+                        <button onclick="document.getElementById('task-image-upload').click()" 
+                                class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
+                            + Add Image
+                        </button>
+                    </label>
+                    <input type="file" id="task-image-upload" accept="image/*" class="hidden" onchange="handleTaskImageUpload(event)">
+                    <div id="task-detail-images" style="display: flex; flex-wrap: wrap; gap: var(--space-3);">
+                        <!-- Images rendered here -->
+                        <div style="color: var(--text-muted); font-size: 13px;">No attachments yet</div>
+                    </div>
+                </div>
+                
+                <!-- Move/Priority Actions -->
+                <div style="border-top: 1px solid var(--border-default); padding-top: var(--space-4);">
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: var(--space-2);">
+                        ⚡ Actions
+                    </label>
+                    <div style="display: flex; flex-wrap: wrap; gap: var(--space-2);">
+                        <button onclick="taskDetailMove('todo')" class="btn btn-ghost" style="font-size: 12px;">
+                            <span class="status-dot idle"></span> To-Do
+                        </button>
+                        <button onclick="taskDetailMove('progress')" class="btn btn-ghost" style="font-size: 12px;">
+                            <span class="status-dot warning"></span> In Progress
+                        </button>
+                        <button onclick="taskDetailMove('done')" class="btn btn-ghost" style="font-size: 12px;">
+                            <span class="status-dot success"></span> Done
+                        </button>
+                        <button onclick="taskDetailCyclePriority()" class="btn btn-ghost" style="font-size: 12px;">
+                            🔄 Priority
+                        </button>
+                        <button onclick="taskDetailDelete()" class="btn btn-ghost" style="font-size: 12px; color: var(--error);">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="border-top: 1px solid var(--border-default); padding: var(--space-4) var(--space-6); display: flex; justify-content: flex-end; gap: var(--space-3);">
+                <button onclick="closeTaskDetailModal()" class="btn btn-ghost">Close</button>
+                <button onclick="saveTaskDetails()" class="btn btn-primary">💾 Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Memory File Viewer Modal -->
     <div id="memory-file-modal" class="modal-overlay">
         <div class="modal modal-lg" style="max-width: 1100px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
@@ -2713,7 +2791,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=2.5.0"></script>
-    <script src="dashboard.js?v=3.38.0"></script>
+    <script src="dashboard.js?v=3.39.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
@@ -3048,6 +3126,152 @@
             pendingImage = null;
             document.getElementById('image-upload').value = '';
         }
+        
+        // =================== TASK DETAIL MODAL ===================
+        let currentDetailTask = null;
+        let currentDetailColumn = null;
+        
+        window.openTaskDetail = function(taskId, column) {
+            const task = state.tasks[column]?.find(t => t.id === taskId);
+            if (!task) return;
+            
+            currentDetailTask = task;
+            currentDetailColumn = column;
+            
+            // Populate modal
+            document.getElementById('task-detail-title').value = task.title || '';
+            document.getElementById('task-detail-description').value = task.description || '';
+            
+            // Status badge
+            const statusEl = document.getElementById('task-detail-status');
+            const statusMap = { todo: 'To-Do', progress: 'In Progress', done: 'Done', archive: 'Archived' };
+            statusEl.textContent = statusMap[column] || column;
+            statusEl.className = 'badge ' + (column === 'done' ? 'badge-success' : column === 'progress' ? 'badge-warning' : '');
+            
+            // Priority badge
+            const priorityEl = document.getElementById('task-detail-priority');
+            priorityEl.textContent = 'P' + (task.priority || 1);
+            priorityEl.className = 'badge badge-primary';
+            
+            // Date
+            const dateEl = document.getElementById('task-detail-date');
+            dateEl.textContent = task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '';
+            
+            // Render images
+            renderTaskImages();
+            
+            showModal('task-detail-modal');
+        };
+        
+        window.closeTaskDetailModal = function() {
+            hideModal('task-detail-modal');
+            currentDetailTask = null;
+            currentDetailColumn = null;
+        };
+        
+        function renderTaskImages() {
+            const container = document.getElementById('task-detail-images');
+            const images = currentDetailTask?.images || [];
+            
+            if (images.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">No attachments yet</div>';
+                return;
+            }
+            
+            container.innerHTML = images.map((img, idx) => `
+                <div style="position: relative; width: 120px; height: 90px; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-default);">
+                    <img src="${img}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;" 
+                         onclick="window.open('${img}', '_blank')">
+                    <button onclick="removeTaskImage(${idx})" 
+                            style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px;">
+                        ✕
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        window.handleTaskImageUpload = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (!currentDetailTask.images) currentDetailTask.images = [];
+                currentDetailTask.images.push(e.target.result);
+                renderTaskImages();
+            };
+            reader.readAsDataURL(file);
+            event.target.value = ''; // Reset input
+        };
+        
+        window.removeTaskImage = function(index) {
+            if (currentDetailTask?.images) {
+                currentDetailTask.images.splice(index, 1);
+                renderTaskImages();
+            }
+        };
+        
+        window.saveTaskDetails = function() {
+            if (!currentDetailTask || !currentDetailColumn) return;
+            
+            currentDetailTask.title = document.getElementById('task-detail-title').value;
+            currentDetailTask.description = document.getElementById('task-detail-description').value;
+            
+            saveState('Updated task details');
+            render();
+            showToast('Task saved!', 'success');
+        };
+        
+        window.taskDetailMove = function(newColumn) {
+            if (!currentDetailTask || !currentDetailColumn || currentDetailColumn === newColumn) return;
+            
+            // Save current details first
+            currentDetailTask.title = document.getElementById('task-detail-title').value;
+            currentDetailTask.description = document.getElementById('task-detail-description').value;
+            
+            // Remove from current column
+            const idx = state.tasks[currentDetailColumn].findIndex(t => t.id === currentDetailTask.id);
+            if (idx > -1) state.tasks[currentDetailColumn].splice(idx, 1);
+            
+            // Add to new column
+            if (newColumn === 'done') currentDetailTask.completedAt = Date.now();
+            state.tasks[newColumn].unshift(currentDetailTask);
+            
+            currentDetailColumn = newColumn;
+            
+            // Update status badge
+            const statusEl = document.getElementById('task-detail-status');
+            const statusMap = { todo: 'To-Do', progress: 'In Progress', done: 'Done', archive: 'Archived' };
+            statusEl.textContent = statusMap[newColumn] || newColumn;
+            statusEl.className = 'badge ' + (newColumn === 'done' ? 'badge-success' : newColumn === 'progress' ? 'badge-warning' : '');
+            
+            saveState('Moved task to ' + newColumn);
+            render();
+            showToast('Task moved!', 'success');
+        };
+        
+        window.taskDetailCyclePriority = function() {
+            if (!currentDetailTask) return;
+            currentDetailTask.priority = (currentDetailTask.priority || 1) % 4 + 1;
+            document.getElementById('task-detail-priority').textContent = 'P' + currentDetailTask.priority;
+            saveState('Changed priority');
+            render();
+        };
+        
+        window.taskDetailDelete = async function() {
+            if (!currentDetailTask || !currentDetailColumn) return;
+            
+            const confirmed = await showConfirm('Delete this task permanently?', 'Delete Task', 'Delete');
+            if (!confirmed) return;
+            
+            const idx = state.tasks[currentDetailColumn].findIndex(t => t.id === currentDetailTask.id);
+            if (idx > -1) state.tasks[currentDetailColumn].splice(idx, 1);
+            
+            saveState('Deleted task');
+            render();
+            closeTaskDetailModal();
+            showToast('Task deleted', 'success');
+        };
     </script>
     
     <!-- Memory Files Styles -->

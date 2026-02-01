@@ -2148,12 +2148,12 @@ function renderTasks() {
             const isSelected = selectedTasks.has(task.id);
             const doneStyle = column === 'done' ? 'text-decoration: line-through; color: var(--text-muted);' : '';
             return `
-            <div class="task-card priority-p${task.priority} ${isSelected ? 'selected' : ''}"
+            <div class="task-card priority-p${task.priority} ${isSelected ? 'selected' : ''} ${task.images?.length ? 'has-attachments' : ''}"
                  data-task-id="${task.id}" data-column="${column}"
                  draggable="true"
                  ondragstart="handleDragStart(event, '${task.id}', '${column}')"
                  ondragend="handleDragEnd(event)"
-                 onclick="openActionModal('${task.id}', '${column}')">
+                 onclick="openTaskDetail('${task.id}', '${column}')">
                 <div style="display: flex; align-items: flex-start; gap: var(--space-3);">
                     <input type="checkbox"
                            style="margin-top: 2px; accent-color: var(--brand-red); cursor: pointer;"
@@ -2164,7 +2164,11 @@ function renderTasks() {
                             <span class="task-title" style="${doneStyle}">${escapeHtml(task.title)}</span>
                             <span class="badge ${getPriorityBadgeClass(task.priority)}">P${task.priority}</span>
                         </div>
-                        <div class="task-meta">#${index + 1} • ${formatTime(task.created || task.completedAt || task.id?.replace('t',''))}</div>
+                        <div class="task-meta">
+                            #${index + 1} • ${formatTime(task.created || task.completedAt || task.id?.replace('t',''))}
+                            ${task.description ? ' • 📝' : ''}
+                            ${task.images?.length ? ` • 📎${task.images.length}` : ''}
+                        </div>
                     </div>
                 </div>
 
