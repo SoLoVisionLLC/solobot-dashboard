@@ -726,30 +726,6 @@ window.toggleChatPageSessionMenu = function() {
     menu.classList.toggle('hidden');
 }
 
-window.renameChatPageSession = function() {
-    toggleChatPageSessionMenu();
-    const newName = prompt('Enter new session name:', currentSessionName);
-    if (!newName || newName === currentSessionName) return;
-    
-    fetch('/api/session/rename', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName: currentSessionName, newName })
-    }).then(r => r.json()).then(result => {
-        if (result.ok) {
-            currentSessionName = newName;
-            const nameEl = document.getElementById('chat-page-session-name');
-            if (nameEl) nameEl.textContent = newName;
-            showToast(`Session renamed to "${newName}"`, 'success');
-        } else {
-            showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
-        }
-    }).catch(e => {
-        console.error('[Dashboard] Failed to rename session:', e);
-        showToast('Failed to rename session', 'error');
-    });
-}
-
 // Session Management
 let availableSessions = [];
 
@@ -777,14 +753,62 @@ function populateSessionDropdown() {
         return;
     }
     
-    menu.innerHTML = availableSessions.map(s => `
-        <button onclick="switchToSession('${s.key}')" class="session-dropdown-item" style="
-            ${s.key === currentSessionName ? 'background: var(--accent-color); color: white;' : ''}
-        ">
-            <span style="font-weight: 600;">${s.displayName || s.name}</span>
-            <span style="font-size: 11px; opacity: 0.7; margin-left: auto; padding-left: 8px;">${s.model}</span>
-        </button>
-    `).join('');
+    menu.innerHTML = availableSessions.map(s => {
+        const isActive = s.key === currentSessionName;
+        const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
+        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+        
+        return `
+        <div class="session-dropdown-item ${isActive ? 'active' : ''}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
+            <div class="session-info">
+                <div class="session-name">${escapeHtml(s.displayName || s.name)}</div>
+                <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
+            </div>
+            <span class="session-model">${s.model}</span>
+            <div class="session-actions">
+                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Rename session">
+                    ✏️
+                </button>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+window.editSessionName = function(sessionKey, currentName) {
+    const newName = prompt('Enter new session name:', currentName);
+    if (!newName || newName === currentName) return;
+    
+    fetch('/api/session/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName: sessionKey, newName })
+    }).then(r => r.json()).then(result => {
+        if (result.ok) {
+            showToast(`Session rename requested. Will update shortly.`, 'success');
+            // Update local display immediately
+            const session = availableSessions.find(s => s.key === sessionKey);
+            if (session) {
+                session.displayName = newName;
+                populateSessionDropdown();
+                if (sessionKey === currentSessionName) {
+                    const nameEl = document.getElementById('chat-page-session-name');
+                    if (nameEl) nameEl.textContent = newName;
+                }
+            }
+        } else {
+            showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
+        }
+    }).catch(e => {
+        console.error('[Dashboard] Failed to rename session:', e);
+        showToast('Failed to rename session', 'error');
+    });
 }
 
 window.switchToSession = async function(sessionKey) {

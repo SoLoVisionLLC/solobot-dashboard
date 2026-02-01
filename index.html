@@ -1462,16 +1462,17 @@
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             z-index: 1000;
-            min-width: 160px;
+            min-width: 280px;
+            max-width: 320px;
             padding: 4px 0;
         }
 
         .session-dropdown-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
             width: 100%;
-            padding: 8px 12px;
+            padding: 10px 12px;
             background: none;
             border: none;
             color: var(--text-primary);
@@ -1479,10 +1480,92 @@
             font-size: 13px;
             text-align: left;
             transition: background 0.15s;
+            border-bottom: 1px solid var(--border-default);
+        }
+
+        .session-dropdown-item:last-child {
+            border-bottom: none;
         }
 
         .session-dropdown-item:hover {
             background: var(--surface-2);
+        }
+
+        .session-dropdown-item.active {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .session-dropdown-item.active .session-meta,
+        .session-dropdown-item.active .session-model {
+            color: rgba(255,255,255,0.7);
+        }
+
+        .session-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .session-name {
+            font-weight: 600;
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .session-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .session-model {
+            font-size: 10px;
+            color: var(--text-muted);
+            background: var(--surface-2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+
+        .session-dropdown-item.active .session-model {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .session-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .session-dropdown-item:hover .session-actions {
+            opacity: 1;
+        }
+
+        .session-edit-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .session-edit-btn:hover {
+            background: var(--surface-elevated);
+            color: var(--text-primary);
+        }
+
+        .session-dropdown-item.active .session-edit-btn:hover {
+            background: rgba(255,255,255,0.2);
+            color: white;
         }
         
         .chat-page-title h1 {
