@@ -45,7 +45,7 @@ let state = {
     }
 };
 
-// Load persisted system messages from localStorage (chat comes from Gateway)
+// Load persisted system messages from localStorage (chat from localStorage + server fallback)
 function loadPersistedMessages() {
     try {
         // System messages are local-only (UI noise)
@@ -59,18 +59,41 @@ function loadPersistedMessages() {
             }
         }
 
-        // Chat messages - persist locally because Gateway doesn't save user messages (bug #5735)
+        // Chat messages - try localStorage first, then fetch from server
         const savedChat = localStorage.getItem('solobot-chat-messages');
         if (savedChat) {
             const parsed = JSON.parse(savedChat);
-            if (Array.isArray(parsed)) {
+            if (Array.isArray(parsed) && parsed.length > 0) {
                 const cutoff = Date.now() - (24 * 60 * 60 * 1000);
                 state.chat.messages = parsed.filter(m => m.time > cutoff);
                 console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
+                return; // Have local messages, no need to fetch from server
             }
         }
+        
+        // No local messages - fetch from server
+        loadChatFromServer();
     } catch (e) {
         console.log('[Dashboard] Failed to load persisted messages:', e.message);
+        loadChatFromServer();
+    }
+}
+
+// Load chat messages from server (fallback when localStorage is empty)
+async function loadChatFromServer() {
+    try {
+        const response = await fetch('/api/state');
+        const serverState = await response.json();
+        if (serverState.chat?.messages?.length > 0) {
+            state.chat.messages = serverState.chat.messages;
+            localStorage.setItem('solobot-chat-messages', JSON.stringify(state.chat.messages));
+            console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`);
+            // Re-render if on chat page
+            if (typeof renderChatMessages === 'function') renderChatMessages();
+            if (typeof renderChatPage === 'function') renderChatPage();
+        }
+    } catch (e) {
+        console.log('[Dashboard] Failed to load chat from server:', e.message);
     }
 }
 
@@ -85,15 +108,35 @@ function persistSystemMessages() {
     }
 }
 
-// Save chat messages to localStorage (workaround for Gateway bug #5735)
-// Gateway doesn't save user messages from operator WebSocket to transcript
+// Save chat messages to localStorage AND server
+// Ensures persistence across browser sessions and deploys
 function persistChatMessages() {
     try {
         const chatToSave = state.chat.messages.slice(-100);
         localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
+        
+        // Also sync to server for persistence across deploys
+        syncChatToServer(chatToSave);
     } catch (e) {
         console.log('[Dashboard] Failed to persist chat messages:', e.message);
     }
+}
+
+// Sync chat messages to server (debounced)
+let chatSyncTimeout = null;
+function syncChatToServer(messages) {
+    if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
+    chatSyncTimeout = setTimeout(async () => {
+        try {
+            await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages })
+            });
+        } catch (e) {
+            console.log('[Dashboard] Chat server sync failed:', e.message);
+        }
+    }, 2000); // Debounce 2 seconds
 }
 
 // Load persisted messages immediately
