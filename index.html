@@ -1326,7 +1326,7 @@
         .chat-page-wrapper {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 120px);
+            height: calc(100vh - 60px);
             max-width: 100%;
             margin: 0;
             padding: 0;
@@ -1338,8 +1338,14 @@
         #page-chat,
         #page-system {
             overflow: hidden;
-            height: calc(100vh - 100px);
-            max-height: calc(100vh - 100px);
+            height: calc(100vh - 60px);
+            max-height: calc(100vh - 60px);
+        }
+        
+        /* Hide footer on chat/system pages */
+        body:has(#page-chat.active) .footer,
+        body:has(#page-system.active) .footer {
+            display: none;
         }
         
         /* Prevent body scroll when chat/system page is active */
