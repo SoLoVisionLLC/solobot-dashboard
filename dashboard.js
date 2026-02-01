@@ -396,10 +396,13 @@ window.changeProvider = function() {
 
 window.updateProviderDisplay = function() {
     const providerSelect = document.getElementById('provider-select');
+    if (!providerSelect) return;
+    
     const selectedProvider = providerSelect.value;
     
-    // Update display
-    document.getElementById('provider-name').textContent = selectedProvider;
+    // Update display (with null check)
+    const providerNameEl = document.getElementById('provider-name');
+    if (providerNameEl) providerNameEl.textContent = selectedProvider;
     
     // Update model dropdown for this provider
     updateModelDropdown(selectedProvider);
@@ -436,13 +439,17 @@ window.changeModel = async function() {
             console.log(`[Dashboard] Model successfully changed to: ${selectedModel}`);
             showToast(`Model changed to ${selectedModel}`, 'success');
             
-            // Update displays
+            // Update displays (with null checks)
             currentModel = selectedModel;
-            document.getElementById('model-name').textContent = selectedModel;
-            document.getElementById('current-model-display').textContent = selectedModel;
+            const modelNameEl = document.getElementById('model-name');
+            const currentModelDisplay = document.getElementById('current-model-display');
+            const providerSelectEl = document.getElementById('provider-select');
+            
+            if (modelNameEl) modelNameEl.textContent = selectedModel;
+            if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
             
             // Refresh model list in settings
-            await updateModelDropdown(document.getElementById('provider-select').value);
+            if (providerSelectEl) await updateModelDropdown(providerSelectEl.value);
         } else {
             console.error('[Dashboard] Failed to change model:', result);
             showToast(`Failed to change model: ${result.error || 'Unknown error'}`, 'error');
