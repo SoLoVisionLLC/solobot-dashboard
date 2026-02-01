@@ -2526,6 +2526,57 @@ function clearConsole() {
     renderConsole();
 }
 
+// Auto-sync activities from transcript file
+let lastActivitySync = 0;
+async function syncActivitiesFromFile() {
+    try {
+        const response = await fetch('/api/memory/memory/recent-activity.json');
+        if (!response.ok) return;
+        
+        const wrapper = await response.json();
+        // API wraps content in {name, content, modified, size}
+        const data = typeof wrapper.content === 'string' ? JSON.parse(wrapper.content) : wrapper.content;
+        if (!data || !data.activities || data.updatedMs <= lastActivitySync) return;
+        
+        lastActivitySync = data.updatedMs;
+        
+        // Convert activities to console log format
+        const activityLogs = data.activities.map(a => ({
+            time: a.timestamp,
+            text: a.text,
+            type: 'info'
+        }));
+        
+        // Merge with existing logs (dedupe by timestamp + text)
+        if (!state.console) state.console = { logs: [] };
+        const existing = new Set(state.console.logs.map(l => `${l.time}-${l.text}`));
+        
+        let added = 0;
+        for (const log of activityLogs) {
+            const key = `${log.time}-${log.text}`;
+            if (!existing.has(key)) {
+                state.console.logs.push(log);
+                existing.add(key);
+                added++;
+            }
+        }
+        
+        if (added > 0) {
+            // Sort by time and keep last 100
+            state.console.logs.sort((a, b) => a.time - b.time);
+            state.console.logs = state.console.logs.slice(-100);
+            renderConsole();
+        }
+    } catch (e) {
+        // Silent fail - file might not exist yet
+    }
+}
+
+// Poll for activity updates every 30 seconds
+setInterval(syncActivitiesFromFile, 30000);
+// Also sync on load
+setTimeout(syncActivitiesFromFile, 2000);
+
 function toggleConsoleExpand() {
     const section = document.getElementById('console-section');
     const output = document.getElementById('console-output');
