@@ -656,6 +656,25 @@ const defaultSettings = {
 // GATEWAY CONNECTION
 // ===================
 
+async function checkRestartToast() {
+    try {
+        const response = await fetch('/api/state');
+        if (!response.ok) return;
+        const state = await response.json();
+        if (state.restartPending) {
+            showToast('Gateway restarted successfully', 'success');
+            delete state.restartPending;
+            await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state)
+            });
+        }
+    } catch (e) {
+        console.warn('[Dashboard] Restart toast check failed:', e);
+    }
+}
+
 function initGateway() {
     gateway = new GatewayClient({
         sessionKey: GATEWAY_CONFIG.sessionKey,
@@ -663,6 +682,7 @@ function initGateway() {
             console.log(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
+            checkRestartToast();
 
             // Load chat history on connect
             // Use mergeHistoryMessages (additive) instead of loadHistoryMessages (replacement)
