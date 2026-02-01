@@ -311,6 +311,12 @@ function initGateway() {
         onChatEvent: (event) => {
             handleChatEvent(event);
         },
+        onToolEvent: (event) => {
+            // Add tool event to terminal in real-time
+            if (event.phase === 'start' && event.summary) {
+                addTerminalLog(event.summary, 'info', event.timestamp);
+            }
+        },
         onError: (error) => {
             console.error(`[Dashboard] Gateway error: ${error}`);
             updateConnectionUI('error', error);
@@ -2523,6 +2529,32 @@ function addNote() {
 function clearConsole() {
     if (state.console) state.console.logs = [];
     saveState();
+    renderConsole();
+}
+
+// Add a log entry to the terminal
+function addTerminalLog(text, type = 'info', timestamp = null) {
+    if (!state.console) state.console = { logs: [] };
+    
+    const log = {
+        time: timestamp || Date.now(),
+        text: text,
+        type: type
+    };
+    
+    // Dedupe - don't add if identical to last entry within 5 seconds
+    const lastLog = state.console.logs[state.console.logs.length - 1];
+    if (lastLog && lastLog.text === text && Math.abs(log.time - lastLog.time) < 5000) {
+        return;
+    }
+    
+    state.console.logs.push(log);
+    
+    // Keep last 100 entries
+    if (state.console.logs.length > 100) {
+        state.console.logs = state.console.logs.slice(-100);
+    }
+    
     renderConsole();
 }
 

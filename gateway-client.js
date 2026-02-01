@@ -17,6 +17,7 @@ class GatewayClient {
         this.onConnected = options.onConnected || (() => {});
         this.onDisconnected = options.onDisconnected || (() => {});
         this.onChatEvent = options.onChatEvent || (() => {});
+        this.onToolEvent = options.onToolEvent || (() => {});
         this.onError = options.onError || (() => {});
     }
 
@@ -186,8 +187,50 @@ class GatewayClient {
 
         if (event === 'chat') {
             this._handleChatEvent(payload);
+        } else if (event === 'agent') {
+            this._handleAgentEvent(payload);
         }
-        // Ignore other events (health, tick, agent, etc.)
+    }
+
+    _handleAgentEvent(payload) {
+        if (!payload) return;
+        
+        // Only handle tool events
+        if (payload.stream !== 'tool') return;
+        
+        const phase = payload.data?.phase;
+        const toolName = payload.data?.name;
+        const args = payload.data?.args;
+        
+        if (phase === 'start' && toolName) {
+            // Format the tool call for display
+            let summary = `🔧 ${toolName}`;
+            if (args) {
+                if (toolName === 'exec' && args.command) {
+                    const cmd = args.command.length > 60 ? args.command.substring(0, 57) + '...' : args.command;
+                    summary = `🔧 ${cmd}`;
+                } else if (toolName === 'Edit' || toolName === 'Write' || toolName === 'Read') {
+                    const path = args.path || args.file_path || '';
+                    const filename = path.split('/').pop();
+                    const icon = toolName === 'Edit' ? '✏️' : toolName === 'Write' ? '📝' : '📖';
+                    summary = `${icon} ${toolName}: ${filename}`;
+                } else if (toolName === 'web_search') {
+                    summary = `🔍 Search: ${(args.query || '').substring(0, 40)}`;
+                } else if (toolName === 'web_fetch') {
+                    summary = `🌐 Fetch: ${(args.url || '').substring(0, 40)}`;
+                }
+            }
+            
+            // Emit as tool event callback
+            if (this.onToolEvent) {
+                this.onToolEvent({
+                    phase: 'start',
+                    name: toolName,
+                    summary,
+                    timestamp: payload.ts || Date.now()
+                });
+            }
+        }
     }
 
     _handleChatEvent(payload) {
