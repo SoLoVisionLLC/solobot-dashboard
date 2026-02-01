@@ -2729,12 +2729,19 @@
                 
                 sortedFiles.forEach(file => {
                     const modifiedDate = file.modified ? new Date(file.modified).toLocaleDateString() : '';
+                    const botBadge = file.botUpdated && !file.acknowledged 
+                        ? `<span class="badge badge-warning bot-updated-badge" title="Updated by SoLoBot">🤖 Updated</span>` 
+                        : '';
+                    const botUpdatedClass = file.botUpdated && !file.acknowledged ? 'bot-updated' : '';
                     html += `
-                        <div class="doc-card memory-file" onclick="viewMemoryFile('${file.path || file.name}')">
+                        <div class="doc-card memory-file ${botUpdatedClass}" onclick="viewMemoryFile('${file.path || file.name}')" data-filepath="${file.path || file.name}">
                             <div style="display: flex; align-items: center; gap: var(--space-3);">
                                 <div class="doc-icon icon-md">📄</div>
                                 <div style="min-width: 0; flex: 1;">
-                                    <div class="doc-title">${file.name}</div>
+                                    <div class="doc-title" style="display: flex; align-items: center; gap: var(--space-2);">
+                                        ${file.name}
+                                        ${botBadge}
+                                    </div>
                                     <div class="doc-description">${file.description || ''}</div>
                                     ${modifiedDate ? `<div class="doc-meta">Modified: ${modifiedDate}</div>` : ''}
                                 </div>
