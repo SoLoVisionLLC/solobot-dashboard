@@ -74,7 +74,6 @@ function loadPersistedMessages() {
         // No local messages - fetch from server
         loadChatFromServer();
     } catch (e) {
-        console.log('[Dashboard] Failed to load persisted messages:', e.message);
         loadChatFromServer();
     }
 }
@@ -93,7 +92,7 @@ async function loadChatFromServer() {
             if (typeof renderChatPage === 'function') renderChatPage();
         }
     } catch (e) {
-        console.log('[Dashboard] Failed to load chat from server:', e.message);
+        // Silently fail - not critical
     }
 }
 
@@ -104,7 +103,7 @@ function persistSystemMessages() {
         const systemToSave = state.system.messages.slice(-30);
         localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
     } catch (e) {
-        console.log('[Dashboard] Failed to persist system messages:', e.message);
+        // Silently fail - not critical
     }
 }
 
@@ -119,7 +118,7 @@ function persistChatMessages() {
         // Also sync to server for persistence across deploys
         syncChatToServer(chatToSave);
     } catch (e) {
-        console.log('[Dashboard] Failed to persist chat messages:', e.message);
+        // Silently fail - not critical
     }
 }
 
@@ -135,7 +134,7 @@ function syncChatToServer(messages) {
                 body: JSON.stringify({ messages })
             });
         } catch (e) {
-            console.log('[Dashboard] Chat server sync failed:', e.message);
+            // Silently fail - not critical
         }
     }, 2000); // Debounce 2 seconds
 }
@@ -183,9 +182,8 @@ function loadGatewaySettingsFromServer() {
         localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
         
         // console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host); // Keep quiet
-    } else {
-        console.log('[Dashboard] ✗ No gateway config in server state');
     }
+    // No gateway config in server state - that's fine
 }
 
 // Gateway client instance
@@ -301,7 +299,6 @@ window.confirm = function(message) {
 function isSystemMessage(text, from) {
     // DEBUG MODE: Show everything in chat
     if (DISABLE_SYSTEM_FILTER) {
-        console.log('[isSystemMessage] FILTER DISABLED - routing all to CHAT');
         return false; // Everything goes to chat
     }
 
@@ -417,14 +414,11 @@ async function populateProviderDropdown() {
     }
     
     try {
-        console.log('[Dashboard] Fetching providers from API...');
         const response = await fetch('/api/models/list');
         if (!response.ok) throw new Error(`API returned ${response.status}`);
-        
+
         const allModels = await response.json();
         const providers = Object.keys(allModels);
-        
-        console.log('[Dashboard] Got providers:', providers);
         
         // Clear existing options
         providerSelect.innerHTML = '';
@@ -439,8 +433,7 @@ async function populateProviderDropdown() {
             ).join(' ');
             providerSelect.appendChild(option);
         });
-        
-        console.log(`[Dashboard] Populated ${providers.length} providers in dropdown`);
+
         return providers;
     } catch (e) {
         console.error('[Dashboard] Failed to fetch providers:', e);
@@ -507,8 +500,6 @@ window.changeModel = async function() {
 };
 
 async function updateModelDropdown(provider) {
-    console.log(`[Dashboard] Updating model dropdown for provider: ${provider}`);
-    
     const modelSelect = document.getElementById('model-select');
     if (!modelSelect) {
         console.error('[Dashboard] model-select element not found!');
@@ -516,8 +507,6 @@ async function updateModelDropdown(provider) {
     }
     
     const models = await getModelsForProvider(provider);
-    
-    console.log(`[Dashboard] Got ${models.length} models for provider ${provider}`);
     
     // Clear current options
     modelSelect.innerHTML = '';
@@ -530,34 +519,28 @@ async function updateModelDropdown(provider) {
         if (model.selected) option.selected = true;
         modelSelect.appendChild(option);
     });
-    
-    console.log(`[Dashboard] Populated dropdown with ${models.length} options`);
 }
 
 async function getModelsForProvider(provider) {
     try {
-        console.log(`[Dashboard] Fetching models from API for provider: ${provider}`);
-        
         // Fetch models from server API
         const response = await fetch('/api/models/list');
         if (!response.ok) {
             throw new Error(`API returned ${response.status}`);
         }
-        
+
         const allModels = await response.json();
-        console.log(`[Dashboard] Got models from API:`, Object.keys(allModels));
-        
+
         // Get models for the requested provider
         const providerModels = allModels[provider] || [];
-        
+
         // Transform to expected format and mark current as selected
         const models = providerModels.map(m => ({
             value: m.id,
             name: m.name,
             selected: (m.id === currentModel)
         }));
-        
-        console.log(`[Dashboard] Returning ${models.length} models for ${provider}:`, models);
+
         return models;
     } catch (e) {
         console.error('[Dashboard] Failed to get models from API:', e);
@@ -591,7 +574,6 @@ function getConfiguredModels() {
         
         return models;
     } catch (e) {
-        console.log('[Dashboard] Failed to get configured models from OpenClaw');
         return [];
     }
 }
@@ -871,9 +853,8 @@ async function saveCurrentChat() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(state)
         });
-        console.log('[Dashboard] Saved current chat as safeguard');
     } catch (e) {
-        console.warn('[Dashboard] Failed to save chat safeguard:', e);
+        // Silently fail - safeguard is optional
     }
 }
 
@@ -916,7 +897,6 @@ async function loadArchivedChat(sessionKey) {
             chatHistory = archived.messages;
             renderChat();
             renderChatPage();
-            console.log(`[Dashboard] Loaded ${archived.messages.length} archived messages`);
         } else {
             chatHistory = [];
             renderChat();
@@ -962,12 +942,11 @@ function initGateway() {
                         loadHistoryMessages(result.messages);
                     } else {
                         // On reconnect, only merge new messages - don't replace
-                        console.log('[Dashboard] Reconnect detected - using merge instead of replace');
                         mergeHistoryMessages(result.messages);
                     }
                 }
-            }).catch(err => {
-                console.log('[Dashboard] chat.history failed:', err.message);
+            }).catch(() => {
+                // History load failed - not critical
             });
 
             // Poll history periodically to catch user messages from other clients
@@ -975,7 +954,6 @@ function initGateway() {
             startHistoryPolling();
         },
         onDisconnected: (message) => {
-            console.log(`[Dashboard] Disconnected: ${message}`);
             updateConnectionUI('disconnected', message);
             isProcessing = false;
             streamingText = '';
@@ -1089,15 +1067,6 @@ function updateConnectionUI(status, message) {
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage } = event;
 
-    // Log for debugging - full details
-    console.log('[Dashboard] handleChatEvent called:', JSON.stringify({
-        eventState,
-        role,
-        contentLength: content?.length,
-        contentPreview: content?.substring(0, 100),
-        errorMessage
-    }));
-
     // Handle user messages from other clients (WebUI, Telegram, etc.)
     if (role === 'user' && eventState === 'final' && content) {
         // Check if we already have this message (to avoid duplicates from our own sends)
@@ -1111,16 +1080,12 @@ function handleChatEvent(event) {
     }
 
     // Handle assistant messages
-    console.log('[Dashboard] Processing assistant message, state:', eventState);
     switch (eventState) {
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
-            console.log('[Dashboard] delta - updating stream:', content?.length, 'chars');
-            
             // Safety: If we have significant streaming content and new content is much shorter,
             // this might be a new response starting. Finalize the old one first.
             if (streamingText && streamingText.length > 100 && content.length < streamingText.length * 0.5) {
-                console.log('[Dashboard] New response detected mid-stream, finalizing previous');
                 addLocalChatMessage(streamingText, 'solobot');
             }
             
@@ -1134,20 +1099,14 @@ function handleChatEvent(event) {
             // Final response from assistant
             // Prefer streamingText if available for consistency (avoid content mismatch)
             const finalContent = streamingText || content;
-            console.log('[Dashboard] final - content:', finalContent?.length, 'chars, role:', role);
             if (finalContent && role !== 'user') {
                 // Check for duplicate - same content within 10 seconds
                 const isDuplicate = state.chat.messages.some(m =>
                     m.from === 'solobot' && m.text === finalContent && (Date.now() - m.time) < 10000
                 );
                 if (!isDuplicate) {
-                    console.log('[Dashboard] Adding final message to chat');
                     addLocalChatMessage(finalContent, 'solobot');
-                } else {
-                    console.log('[Dashboard] Skipping duplicate message');
                 }
-            } else {
-                console.log('[Dashboard] Skipping final message - no content or user role');
             }
             streamingText = '';
             isProcessing = false;
@@ -1157,7 +1116,6 @@ function handleChatEvent(event) {
             break;
 
         case 'error':
-            console.log('[Dashboard] error state:', errorMessage);
             addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
             streamingText = '';
             isProcessing = false;
@@ -1165,9 +1123,6 @@ function handleChatEvent(event) {
             renderChat();
             renderChatPage();
             break;
-
-        default:
-            console.log('[Dashboard] Unknown event state:', eventState);
     }
 }
 
@@ -1257,8 +1212,8 @@ function startHistoryPolling() {
             if (result?.messages) {
                 mergeHistoryMessages(result.messages);
             }
-        }).catch(err => {
-            console.log('[Dashboard] History poll failed:', err.message);
+        }).catch(() => {
+            // History poll failed - not critical
         });
     }, 10000);
 }
@@ -1324,8 +1279,6 @@ function mergeHistoryMessages(messages) {
     }
 
     if (newChatCount > 0 || newSystemCount > 0) {
-        console.log(`[Dashboard] Merged ${newChatCount} chat, ${newSystemCount} system messages from history`);
-
         // Sort and trim chat
         state.chat.messages.sort((a, b) => a.time - b.time);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
@@ -1352,16 +1305,12 @@ function mergeHistoryMessages(messages) {
 // ===================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[Dashboard] DOMContentLoaded fired - calling loadState()');
     await loadState();
-    console.log('[Dashboard] loadState() completed');
-    console.log('[Dashboard] state.tasks:', JSON.stringify(state.tasks));
-    console.log('[Dashboard] state.tasks.todo length:', state.tasks?.todo?.length);
-    
+
     // Log summary after state is loaded
     const provider = localStorage.getItem('selected_provider') || 'anthropic';
     const model = localStorage.getItem('selected_model') || 'claude-3-opus';
-    console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}, Tasks: ${Object.values(state.tasks).flat().length}`);
+    console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
     
     // Load gateway settings from server state if localStorage is empty
     loadGatewaySettingsFromServer();
@@ -1392,7 +1341,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setInterval(async () => {
         // Skip auto-refresh while task modal is open (prevents race condition with unsaved changes)
         if (taskModalOpen) {
-            console.log('[Dashboard] Skipping auto-refresh - task modal open');
             return;
         }
         try {
@@ -1501,7 +1449,6 @@ function setupChatDragDrop() {
 // ===================
 
 async function loadState() {
-    console.log('[loadState] Starting...');
     // Preserve current messages and logs
     const currentChat = state.chat;
     const currentSystem = state.system;
@@ -1509,13 +1456,9 @@ async function loadState() {
 
     // Load from VPS first
     try {
-        console.log('[loadState] Fetching /api/state...');
         const response = await fetch('/api/state', { cache: 'no-store' });
-        console.log('[loadState] Response status:', response.status);
         if (response.ok) {
             const vpsState = await response.json();
-            console.log('[loadState] VPS state tasks:', vpsState.tasks);
-            console.log('[loadState] VPS todo count:', vpsState.tasks?.todo?.length);
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
             if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
 
@@ -1562,12 +1505,10 @@ async function loadState() {
             // Save merged chat to localStorage
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
             persistChatMessages(); // Also persist to dedicated chat storage
-            
-            console.log('Loaded state from VPS (chat preserved)');
             return;
         }
     } catch (e) {
-        console.log('VPS not available:', e.message);
+        // VPS not available, will use localStorage fallback
     }
 
     // Fallback: localStorage
@@ -1578,7 +1519,6 @@ async function loadState() {
         delete parsed.system;
         delete parsed.console;
         state = { ...state, ...parsed, chat: currentChat, system: currentSystem, console: currentConsole };
-        console.log('Loaded state from localStorage (chat/console preserved)');
     } else {
         initSampleData();
     }
@@ -1634,7 +1574,6 @@ async function syncToServer() {
         });
         
         if (response.ok) {
-            console.log('Synced to server');
             if (state.console && state.console.logs) {
                 state.console.logs.push({
                     text: 'State synced to server',
@@ -1719,7 +1658,6 @@ async function compressImage(dataUrl, maxWidth = 1200, quality = 0.8) {
             
             // Convert to JPEG for better compression (unless PNG transparency needed)
             const compressed = canvas.toDataURL('image/jpeg', quality);
-            console.log(`[Dashboard] Image compressed: ${Math.round(dataUrl.length/1024)}KB -> ${Math.round(compressed.length/1024)}KB`);
             resolve(compressed);
         };
         img.src = dataUrl;
@@ -1837,14 +1775,10 @@ function addLocalChatMessage(text, from, image = null) {
     };
 
     const isSystem = isSystemMessage(text, from);
-    const preview = text.substring(0, 80) + (text.length > 80 ? '...' : '');
-
-    console.log(`[addLocalChatMessage] from: ${from}, isSystem: ${isSystem}, text: "${preview}"`);
 
     // Route to appropriate message array
     if (isSystem) {
         // System message - goes to system tab (local UI noise)
-        console.log(`[addLocalChatMessage] → SYSTEM tab (${state.system.messages.length} total)`);
         state.system.messages.push(message);
         if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -1853,7 +1787,6 @@ function addLocalChatMessage(text, from, image = null) {
         renderSystemPage();
     } else {
         // Real chat message - goes to chat tab (synced via Gateway)
-        console.log(`[addLocalChatMessage] → CHAT tab (${state.chat.messages.length} total)`);
         state.chat.messages.push(message);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -1887,9 +1820,8 @@ function syncChatToVPS() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages: state.chat.messages.slice(-100) })
             });
-            console.log('[Dashboard] Chat synced to VPS for cross-computer access');
         } catch (e) {
-            console.log('[Dashboard] Chat sync failed:', e.message);
+            // Chat sync failed - not critical
         }
     }, 2000);
 }
@@ -1905,8 +1837,6 @@ function renderChat() {
     const messages = state.chat?.messages || [];
     const isConnected = gateway?.isConnected();
 
-    console.log(`[renderChat] Rendering ${messages.length} chat messages, streaming: ${!!streamingText}`);
-    
     // Save scroll state BEFORE clearing
     const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
@@ -2097,7 +2027,6 @@ function saveChatScrollPosition() {
     if (container && container.scrollTop > 0) {
         sessionStorage.setItem('chatScrollPosition', container.scrollTop);
         sessionStorage.setItem('chatScrollHeight', container.scrollHeight);
-        console.log('[Chat] Saved scroll position:', container.scrollTop, 'of', container.scrollHeight);
     }
 }
 
@@ -2113,7 +2042,6 @@ function restoreChatScrollPosition() {
         // Calculate relative position and apply
         const ratio = parseFloat(savedPosition) / parseFloat(savedHeight);
         container.scrollTop = ratio * container.scrollHeight;
-        console.log('[Chat] Restored scroll position:', container.scrollTop);
     }
 }
 
@@ -2200,12 +2128,7 @@ function updateScrollToBottomButton() {
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
-    if (!container) {
-        console.log('[renderChatPage] ❌ Container #chat-page-messages not found!');
-        return;
-    }
-
-    console.log(`[renderChatPage] Rendering ${state.chat?.messages?.length || 0} messages to Chat PAGE`);
+    if (!container) return;
 
     // Setup scroll listener
     setupChatPageScrollListener();
@@ -2566,8 +2489,6 @@ async function startNewSession() {
     renderChat();
     renderChatPage();
     renderSystemPage();
-    
-    console.log('[Dashboard] Started new session');
 }
 
 // ===================
@@ -2767,8 +2688,6 @@ function renderConsole() {
 }
 
 function renderTasks() {
-    console.log('[renderTasks] Called with state.tasks:', state.tasks);
-    console.log('[renderTasks] todo count:', state.tasks?.todo?.length);
     ['todo', 'progress', 'done'].forEach(column => {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
@@ -3495,7 +3414,6 @@ function updateSetting(key, value) {
     
     // Settings are stored in localStorage
     localStorage.setItem(`setting_${key}`, JSON.stringify(value));
-    console.log(`Setting ${key} = ${value}`);
 }
 
 async function resetToServerState() {
@@ -3695,10 +3613,7 @@ window.viewMemoryFile = async function(filePath) {
         
         // Load version history (function from docs-hub-memory-files.js)
         if (typeof window.loadVersionHistory === 'function') {
-            console.log('[Dashboard] Calling loadVersionHistory for:', filePath);
             window.loadVersionHistory(filePath);
-        } else {
-            console.warn('[Dashboard] loadVersionHistory not found!');
         }
         
     } catch (error) {
