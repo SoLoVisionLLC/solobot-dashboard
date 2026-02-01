@@ -818,9 +818,10 @@ function setupChatDragDrop() {
 // ===================
 
 async function loadState() {
-    // Preserve current chat messages
+    // Preserve current messages and logs
     const currentChat = state.chat;
     const currentSystem = state.system;
+    const currentConsole = state.console;
 
     // Load from VPS first
     try {
@@ -865,7 +866,8 @@ async function loadState() {
                 ...state, 
                 ...vpsState, 
                 chat: { messages: finalChat },
-                system: currentSystem  // Keep system messages local
+                system: currentSystem,  // Keep system messages local
+                console: currentConsole  // Keep terminal logs local
             };
             delete state.localModified;
             
@@ -884,10 +886,11 @@ async function loadState() {
     const localSaved = localStorage.getItem('solovision-dashboard');
     if (localSaved) {
         const parsed = JSON.parse(localSaved);
-        // Keep system messages local
+        // Keep local-only data
         delete parsed.system;
-        state = { ...state, ...parsed, chat: currentChat, system: currentSystem };
-        console.log('Loaded state from localStorage (chat preserved)');
+        delete parsed.console;
+        state = { ...state, ...parsed, chat: currentChat, system: currentSystem, console: currentConsole };
+        console.log('Loaded state from localStorage (chat/console preserved)');
     } else {
         initSampleData();
     }
@@ -2816,7 +2819,10 @@ window.dashboardAPI = {
     },
     getState: () => state,
     setState: (newState) => {
-        state = { ...state, ...newState };
+        // Preserve local-only data
+        const currentConsole = state.console;
+        const currentSystem = state.system;
+        state = { ...state, ...newState, console: currentConsole, system: currentSystem };
         saveState();
         render();
     }
