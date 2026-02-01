@@ -143,6 +143,88 @@ function saveFileMeta() {
   fs.writeFileSync(META_FILE, JSON.stringify(fileMeta, null, 2));
 }
 
+// ============================================
+// File Watcher - Detect External Changes
+// ============================================
+
+// Track file modification times to detect external changes
+let fileModTimes = {};
+const MOD_TIMES_FILE = './data/file-mod-times.json';
+
+try {
+  if (fs.existsSync(MOD_TIMES_FILE)) {
+    fileModTimes = JSON.parse(fs.readFileSync(MOD_TIMES_FILE, 'utf8'));
+  }
+} catch (e) {
+  console.log('Starting with fresh mod times tracking');
+}
+
+function saveModTimes() {
+  fs.writeFileSync(MOD_TIMES_FILE, JSON.stringify(fileModTimes, null, 2));
+}
+
+// Check for external file changes and create versions/badges
+function checkForExternalChanges() {
+  if (!fs.existsSync(MEMORY_DIR)) return;
+  
+  const checkFile = (filepath, relativePath) => {
+    try {
+      const stat = fs.statSync(filepath);
+      const mtime = stat.mtime.getTime();
+      const lastKnown = fileModTimes[relativePath];
+      
+      if (lastKnown && mtime > lastKnown) {
+        // File was modified externally!
+        console.log(`External change detected: ${relativePath}`);
+        
+        // Mark as bot-updated
+        if (!fileMeta[relativePath]) {
+          fileMeta[relativePath] = {};
+        }
+        fileMeta[relativePath].botUpdated = true;
+        fileMeta[relativePath].botUpdatedAt = Date.now();
+        fileMeta[relativePath].acknowledged = false;
+        saveFileMeta();
+      }
+      
+      // Update tracked mod time
+      fileModTimes[relativePath] = mtime;
+    } catch (e) {
+      // File might have been deleted
+    }
+  };
+  
+  // Check root memory files
+  try {
+    const items = fs.readdirSync(MEMORY_DIR);
+    for (const item of items) {
+      const itemPath = path.join(MEMORY_DIR, item);
+      const stat = fs.statSync(itemPath);
+      
+      if (stat.isFile() && item.endsWith('.md')) {
+        checkFile(itemPath, item);
+      } else if (stat.isDirectory() && item === 'memory') {
+        // Check memory/ subdirectory
+        const subItems = fs.readdirSync(itemPath);
+        for (const subItem of subItems) {
+          if (subItem.endsWith('.md')) {
+            checkFile(path.join(itemPath, subItem), `memory/${subItem}`);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.log('Error checking for external changes:', e.message);
+  }
+  
+  saveModTimes();
+}
+
+// Check for external changes every 30 seconds
+setInterval(checkForExternalChanges, 30000);
+// Also check on startup after a short delay
+setTimeout(checkForExternalChanges, 5000);
+
 // Create a version backup of a file
 function createVersion(filename, content) {
   const timestamp = Date.now();
