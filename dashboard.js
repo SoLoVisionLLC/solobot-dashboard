@@ -192,6 +192,7 @@ let streamingText = '';
 let isProcessing = false;
 let lastProcessingEndTime = 0; // Track when processing ended to avoid poll conflicts
 let historyPollInterval = null;
+let sessionVersion = 0; // Incremented on session switch to ignore stale history data
 
 let newTaskPriority = 1;
 let newTaskColumn = 'todo';
@@ -840,24 +841,28 @@ window.switchToSession = async function(sessionKey) {
     try {
         // 1. Save current chat as safeguard
         await saveCurrentChat();
-        
-        // 2. Update session config and input field
+
+        // 2. Increment session version to invalidate any in-flight history loads
+        sessionVersion++;
+        console.log(`[Dashboard] Session version now ${sessionVersion}`);
+
+        // 3. Update session config and input field
         currentSessionName = sessionKey;
         GATEWAY_CONFIG.sessionKey = sessionKey;
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
 
-        // 3. Clear current chat (skip confirmation when switching sessions)
-        await clearChatHistory(true);
+        // 4. Clear current chat (skip confirmation, clear cache to prevent stale data)
+        await clearChatHistory(true, true);
 
-        // 4. Reconnect gateway with new session key
+        // 5. Reconnect gateway with new session key
         if (gateway && gateway.isConnected()) {
             gateway.disconnect();
             await new Promise(resolve => setTimeout(resolve, 300));
             connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
         }
 
-        // 5. Load new session's history
+        // 6. Load new session's history
         await loadSessionHistory(sessionKey);
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
@@ -972,9 +977,14 @@ function initGateway() {
             checkRestartToast();
 
             // Load chat history on connect
-            // Use mergeHistoryMessages (additive) instead of loadHistoryMessages (replacement)
-            // to prevent losing messages during reconnections
+            // Capture session version to detect stale responses after session switch
+            const loadVersion = sessionVersion;
             gateway.loadHistory().then(result => {
+                // Ignore if session changed during async load
+                if (loadVersion !== sessionVersion) {
+                    console.log(`[Dashboard] Ignoring stale history (version ${loadVersion} != ${sessionVersion})`);
+                    return;
+                }
                 if (result?.messages) {
                     // Only do full replacement if chat is empty (first load)
                     if (!state.chat?.messages?.length) {
@@ -1265,7 +1275,14 @@ function startHistoryPolling() {
         if (!gateway || !gateway.isConnected() || isProcessing) return;
         if (Date.now() - lastProcessingEndTime < 3000) return;
 
+        // Capture session version to detect stale responses
+        const pollVersion = sessionVersion;
         gateway.loadHistory().then(result => {
+            // Ignore if session changed during async load
+            if (pollVersion !== sessionVersion) {
+                console.log(`[Dashboard] Ignoring stale poll history (version ${pollVersion} != ${sessionVersion})`);
+                return;
+            }
             if (result?.messages) {
                 mergeHistoryMessages(result.messages);
             }
@@ -2489,7 +2506,7 @@ function closeConfirmModal(result) {
 window.showConfirm = showConfirm;
 window.closeConfirmModal = closeConfirmModal;
 
-async function clearChatHistory(skipConfirm = false) {
+async function clearChatHistory(skipConfirm = false, clearCache = false) {
     if (!skipConfirm) {
         const confirmed = await showConfirm(
             'Clear Chat History',
@@ -2504,6 +2521,12 @@ async function clearChatHistory(skipConfirm = false) {
     state.chat.messages = [];
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
+
+    // Clear localStorage cache when switching sessions to prevent stale data
+    if (clearCache) {
+        localStorage.removeItem('solobot-chat-messages');
+    }
+
     renderChat();
     renderChatPage();
 }
@@ -2528,11 +2551,16 @@ window.startNewSession = async function() {
 
     showToast(`Creating new session "${sessionKey}"...`, 'info');
 
-    // Clear local chat
+    // Increment session version to invalidate any in-flight history loads
+    sessionVersion++;
+    console.log(`[Dashboard] Session version now ${sessionVersion} (new session)`);
+
+    // Clear local chat and cache
     state.chat.messages = [];
     state.system.messages = [];
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
+    localStorage.removeItem('solobot-chat-messages');
 
     // Switch gateway to new session - need to reconnect with new session key
     currentSessionName = sessionKey;
