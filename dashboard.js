@@ -846,8 +846,8 @@ window.switchToSession = async function(sessionKey) {
             gateway.setSessionKey(sessionKey);
         }
         
-        // 3. Clear current chat
-        clearChatHistory();
+        // 3. Clear current chat (skip confirmation when switching sessions)
+        await clearChatHistory(true);
         
         // 4. Load new session's history
         await loadSessionHistory(sessionKey);
@@ -2484,22 +2484,23 @@ function closeConfirmModal(result) {
 window.showConfirm = showConfirm;
 window.closeConfirmModal = closeConfirmModal;
 
-async function clearChatHistory() {
-    const confirmed = await showConfirm(
-        'Clear Chat History',
-        'Clear all chat messages? They may reload from Gateway on next sync.',
-        'Clear',
-        'Cancel',
-        true
-    );
-    
-    if (confirmed) {
-        state.chat.messages = [];
-        chatPageNewMessageCount = 0;
-        chatPageUserScrolled = false;
-        renderChat();
-        renderChatPage();
+async function clearChatHistory(skipConfirm = false) {
+    if (!skipConfirm) {
+        const confirmed = await showConfirm(
+            'Clear Chat History',
+            'Clear all chat messages? They may reload from Gateway on next sync.',
+            'Clear',
+            'Cancel',
+            true
+        );
+        if (!confirmed) return;
     }
+
+    state.chat.messages = [];
+    chatPageNewMessageCount = 0;
+    chatPageUserScrolled = false;
+    renderChat();
+    renderChatPage();
 }
 
 async function startNewSession() {
