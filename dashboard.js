@@ -687,7 +687,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('edit-title-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') saveEditedTitle();
     });
+    
+    // Drag and drop for images on chat page
+    setupChatDragDrop();
 });
+
+// Set up drag and drop for chat page
+function setupChatDragDrop() {
+    const chatWrapper = document.querySelector('.chat-page-wrapper');
+    if (!chatWrapper) return;
+    
+    // Prevent default drag behaviors on the whole page
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        chatWrapper.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+    
+    // Highlight drop zone
+    ['dragenter', 'dragover'].forEach(eventName => {
+        chatWrapper.addEventListener(eventName, () => {
+            chatWrapper.classList.add('drag-over');
+        }, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+        chatWrapper.addEventListener(eventName, () => {
+            chatWrapper.classList.remove('drag-over');
+        }, false);
+    });
+    
+    // Handle drop
+    chatWrapper.addEventListener('drop', (e) => {
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                processChatPageImageFile(file);
+            }
+        }
+    }, false);
+}
 
 // ===================
 // DATA PERSISTENCE

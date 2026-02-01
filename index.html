@@ -2539,7 +2539,7 @@
 
     <script src="gateway-client.js?v=3.3.0"></script>
     <script src="docs-hub-memory-files.js?v=2.0.0"></script>
-    <script src="dashboard.js?v=3.25.0"></script>
+    <script src="dashboard.js?v=3.26.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
@@ -2906,6 +2906,29 @@
         
         .version-item:last-child {
             border-bottom: none;
+        }
+        
+        /* Drag and drop highlight for chat */
+        .chat-page-wrapper.drag-over {
+            outline: 3px dashed var(--brand-red);
+            outline-offset: -3px;
+            background: rgba(188, 32, 38, 0.05);
+        }
+        
+        .chat-page-wrapper.drag-over::after {
+            content: '📷 Drop image here';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--surface-overlay);
+            padding: var(--space-4) var(--space-6);
+            border-radius: var(--radius-lg);
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--brand-red);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 100;
         }
     </style>
 </body>
