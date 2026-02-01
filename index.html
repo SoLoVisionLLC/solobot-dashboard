@@ -2045,7 +2045,11 @@
                             </label>
                             <input type="text" id="chat-input" class="input flex-1" placeholder="Type a message..."
                                    onkeypress="if(event.key==='Enter')sendChatMessage()"
-                                   onpaste="handlePaste(event)">
+                                   onpaste="handlePaste(event)"
+                                   autocomplete="off"
+                                   data-lpignore="true"
+                                   data-1p-ignore="true"
+                                   data-form-type="other">
                             <button onclick="sendChatMessage()" class="btn btn-primary">Send</button>
                         </div>
                     </div>
@@ -2210,7 +2214,14 @@
                                    placeholder="Message SoLoBot..." 
                                    onkeypress="if(event.key==='Enter' && !event.shiftKey) sendChatPageMessage()"
                                    onpaste="handleChatPagePaste(event)"
-                                   autocomplete="off">
+                                   autocomplete="off"
+                                   autocorrect="off"
+                                   autocapitalize="off"
+                                   spellcheck="false"
+                                   data-lpignore="true"
+                                   data-form-type="other"
+                                   data-1p-ignore="true"
+                                   aria-autocomplete="none">
                             <button onclick="sendChatPageMessage()" class="btn btn-primary">
                                 Send
                             </button>
