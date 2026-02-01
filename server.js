@@ -736,15 +736,19 @@ const server = http.createServer((req, res) => {
         console.log(`[Server] Model change requested: ${modelId}`);
         
         // Update state with requested model
-        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-        state.requestedModel = {
+        const fileState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        fileState.requestedModel = {
           modelId: modelId,
           provider: modelId.split('/')[0],
           name: modelId.split('/').pop(),
           requestedAt: Date.now()
         };
-        state.lastSync = Date.now();
-        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+        fileState.lastSync = Date.now();
+        fs.writeFileSync(STATE_FILE, JSON.stringify(fileState, null, 2));
+        
+        // Update global in-memory state
+        state.requestedModel = fileState.requestedModel;
+        state.lastSync = fileState.lastSync;
         
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ 
