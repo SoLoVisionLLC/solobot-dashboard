@@ -515,11 +515,13 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    // Merge chat: combine gateway history with ALL local messages, dedupe by text snippet
-    const historyTexts = new Set(chatMessages.map(m => m.text.substring(0, 100)));
+    // Merge chat: combine gateway history with ALL local messages
+    // Dedupe by ID first, then by exact text match (not snippet) to be safer
+    const historyIds = new Set(chatMessages.map(m => m.id));
+    const historyExactTexts = new Set(chatMessages.map(m => m.text));
     const uniqueLocalMessages = allLocalChatMessages.filter(m => {
-        const textSnippet = m.text.substring(0, 100);
-        return !historyTexts.has(textSnippet);
+        // Keep local message if: different ID AND different exact text
+        return !historyIds.has(m.id) && !historyExactTexts.has(m.text);
     });
 
     state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
