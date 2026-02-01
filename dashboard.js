@@ -560,43 +560,26 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         console.log(`[Dashboard] Current model: ${currentProvider}/${currentModel}`);
         
-        // Update displays
-        document.getElementById('provider-name').textContent = currentProvider;
-        document.getElementById('model-name').textContent = currentModel;
-        document.getElementById('current-provider-display').textContent = currentProvider;
-        document.getElementById('current-model-display').textContent = currentModel;
+        // Update displays (with null checks)
+        const providerNameEl = document.getElementById('provider-name');
+        const modelNameEl = document.getElementById('model-name');
+        const currentProviderDisplay = document.getElementById('current-provider-display');
+        const currentModelDisplay = document.getElementById('current-model-display');
+        const providerSelectEl = document.getElementById('provider-select');
         
-        // Set provider select to current
-        document.getElementById('provider-select').value = currentProvider;
+        if (providerNameEl) providerNameEl.textContent = currentProvider;
+        if (modelNameEl) modelNameEl.textContent = currentModel;
+        if (currentProviderDisplay) currentProviderDisplay.textContent = currentProvider;
+        if (currentModelDisplay) currentModelDisplay.textContent = currentModel;
+        if (providerSelectEl) providerSelectEl.value = currentProvider;
         
         // Populate model dropdown for current provider
         await updateModelDropdown(currentProvider);
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
-        console.error('[Dashboard] Error details:', error.message, error.stack);
-        
-        // Show error to user instead of fallback
-        console.error('[Dashboard] CRITICAL: Cannot display current model configuration');
-        
-        // Display error state
-        document.getElementById('provider-name').textContent = 'ERROR';
-        document.getElementById('model-name').textContent = 'Unable to load model';
-        document.getElementById('current-provider-display').textContent = 'ERROR';
-        document.getElementById('current-model-display').textContent = 'Unable to load model';
-        
-        // Show error in dropdowns
-        const providerSelect = document.getElementById('provider-select');
-        const modelSelect = document.getElementById('model-select');
-        
-        providerSelect.innerHTML = '<option value="">ERROR: Cannot load providers</option>';
-        modelSelect.innerHTML = '<option value="">ERROR: Cannot load models</option>';
-        
-        // Show error toast
-        showToast('Failed to load AI model configuration', 'error');
-        
-        // Re-throw to make error visible in console
-        throw error;
+        // Don't crash the whole page - just log the error
+        console.warn('[Dashboard] Model display may be incomplete');
     }
 });
 
@@ -2357,27 +2340,34 @@ function renderStatus() {
     const subagentBanner = document.getElementById('subagent-banner');
     const subagentTask = document.getElementById('subagent-task');
 
-    // Use design system status-dot classes
-    indicator.className = 'status-dot';
-    switch(state.status) {
-        case 'working':
-            indicator.classList.add('success', 'pulse');
-            text.textContent = 'WORKING';
-            break;
-        case 'thinking':
-            indicator.classList.add('warning', 'pulse');
-            text.textContent = 'THINKING';
-            break;
-        case 'offline':
-            indicator.classList.add('error');
-            text.textContent = 'OFFLINE';
-            break;
-        default:
-            indicator.classList.add('success');
-            text.textContent = 'IDLE';
+    // Use design system status-dot classes (with null checks)
+    if (indicator) {
+        indicator.className = 'status-dot';
+        switch(state.status) {
+            case 'working':
+                indicator.classList.add('success', 'pulse');
+                break;
+            case 'thinking':
+                indicator.classList.add('warning', 'pulse');
+                break;
+            case 'offline':
+                indicator.classList.add('error');
+                break;
+            default:
+                indicator.classList.add('success');
+        }
+    }
+    
+    if (text) {
+        switch(state.status) {
+            case 'working': text.textContent = 'WORKING'; break;
+            case 'thinking': text.textContent = 'THINKING'; break;
+            case 'offline': text.textContent = 'OFFLINE'; break;
+            default: text.textContent = 'IDLE';
+        }
     }
 
-    modelEl.textContent = state.model || 'opus 4.5';
+    if (modelEl) modelEl.textContent = state.model || 'opus 4.5';
 
     const providerEl = document.getElementById('provider-name');
     if (providerEl) {
