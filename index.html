@@ -301,7 +301,9 @@
         .header {
             background: var(--surface-1);
             border-bottom: 1px solid var(--border-default);
-            padding: var(--space-4) 0;
+            height: 60px; /* Match sidebar-logo height */
+            display: flex;
+            align-items: center;
             position: sticky;
             top: 0;
             z-index: 100;
@@ -311,6 +313,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            width: 100%;
         }
 
         .logo {
