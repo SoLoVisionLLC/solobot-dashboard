@@ -1981,15 +1981,17 @@ function renderConsole() {
     }
 
     const output = document.getElementById('console-output');
-    if (output && consoleData.logs && consoleData.logs.length > 0) {
-        output.innerHTML = consoleData.logs.map(log => {
-            const timeStr = formatTimeShort(log.time);
-            const colorClass = getLogColor(log.type);
-            const prefix = getLogPrefix(log.type);
-            return `<div class="${colorClass}"><span class="info">[${timeStr}]</span> ${prefix}${escapeHtml(log.text)}</div>`;
-        }).join('');
-
-        output.scrollTop = output.scrollHeight;
+    if (output) {
+        if (consoleData.logs && consoleData.logs.length > 0) {
+            output.innerHTML = consoleData.logs.map(log => {
+                const timeStr = formatTimeShort(log.time);
+                const colorClass = getLogColor(log.type);
+                const prefix = getLogPrefix(log.type);
+                return `<div class="${colorClass}"><span class="info">[${timeStr}]</span> ${prefix}${escapeHtml(log.text)}</div>`;
+            }).join('');
+            output.scrollTop = output.scrollHeight;
+        }
+        // Don't clear if empty - keep existing content
     }
 }
 
