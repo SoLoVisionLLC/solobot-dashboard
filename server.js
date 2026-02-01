@@ -971,8 +971,8 @@ const server = http.createServer((req, res) => {
         return;
       }
       
-      // Read transcript file
-      const transcriptPath = path.join('/home/node/.openclaw/agents/main/sessions', `${sessionInfo.sessionId}.jsonl`);
+      // Read transcript file from mounted sessions folder
+      const transcriptPath = path.join('/app/sessions', `${sessionInfo.sessionId}.jsonl`);
       console.log(`[Server] Looking for transcript at: ${transcriptPath}`);
       
       if (!fs.existsSync(transcriptPath)) {
