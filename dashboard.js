@@ -454,11 +454,10 @@ window.refreshModels = async function() {
             showToast(`${result.message}`, 'success');
             // Refresh the provider dropdown with new models
             await populateProviderDropdown();
-            // Update model dropdown for current provider
+            // Update model dropdown for current provider (use currentProvider variable as fallback)
             const providerSelect = document.getElementById('provider-select');
-            if (providerSelect) {
-                await updateModelDropdown(providerSelect.value);
-            }
+            const provider = providerSelect?.value || currentProvider || 'openrouter';
+            await updateModelDropdown(provider);
         } else {
             showToast(result.message || 'Failed to refresh models', 'warning');
         }
@@ -469,8 +468,9 @@ window.refreshModels = async function() {
 }
 
 window.changeModel = async function() {
-    const modelSelect = document.getElementById('model-select');
-    const selectedModel = modelSelect.value;
+    // Support both model-select and setting-model IDs
+    const modelSelect = document.getElementById('model-select') || document.getElementById('setting-model');
+    const selectedModel = modelSelect?.value;
     
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
@@ -557,9 +557,10 @@ window.changeModel = async function() {
 };
 
 async function updateModelDropdown(provider) {
-    const modelSelect = document.getElementById('model-select');
+    // Support both model-select and setting-model IDs
+    const modelSelect = document.getElementById('model-select') || document.getElementById('setting-model');
     if (!modelSelect) {
-        console.error('[Dashboard] model-select element not found!');
+        console.warn('[Dashboard] No model select element found (tried model-select and setting-model)');
         return;
     }
     
@@ -576,6 +577,12 @@ async function updateModelDropdown(provider) {
         if (model.selected) option.selected = true;
         modelSelect.appendChild(option);
     });
+    
+    // Also update setting-model if it's a different element
+    const settingModel = document.getElementById('setting-model');
+    if (settingModel && settingModel !== modelSelect) {
+        settingModel.innerHTML = modelSelect.innerHTML;
+    }
 }
 
 async function getModelsForProvider(provider) {
