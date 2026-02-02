@@ -752,7 +752,8 @@ async function fetchSessions() {
         try {
             // Fetch all sessions without label filter
             // Note: gateway's label filter checks entry.label but dashboard sessions have origin.label
-            const result = await gateway.listSessions({ label: '' });
+            // Don't pass label parameter at all - empty string fails validation
+            const result = await gateway.listSessions({});
             let sessions = result?.sessions || [];
 
             // Filter on client side: include sessions with origin.label matching "SoLoBot Dashboard"
