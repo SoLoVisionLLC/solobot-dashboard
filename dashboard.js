@@ -778,25 +778,14 @@ async function fetchSessions() {
                 return false;
             });
 
-            // Patch sessions that need their displayName set to the friendly name
-            // Only patch if displayName is not already set
-            for (const s of sessions) {
-                const friendlyName = getFriendlySessionName(s.key);
-                if (!s.displayName && friendlyName !== s.key) {
-                    // Set displayName to the friendly session name
-                    gateway.patchSession(s.key, { displayName: friendlyName }).catch(err => {
-                        console.warn(`[Dashboard] Failed to set displayName for session ${s.key}:`, err.message);
-                    });
-                }
-            }
-
             // Map gateway response to expected format
+            // Always use friendly name for display (strips agent:main: prefix)
             availableSessions = sessions.map(s => {
                 const friendlyName = getFriendlySessionName(s.key);
                 return {
                     key: s.key,
                     name: friendlyName,
-                    displayName: s.displayName || friendlyName,
+                    displayName: friendlyName,  // Always use friendly name, not gateway's displayName
                     updatedAt: s.updatedAt,
                     totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
                     model: s.model || 'unknown',
