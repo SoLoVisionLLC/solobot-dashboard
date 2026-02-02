@@ -13,8 +13,8 @@ services:
       - /home/node/.openclaw/workspace/memory:/app/memory:ro
       # Mount scripts directory for functionality
       - /home/node/.openclaw/workspace/scripts:/app/scripts:ro
-      # Mount OpenClaw directory for reading config (models, etc.)
-      - /home/node/.openclaw:/app/openclaw:ro
+      # Mount OpenClaw directory for reading AND WRITING config (models, etc.)
+      - /home/node/.openclaw:/app/openclaw
       # Mount sessions directory for reading chat history
       - /home/node/.openclaw/sessions:/app/sessions:ro
 
