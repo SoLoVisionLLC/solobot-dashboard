@@ -362,6 +362,21 @@ class GatewayClient {
         }
     }
 
+    listSessions(opts = {}) {
+        if (!this.connected) {
+            return Promise.reject(new Error('Not connected'));
+        }
+
+        console.log('[Gateway] Listing sessions...');
+        return this._request('sessions.list', {
+            includeDerivedTitles: true,
+            ...opts
+        }).then(result => {
+            console.log(`[Gateway] Sessions list returned ${result?.sessions?.length || 0} sessions`);
+            return result;
+        });
+    }
+
     disconnect() {
         this.desiredConnection = null;
         this.connected = false;

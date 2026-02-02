@@ -747,12 +747,54 @@ window.toggleChatPageSessionMenu = function() {
 let availableSessions = [];
 
 async function fetchSessions() {
+    // Try gateway first if connected (direct RPC call)
+    if (gateway && gateway.isConnected()) {
+        try {
+            // Fetch all sessions without label filter
+            // Note: gateway's label filter checks entry.label but dashboard sessions have origin.label
+            const result = await gateway.listSessions({ label: '' });
+            let sessions = result?.sessions || [];
+
+            // Filter on client side: include sessions with origin.label matching "SoLoBot Dashboard"
+            // or sessions without any label/origin (custom dashboard sessions)
+            const dashboardLabel = 'SoLoBot Dashboard';
+            sessions = sessions.filter(s => {
+                // Include if origin.label matches
+                if (s.origin?.label === dashboardLabel) return true;
+                // Include if entry.label matches (older format)
+                if (s.label === dashboardLabel) return true;
+                // Include sessions created with custom keys from dashboard (no label/origin)
+                // These are direct sessions without group info
+                if (s.kind === 'direct' && !s.origin?.label && !s.label) return true;
+                return false;
+            });
+
+            // Map gateway response to expected format
+            availableSessions = sessions.map(s => ({
+                key: s.key,
+                name: s.key,
+                displayName: s.displayName || s.label || s.origin?.label || s.key,
+                updatedAt: s.updatedAt,
+                totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                model: s.model || 'unknown',
+                sessionId: s.sessionId
+            }));
+
+            console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from gateway (filtered from ${result?.sessions?.length || 0} total)`);
+            populateSessionDropdown();
+            return availableSessions;
+        } catch (e) {
+            console.warn('[Dashboard] Gateway sessions.list failed, falling back to server:', e.message);
+        }
+    }
+
+    // Fallback to server API
     try {
         const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         availableSessions = data.sessions || [];
-        console.log(`[Dashboard] Fetched ${availableSessions.length} sessions`);
+        console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from server`);
         populateSessionDropdown();
         return availableSessions;
     } catch (e) {
@@ -1001,6 +1043,9 @@ function initGateway() {
             // Poll history periodically to catch user messages from other clients
             // (Gateway doesn't broadcast user messages as events, only assistant messages)
             startHistoryPolling();
+
+            // Fetch sessions list from gateway (now that we're connected)
+            fetchSessions();
         },
         onDisconnected: (message) => {
             updateConnectionUI('disconnected', message);
