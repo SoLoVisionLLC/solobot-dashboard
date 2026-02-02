@@ -8,8 +8,9 @@ const { exec } = require('child_process');
 // Dynamic Model Fetching from OpenClaw Config
 // ============================================
 
-// Path to mounted OpenClaw config (from docker-compose volume)
-const OPENCLAW_CONFIG_PATH = './openclaw-config.json';
+// Path to mounted OpenClaw config (from Coolify volume mount)
+// We mount the whole .openclaw directory to avoid Docker EISDIR issues with single files
+const OPENCLAW_CONFIG_PATH = './openclaw/openclaw.json';
 // Fallback path (direct access if running on same machine)
 const OPENCLAW_CONFIG_FALLBACK = '/home/node/.openclaw/openclaw.json';
 
