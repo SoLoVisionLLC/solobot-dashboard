@@ -2237,15 +2237,17 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                 </svg>
                             </label>
-                            <input type="search" id="chat-input" class="input flex-1" placeholder="Type a message..."
-                                   name="dashboard_chat_field"
+                            <input type="text" id="chat-input" class="input flex-1" placeholder="Type a message..."
+                                   name="dashboard_chat_field_" 
                                    onkeypress="if(event.key==='Enter')sendChatMessage()"
                                    onpaste="handlePaste(event)"
-                                   autocomplete="new-password"
+                                   autocomplete="off"
+                                   autocorrect="off"
+                                   autocapitalize="off"
+                                   spellcheck="false"
                                    data-lpignore="true"
                                    data-1p-ignore="true"
-                                   data-form-type="other"
-                                   role="searchbox">
+                                   data-form-type="other">
                             <button onclick="sendChatMessage()" class="btn btn-primary">Send</button>
                         </div>
                     </div>
@@ -2418,21 +2420,19 @@
                             <!-- Hidden decoy fields to trick password managers -->
                             <input type="text" name="fake_username_field" style="display:none;" tabindex="-1" aria-hidden="true">
                             <input type="password" name="fake_password_field" style="display:none;" tabindex="-1" aria-hidden="true">
-                            <input type="search" 
+                            <input type="text" 
                                    id="chat-page-input" 
-                                   name="chat_message_input_field"
+                                   name="chat_message_input_field_"
                                    placeholder="Message SoLoBot..." 
                                    onkeypress="if(event.key==='Enter' && !event.shiftKey) sendChatPageMessage()"
                                    onpaste="handleChatPagePaste(event)"
-                                   autocomplete="new-password"
+                                   autocomplete="off"
                                    autocorrect="off"
                                    autocapitalize="off"
                                    spellcheck="false"
                                    data-lpignore="true"
                                    data-form-type="other"
-                                   data-1p-ignore="true"
-                                   aria-autocomplete="none"
-                                   role="searchbox">
+                                   data-1p-ignore="true">
                             <button onclick="sendChatPageMessage()" class="btn btn-primary">
                                 Send
                             </button>
