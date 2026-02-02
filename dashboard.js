@@ -1366,13 +1366,17 @@ function mergeHistoryMessages(messages) {
     // This catches user messages from other clients that weren't broadcast as events
     const existingIds = new Set(state.chat.messages.map(m => m.id));
     const existingSystemIds = new Set(state.system.messages.map(m => m.id));
+    // Also track existing text content to prevent duplicates when IDs differ
+    // (local messages use 'm' + Date.now(), history messages have server IDs)
+    const existingTexts = new Set(state.chat.messages.map(m => m.text));
+    const existingSystemTexts = new Set(state.system.messages.map(m => m.text));
     let newChatCount = 0;
     let newSystemCount = 0;
 
     for (const msg of messages) {
         const msgId = msg.id || 'm' + msg.timestamp;
 
-        // Skip if already exists in either array
+        // Skip if already exists in either array (by ID)
         if (existingIds.has(msgId) || existingSystemIds.has(msgId)) {
             continue;
         }
@@ -1392,8 +1396,18 @@ function mergeHistoryMessages(messages) {
                 }
             }
 
-            // Only add if we have content
+            // Only add if we have content and it's not a duplicate by text
             if (textContent) {
+                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot');
+
+                // Skip if we already have this exact text content (prevents duplicates when IDs differ)
+                if (isSystemMsg && existingSystemTexts.has(textContent)) {
+                    continue;
+                }
+                if (!isSystemMsg && existingTexts.has(textContent)) {
+                    continue;
+                }
+
                 const message = {
                     id: msgId,
                     from: msg.role === 'user' ? 'user' : 'solobot',
@@ -1402,12 +1416,14 @@ function mergeHistoryMessages(messages) {
                 };
 
                 // Classify and route
-                if (isSystemMessage(textContent, message.from)) {
+                if (isSystemMsg) {
                     state.system.messages.push(message);
+                    existingSystemTexts.add(textContent);
                     newSystemCount++;
                 } else {
                     state.chat.messages.push(message);
                     existingIds.add(msgId);
+                    existingTexts.add(textContent);
                     newChatCount++;
                 }
             }
