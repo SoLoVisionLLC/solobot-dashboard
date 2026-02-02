@@ -265,12 +265,43 @@ class GatewayClient {
             }
         }
 
+        // Log chat events with model info for debugging
+        if (state === 'delta') {
+            // Only log first delta to avoid spam
+            if (!this._loggedDelta) {
+                console.log(`[Gateway] ⬇️ Receiving response (model: ${message?.model || 'unknown'}, provider: ${message?.provider || 'unknown'})`);
+                this._loggedDelta = true;
+            }
+        } else if (state === 'final') {
+            this._loggedDelta = false;
+            const contentLen = contentText.length;
+            const stopReason = message?.stopReason;
+            const errorMsg = message?.errorMessage || payload.errorMessage;
+            
+            if (errorMsg) {
+                console.error(`[Gateway] ❌ AI RESPONSE ERROR: ${errorMsg}`);
+                console.error(`[Gateway]    Provider: ${message?.provider || 'unknown'}, Model: ${message?.model || 'unknown'}`);
+                console.error(`[Gateway]    Stop reason: ${stopReason || 'none'}`);
+            } else if (contentLen === 0 && role === 'assistant') {
+                console.warn(`[Gateway] ⚠️ Empty response from AI (stopReason: ${stopReason}, provider: ${message?.provider})`);
+            } else {
+                console.log(`[Gateway] ✅ Response complete: ${contentLen} chars (stopReason: ${stopReason || 'end_turn'})`);
+            }
+        } else if (state === 'error') {
+            this._loggedDelta = false;
+            console.error(`[Gateway] ❌ Chat error state: ${payload.errorMessage || 'Unknown error'}`);
+        }
+
         this.onChatEvent({
             state,
             content: contentText,
             role,
             sessionKey: eventSessionKey,
-            errorMessage: payload.errorMessage
+            errorMessage: message?.errorMessage || payload.errorMessage,
+            // Pass through model info for dashboard to use
+            model: message?.model,
+            provider: message?.provider,
+            stopReason: message?.stopReason
         });
     }
 
@@ -287,9 +318,17 @@ class GatewayClient {
 
         // Log model and session info
         const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
-        console.log(`[Gateway] Sending message to session "${this.sessionKey}" with ${model}`);
+        console.log(`[Gateway] ⬆️ Sending message to session "${this.sessionKey}"`);
+        console.log(`[Gateway]    Model: ${model}`);
+        console.log(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
-        return this._request('chat.send', params);
+        return this._request('chat.send', params).then(result => {
+            console.log(`[Gateway] ✅ Message sent, runId: ${result?.runId || 'none'}`);
+            return result;
+        }).catch(err => {
+            console.error(`[Gateway] ❌ Failed to send message: ${err.message}`);
+            throw err;
+        });
     }
 
     sendMessageWithImage(text, imageDataUrl) {

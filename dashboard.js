@@ -1224,7 +1224,13 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
-    const { state: eventState, content, role, errorMessage } = event;
+    const { state: eventState, content, role, errorMessage, model, provider, stopReason } = event;
+    
+    // Track the current model being used for responses
+    if (model) {
+        window._lastResponseModel = model;
+        window._lastResponseProvider = provider;
+    }
 
     // Handle user messages from other clients (WebUI, Telegram, etc.)
     if (role === 'user' && eventState === 'final' && content) {
@@ -1264,7 +1270,7 @@ function handleChatEvent(event) {
                     m.from === 'solobot' && m.text === finalContent && (Date.now() - m.time) < 10000
                 );
                 if (!isDuplicate) {
-                    addLocalChatMessage(finalContent, 'solobot');
+                    addLocalChatMessage(finalContent, 'solobot', window._lastResponseModel);
                 }
             }
             streamingText = '';
@@ -1286,7 +1292,7 @@ function handleChatEvent(event) {
 }
 
 function loadHistoryMessages(messages) {
-    console.log(`[Dashboard] loadHistoryMessages called with ${messages?.length || 0} messages, session: ${gateway?.sessionKey || 'unknown'}`);
+    // Removed verbose log - called frequently on history sync
     // Convert gateway history format and classify as chat vs system
     // IMPORTANT: Preserve ALL local messages since Gateway doesn't save user messages (bug #5735)
     const allLocalChatMessages = state.chat.messages.filter(m => m.id.startsWith('m'));
@@ -1394,7 +1400,7 @@ function stopHistoryPolling() {
 }
 
 function mergeHistoryMessages(messages) {
-    console.log(`[Dashboard] mergeHistoryMessages called with ${messages?.length || 0} messages, session: ${gateway?.sessionKey || 'unknown'}`);
+    // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
     const existingIds = new Set(state.chat.messages.map(m => m.id));
@@ -1920,16 +1926,29 @@ async function sendChatMessage() {
     }
 }
 
-function addLocalChatMessage(text, from, image = null) {
+function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
     if (!state.chat) state.chat = { messages: [] };
     if (!state.system) state.system = { messages: [] };
+    
+    // Handle both (text, from, image) and (text, from, model) call signatures
+    // If third param is a string that looks like a model name, treat it as model
+    let image = null;
+    let messageModel = model;
+    if (imageOrModel && typeof imageOrModel === 'string') {
+        if (imageOrModel.includes('/') || imageOrModel.includes('claude') || imageOrModel.includes('gpt') || imageOrModel.includes('MiniMax')) {
+            messageModel = imageOrModel;
+        } else if (imageOrModel.startsWith('data:')) {
+            image = imageOrModel;
+        }
+    }
 
     const message = {
         id: 'm' + Date.now(),
         from,
         text,
         time: Date.now(),
-        image: image
+        image: image,
+        model: messageModel // Store which AI model generated this response
     };
 
     const isSystem = isSystemMessage(text, from);
@@ -1991,10 +2010,9 @@ function syncChatToVPS() {
 function renderChat() {
     const container = document.getElementById('chat-messages');
     if (!container) {
-        console.log('[Dashboard] renderChat: container not found');
         return;
     }
-    console.log(`[Dashboard] renderChat: rendering ${state.chat?.messages?.length || 0} messages`);
+    // Removed verbose log: renderChat called frequently
 
     const messages = state.chat?.messages || [];
     const isConnected = gateway?.isConnected();
@@ -2099,6 +2117,17 @@ function createChatMessageElement(msg) {
     } else {
         nameSpan.style.color = 'var(--success)';
         nameSpan.textContent = msg.isStreaming ? 'SoLoBot (typing...)' : 'SoLoBot';
+    }
+    
+    // Model badge for bot messages (shows which AI model generated the response)
+    if (!isUser && !isSystem && msg.model) {
+        const modelBadge = document.createElement('span');
+        modelBadge.style.cssText = 'font-size: 10px; padding: 1px 5px; background: var(--surface-3); border-radius: 3px; color: var(--text-muted); margin-left: 4px;';
+        // Show short model name (e.g., 'claude-3-5-sonnet' instead of 'anthropic/claude-3-5-sonnet-latest')
+        const shortModel = msg.model.split('/').pop().replace(/-latest$/, '');
+        modelBadge.textContent = shortModel;
+        modelBadge.title = msg.model; // Full model name on hover
+        header.appendChild(modelBadge);
     }
 
     const timeSpan = document.createElement('span');
@@ -2291,10 +2320,9 @@ function updateScrollToBottomButton() {
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
     if (!container) {
-        console.log('[Dashboard] renderChatPage: container not found');
         return;
     }
-    console.log(`[Dashboard] renderChatPage: rendering ${state.chat?.messages?.length || 0} messages`);
+    // Removed verbose log: renderChatPage called frequently
 
     // Setup scroll listener
     setupChatPageScrollListener();
