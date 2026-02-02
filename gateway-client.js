@@ -246,7 +246,9 @@ class GatewayClient {
 
         // Filter by session key
         const eventSessionKey = payload.sessionKey || 'main';
+        console.log(`[Gateway] Chat event for session "${eventSessionKey}" (we are "${this.sessionKey}")`);
         if (eventSessionKey !== this.sessionKey) {
+            console.log(`[Gateway] Ignoring event for different session`);
             return;
         }
 
