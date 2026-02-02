@@ -442,6 +442,32 @@ async function populateProviderDropdown() {
     }
 }
 
+// Refresh models from CLI (force cache invalidation)
+window.refreshModels = async function() {
+    showToast('Refreshing models from CLI...', 'info');
+    
+    try {
+        const response = await fetch('/api/models/refresh', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.ok) {
+            showToast(`${result.message}`, 'success');
+            // Refresh the provider dropdown with new models
+            await populateProviderDropdown();
+            // Update model dropdown for current provider
+            const providerSelect = document.getElementById('provider-select');
+            if (providerSelect) {
+                await updateModelDropdown(providerSelect.value);
+            }
+        } else {
+            showToast(result.message || 'Failed to refresh models', 'warning');
+        }
+    } catch (e) {
+        console.error('[Dashboard] Failed to refresh models:', e);
+        showToast('Failed to refresh models: ' + e.message, 'error');
+    }
+}
+
 window.changeModel = async function() {
     const modelSelect = document.getElementById('model-select');
     const selectedModel = modelSelect.value;

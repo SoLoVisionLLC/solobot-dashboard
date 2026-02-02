@@ -2,6 +2,120 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+
+// ============================================
+// Dynamic Model Fetching from OpenClaw/SoLoBot CLI
+// ============================================
+
+// Cache for models list (refreshed every 5 minutes)
+let cachedModels = null;
+let modelsLastFetched = 0;
+const MODELS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Fetch models dynamically from `solobot models list` command
+ * Returns models grouped by provider in the format expected by the dashboard
+ */
+function fetchModelsFromCLI() {
+  return new Promise((resolve) => {
+    // Check cache first
+    if (cachedModels && (Date.now() - modelsLastFetched) < MODELS_CACHE_TTL) {
+      return resolve(cachedModels);
+    }
+
+    // Try solobot first, fall back to openclaw
+    exec('solobot models list 2>/dev/null || openclaw models list 2>/dev/null', { 
+      encoding: 'utf8',
+      timeout: 10000 
+    }, (error, stdout, stderr) => {
+      if (error || !stdout) {
+        console.warn('[Models] CLI command failed, using fallback:', error?.message || 'no output');
+        return resolve(null); // Return null to trigger fallback
+      }
+
+      try {
+        const models = parseModelsOutput(stdout);
+        if (Object.keys(models).length > 0) {
+          cachedModels = models;
+          modelsLastFetched = Date.now();
+          console.log(`[Models] Fetched ${Object.values(models).flat().length} models from CLI`);
+        }
+        resolve(models);
+      } catch (e) {
+        console.error('[Models] Failed to parse CLI output:', e.message);
+        resolve(null);
+      }
+    });
+  });
+}
+
+/**
+ * Parse the output of `solobot models list` into grouped format
+ * Example output line:
+ * openrouter/auto                            -          -        -     -     default,configured,missing
+ */
+function parseModelsOutput(output) {
+  const models = {};
+  const lines = output.split('\n').filter(line => line.trim());
+  
+  // Skip header line (starts with "Model")
+  const dataLines = lines.filter(line => !line.startsWith('Model') && line.includes('/'));
+  
+  for (const line of dataLines) {
+    // Parse the model line - first column is the model ID
+    const parts = line.trim().split(/\s{2,}/); // Split on 2+ spaces
+    if (parts.length < 1) continue;
+    
+    let modelId = parts[0].trim();
+    // Handle truncated model names (ending with ...)
+    if (modelId.endsWith('...')) {
+      // Try to find the full name from common patterns
+      modelId = modelId.replace(/\.\.\.+$/, '');
+    }
+    
+    // Extract provider from model ID
+    const slashIndex = modelId.indexOf('/');
+    if (slashIndex === -1) continue;
+    
+    const provider = modelId.substring(0, slashIndex);
+    const modelName = modelId.substring(slashIndex + 1);
+    
+    // Get tags from last column if available
+    const tags = parts[parts.length - 1] || '';
+    const isDefault = tags.includes('default');
+    const isFlagship = tags.includes('fallback#1') || tags.includes('fallback#2') || tags.includes('fallback#3');
+    
+    // Determine tier
+    let tier = 'standard';
+    if (isDefault) tier = 'default';
+    else if (isFlagship) tier = 'flagship';
+    else if (tags.includes('configured')) tier = 'configured';
+    
+    // Format display name
+    let displayName = modelName
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    
+    // Add star for default/flagship
+    if (isDefault) displayName += ' ⭐';
+    else if (isFlagship) displayName += ' 🔥';
+    
+    // Initialize provider array if needed
+    if (!models[provider]) {
+      models[provider] = [];
+    }
+    
+    models[provider].push({
+      id: modelId,
+      name: displayName,
+      tier: tier
+    });
+  }
+  
+  return models;
+}
 
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
@@ -705,37 +819,81 @@ const server = http.createServer((req, res) => {
   // Change AI Model endpoint
   // Get available models list (for dropdowns)
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
-    // Models list - check state first for dynamic list, fall back to configured defaults
-    try {
-      const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      if (state.availableModels) {
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(state.availableModels));
+    res.setHeader('Content-Type', 'application/json');
+    
+    // First try to fetch dynamically from CLI
+    fetchModelsFromCLI().then(cliModels => {
+      if (cliModels && Object.keys(cliModels).length > 0) {
+        res.end(JSON.stringify(cliModels));
         return;
       }
-    } catch (e) { /* use defaults */ }
+      
+      // Fallback: check state file for cached models
+      try {
+        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        if (state.availableModels) {
+          res.end(JSON.stringify(state.availableModels));
+          return;
+        }
+      } catch (e) { /* use defaults */ }
+      
+      // Final fallback: hardcoded defaults
+      const models = {
+        'openai-codex': [
+          { id: 'openai-codex/gpt-5.2-codex', name: 'GPT-5.2 Codex ⭐', tier: 'flagship' }
+        ],
+        anthropic: [
+          { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' }
+        ],
+        'google-antigravity': [
+          { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking', tier: 'flagship' }
+        ],
+        moonshot: [
+          { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }
+        ],
+        openrouter: [
+          { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
+        ]
+      };
+      
+      res.end(JSON.stringify(models));
+    }).catch(err => {
+      console.error('[Models] Error fetching models:', err);
+      // Return minimal fallback on error
+      res.end(JSON.stringify({
+        'openrouter': [{ id: 'openrouter/auto', name: 'Auto', tier: 'auto' }]
+      }));
+    });
+    return;
+  }
+  
+  // Refresh models cache (force re-fetch from CLI)
+  if (url.pathname === '/api/models/refresh' && req.method === 'POST') {
+    // Clear cache to force refresh
+    cachedModels = null;
+    modelsLastFetched = 0;
     
-    // Default configured models (SoLo's setup as of 2026-02-01)
-    const models = {
-      'openai-codex': [
-        { id: 'openai-codex/gpt-5.2-codex', name: 'GPT-5.2 Codex ⭐', tier: 'flagship' }
-      ],
-      anthropic: [
-        { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' }
-      ],
-      'google-antigravity': [
-        { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking', tier: 'flagship' }
-      ],
-      moonshot: [
-        { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }
-      ],
-      openrouter: [
-        { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
-      ]
-    };
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(models));
+    // Fetch fresh models
+    fetchModelsFromCLI().then(models => {
+      res.setHeader('Content-Type', 'application/json');
+      if (models && Object.keys(models).length > 0) {
+        const count = Object.values(models).flat().length;
+        res.end(JSON.stringify({ 
+          ok: true, 
+          message: `Refreshed ${count} models from CLI`,
+          providers: Object.keys(models),
+          count: count
+        }));
+      } else {
+        res.end(JSON.stringify({ 
+          ok: false, 
+          message: 'CLI command failed, using fallback models'
+        }));
+      }
+    }).catch(err => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return;
   }
   
