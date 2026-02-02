@@ -244,11 +244,9 @@ class GatewayClient {
     _handleChatEvent(payload) {
         if (!payload) return;
 
-        // Filter by session key
+        // Filter by session key (case-insensitive - gateway returns lowercase)
         const eventSessionKey = payload.sessionKey || 'main';
-        console.log(`[Gateway] Chat event for session "${eventSessionKey}" (we are "${this.sessionKey}")`);
-        if (eventSessionKey !== this.sessionKey) {
-            console.log(`[Gateway] Ignoring event for different session`);
+        if (eventSessionKey.toLowerCase() !== this.sessionKey.toLowerCase()) {
             return;
         }
 
