@@ -13,6 +13,10 @@ services:
       - /home/node/.openclaw/workspace/memory:/app/memory:ro
       # Mount scripts directory for functionality
       - /home/node/.openclaw/workspace/scripts:/app/scripts:ro
+      # Mount OpenClaw config for reading available models
+      - /home/node/.openclaw/openclaw.json:/app/openclaw-config.json:ro
+      # Mount sessions directory for reading chat history
+      - /home/node/.openclaw/sessions:/app/sessions:ro
 
 volumes:
   dashboard-data:

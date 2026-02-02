@@ -5,8 +5,13 @@ const path = require('path');
 const { exec } = require('child_process');
 
 // ============================================
-// Dynamic Model Fetching from OpenClaw/SoLoBot CLI
+// Dynamic Model Fetching from OpenClaw Config
 // ============================================
+
+// Path to mounted OpenClaw config (from docker-compose volume)
+const OPENCLAW_CONFIG_PATH = './openclaw-config.json';
+// Fallback path (direct access if running on same machine)
+const OPENCLAW_CONFIG_FALLBACK = '/home/node/.openclaw/openclaw.json';
 
 // Cache for models list (refreshed every 5 minutes)
 let cachedModels = null;
@@ -14,36 +19,120 @@ let modelsLastFetched = 0;
 const MODELS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Fetch models dynamically from `solobot models list` command
- * Returns models grouped by provider in the format expected by the dashboard
+ * Fetch models from OpenClaw config file (primary method)
+ * Works across containers since the config is volume-mounted
  */
-function fetchModelsFromCLI() {
+function fetchModelsFromConfig() {
   return new Promise((resolve) => {
     // Check cache first
     if (cachedModels && (Date.now() - modelsLastFetched) < MODELS_CACHE_TTL) {
       return resolve(cachedModels);
     }
 
-    // Try solobot first, fall back to openclaw
+    // Try mounted config first, then fallback path
+    const configPaths = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK];
+    
+    for (const configPath of configPaths) {
+      try {
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const models = parseOpenClawConfig(config);
+          
+          if (Object.keys(models).length > 0) {
+            cachedModels = models;
+            modelsLastFetched = Date.now();
+            console.log(`[Models] Loaded ${Object.values(models).flat().length} models from ${configPath}`);
+            return resolve(models);
+          }
+        }
+      } catch (e) {
+        console.warn(`[Models] Failed to read config from ${configPath}:`, e.message);
+      }
+    }
+
+    console.warn('[Models] No OpenClaw config found, using fallback');
+    resolve(null);
+  });
+}
+
+/**
+ * Parse OpenClaw config JSON to extract available models
+ * The config structure has: agents.defaults.model.picker (array of model IDs)
+ */
+function parseOpenClawConfig(config) {
+  const models = {};
+  
+  // Get picker models (the dropdown selection) - this is the main source
+  const pickerModels = config?.agents?.defaults?.model?.picker || [];
+  
+  // Also check primary/fallback models
+  const primaryModel = config?.agents?.defaults?.model?.primary;
+  const fallbackModels = config?.agents?.defaults?.model?.fallbacks || [];
+  
+  // Combine all configured models
+  const allModelIds = [...new Set([
+    ...(primaryModel ? [primaryModel] : []),
+    ...pickerModels,
+    ...fallbackModels
+  ])];
+  
+  // Parse each model ID
+  for (const modelId of allModelIds) {
+    if (!modelId || typeof modelId !== 'string') continue;
+    
+    const slashIndex = modelId.indexOf('/');
+    if (slashIndex === -1) continue;
+    
+    const provider = modelId.substring(0, slashIndex);
+    const modelName = modelId.substring(slashIndex + 1);
+    
+    // Determine tier
+    let tier = 'configured';
+    if (modelId === primaryModel) tier = 'default';
+    else if (fallbackModels.includes(modelId)) tier = 'fallback';
+    
+    // Format display name
+    let displayName = modelName
+      .split(/[-\/]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    
+    // Add indicator for primary model
+    if (modelId === primaryModel) displayName += ' ⭐';
+    
+    // Initialize provider array if needed
+    if (!models[provider]) {
+      models[provider] = [];
+    }
+    
+    // Avoid duplicates
+    if (!models[provider].some(m => m.id === modelId)) {
+      models[provider].push({
+        id: modelId,
+        name: displayName,
+        tier: tier
+      });
+    }
+  }
+  
+  return models;
+}
+
+/**
+ * Legacy: Fetch models from CLI (fallback if config not available)
+ */
+function fetchModelsFromCLI() {
+  return new Promise((resolve) => {
     exec('solobot models list 2>/dev/null || openclaw models list 2>/dev/null', { 
       encoding: 'utf8',
       timeout: 10000 
     }, (error, stdout, stderr) => {
       if (error || !stdout) {
-        console.warn('[Models] CLI command failed, using fallback:', error?.message || 'no output');
-        return resolve(null); // Return null to trigger fallback
+        return resolve(null);
       }
-
       try {
-        const models = parseModelsOutput(stdout);
-        if (Object.keys(models).length > 0) {
-          cachedModels = models;
-          modelsLastFetched = Date.now();
-          console.log(`[Models] Fetched ${Object.values(models).flat().length} models from CLI`);
-        }
-        resolve(models);
+        resolve(parseModelsOutput(stdout));
       } catch (e) {
-        console.error('[Models] Failed to parse CLI output:', e.message);
         resolve(null);
       }
     });
@@ -51,67 +140,35 @@ function fetchModelsFromCLI() {
 }
 
 /**
- * Parse the output of `solobot models list` into grouped format
- * Example output line:
- * openrouter/auto                            -          -        -     -     default,configured,missing
+ * Parse CLI output (legacy support)
  */
 function parseModelsOutput(output) {
   const models = {};
   const lines = output.split('\n').filter(line => line.trim());
-  
-  // Skip header line (starts with "Model")
   const dataLines = lines.filter(line => !line.startsWith('Model') && line.includes('/'));
   
   for (const line of dataLines) {
-    // Parse the model line - first column is the model ID
-    const parts = line.trim().split(/\s{2,}/); // Split on 2+ spaces
+    const parts = line.trim().split(/\s{2,}/);
     if (parts.length < 1) continue;
     
-    let modelId = parts[0].trim();
-    // Handle truncated model names (ending with ...)
-    if (modelId.endsWith('...')) {
-      // Try to find the full name from common patterns
-      modelId = modelId.replace(/\.\.\.+$/, '');
-    }
-    
-    // Extract provider from model ID
+    let modelId = parts[0].trim().replace(/\.\.\.+$/, '');
     const slashIndex = modelId.indexOf('/');
     if (slashIndex === -1) continue;
     
     const provider = modelId.substring(0, slashIndex);
     const modelName = modelId.substring(slashIndex + 1);
-    
-    // Get tags from last column if available
     const tags = parts[parts.length - 1] || '';
-    const isDefault = tags.includes('default');
-    const isFlagship = tags.includes('fallback#1') || tags.includes('fallback#2') || tags.includes('fallback#3');
     
-    // Determine tier
     let tier = 'standard';
-    if (isDefault) tier = 'default';
-    else if (isFlagship) tier = 'flagship';
+    if (tags.includes('default')) tier = 'default';
+    else if (tags.includes('fallback#1') || tags.includes('fallback#2')) tier = 'flagship';
     else if (tags.includes('configured')) tier = 'configured';
     
-    // Format display name
-    let displayName = modelName
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    let displayName = modelName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    if (tags.includes('default')) displayName += ' ⭐';
     
-    // Add star for default/flagship
-    if (isDefault) displayName += ' ⭐';
-    else if (isFlagship) displayName += ' 🔥';
-    
-    // Initialize provider array if needed
-    if (!models[provider]) {
-      models[provider] = [];
-    }
-    
-    models[provider].push({
-      id: modelId,
-      name: displayName,
-      tier: tier
-    });
+    if (!models[provider]) models[provider] = [];
+    models[provider].push({ id: modelId, name: displayName, tier });
   }
   
   return models;
@@ -821,14 +878,22 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     
-    // First try to fetch dynamically from CLI
-    fetchModelsFromCLI().then(cliModels => {
+    // Primary: fetch from mounted OpenClaw config file (works across containers)
+    fetchModelsFromConfig().then(configModels => {
+      if (configModels && Object.keys(configModels).length > 0) {
+        res.end(JSON.stringify(configModels));
+        return;
+      }
+      
+      // Fallback 1: try CLI (only works if solobot is installed locally)
+      return fetchModelsFromCLI();
+    }).then(cliModels => {
       if (cliModels && Object.keys(cliModels).length > 0) {
         res.end(JSON.stringify(cliModels));
         return;
       }
       
-      // Fallback: check state file for cached models
+      // Fallback 2: check state file for cached models
       try {
         const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         if (state.availableModels) {
@@ -867,27 +932,32 @@ const server = http.createServer((req, res) => {
     return;
   }
   
-  // Refresh models cache (force re-fetch from CLI)
+  // Refresh models cache (force re-fetch from config)
   if (url.pathname === '/api/models/refresh' && req.method === 'POST') {
     // Clear cache to force refresh
     cachedModels = null;
     modelsLastFetched = 0;
     
-    // Fetch fresh models
-    fetchModelsFromCLI().then(models => {
+    // Fetch fresh models from config
+    fetchModelsFromConfig().then(async models => {
+      // If config didn't work, try CLI
+      if (!models || Object.keys(models).length === 0) {
+        models = await fetchModelsFromCLI();
+      }
+      
       res.setHeader('Content-Type', 'application/json');
       if (models && Object.keys(models).length > 0) {
         const count = Object.values(models).flat().length;
         res.end(JSON.stringify({ 
           ok: true, 
-          message: `Refreshed ${count} models from CLI`,
+          message: `Refreshed ${count} models from config`,
           providers: Object.keys(models),
           count: count
         }));
       } else {
         res.end(JSON.stringify({ 
           ok: false, 
-          message: 'CLI command failed, using fallback models'
+          message: 'Config file not found or empty. Check volume mount for openclaw-config.json'
         }));
       }
     }).catch(err => {
