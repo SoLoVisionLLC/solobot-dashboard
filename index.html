@@ -531,18 +531,6 @@
                 display: flex;
             }
 
-            /* App content takes full width on mobile */
-            .app-content {
-                margin-left: 0;
-                max-width: 100vw;
-            }
-
-            .sidebar.pinned ~ .app-content,
-            .sidebar:hover ~ .app-content {
-                margin-left: 0;
-                max-width: 100vw;
-            }
-
             /* Mobile overlay for sidebar */
             .mobile-sidebar-overlay {
                 display: none;
@@ -582,19 +570,6 @@
             .status-chip {
                 padding: var(--space-1) var(--space-2);
                 font-size: 12px;
-            }
-
-            /* Chat/System pages full width on mobile */
-            #page-chat,
-            #page-system {
-                left: 0;
-            }
-
-            .sidebar.pinned ~ .app-content #page-chat,
-            .sidebar.pinned ~ .app-content #page-system,
-            .sidebar:hover ~ .app-content #page-chat,
-            .sidebar:hover ~ .app-content #page-system {
-                left: 0;
             }
 
             /* Chat page adjustments */
@@ -1927,20 +1902,29 @@
         
         .app-content {
             flex: 1;
-            margin-left: 64px;
             display: flex;
             flex-direction: column;
             min-height: 100vh;
-            max-width: calc(100vw - 64px);
             overflow-x: hidden;
+            /* Mobile-first: no margin */
+            margin-left: 0;
+            max-width: 100vw;
             transition: margin-left 0.2s ease, max-width 0.2s ease;
         }
-        
-        /* Adjust content when sidebar is expanded (pinned or hovered) */
-        .sidebar.pinned ~ .app-content,
-        .sidebar:hover ~ .app-content {
-            margin-left: 200px;
-            max-width: calc(100vw - 200px);
+
+        /* Desktop only: sidebar margin adjustments */
+        @media (min-width: 769px) {
+            .app-content {
+                margin-left: 64px;
+                max-width: calc(100vw - 64px);
+            }
+
+            /* Adjust content when sidebar is expanded (pinned or hovered) */
+            .sidebar.pinned ~ .app-content,
+            .sidebar:hover ~ .app-content {
+                margin-left: 200px;
+                max-width: calc(100vw - 200px);
+            }
         }
         
         /* Page containers */
@@ -2004,25 +1988,34 @@
         }
 
         /* =================== CHAT PAGE STYLES =================== */
-        
+
         /* Chat/system pages: below header, no scroll on body */
+        /* Mobile-first: full width */
         #page-chat,
         #page-system {
             position: fixed;
             top: 60px; /* header height */
-            left: 64px; /* sidebar collapsed width */
+            left: 0;
             right: 0;
             bottom: 0;
             overflow: hidden;
             z-index: 50;
         }
-        
-        /* Adjust for pinned/hovered sidebar */
-        .sidebar.pinned ~ .app-content #page-chat,
-        .sidebar.pinned ~ .app-content #page-system,
-        .sidebar:hover ~ .app-content #page-chat,
-        .sidebar:hover ~ .app-content #page-system {
-            left: 200px;
+
+        /* Desktop only: account for sidebar */
+        @media (min-width: 769px) {
+            #page-chat,
+            #page-system {
+                left: 64px; /* sidebar collapsed width */
+            }
+
+            /* Adjust for pinned/hovered sidebar */
+            .sidebar.pinned ~ .app-content #page-chat,
+            .sidebar.pinned ~ .app-content #page-system,
+            .sidebar:hover ~ .app-content #page-chat,
+            .sidebar:hover ~ .app-content #page-system {
+                left: 200px;
+            }
         }
         
         .chat-page-wrapper {
