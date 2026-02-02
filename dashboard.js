@@ -2573,7 +2573,7 @@ window.startNewSession = async function() {
     }
 
     // Refresh sessions list to include the new one
-    await fetchAvailableSessions();
+    await fetchSessions();
     populateSessionDropdown();
 
     renderChat();
