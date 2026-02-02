@@ -968,6 +968,70 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Test model endpoint - sends a test prompt to verify model is working
+  if (url.pathname === '/api/models/test' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      const startTime = Date.now();
+      try {
+        const { model, prompt } = JSON.parse(body);
+        if (!model) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'model is required' }));
+          return;
+        }
+
+        console.log(`[Health] Testing model: ${model}`);
+        
+        const gatewayUrl = process.env.GATEWAY_URL || 'http://moltbot:3000';
+        const testPrompt = prompt || 'Say OK';
+        
+        const gatewayRes = await fetch(`${gatewayUrl}/api/rpc`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            method: 'chat.send',
+            params: {
+              sessionId: 'health-test-' + Date.now(),
+              message: testPrompt,
+              model: model
+            }
+          }),
+          signal: AbortSignal.timeout(30000)
+        });
+        
+        const latencyMs = Date.now() - startTime;
+        
+        if (!gatewayRes.ok) {
+          const errText = await gatewayRes.text().catch(() => 'Unknown');
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: `Gateway ${gatewayRes.status}`, latencyMs }));
+          return;
+        }
+        
+        const data = await gatewayRes.json();
+        
+        if (data.error) {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: data.error.message || data.error, latencyMs }));
+          return;
+        }
+        
+        console.log(`[Health] Model ${model} OK in ${latencyMs}ms`);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: true, latencyMs, model }));
+
+      } catch (e) {
+        const latencyMs = Date.now() - startTime;
+        console.error('[Health] Model test error:', e.message);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: false, error: e.message || 'Connection failed', latencyMs }));
+      }
+    });
+    return;
+  }
+  
   // Change model (updates OpenClaw config directly)
   if (url.pathname === '/api/models/set' && req.method === 'POST') {
     let body = '';
