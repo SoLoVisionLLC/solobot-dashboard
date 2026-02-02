@@ -1539,49 +1539,22 @@ async function loadState() {
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
             if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
 
-            // MERGE chat from VPS with current local chat (for cross-computer sync)
-            const vpsChat = vpsState.chat?.messages || [];
-            const localChat = currentChat?.messages || [];
-            
-            // Merge and deduplicate by ID
-            const allChatIds = new Set();
-            const mergedChat = [];
-            
-            // Add VPS messages first (they may have older messages from other computers)
-            for (const msg of vpsChat) {
-                if (msg.id && !allChatIds.has(msg.id)) {
-                    allChatIds.add(msg.id);
-                    mergedChat.push(msg);
-                }
-            }
-            
-            // Add local messages (dedup)
-            for (const msg of localChat) {
-                if (msg.id && !allChatIds.has(msg.id)) {
-                    allChatIds.add(msg.id);
-                    mergedChat.push(msg);
-                }
-            }
-            
-            // Sort by time and trim
-            mergedChat.sort((a, b) => (a.time || 0) - (b.time || 0));
-            const finalChat = mergedChat.slice(-200); // Keep last 200
-            
             // Don't overwrite pendingChat
             delete vpsState.pendingChat;
+            // Don't overwrite chat - it's session-specific and comes from Gateway
+            delete vpsState.chat;
 
-            state = { 
-                ...state, 
-                ...vpsState, 
-                chat: { messages: finalChat },
+            state = {
+                ...state,
+                ...vpsState,
+                chat: currentChat,  // Keep current session's chat
                 system: currentSystem,  // Keep system messages local
                 console: currentConsole  // Keep terminal logs local
             };
             delete state.localModified;
-            
-            // Save merged chat to localStorage
+
+            // Save state to localStorage (without overwriting chat)
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
-            persistChatMessages(); // Also persist to dedicated chat storage
             return;
         }
     } catch (e) {
