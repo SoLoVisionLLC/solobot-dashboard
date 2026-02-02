@@ -531,22 +531,28 @@
                 display: flex;
             }
 
-            /* Mobile overlay for sidebar */
+            /* Mobile overlay for sidebar - sits between content and sidebar */
             .mobile-sidebar-overlay {
                 display: none;
                 position: fixed;
-                inset: 0;
+                top: 60px; /* Below header */
+                left: 0;
+                right: 0;
+                bottom: 0;
                 background: rgba(0, 0, 0, 0.5);
-                z-index: 199;
+                z-index: 150; /* Above content, below sidebar (200) */
             }
 
             .mobile-sidebar-overlay.visible {
                 display: block;
             }
 
-            /* Header adjustments */
+            /* Header adjustments - sticky and above overlay */
             .header {
                 padding: 0 var(--space-3);
+                position: sticky;
+                top: 0;
+                z-index: 201; /* Above sidebar and overlay */
             }
 
             .header-inner {
