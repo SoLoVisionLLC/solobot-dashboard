@@ -377,6 +377,21 @@ class GatewayClient {
         });
     }
 
+    patchSession(sessionKey, patch) {
+        if (!this.connected) {
+            return Promise.reject(new Error('Not connected'));
+        }
+
+        console.log(`[Gateway] Patching session "${sessionKey}":`, patch);
+        return this._request('sessions.patch', {
+            sessionKey,
+            ...patch
+        }).then(result => {
+            console.log(`[Gateway] Session patched:`, result);
+            return result;
+        });
+    }
+
     disconnect() {
         this.desiredConnection = null;
         this.connected = false;

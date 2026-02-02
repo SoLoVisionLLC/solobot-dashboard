@@ -770,11 +770,22 @@ async function fetchSessions() {
                 return false;
             });
 
+            // Patch sessions that need their label set to match their key
+            // This ensures sessions appear correctly when filtered by label
+            for (const s of sessions) {
+                if (s.label !== s.key) {
+                    // Set label to session key so it's filterable
+                    gateway.patchSession(s.key, { label: s.key }).catch(err => {
+                        console.warn(`[Dashboard] Failed to set label for session ${s.key}:`, err.message);
+                    });
+                }
+            }
+
             // Map gateway response to expected format
             availableSessions = sessions.map(s => ({
                 key: s.key,
                 name: s.key,
-                displayName: s.displayName || s.label || s.origin?.label || s.key,
+                displayName: s.displayName || s.label || s.key,
                 updatedAt: s.updatedAt,
                 totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
                 model: s.model || 'unknown',
