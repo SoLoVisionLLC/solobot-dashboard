@@ -696,6 +696,14 @@ async function checkRestartToast() {
 // SESSION MANAGEMENT
 // ===================
 
+// Helper to extract friendly name from session key (strips agent:agentId: prefix)
+function getFriendlySessionName(key) {
+    if (!key) return 'main';
+    // Strip agent:main: or agent:xxx: prefix
+    const match = key.match(/^agent:[^:]+:(.+)$/);
+    return match ? match[1] : key;
+}
+
 let currentSessionName = 'main';
 
 window.toggleSessionMenu = function() {
@@ -770,27 +778,31 @@ async function fetchSessions() {
                 return false;
             });
 
-            // Patch sessions that need their label set to match their key
-            // This ensures sessions appear correctly when filtered by label
+            // Patch sessions that need their displayName set to the friendly name
+            // Only patch if displayName is not already set
             for (const s of sessions) {
-                if (s.label !== s.key) {
-                    // Set label to session key so it's filterable
-                    gateway.patchSession(s.key, { label: s.key }).catch(err => {
-                        console.warn(`[Dashboard] Failed to set label for session ${s.key}:`, err.message);
+                const friendlyName = getFriendlySessionName(s.key);
+                if (!s.displayName && friendlyName !== s.key) {
+                    // Set displayName to the friendly session name
+                    gateway.patchSession(s.key, { displayName: friendlyName }).catch(err => {
+                        console.warn(`[Dashboard] Failed to set displayName for session ${s.key}:`, err.message);
                     });
                 }
             }
 
             // Map gateway response to expected format
-            availableSessions = sessions.map(s => ({
-                key: s.key,
-                name: s.key,
-                displayName: s.displayName || s.label || s.key,
-                updatedAt: s.updatedAt,
-                totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
-                model: s.model || 'unknown',
-                sessionId: s.sessionId
-            }));
+            availableSessions = sessions.map(s => {
+                const friendlyName = getFriendlySessionName(s.key);
+                return {
+                    key: s.key,
+                    name: friendlyName,
+                    displayName: s.displayName || friendlyName,
+                    updatedAt: s.updatedAt,
+                    totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                    model: s.model || 'unknown',
+                    sessionId: s.sessionId
+                };
+            });
 
             console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from gateway (filtered from ${result?.sessions?.length || 0} total)`);
             populateSessionDropdown();
@@ -890,7 +902,7 @@ window.switchToSession = async function(sessionKey) {
         return;
     }
     
-    showToast(`Switching to ${sessionKey}...`, 'info');
+    showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
     
     try {
         // 1. Save current chat as safeguard
@@ -925,8 +937,8 @@ window.switchToSession = async function(sessionKey) {
         }
         // Refresh dropdown to show new selection
         populateSessionDropdown();
-        
-        showToast(`Switched to ${sessionKey}`, 'success');
+
+        showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
@@ -1021,12 +1033,13 @@ function initGateway() {
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
             
-            // Update session name displays
+            // Update session name displays (use friendly name without agent prefix)
             currentSessionName = sessionKey;
+            const friendlyName = getFriendlySessionName(sessionKey);
             const nameEl = document.getElementById('current-session-name');
-            if (nameEl) nameEl.textContent = sessionKey;
+            if (nameEl) nameEl.textContent = friendlyName;
             const chatPageNameEl = document.getElementById('chat-page-session-name');
-            if (chatPageNameEl) chatPageNameEl.textContent = sessionKey;
+            if (chatPageNameEl) chatPageNameEl.textContent = friendlyName;
             
             checkRestartToast();
 

@@ -384,7 +384,7 @@ class GatewayClient {
 
         console.log(`[Gateway] Patching session "${sessionKey}":`, patch);
         return this._request('sessions.patch', {
-            sessionKey,
+            key: sessionKey,
             ...patch
         }).then(result => {
             console.log(`[Gateway] Session patched:`, result);
