@@ -2770,6 +2770,14 @@
                     </a>
                     <a
                         class="sidebar-item"
+                        onclick="showPage('health')"
+                        data-page="health"
+                    >
+                        <span class="sidebar-item-icon">🏥</span>
+                        <span class="sidebar-item-text">System Health</span>
+                    </a>
+                    <a
+                        class="sidebar-item"
                         onclick="showPage('products')"
                         data-page="products"
                     >
@@ -3778,6 +3786,70 @@
                         </div>
                     </div>
                     <!-- END SYSTEM PAGE -->
+
+                    <!-- =================== SYSTEM HEALTH PAGE =================== -->
+                    <div id="page-health" class="page">
+                        <div class="container" style="padding: var(--space-6)">
+                            <!-- Page Header -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-6);">
+                                <div>
+                                    <h1 style="font-size: 24px; font-weight: 700; color: var(--text-primary);">
+                                        🏥 System Health
+                                    </h1>
+                                    <p style="color: var(--text-secondary); margin-top: var(--space-1); font-size: 14px;">
+                                        Test AI models and monitor system status
+                                    </p>
+                                </div>
+                                <button onclick="runAllModelTests()" class="btn btn-primary" id="test-all-btn">
+                                    🚀 Test All Models
+                                </button>
+                            </div>
+                            
+                            <!-- Summary Cards -->
+                            <div class="grid-3" style="margin-bottom: var(--space-6);">
+                                <div class="card" style="padding: var(--space-4);">
+                                    <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--space-2);">
+                                        Gateway Status
+                                    </div>
+                                    <div id="health-gateway-status" style="display: flex; align-items: center; gap: var(--space-2);">
+                                        <span style="font-size: 20px;">⏳</span>
+                                        <span style="font-weight: 500;">Checking...</span>
+                                    </div>
+                                </div>
+                                <div class="card" style="padding: var(--space-4);">
+                                    <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--space-2);">
+                                        Models Available
+                                    </div>
+                                    <div id="health-model-count" style="font-size: 28px; font-weight: 700; color: var(--text-primary);">
+                                        --
+                                    </div>
+                                </div>
+                                <div class="card" style="padding: var(--space-4);">
+                                    <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--space-2);">
+                                        Last Test
+                                    </div>
+                                    <div id="health-last-test" style="font-weight: 500; color: var(--text-primary);">
+                                        Never
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Model Test Results -->
+                            <div class="card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-4); border-bottom: 1px solid var(--border-default);">
+                                    <span style="font-weight: 600;">AI Model Health Check</span>
+                                    <span id="health-test-progress" style="font-size: 12px; color: var(--text-muted);"></span>
+                                </div>
+                                <div id="health-model-list" style="padding: 0;">
+                                    <div style="padding: var(--space-4); color: var(--text-muted); text-align: center;">
+                                        <p style="margin-bottom: var(--space-2);">Click "Test All Models" to run health checks on all configured AI models.</p>
+                                        <p style="font-size: 12px;">This will send a test message to each model and verify responses.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- END SYSTEM HEALTH PAGE -->
 
                     <!-- =================== PRODUCTS PAGE =================== -->
                     <div id="page-products" class="page">
@@ -4977,6 +5049,7 @@
                 "memory",
                 "chat",
                 "system",
+                "health",
                 "products",
             ];
 
