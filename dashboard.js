@@ -517,29 +517,8 @@ window.changeModel = async function() {
             // Refresh model list in settings
             if (providerSelectEl) await updateModelDropdown(providerSelectEl.value);
 
-            // Directly patch gateway config via WebSocket RPC (no bot involved)
-            if (gateway && gateway.isConnected()) {
-                showToast(`Applying ${selectedModel} to gateway...`, 'info');
-                try {
-                    const configPatch = {
-                        agents: {
-                            defaults: {
-                                model: {
-                                    primary: selectedModel
-                                }
-                            }
-                        }
-                    };
-
-                    await gateway.patchConfig(configPatch);
-                    showToast(`Model changed to ${selectedModel}. Gateway restarting...`, 'success');
-                } catch (err) {
-                    console.error('[Dashboard] Config patch failed:', err);
-                    showToast(`Model saved locally. Gateway patch failed: ${err.message}`, 'warning');
-                }
-            } else {
-                showToast(`Model saved. Connect to gateway to apply.`, 'warning');
-            }
+            // Gateway will automatically reload when the server updates openclaw.json
+            showToast(`Model changed to ${selectedModel}. System updating...`, 'success');
         } else {
             console.error('[Dashboard] Failed to change model:', result);
             showToast(`Failed to change model: ${result.error || 'Unknown error'}`, 'error');
