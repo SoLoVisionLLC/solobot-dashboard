@@ -3947,7 +3947,21 @@ async function loadHealthModels() {
         if (!response.ok) throw new Error('Failed to fetch models');
         const data = await response.json();
         
-        const models = data.models || [];
+        // API returns models grouped by provider: { anthropic: [...], google: [...] }
+        // Flatten into a single array
+        let models = [];
+        if (data.models) {
+            // Direct models array format
+            models = data.models;
+        } else {
+            // Provider-grouped format - flatten it
+            for (const provider of Object.keys(data)) {
+                if (Array.isArray(data[provider])) {
+                    models = models.concat(data[provider]);
+                }
+            }
+        }
+        
         const countEl = document.getElementById('health-model-count');
         if (countEl) countEl.textContent = models.length;
         
