@@ -1804,9 +1804,28 @@ function handlePaste(event) {
 let chatInputSelection = { start: 0, end: 0 };
 
 function handleChatInputKeydown(event) {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    const input = event.target;
+    if (event.key !== 'Enter' || !input) return;
+
+    if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
         sendChatMessage();
+        return;
+    }
+
+    if (event.shiftKey) {
+        event.preventDefault();
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const value = input.value;
+        const before = value.slice(0, start);
+        const after = value.slice(end);
+        const newValue = `${before}\n${after}`;
+        input.value = newValue;
+        const cursor = start + 1;
+        input.setSelectionRange(cursor, cursor);
+        adjustChatInputHeight(input);
+        return;
     }
 }
 
