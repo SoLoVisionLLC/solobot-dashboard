@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
+process.env.TZ = process.env.TZ || 'America/New_York';
+
 // ============================================
 // Dynamic Model Fetching from OpenClaw Config
 // ============================================
