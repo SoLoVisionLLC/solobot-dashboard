@@ -12,15 +12,11 @@ function escapeHtmlLocal(str) {
         .replace(/'/g, '&#39;');
 }
 
-// Cache for memory files list
 let memoryFilesCache = [];
 let lastFetchTime = 0;
-const CACHE_DURATION = 30000; // 30 seconds
-
-// Current file being edited
+const CACHE_DURATION = 30000;
 window.currentMemoryFile = null;
 
-// Categorize files based on name
 function categorizeFile(filename) {
     const coreDocs = ['SOUL.md', 'USER.md', 'AGENTS.md', 'MEMORY.md', 'TOOLS.md', 'HEARTBEAT.md', 'IDENTITY.md'];
     const guideDocs = ['SOLOBOT-GUIDE.md', 'LESSONS-LEARNED.md', 'DEPLOY_INSTRUCTIONS.md'];
@@ -52,7 +48,9 @@ function getFileDescription(filename) {
 
 async function fetchMemoryFiles() {
     const now = Date.now();
-    if (memoryFilesCache.length > 0 && (now - lastFetchTime) < CACHE_DURATION) return memoryFilesCache;
+    if (memoryFilesCache.length > 0 && (now - lastFetchTime) < CACHE_DURATION) {
+        return memoryFilesCache;
+    }
     try {
         const response = await fetch('/api/memory');
         const data = await response.json();
@@ -74,19 +72,18 @@ async function fetchMemoryFiles() {
 }
 
 async function renderMemoryFiles(filter = '') {
-    const container = document.getElementById('memory-files-grid') || document.getElementById('docs-grid');
+    const container = document.getElementById('memory-files-grid');
     if (!container) return;
     container.innerHTML = '<div class="loading-state">Loading memory files...</div>';
     const files = await fetchMemoryFiles();
     if (files.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>⚠️ Memory files not available</p></div>';
+        container.innerHTML = '<div class="empty-state"><p>⚠️ Memory files not found</p></div>';
         return;
     }
-    const lowerFilter = filter.toLowerCase();
     const filtered = files.filter(file =>
-        file.name.toLowerCase().includes(lowerFilter) ||
-        file.description.toLowerCase().includes(lowerFilter) ||
-        file.category.toLowerCase().includes(lowerFilter)
+        file.name.toLowerCase().includes(filter.toLowerCase()) ||
+        file.description.toLowerCase().includes(filter.toLowerCase()) ||
+        file.category.toLowerCase().includes(filter.toLowerCase())
     );
     const grouped = filtered.reduce((groups, file) => {
         const category = file.category;
@@ -95,28 +92,26 @@ async function renderMemoryFiles(filter = '') {
         return groups;
     }, {});
     const order = ['Core Identity', 'Guides & Reference', 'Daily Logs', 'Other Documents'];
-    const sortedCategories = Object.keys(grouped).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    const sorted = Object.keys(grouped).sort((a, b) => order.indexOf(a) - order.indexOf(b));
     const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
     let html = '';
-    sortedCategories.forEach(category => {
+    sorted.forEach(category => {
         html += `<div class="docs-category"><h3 class="category-title">${escape(category)}</h3><div class="docs-category-grid">`;
         const filesInCat = grouped[category].sort((a, b) => {
             if (category === 'Daily Logs') return b.name.localeCompare(a.name);
             return a.name.localeCompare(b.name);
         });
         filesInCat.forEach(file => {
-            const modifiedDate = file.modified ? new Date(file.modified).toLocaleDateString() : '';
-            const botBadge = file.botUpdated && !file.acknowledged ? '<span class="badge badge-warning bot-updated-badge">🤖 Updated</span>' : '';
+            const modified = file.modified ? new Date(file.modified).toLocaleDateString() : '';
+            const badge = file.botUpdated && !file.acknowledged ? '<span class="badge badge-warning">🤖 Updated</span>' : '';
             html += `
-                <div class="doc-card memory-file ${file.botUpdated && !file.acknowledged ? 'bot-updated' : ''}" onclick="viewMemoryFile('${escape(file.path)}')">
+                <div class="doc-card memory-file" onclick="viewMemoryFile('${escape(file.path)}')">
                     <div style="display: flex; align-items: center; gap: var(--space-3);">
                         <div class="doc-icon icon-md">📄</div>
-                        <div style="flex: 1;"> 
-                            <div class="doc-title" style="display: flex; align-items: center; gap: 6px;">
-                                ${escape(file.name)} ${botBadge}
-                            </div>
+                        <div style="flex: 1;">
+                            <div class="doc-title" style="display: flex; align-items: center; gap: 6px;">${escape(file.name)} ${badge}</div>
                             <div class="doc-description">${escape(file.description)}</div>
-                            ${modifiedDate ? `<div class="doc-meta">Modified: ${modifiedDate}</div>` : ''}
+                            ${modified ? `<div class="doc-meta">Modified: ${modified}</div>` : ''}
                         </div>
                     </div>
                 </div>`;
@@ -130,15 +125,9 @@ async function renderMemoryFiles(filter = '') {
 function updateMemoryModalFooter(editMode = false) {
     const footer = document.querySelector('#memory-file-modal .modal-footer');
     if (!footer) return;
-    if (editMode) {
-        footer.innerHTML = `
-            <button onclick="cancelEditMemoryFile()" class="btn btn-secondary">Cancel</button>
-            <button onclick="saveMemoryFile()" class="btn btn-primary">💾 Save Changes</button>`;
-    } else {
-        footer.innerHTML = `
-            <button onclick="hideModal('memory-file-modal')" class="btn btn-secondary">Close</button>
-            <button onclick="editMemoryFile()" class="btn btn-primary">✏️ Edit</button>`;
-    }
+    footer.innerHTML = editMode
+        ? '<button onclick="cancelEditMemoryFile()" class="btn btn-secondary">Cancel</button><button onclick="saveMemoryFile()" class="btn btn-primary">💾 Save Changes</button>'
+        : '<button onclick="hideModal(\'memory-file-modal\')" class="btn btn-secondary">Close</button><button onclick="editMemoryFile()" class="btn btn-primary">✏️ Edit</button>';
 }
 
 function getMemoryContainer() {
@@ -150,18 +139,7 @@ function renderMemoryPre(text) {
     if (!container) return;
     const pre = document.createElement('pre');
     pre.id = 'memory-file-content';
-    pre.style.cssText = `
-        flex: 1;
-        width: 100%;
-        margin: 0;
-        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-        font-size: 13px;
-        line-height: 1.6;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        background: var(--surface-2);
-        color: var(--text-primary);
-        outline: none;`;
+    pre.style.cssText = 'margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: \'SF Mono\', \'Monaco\', \'Consolas\', monospace; font-size: 13px; line-height: 1.5; background: var(--surface-1); color: var(--text-primary); padding: 12px;';
     pre.textContent = text;
     container.innerHTML = '';
     container.appendChild(pre);
@@ -173,19 +151,7 @@ function renderMemoryTextarea(text) {
     const textarea = document.createElement('textarea');
     textarea.id = 'memory-file-editor';
     textarea.value = text;
-    textarea.style.cssText = `
-        flex: 1;
-        width: 100%;
-        min-height: 60vh;
-        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-        font-size: 13px;
-        line-height: 1.6;
-        padding: 12px;
-        border: 1px solid var(--border-default);
-        border-radius: 4px;
-        background: var(--surface-1);
-        color: var(--text-primary);
-        resize: vertical;`;
+    textarea.style.cssText = 'width: 100%; min-height: 60vh; font-family: \'SF Mono\', \'Monaco\', \'Consolas\', monospace; font-size: 13px; line-height: 1.5; padding: 12px; border: 1px solid var(--border-default); background: var(--surface-1); color: var(--text-primary); resize: vertical;';
     container.innerHTML = '';
     container.appendChild(textarea);
     textarea.focus();
@@ -193,9 +159,7 @@ function renderMemoryTextarea(text) {
 
 async function viewMemoryFile(filepath) {
     const titleEl = document.getElementById('memory-file-title');
-    const saveBtn = document.getElementById('memory-save-btn');
     if (titleEl) titleEl.textContent = filepath;
-    if (saveBtn) saveBtn.textContent = '💾 Save';
     showModal('memory-file-modal');
     updateMemoryModalFooter(false);
     try {
@@ -218,9 +182,7 @@ async function viewMemoryFile(filepath) {
             titleEl.innerHTML = `
                 ${escapeHtmlLocal(data.name)}
                 <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
-                <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
-                    ✓ Mark as Read
-                </button>`;
+                <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">✓ Mark as Read</button>`;
         }
     } catch (e) {
         renderMemoryPre(`Failed to load file: ${e.message}`);
@@ -241,22 +203,18 @@ function cancelEditMemoryFile() {
 
 async function saveMemoryFile() {
     const textarea = document.getElementById('memory-file-editor');
-    const saveBtn = document.getElementById('memory-save-btn');
     if (!textarea || !window.currentMemoryFile) return;
+    const saveBtn = document.getElementById('memory-save-btn');
     const newContent = textarea.value;
-    const filepath = window.currentMemoryFile.path;
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.textContent = '⏳ Saving...';
     }
     try {
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+        const response = await fetch(`/api/memory/${encodeURIComponent(window.currentMemoryFile.path)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: newContent,
-                updatedBy: 'user'
-            })
+            body: JSON.stringify({ content: newContent, updatedBy: 'user' })
         });
         const data = await response.json();
         if (data.error) throw new Error(data.error);
@@ -269,8 +227,8 @@ async function saveMemoryFile() {
         updateMemoryModalFooter(false);
         memoryFilesCache = [];
         lastFetchTime = 0;
-        loadVersionHistory(filepath);
-        renderMemoryFiles(document.getElementById('memory-search')?.value || '');
+        loadVersionHistory(window.currentMemoryFile.path);
+        renderMemoryFiles();
     } catch (e) {
         alert(`Failed to save: ${e.message}`);
         renderMemoryTextarea(window.currentMemoryFile.content);
