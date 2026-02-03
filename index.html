@@ -3374,13 +3374,13 @@
                                                     </path>
                                                 </svg>
                                             </label>
-                                            <input
-                                                type="text"
+                                            <textarea
                                                 id="chat-input"
                                                 class="input flex-1"
                                                 placeholder="Type a message..."
                                                 name="dashboard_chat_field_"
-                                                onkeypress="if(event.key==='Enter')sendChatMessage()"
+                                                rows="1"
+                                                onkeydown="handleChatInputKeydown(event)"
                                                 onpaste="handlePaste(event)"
                                                 autocomplete="off"
                                                 autocorrect="off"
@@ -3389,7 +3389,8 @@
                                                 data-lpignore="true"
                                                 data-1p-ignore="true"
                                                 data-form-type="other"
-                                            >
+                                                style="min-height: var(--space-8); max-height: 160px; resize: vertical;"
+                                            ></textarea>
                                             <button
                                                 onclick="sendChatMessage()"
                                                 class="btn btn-primary"

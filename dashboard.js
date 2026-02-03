@@ -1565,6 +1565,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderDocs(e.target.value);
     });
     
+    attachChatInputHandlers();
+    
     // Close menus when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.task-menu') && !e.target.closest('.task-menu-btn')) {
@@ -1799,6 +1801,49 @@ function handlePaste(event) {
     }
 }
 
+let chatInputSelection = { start: 0, end: 0 };
+
+function handleChatInputKeydown(event) {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        sendChatMessage();
+    }
+}
+
+function cacheChatInputSelection(input) {
+    if (!input) return;
+    chatInputSelection.start = input.selectionStart;
+    chatInputSelection.end = input.selectionEnd;
+}
+
+function restoreChatInputSelection(input) {
+    if (!input) return;
+    const length = input.value.length;
+    const start = Math.min(chatInputSelection.start ?? length, length);
+    const end = Math.min(chatInputSelection.end ?? length, length);
+    input.setSelectionRange(start, end);
+}
+
+function adjustChatInputHeight(input) {
+    if (!input) return;
+    input.style.height = 'auto';
+    const height = Math.min(input.scrollHeight, 160);
+    input.style.height = `${Math.max(height, 36)}px`;
+}
+
+function attachChatInputHandlers() {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.addEventListener('keydown', handleChatInputKeydown);
+    input.addEventListener('blur', () => cacheChatInputSelection(input));
+    input.addEventListener('focus', () => {
+        restoreChatInputSelection(input);
+        adjustChatInputHeight(input);
+    });
+    input.addEventListener('input', () => adjustChatInputHeight(input));
+    adjustChatInputHeight(input);
+}
+
 // Compress image to reduce size for WebSocket transmission
 async function compressImage(dataUrl, maxWidth = 1200, quality = 0.8) {
     return new Promise((resolve) => {
@@ -1909,6 +1954,8 @@ async function sendChatMessage() {
     
     input.value = '';
     clearImagePreviews();
+    adjustChatInputHeight(input);
+    chatInputSelection = { start: 0, end: 0 };
 
     // Send via Gateway WebSocket
     try {
