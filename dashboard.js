@@ -3978,6 +3978,8 @@ async function loadHealthModels() {
 }
 
 // Test a single model by sending it a simple prompt via WebSocket gateway
+// Note: Gateway uses session-level model config, so this tests connectivity
+// rather than each individual model's API availability
 async function testSingleModel(modelId) {
     const startTime = Date.now();
     
@@ -3991,14 +3993,13 @@ async function testSingleModel(modelId) {
             };
         }
         
-        // Use the gateway's WebSocket RPC to test the model
+        // Use the gateway's WebSocket RPC to test connectivity
         // Create a unique health-check session to avoid polluting main chat
-        const healthSessionKey = 'health-check-' + Date.now();
+        const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-');
         
         const result = await gateway._request('chat.send', {
             message: 'Say OK',
             sessionKey: healthSessionKey,
-            model: modelId,
             idempotencyKey: crypto.randomUUID()
         }, 30000); // 30s timeout
         
