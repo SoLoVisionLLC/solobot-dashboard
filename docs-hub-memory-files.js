@@ -236,6 +236,33 @@ async function viewMemoryFile(filepath) {
 }
 
 // Acknowledge bot update
+function getFileCardSelector(filepath) {
+    if (!filepath) return null;
+    const escapeSelector = (str) => {
+        if (typeof CSS !== 'undefined' && CSS.escape) {
+            return CSS.escape(str);
+        }
+        return str.replace(/([\\#\.\[\]:\/,\+\*=\^\$@!\(\)<>])/g, '\\$1');
+    };
+    return `[data-filepath="${escapeSelector(filepath)}"]`;
+}
+
+function markFileCardAsRead(filepath) {
+    try {
+        if (!filepath) return;
+        const selector = getFileCardSelector(filepath);
+        const card = document.querySelector(selector);
+        if (!card) return;
+        card.classList.remove('bot-updated');
+        const badge = card.querySelector('.bot-updated-badge');
+        if (badge) {
+            badge.remove();
+        }
+    } catch (err) {
+        console.warn('[Memory] Failed to mark card as read:', err);
+    }
+}
+
 async function acknowledgeUpdate(filepath) {
     try {
         await fetch('/api/memory-meta/acknowledge', {
@@ -251,13 +278,20 @@ async function acknowledgeUpdate(filepath) {
             file.acknowledged = true;
         }
         
+        // Adjust UI directly
+        markFileCardAsRead(filepath);
+        
+        // Reset cached list so we fetch fresh data next time
+        memoryFilesCache = [];
+        lastFetchTime = 0;
+        
         // Update title
         const titleEl = document.getElementById('memory-file-title');
         if (titleEl && window.currentMemoryFile) {
             titleEl.textContent = window.currentMemoryFile.path;
         }
         
-        // Refresh file list
+        // Refresh file list with newest metadata
         renderMemoryFiles(document.getElementById('memory-search')?.value || '');
     } catch (e) {
         console.error('Failed to acknowledge:', e);
