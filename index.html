@@ -5041,7 +5041,7 @@
 
         <script src="gateway-client.js?v=3.6.0"></script>
         <script src="docs-hub-memory-files.js?v=2.5.0"></script>
-        <script src="dashboard.js?v=3.48.0"></script>
+        <script src="dashboard.js?v=3.49.0"></script>
         <script>
             // Valid page names
             const VALID_PAGES = [
@@ -5151,6 +5151,14 @@
                 // Validate page name
                 if (!VALID_PAGES.includes(pageName)) {
                     pageName = "dashboard";
+                }
+
+                if (pageName === "health") {
+                    if (typeof initHealthPage === 'function') {
+                        initHealthPage();
+                    } else {
+                        console.warn('[Health] initHealthPage not available yet');
+                    }
                 }
 
                 // Save chat scroll position before leaving chat page

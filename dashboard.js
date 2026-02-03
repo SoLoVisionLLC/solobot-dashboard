@@ -843,7 +843,7 @@ function populateSessionDropdown() {
         const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
         
         return `
-        <div class="session-dropdown-item ${isActive ? 'active' : ''}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
+        <div class="session-dropdown-item ${isActive ? 'active' : ''}" onclick="if(event.target.closest('.session-edit-btn') || event.target.closest('.session-delete-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
                 <div class="session-name">${escapeHtml(s.displayName || s.name)}</div>
                 <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
@@ -852,6 +852,9 @@ function populateSessionDropdown() {
             <div class="session-actions">
                 <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Rename session">
                     ✏️
+                </button>
+                <button class="session-delete-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Delete session">
+                    🗑️
                 </button>
             </div>
         </div>
@@ -893,6 +896,42 @@ window.editSessionName = function(sessionKey, currentName) {
         console.error('[Dashboard] Failed to rename session:', e);
         showToast('Failed to rename session', 'error');
     });
+}
+
+window.deleteSession = async function(sessionKey, sessionName) {
+    const confirmed = await showConfirm(
+        `Are you sure you want to delete the session "${sessionName}"? This action cannot be undone.`,
+        'Delete Session',
+        'Delete'
+    );
+    
+    if (!confirmed) return;
+    
+    // If we're deleting the current session, switch to main first
+    if (sessionKey === currentSessionName) {
+        await switchToSession('main');
+    }
+    
+    try {
+        const response = await fetch('/api/session/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionKey })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.ok) {
+            showToast(`Session "${sessionName}" deleted successfully`, 'success');
+            // Refresh the sessions list
+            await fetchSessions();
+        } else {
+            showToast(`Failed to delete session: ${result.error || 'Unknown error'}`, 'error');
+        }
+    } catch (e) {
+        console.error('[Dashboard] Failed to delete session:', e);
+        showToast('Failed to delete session', 'error');
+    }
 }
 
 window.switchToSession = async function(sessionKey) {
@@ -3943,37 +3982,52 @@ function updateHealthGatewayStatus() {
 
 // Load available models from API
 async function loadHealthModels() {
+    console.log('[Health] Loading models...');
     try {
         const response = await fetch('/api/models/list');
-        if (!response.ok) throw new Error('Failed to fetch models');
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
         const data = await response.json();
         
         // API returns models grouped by provider: { anthropic: [...], google: [...] }
         // Flatten into a single array
         let models = [];
-        if (data.models) {
+        if (data.models && Array.isArray(data.models)) {
             // Direct models array format
             models = data.models;
         } else {
             // Provider-grouped format - flatten it
             for (const provider of Object.keys(data)) {
                 if (Array.isArray(data[provider])) {
-                    models = models.concat(data[provider]);
+                    // Inject provider into model id if it's not already there
+                    const providerModels = data[provider].map(m => {
+                        if (typeof m === 'string') return { id: m };
+                        return m;
+                    });
+                    models = models.concat(providerModels);
                 }
             }
         }
         
+        console.log(`[Health] Loaded ${models.length} models`);
         const countEl = document.getElementById('health-model-count');
         if (countEl) countEl.textContent = models.length;
         
         // Render initial model list (not tested yet)
-        renderHealthModelList(models, {});
+        renderHealthModelList(models, healthTestResults); // Use existing results if any
         
         return models;
     } catch (error) {
         console.error('[Health] Failed to load models:', error);
         const countEl = document.getElementById('health-model-count');
         if (countEl) countEl.textContent = '?';
+        
+        const container = document.getElementById('health-model-list');
+        if (container) {
+            container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--error);">
+                <p>Failed to load models: ${error.message}</p>
+                <button onclick="loadHealthModels()" class="btn btn-ghost" style="margin-top: 10px;">Retry</button>
+            </div>`;
+        }
         return [];
     }
 }
@@ -4001,13 +4055,20 @@ async function testSingleModel(modelId) {
         try {
             await gateway._request('sessions.patch', {
                 key: healthSessionKey,
-                model: modelId
+                model: modelId,
+                agentId: 'main' // Ensure we have a valid agent context
             }, 10000); // 10s timeout for patch
         } catch (patchError) {
             console.error(`[Health] Failed to patch session model: ${patchError.message}`);
+            
+            // If the error is "unknown session", the session might not exist yet.
+            // But chat.send with a new key usually handles this.
+            // Let's try to proceed to chat.send which might auto-create with defaults,
+            // though without the patch it won't be testing the target model.
+            // So we really want the patch to succeed.
             return {
                 success: false,
-                error: `Model config failed: ${patchError.message}`,
+                error: `Config failed: ${patchError.message}`,
                 latencyMs: Date.now() - startTime
             };
         }
@@ -4232,13 +4293,4 @@ window.testSingleModelUI = async function(modelId) {
         result.success ? 'success' : 'error');
 };
 
-// Hook into page navigation to init health page
-const originalShowPage = window.showPage;
-if (typeof originalShowPage === 'function') {
-    window.showPage = function(pageName, updateURL = true) {
-        originalShowPage(pageName, updateURL);
-        if (pageName === 'health') {
-            initHealthPage();
-        }
-    };
-}
+// End of dashboard.js

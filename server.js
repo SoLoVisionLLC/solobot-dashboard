@@ -1234,6 +1234,33 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Session delete endpoint
+  if (url.pathname === '/api/session/delete' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { sessionKey } = JSON.parse(body);
+        if (!sessionKey) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'sessionKey is required' }));
+          return;
+        }
+        console.log(`[Server] Session delete requested: ${sessionKey}`);
+        // Store delete request in state for agent to apply
+        state.sessionDeleteRequest = { sessionKey, requestedAt: Date.now() };
+        saveState();
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, message: 'Delete requested. SoLoBot will apply it.' }));
+      } catch (e) {
+        console.error('[Server] Failed to request session delete:', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to request session delete', details: e.message }));
+      }
+    });
+    return;
+  }
+  
   // Manual state backup endpoint
   if (url.pathname === '/api/state/backup' && req.method === 'POST') {
     try {
