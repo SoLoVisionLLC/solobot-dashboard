@@ -3977,53 +3977,43 @@ async function loadHealthModels() {
     }
 }
 
-// Test a single model by sending it a simple prompt
+// Test a single model by sending it a simple prompt via WebSocket gateway
 async function testSingleModel(modelId) {
     const startTime = Date.now();
     
     try {
-        // Use the gateway's chat.send but with a test session
-        // We'll use the /api/models/test endpoint if available, or simulate via chat
-        const response = await fetch('/api/models/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: modelId,
-                prompt: 'Respond with exactly "OK" and nothing else.'
-            })
-        });
+        // Check if gateway is connected
+        if (!gateway || !gateway.isConnected()) {
+            return {
+                success: false,
+                error: 'Gateway not connected',
+                latencyMs: Date.now() - startTime
+            };
+        }
+        
+        // Use the gateway's WebSocket RPC to test the model
+        // Create a unique health-check session to avoid polluting main chat
+        const healthSessionKey = 'health-check-' + Date.now();
+        
+        const result = await gateway._request('chat.send', {
+            message: 'Say OK',
+            sessionKey: healthSessionKey,
+            model: modelId,
+            idempotencyKey: crypto.randomUUID()
+        }, 30000); // 30s timeout
         
         const latencyMs = Date.now() - startTime;
         
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            return {
-                success: false,
-                error: errData.error || `HTTP ${response.status}`,
-                latencyMs
-            };
-        }
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            return {
-                success: false,
-                error: data.error,
-                latencyMs
-            };
-        }
-        
         return {
             success: true,
-            response: data.response || 'OK',
+            response: result?.response || 'OK',
             latencyMs
         };
         
     } catch (error) {
         return {
             success: false,
-            error: error.message || 'Connection failed',
+            error: error.message || 'Test failed',
             latencyMs: Date.now() - startTime
         };
     }
