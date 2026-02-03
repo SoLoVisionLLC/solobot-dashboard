@@ -4202,8 +4202,12 @@ function renderHealthModelList(models, results) {
                     </div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="color: ${statusColor}; font-size: 13px; font-weight: 500;">${statusText}</div>
-                    ${result.status === 'pending' ? `<button onclick="testSingleModelUI('${model.id}')" class="btn btn-ghost" style="font-size: 11px; padding: 2px 8px;">Test</button>` : ''}
+                    <div style="color: ${statusColor}; font-size: 13px; font-weight: 500; margin-bottom: 2px;">${statusText}</div>
+                    ${result.status !== 'testing' && !healthTestInProgress ? `
+                        <button onclick="testSingleModelUI('${model.id}')" class="btn btn-ghost" style="font-size: 10px; padding: 1px 6px; height: auto;">
+                            ${result.status === 'pending' ? 'Test' : 'Re-test'}
+                        </button>
+                    ` : ''}
                 </div>
             </div>
         `;
