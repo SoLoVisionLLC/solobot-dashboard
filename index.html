@@ -1304,6 +1304,12 @@
                 align-items: center;
             }
 
+            .chat-input-area textarea {
+                white-space: pre-wrap;
+                word-break: break-word;
+                overflow-wrap: break-word;
+            }
+
             /* Image preview - supports multiple images */
             .image-preview-container {
                 padding: var(--space-2) var(--space-3);
@@ -3380,6 +3386,7 @@
                                                 placeholder="Type a message..."
                                                 name="dashboard_chat_field_"
                                                 rows="1"
+                                                wrap="soft"
                                                 onkeydown="handleChatInputKeydown(event)"
                                                 onpaste="handlePaste(event)"
                                                 autocomplete="off"
