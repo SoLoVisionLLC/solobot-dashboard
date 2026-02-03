@@ -992,7 +992,8 @@ const server = http.createServer((req, res) => {
 
         console.log(`[Health] Testing model: ${model}`);
         
-        const gatewayUrl = process.env.GATEWAY_URL || 'http://moltbot:3000';
+        // Use external gateway URL (containers aren't on same network)
+        const gatewayUrl = process.env.GATEWAY_URL || 'https://solobot.sololink.cloud';
         const testPrompt = prompt || 'Say OK';
         
         const gatewayRes = await fetch(`${gatewayUrl}/api/rpc`, {
