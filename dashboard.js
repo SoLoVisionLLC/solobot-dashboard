@@ -3977,9 +3977,7 @@ async function loadHealthModels() {
     }
 }
 
-// Test a single model by sending it a simple prompt via WebSocket gateway
-// Note: Gateway uses session-level model config, so this tests connectivity
-// rather than each individual model's API availability
+// Test a single model by creating a dedicated session, patching its model, and sending a test message
 async function testSingleModel(modelId) {
     const startTime = Date.now();
     
@@ -3993,15 +3991,32 @@ async function testSingleModel(modelId) {
             };
         }
         
-        // Use the gateway's WebSocket RPC to test connectivity
-        // Create a unique health-check session to avoid polluting main chat
-        const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-');
+        // Create a unique health-check session for this model
+        const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-').replace(/[^a-zA-Z0-9-]/g, '');
         
+        // Step 1: Patch the session to use the target model
+        console.log(`[Health] Setting model for session ${healthSessionKey} to ${modelId}`);
+        try {
+            await gateway._request('sessions.patch', {
+                key: healthSessionKey,
+                model: modelId
+            }, 10000); // 10s timeout for patch
+        } catch (patchError) {
+            console.error(`[Health] Failed to patch session model: ${patchError.message}`);
+            return {
+                success: false,
+                error: `Model config failed: ${patchError.message}`,
+                latencyMs: Date.now() - startTime
+            };
+        }
+        
+        // Step 2: Send a test message using that session
+        console.log(`[Health] Sending test message to ${modelId}`);
         const result = await gateway._request('chat.send', {
-            message: 'Say OK',
+            message: 'Respond with exactly: OK',
             sessionKey: healthSessionKey,
             idempotencyKey: crypto.randomUUID()
-        }, 30000); // 30s timeout
+        }, 60000); // 60s timeout for LLM response
         
         const latencyMs = Date.now() - startTime;
         
