@@ -874,14 +874,16 @@ const server = http.createServer((req, res) => {
     return;
   }
   
-  // Change AI Model endpoint
   // Get available models list (for dropdowns)
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
+    let responseSent = false;
     
     // Primary: fetch from mounted OpenClaw config file (works across containers)
     fetchModelsFromConfig().then(configModels => {
+      if (responseSent) return;
       if (configModels && Object.keys(configModels).length > 0) {
+        responseSent = true;
         res.end(JSON.stringify(configModels));
         return;
       }
@@ -889,7 +891,9 @@ const server = http.createServer((req, res) => {
       // Fallback 1: try CLI (only works if solobot is installed locally)
       return fetchModelsFromCLI();
     }).then(cliModels => {
+      if (responseSent) return;
       if (cliModels && Object.keys(cliModels).length > 0) {
+        responseSent = true;
         res.end(JSON.stringify(cliModels));
         return;
       }
@@ -898,6 +902,7 @@ const server = http.createServer((req, res) => {
       try {
         const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         if (state.availableModels) {
+          responseSent = true;
           res.end(JSON.stringify(state.availableModels));
           return;
         }
@@ -922,10 +927,13 @@ const server = http.createServer((req, res) => {
         ]
       };
       
+      responseSent = true;
       res.end(JSON.stringify(models));
     }).catch(err => {
+      if (responseSent) return;
       console.error('[Models] Error fetching models:', err);
       // Return minimal fallback on error
+      responseSent = true;
       res.end(JSON.stringify({
         'openrouter': [{ id: 'openrouter/auto', name: 'Auto', tier: 'auto' }]
       }));
