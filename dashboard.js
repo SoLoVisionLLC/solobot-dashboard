@@ -1224,7 +1224,28 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
-    const { state: eventState, content, role, errorMessage, model, provider, stopReason } = event;
+    const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey } = event;
+    
+    // Intercept health check events
+    if (sessionKey && sessionKey.startsWith('health-check-')) {
+        const pending = pendingHealthChecks.get(sessionKey);
+        if (pending) {
+            if (eventState === 'final') {
+                pending.resolve({
+                    success: true,
+                    content: content,
+                    model: model,
+                    provider: provider
+                });
+                pendingHealthChecks.delete(sessionKey);
+            } else if (eventState === 'error') {
+                pending.reject(new Error(errorMessage || 'Gateway error'));
+                pendingHealthChecks.delete(sessionKey);
+            }
+        }
+        // Don't show health check events in the main chat UI
+        return;
+    }
     
     // Track the current model being used for responses
     if (model) {
@@ -3915,6 +3936,7 @@ window.closeMemoryModal = function() {
 
 let healthTestResults = {};
 let healthTestInProgress = false;
+let pendingHealthChecks = new Map(); // sessionKey -> { resolve, reject, timer }
 
 // Initialize health page when shown
 function initHealthPage() {
@@ -3978,6 +4000,7 @@ async function loadHealthModels() {
 }
 
 // Test a single model by creating a dedicated session, patching its model, and sending a test message
+// Now waits for the actual LLM response event via WebSocket
 async function testSingleModel(modelId) {
     const startTime = Date.now();
     
@@ -4010,19 +4033,42 @@ async function testSingleModel(modelId) {
             };
         }
         
-        // Step 2: Send a test message using that session
+        // Step 2: Create a promise that waits for the actual LLM response event
+        const responsePromise = new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                if (pendingHealthChecks.has(healthSessionKey)) {
+                    pendingHealthChecks.delete(healthSessionKey);
+                    reject(new Error('Response timeout (60s)'));
+                }
+            }, 60000); // 60s timeout for LLM response
+            
+            pendingHealthChecks.set(healthSessionKey, {
+                resolve: (res) => {
+                    clearTimeout(timer);
+                    resolve(res);
+                },
+                reject: (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                }
+            });
+        });
+        
+        // Step 3: Send a test message using that session
         console.log(`[Health] Sending test message to ${modelId}`);
-        const result = await gateway._request('chat.send', {
+        await gateway._request('chat.send', {
             message: 'Respond with exactly: OK',
             sessionKey: healthSessionKey,
             idempotencyKey: crypto.randomUUID()
-        }, 60000); // 60s timeout for LLM response
+        }, 10000); // 10s timeout for the SEND REQUEST itself
         
+        // Step 4: Wait for the ACTUAL response event
+        const result = await responsePromise;
         const latencyMs = Date.now() - startTime;
         
         return {
             success: true,
-            response: result?.response || 'OK',
+            response: result?.content || 'OK',
             latencyMs
         };
         
