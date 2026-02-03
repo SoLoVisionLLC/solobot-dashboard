@@ -181,6 +181,9 @@ const DEFAULT_STATE_FILE = './data/default-state.json';
 const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
+const BACKUP_DIR = path.resolve(__dirname, '../dashboard-backups');
+const BACKUP_PREFIX = 'state-backup-';
+const BACKUP_RETENTION = 10;
 
 // Google Drive backup config (for auto-restore on startup)
 // Set these in Coolify environment variables for auto-restore to work
@@ -193,6 +196,51 @@ const AUTO_RESTORE_ENABLED = GDRIVE_BACKUP_FILE_ID && GDRIVE_CLIENT_ID && GDRIVE
 // Ensure data directories exist
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
+
+function ensureBackupDir() {
+  if (!fs.existsSync(BACKUP_DIR)) {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  }
+}
+
+function formatBackupTimestamp(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = pad(date.getUTCMonth() + 1);
+  const day = pad(date.getUTCDate());
+  const hours = pad(date.getUTCHours());
+  const minutes = pad(date.getUTCMinutes());
+  const seconds = pad(date.getUTCSeconds());
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
+function pruneStateBackups() {
+  try {
+    const backups = fs.readdirSync(BACKUP_DIR)
+      .filter(name => name.startsWith(BACKUP_PREFIX) && name.endsWith('.json'))
+      .sort();
+    while (backups.length > BACKUP_RETENTION) {
+      const toRemove = backups.shift();
+      fs.unlinkSync(path.join(BACKUP_DIR, toRemove));
+    }
+  } catch (err) {
+    console.error('[Backup] Failed to prune backups:', err.message);
+  }
+}
+
+function createStateBackup(serializedState) {
+  try {
+    ensureBackupDir();
+    const fileName = `${BACKUP_PREFIX}${formatBackupTimestamp(new Date())}.json`;
+    const targetPath = path.join(BACKUP_DIR, fileName);
+    fs.writeFileSync(targetPath, serializedState);
+    pruneStateBackups();
+    console.log(`[Backup] Saved state snapshot to ${fileName}`);
+    return targetPath;
+  } catch (err) {
+    console.error('[Backup] Failed to snapshot state:', err.message);
+  }
+}
 
 // ============================================
 // Google Drive Auto-Restore on Startup
@@ -425,8 +473,10 @@ let state = {};
 
 function saveState() {
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    const serialized = JSON.stringify(state, null, 2);
+    fs.writeFileSync(STATE_FILE, serialized);
     console.log(`[Server] State saved to ${STATE_FILE}`);
+    createStateBackup(serialized);
   } catch (e) {
     console.error('[Server] Failed to save state:', e.message);
     throw e; // Re-throw to make error visible
