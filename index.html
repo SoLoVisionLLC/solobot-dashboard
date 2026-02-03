@@ -4353,13 +4353,13 @@
                         >
                             <!-- Editor panel -->
                             <div
-                                style="flex: 1; display: flex; flex-direction: column; min-width: 0"
+                                id="memory-file-container"
+                                style="flex: 1; display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-6)"
                             >
-                                <textarea
+                                <pre
                                     id="memory-file-content"
-                                    style="flex: 1; width: 100%; min-height: 0; font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.6; padding: var(--space-4) var(--space-6); border: none; resize: none; background: var(--surface-2); color: var(--text-primary); outline: none"
-                                    placeholder="Loading..."
-                                ></textarea>
+                                    style="flex: 1; width: 100%; margin: 0; font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; background: var(--surface-2); color: var(--text-primary); outline: none"
+                                >Loading...</pre>
                             </div>
                             <!-- Version history sidebar -->
                             <div
@@ -5040,7 +5040,7 @@
         </div>
 
         <script src="gateway-client.js?v=3.6.0"></script>
-        <script src="docs-hub-memory-files.js?v=2.6.0"></script>
+        <script src="docs-hub-memory-files.js?v=2.7.0"></script>
         <script src="dashboard.js?v=3.48.0"></script>
         <script>
             // Valid page names
