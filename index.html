@@ -1330,17 +1330,24 @@
         .sidebar-agent {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
-            padding: 8px 10px;
+            padding: 8px 0;
             border-radius: var(--radius-md);
             color: var(--text-primary);
             transition: background var(--transition-fast), border-color var(--transition-fast);
             border: 1px solid transparent;
             cursor: pointer;
         }
+        
+        .sidebar:hover .sidebar-agent,
+        .sidebar.pinned .sidebar-agent {
+            justify-content: flex-start;
+            padding: 8px 10px;
+        }
 
         .sidebar-agent:hover {
-            background: var(--bg-hover);
+            background: var(--surface-2);
         }
 
         .sidebar-agent.active {
@@ -1762,8 +1769,8 @@
         }
         
         .chat-page-message.user {
-            justify-content: flex-end;
             flex-direction: row-reverse;
+            justify-content: flex-start;
         }
         
         .chat-page-message.solobot,
@@ -1781,7 +1788,7 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            background: var(--bg-tertiary);
+            background: var(--surface-2);
             border: 2px solid var(--border-default);
         }
         
@@ -2060,35 +2067,35 @@
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Agents</div>
                 <div class="sidebar-agent" data-agent="main">
-                    <img class="agent-avatar" src="avatars/solobot.png" alt="Main">
+                    <img class="agent-avatar" src="/avatars/solobot.png" alt="Main">
                     <span class="sidebar-item-text">SoLoBot (Main)</span>
                 </div>
                 <div class="sidebar-agent" data-agent="exec">
-                    <img class="agent-avatar" src="avatars/exec.svg" alt="EXEC">
+                    <img class="agent-avatar" src="/avatars/exec.svg" alt="EXEC">
                     <span class="sidebar-item-text">EXEC Orchestrator</span>
                 </div>
                 <div class="sidebar-agent" data-agent="coo">
-                    <img class="agent-avatar" src="avatars/coo.png" alt="COO">
+                    <img class="agent-avatar" src="/avatars/coo.png" alt="COO">
                     <span class="sidebar-item-text">COO</span>
                 </div>
                 <div class="sidebar-agent" data-agent="cfo">
-                    <img class="agent-avatar" src="avatars/cfo.png" alt="CFO">
+                    <img class="agent-avatar" src="/avatars/cfo.png" alt="CFO">
                     <span class="sidebar-item-text">CFO</span>
                 </div>
                 <div class="sidebar-agent" data-agent="cmp">
-                    <img class="agent-avatar" src="avatars/cmp.png" alt="CMP">
+                    <img class="agent-avatar" src="/avatars/cmp.png" alt="CMP">
                     <span class="sidebar-item-text">CMP</span>
                 </div>
                 <div class="sidebar-agent" data-agent="dev">
-                    <img class="agent-avatar" src="avatars/dev.png" alt="DEV">
+                    <img class="agent-avatar" src="/avatars/dev.png" alt="DEV">
                     <span class="sidebar-item-text">DEV</span>
                 </div>
                 <div class="sidebar-agent" data-agent="family">
-                    <img class="agent-avatar" src="avatars/family.svg" alt="Family">
+                    <img class="agent-avatar" src="/avatars/family.svg" alt="Family">
                     <span class="sidebar-item-text">Family Coordinator</span>
                 </div>
                 <div class="sidebar-agent" data-agent="tax">
-                    <img class="agent-avatar" src="avatars/tax.svg" alt="TAX">
+                    <img class="agent-avatar" src="/avatars/tax.svg" alt="TAX">
                     <span class="sidebar-item-text">Tax Compliance</span>
                 </div>
             </div>

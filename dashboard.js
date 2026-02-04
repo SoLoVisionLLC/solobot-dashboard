@@ -2574,7 +2574,7 @@ function createChatPageMessage(msg) {
         } else {
             // Bot avatar - SoLoBot image
             const avatarImg = document.createElement('img');
-            avatarImg.src = 'avatars/solobot.png';
+            avatarImg.src = '/avatars/solobot.png';
             avatarImg.alt = 'SoLoBot';
             avatarImg.onerror = () => { avatarImg.style.display = 'none'; avatar.textContent = '🤖'; };
             avatar.appendChild(avatarImg);
