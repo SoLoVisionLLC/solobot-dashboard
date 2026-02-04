@@ -629,7 +629,12 @@ const MIME_TYPES = {
   '.css': 'text/css',
   '.json': 'application/json',
   '.png': 'image/png',
-  '.ico': 'image/x-icon'
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
 };
 
 const server = http.createServer((req, res) => {

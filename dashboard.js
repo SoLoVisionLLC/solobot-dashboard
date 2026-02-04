@@ -2505,6 +2505,27 @@ function createChatPageMessage(msg) {
     const wrapper = document.createElement('div');
     wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
     
+    // Avatar (for bot and user messages, not system)
+    if (!isSystem) {
+        const avatar = document.createElement('div');
+        avatar.className = 'chat-page-avatar';
+        
+        if (isUser) {
+            // User avatar - initials circle
+            avatar.classList.add('user-avatar');
+            avatar.textContent = 'U';
+        } else {
+            // Bot avatar - SoLoBot image
+            const avatarImg = document.createElement('img');
+            avatarImg.src = 'avatars/solobot.png';
+            avatarImg.alt = 'SoLoBot';
+            avatarImg.onerror = () => { avatarImg.style.display = 'none'; avatar.textContent = '🤖'; };
+            avatar.appendChild(avatarImg);
+        }
+        
+        wrapper.appendChild(avatar);
+    }
+    
     // Bubble
     const bubble = document.createElement('div');
     bubble.className = 'chat-page-bubble';
