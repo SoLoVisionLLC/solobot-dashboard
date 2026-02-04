@@ -3086,7 +3086,7 @@ window.startNewAgentSession = async function(agentId) {
     const agentLabel = getAgentLabel(agentId);
 
     // Prompt only shows timestamp - agent prefix is added automatically
-    const userInput = prompt(`Enter name for new ${agentLabel} session:`, defaultTimestamp);
+    const userInput = prompt(`Enter session name:`, defaultTimestamp);
     if (!userInput || !userInput.trim()) return;
 
     // Always prepend agent ID to the session name (lowercase)
