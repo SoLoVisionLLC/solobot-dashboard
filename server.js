@@ -187,6 +187,54 @@ const BACKUP_DIR = path.resolve(__dirname, '../dashboard-backups');
 const BACKUP_PREFIX = 'state-backup-';
 const BACKUP_RETENTION = 10;
 
+// ============================================
+// Sessions: Read directly from OpenClaw
+// ============================================
+const SESSIONS_PATHS = [
+  '/app/sessions/sessions.json',
+  '/home/node/.openclaw/agents/main/sessions/sessions.json'
+];
+
+function loadSessionsFromOpenClaw() {
+  try {
+    let sessionsData = null;
+    for (const p of SESSIONS_PATHS) {
+      if (fs.existsSync(p)) {
+        sessionsData = JSON.parse(fs.readFileSync(p, 'utf8'));
+        break;
+      }
+    }
+    if (!sessionsData) return [];
+
+    const sessions = [];
+    for (const key of Object.keys(sessionsData)) {
+      const data = sessionsData[key] || {};
+      const parts = key.split(':');
+      const shortName = parts.length ? parts[parts.length - 1] : key;
+      let displayName = data.displayName;
+      if (!displayName && data.origin) displayName = data.origin.label;
+      if (!displayName) displayName = shortName;
+
+      sessions.push({
+        key,
+        name: shortName,
+        displayName,
+        kind: data.chatType || 'unknown',
+        channel: (data.deliveryContext && data.deliveryContext.channel) || 'unknown',
+        model: data.model || 'unknown',
+        updatedAt: data.updatedAt,
+        sessionId: data.sessionId,
+        totalTokens: data.totalTokens || 0
+      });
+    }
+
+    return sessions;
+  } catch (e) {
+    console.warn('[Sessions] Failed to load sessions:', e.message);
+    return [];
+  }
+}
+
 // Google Drive backup config (for auto-restore on startup)
 // Set these in Coolify environment variables for auto-restore to work
 const GDRIVE_BACKUP_FILE_ID = process.env.GDRIVE_BACKUP_FILE_ID;  // The backup file ID in Drive
@@ -1325,8 +1373,7 @@ const server = http.createServer((req, res) => {
   
   // List sessions endpoint (fetches from OpenClaw)
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
-    // Return sessions from state, or empty if not cached
-    const sessions = state.sessions || [];
+    const sessions = loadSessionsFromOpenClaw();
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ sessions, count: sessions.length }));
     return;
@@ -1366,9 +1413,10 @@ const server = http.createServer((req, res) => {
       const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
       
       console.log(`[Server] History request for session: ${sessionKey}`);
-      console.log(`[Server] Available sessions: ${state.sessions?.map(s => s.key).join(', ')}`);
+      const sessions = loadSessionsFromOpenClaw();
+      console.log(`[Server] Available sessions: ${sessions.map(s => s.key).join(', ')}`);
       
-      const sessionInfo = state.sessions?.find(s => s.key === sessionKey);
+      const sessionInfo = sessions.find(s => s.key === sessionKey);
       
       if (!sessionInfo?.sessionId) {
         console.log(`[Server] Session not found: ${sessionKey}`);
