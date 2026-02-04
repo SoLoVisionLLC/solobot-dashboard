@@ -1264,6 +1264,14 @@ function handleChatEvent(event) {
             streamingText = '';
             isProcessing = false;
             lastProcessingEndTime = Date.now();
+            // Immediate history refresh to catch user messages from other clients
+            if (gateway && gateway.isConnected()) {
+                const pollVersion = sessionVersion;
+                gateway.loadHistory().then(result => {
+                    if (pollVersion !== sessionVersion) return;
+                    if (result?.messages) mergeHistoryMessages(result.messages);
+                }).catch(() => {});
+            }
             renderChat();
             renderChatPage();
             break;
@@ -1387,7 +1395,7 @@ function startHistoryPolling() {
         }).catch(() => {
             // History poll failed - not critical
         });
-    }, 10000);
+    }, 3000);
 }
 
 function stopHistoryPolling() {
