@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 
 process.env.TZ = process.env.TZ || 'America/New_York';
@@ -293,6 +294,60 @@ function createStateBackup(serializedState) {
 }
 
 // ============================================
+// Google Drive Instant Backup (Debounced)
+// ============================================
+const DRIVE_BACKUP_DEBOUNCE_MS = 5000;
+let driveBackupTimer = null;
+let driveBackupInFlight = false;
+let lastDriveBackupHash = '';
+let pendingDriveBackup = null;
+
+function hashState(serializedState) {
+  return crypto.createHash('sha256').update(serializedState).digest('hex');
+}
+
+function queueDriveBackup(serializedState) {
+  if (!AUTO_RESTORE_ENABLED) return;
+  pendingDriveBackup = serializedState;
+  if (driveBackupTimer) clearTimeout(driveBackupTimer);
+  driveBackupTimer = setTimeout(() => {
+    const toBackup = pendingDriveBackup;
+    pendingDriveBackup = null;
+    performDriveBackup(toBackup).catch(err => {
+      console.warn('[Backup] Drive backup failed:', err.message);
+    });
+  }, DRIVE_BACKUP_DEBOUNCE_MS);
+}
+
+async function performDriveBackup(serializedState) {
+  if (!serializedState || driveBackupInFlight) return;
+  const currentHash = hashState(serializedState);
+  if (currentHash === lastDriveBackupHash) return;
+  driveBackupInFlight = true;
+  try {
+    const accessToken = await getGoogleAccessToken();
+    const result = await httpsRequest({
+      hostname: 'www.googleapis.com',
+      path: `/upload/drive/v3/files/${GDRIVE_BACKUP_FILE_ID}?uploadType=media`,
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }, serializedState);
+
+    if (result.status >= 200 && result.status < 300) {
+      lastDriveBackupHash = currentHash;
+      console.log('[Backup] Updated Google Drive backup file');
+    } else {
+      throw new Error(`Drive backup failed: ${result.status}`);
+    }
+  } finally {
+    driveBackupInFlight = false;
+  }
+}
+
+// ============================================
 // Google Drive Auto-Restore on Startup
 // ============================================
 
@@ -369,14 +424,19 @@ async function checkAndRestoreFromBackup(localState) {
   
   console.log(`[Auto-Restore] Local state: ${localTaskCount} tasks, lastSync: ${localLastSync ? new Date(localLastSync).toISOString() : 'never'}`);
   
-  // If local state has tasks and recent sync, skip restore
-  if (localTaskCount > 0 && localLastSync > Date.now() - 24 * 60 * 60 * 1000) {
+  const localNotesCount = (localState?.notes?.length || 0);
+  const localChatCount = (localState?.chat?.messages?.length || 0);
+  const localLooksEmpty = localTaskCount === 0 && localNotesCount === 0 && localChatCount === 0;
+  const localLooksFresh = localLastSync > Date.now() - 24 * 60 * 60 * 1000;
+
+  // Only restore if local is truly empty or missing
+  if (!localLooksEmpty || localLooksFresh) {
     console.log('[Auto-Restore] Local state looks good, skipping restore');
     return localState;
   }
   
   try {
-    console.log('[Auto-Restore] Local state empty/stale, fetching backup from Google Drive...');
+    console.log('[Auto-Restore] Local state empty, fetching backup from Google Drive...');
     const accessToken = await getGoogleAccessToken();
     const backupState = await fetchBackupFromDrive(accessToken);
     
@@ -527,6 +587,7 @@ function saveState() {
     fs.writeFileSync(STATE_FILE, serialized);
     console.log(`[Server] State saved to ${STATE_FILE}`);
     createStateBackup(serialized);
+    queueDriveBackup(serialized);
   } catch (e) {
     console.error('[Server] Failed to save state:', e.message);
     throw e; // Re-throw to make error visible
