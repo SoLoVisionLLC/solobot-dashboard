@@ -847,6 +847,9 @@ function handleSubagentSessionAgent() {
 }
 
 async function fetchSessions() {
+    // Preserve locally-added sessions that might not be in gateway yet
+    const localSessions = availableSessions.filter(s => s.sessionId === null);
+    
     // Try gateway first if connected (direct RPC call)
     if (gateway && gateway.isConnected()) {
         try {
@@ -860,7 +863,7 @@ async function fetchSessions() {
 
             // Map gateway response to expected format
             // Always use friendly name for display (strips agent:main: prefix)
-            availableSessions = sessions.map(s => {
+            const gatewaySessions = sessions.map(s => {
                 const friendlyName = getFriendlySessionName(s.key);
                 return {
                     key: s.key,
@@ -872,8 +875,13 @@ async function fetchSessions() {
                     sessionId: s.sessionId
                 };
             });
+            
+            // Merge: gateway sessions + local sessions not in gateway
+            const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
+            const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
+            availableSessions = [...gatewaySessions, ...mergedLocalSessions];
 
-            console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from gateway (filtered from ${result?.sessions?.length || 0} total)`);
+            console.log(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
             
             // If current session is a subagent, determine the correct agent from its label
             handleSubagentSessionAgent();
@@ -890,8 +898,14 @@ async function fetchSessions() {
         const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        availableSessions = data.sessions || [];
-        console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from server`);
+        const serverSessions = data.sessions || [];
+        
+        // Merge: server sessions + local sessions not in server
+        const serverKeys = new Set(serverSessions.map(s => s.key));
+        const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
+        availableSessions = [...serverSessions, ...mergedLocalSessions];
+        
+        console.log(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
         
         // If current session is a subagent, determine the correct agent from its label
         handleSubagentSessionAgent();
@@ -910,6 +924,9 @@ function populateSessionDropdown() {
     
     // Filter sessions for current agent only
     const agentSessions = filterSessionsForAgent(availableSessions, currentAgentId);
+    
+    console.log(`[Dashboard] populateSessionDropdown: agent=${currentAgentId}, total=${availableSessions.length}, filtered=${agentSessions.length}`);
+    console.log(`[Dashboard] Available sessions:`, availableSessions.map(s => s.key));
     
     // Build the dropdown HTML
     let html = '';
@@ -3111,8 +3128,28 @@ window.startNewAgentSession = async function(agentId) {
         connectToGateway();
     }
 
-    // Refresh sessions list and dropdown
+    // Add new session to availableSessions locally (gateway won't return it until there's activity)
+    const newSession = {
+        key: sessionKey,
+        name: sessionName.trim(),
+        displayName: sessionName.trim(),
+        updatedAt: Date.now(),
+        totalTokens: 0,
+        model: currentModel || 'unknown',
+        sessionId: null
+    };
+    
+    // Add to beginning of list (most recent)
+    availableSessions.unshift(newSession);
+    
+    // Refresh sessions list from gateway (will merge with our local addition)
     await fetchSessions();
+    
+    // Ensure our new session is still in the list (in case fetchSessions didn't include it)
+    if (!availableSessions.some(s => s.key === sessionKey)) {
+        availableSessions.unshift(newSession);
+    }
+    
     populateSessionDropdown();
     setActiveSidebarAgent(agentId);
 
