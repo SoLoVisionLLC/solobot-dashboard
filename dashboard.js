@@ -3065,6 +3065,62 @@ async function clearChatHistory(skipConfirm = false, clearCache = false) {
     renderChatPage();
 }
 
+// ===================
+// NEW SESSION MODAL
+// ===================
+
+let newSessionModalResolve = null;
+
+window.openNewSessionModal = function(defaultValue) {
+    return new Promise((resolve) => {
+        newSessionModalResolve = resolve;
+        const modal = document.getElementById('new-session-modal');
+        const input = document.getElementById('new-session-name-input');
+        if (modal && input) {
+            input.value = defaultValue || '';
+            modal.classList.add('visible');
+            // Focus and select all text
+            setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 50);
+        } else {
+            resolve(null);
+        }
+    });
+};
+
+window.closeNewSessionModal = function(value) {
+    const modal = document.getElementById('new-session-modal');
+    if (modal) {
+        modal.classList.remove('visible');
+    }
+    if (newSessionModalResolve) {
+        newSessionModalResolve(value);
+        newSessionModalResolve = null;
+    }
+};
+
+window.submitNewSessionModal = function() {
+    const input = document.getElementById('new-session-name-input');
+    const value = input ? input.value : null;
+    closeNewSessionModal(value);
+};
+
+// Handle Enter key in new session modal
+document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('new-session-modal');
+    if (modal && modal.classList.contains('visible')) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitNewSessionModal();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeNewSessionModal(null);
+        }
+    }
+});
+
 // Start a new session for a specific agent
 window.startNewAgentSession = async function(agentId) {
     // Close dropdown first
@@ -3085,8 +3141,8 @@ window.startNewAgentSession = async function(agentId) {
     
     const agentLabel = getAgentLabel(agentId);
 
-    // Prompt only shows timestamp - agent prefix is added automatically
-    const userInput = prompt(`Enter session name:`, defaultTimestamp);
+    // Open custom modal instead of browser prompt
+    const userInput = await openNewSessionModal(defaultTimestamp);
     if (!userInput || !userInput.trim()) return;
 
     // Always prepend agent ID to the session name (lowercase)

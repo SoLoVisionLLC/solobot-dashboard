@@ -3116,6 +3116,23 @@
     </div><!-- END app-content -->
     </div><!-- END app-layout -->
 
+    <!-- New Session Name Modal -->
+    <div id="new-session-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Enter session name:</h3>
+                <button onclick="closeNewSessionModal(null)" class="modal-close">✕</button>
+            </div>
+            <div class="modal-body" style="padding: var(--space-4) var(--space-6);">
+                <input type="text" id="new-session-name-input" class="input" style="width: 100%; font-size: 14px;" placeholder="Session name">
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default);">
+                <button onclick="closeNewSessionModal(null)" class="btn btn-ghost">Cancel</button>
+                <button onclick="submitNewSessionModal()" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Confirm Modal -->
     <div id="confirm-modal" class="modal-overlay">
         <div class="modal" style="max-width: 400px;">
@@ -3138,7 +3155,7 @@
 
     <script src="gateway-client.js?v=3.6.0"></script>
     <script src="docs-hub-memory-files.js?v=2.5.0"></script>
-    <script src="dashboard.js?v=3.43.0"></script>
+    <script src="dashboard.js?v=3.44.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
