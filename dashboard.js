@@ -983,6 +983,15 @@ function getAgentLabel(agentId) {
     return labels[agentId] || agentId.toUpperCase();
 }
 
+// Get display name for message bubbles (e.g., "SoLoBot-DEV")
+function getAgentDisplayName(agentId) {
+    if (!agentId || agentId === 'main') {
+        return 'SoLoBot';
+    }
+    const label = getAgentLabel(agentId);
+    return `SoLoBot-${label}`;
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -2418,7 +2427,8 @@ function createChatMessageElement(msg) {
         nameSpan.textContent = 'System';
     } else {
         nameSpan.style.color = 'var(--success)';
-        nameSpan.textContent = msg.isStreaming ? 'SoLoBot (typing...)' : 'SoLoBot';
+        const displayName = getAgentDisplayName(currentAgentId);
+        nameSpan.textContent = msg.isStreaming ? `${displayName} (typing...)` : displayName;
     }
     
     // Model badge for bot messages (shows which AI model generated the response)
@@ -2662,12 +2672,13 @@ function renderChatPage() {
     
     // Show empty state if no messages
     if (messages.length === 0 && !streamingText) {
+        const displayName = getAgentDisplayName(currentAgentId);
         container.innerHTML = `
             <div class="chat-page-empty">
                 <div class="chat-page-empty-icon">💬</div>
                 <div class="chat-page-empty-text">
                     ${isConnected 
-                        ? 'Start a conversation with SoLoBot' 
+                        ? `Start a conversation with ${displayName}` 
                         : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
                 </div>
             </div>
@@ -2762,7 +2773,8 @@ function createChatPageMessage(msg) {
     } else if (isSystem) {
         sender.textContent = 'System';
     } else {
-        sender.textContent = msg.isStreaming ? 'SoLoBot is typing...' : 'SoLoBot';
+        const displayName = getAgentDisplayName(currentAgentId);
+        sender.textContent = msg.isStreaming ? `${displayName} is typing...` : displayName;
     }
     
     const time = document.createElement('span');
