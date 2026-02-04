@@ -2322,6 +2322,27 @@
                 color: white;
             }
 
+            .session-delete-btn {
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 4px;
+                border-radius: 4px;
+                color: var(--text-muted);
+                font-size: 12px;
+                line-height: 1;
+            }
+
+            .session-delete-btn:hover {
+                background: var(--surface-elevated);
+                color: var(--text-primary);
+            }
+
+            .session-dropdown-item.active .session-delete-btn:hover {
+                background: rgba(255, 255, 255, 0.2);
+                color: white;
+            }
+
             .chat-page-title h1 {
                 font-size: 16px;
                 font-weight: 600;
