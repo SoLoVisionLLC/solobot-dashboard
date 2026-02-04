@@ -2483,6 +2483,7 @@
                 <!-- Chat Actions Bar -->
                 <div class="chat-page-header">
                     <div class="chat-page-title">
+                        <span id="chat-page-agent-name" style="font-size: 14px; font-weight: 600; color: var(--text-primary);"></span>
                         <span id="chat-page-status-dot" class="status-dot idle"></span>
                         <span id="chat-page-status-text">Disconnected</span>
                     </div>
@@ -2501,7 +2502,7 @@
                         <button onclick="scrollChatToBottom()" class="btn btn-ghost" title="Scroll to bottom">
                             ↓ Latest
                         </button>
-                        <button onclick="startNewSession()" class="btn btn-ghost" title="Start new session">
+                        <button onclick="startNewSession()" class="btn btn-ghost" title="Start new session for current agent">
                             ✨ New
                         </button>
                         <button onclick="clearChatHistory()" class="btn btn-ghost" title="Clear chat">

@@ -765,6 +765,21 @@ window.toggleChatPageSessionMenu = function() {
 
 // Session Management
 let availableSessions = [];
+let currentAgentId = 'main'; // Track which agent's sessions we're viewing
+
+// Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
+function getAgentIdFromSession(sessionKey) {
+    const match = sessionKey?.match(/^agent:([^:]+):/);
+    return match ? match[1] : 'main';
+}
+
+// Filter sessions to only show those belonging to a specific agent
+function filterSessionsForAgent(sessions, agentId) {
+    return sessions.filter(s => {
+        const sessAgent = getAgentIdFromSession(s.key);
+        return sessAgent === agentId;
+    });
+}
 
 async function fetchSessions() {
     // Try gateway first if connected (direct RPC call)
@@ -820,12 +835,26 @@ function populateSessionDropdown() {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
     
-    if (availableSessions.length === 0) {
-        menu.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">No sessions available</div>';
+    // Filter sessions for current agent only
+    const agentSessions = filterSessionsForAgent(availableSessions, currentAgentId);
+    
+    // Build the dropdown HTML
+    let html = '';
+    
+    // Header showing which agent's sessions we're viewing
+    const agentLabel = getAgentLabel(currentAgentId);
+    html += `<div style="padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center;">
+        <span>${escapeHtml(agentLabel)} Sessions</span>
+        <button onclick="startNewAgentSession('${currentAgentId}')" style="background: var(--brand-red); color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer;" title="New session for ${agentLabel}">+ New</button>
+    </div>`;
+    
+    if (agentSessions.length === 0) {
+        html += '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">No sessions for this agent yet</div>';
+        menu.innerHTML = html;
         return;
     }
     
-    menu.innerHTML = availableSessions.map(s => {
+    html += agentSessions.map(s => {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
         const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
@@ -845,6 +874,23 @@ function populateSessionDropdown() {
         </div>
         `;
     }).join('');
+    
+    menu.innerHTML = html;
+}
+
+// Get human-readable label for an agent ID
+function getAgentLabel(agentId) {
+    const labels = {
+        'main': 'SoLoBot',
+        'exec': 'EXEC',
+        'coo': 'COO',
+        'cfo': 'CFO',
+        'cmp': 'CMP',
+        'dev': 'DEV',
+        'family': 'Family',
+        'tax': 'Tax'
+    };
+    return labels[agentId] || agentId.toUpperCase();
 }
 
 function escapeHtml(text) {
@@ -906,6 +952,12 @@ window.switchToSession = async function(sessionKey) {
         GATEWAY_CONFIG.sessionKey = sessionKey;
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
+        
+        // 3a. Update current agent ID from session key
+        const agentMatch = sessionKey.match(/^agent:([^:]+):/);
+        if (agentMatch) {
+            currentAgentId = agentMatch[1];
+        }
 
         // 4. Clear current chat (skip confirmation, clear cache to prevent stale data)
         await clearChatHistory(true, true);
@@ -922,12 +974,11 @@ window.switchToSession = async function(sessionKey) {
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
             const session = availableSessions.find(s => s.key === sessionKey);
-            nameEl.textContent = session ? (session.displayName || session.name) : sessionKey;
+            nameEl.textContent = session ? (session.displayName || session.name) : getFriendlySessionName(sessionKey);
         }
-        // Refresh dropdown to show new selection
+        // Refresh dropdown to show new selection (filtered by agent)
         populateSessionDropdown();
 
-        const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) setActiveSidebarAgent(agentMatch[1]);
         else setActiveSidebarAgent(null);
 
@@ -1531,6 +1582,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize sidebar agent shortcuts
     setupSidebarAgents();
+    
+    // Initialize agent name display based on current session
+    const agentNameEl = document.getElementById('chat-page-agent-name');
+    if (agentNameEl) {
+        agentNameEl.textContent = getAgentLabel(currentAgentId);
+    }
 
     // Initialize Gateway client
     initGateway();
@@ -2695,6 +2752,22 @@ function setActiveSidebarAgent(agentId) {
             el.classList.remove('active');
         }
     });
+    
+    // Update currentAgentId and refresh dropdown to show this agent's sessions
+    if (agentId) {
+        const wasChanged = agentId !== currentAgentId;
+        currentAgentId = agentId;
+        
+        // Update agent name display in chat header
+        const agentNameEl = document.getElementById('chat-page-agent-name');
+        if (agentNameEl) {
+            agentNameEl.textContent = getAgentLabel(agentId);
+        }
+        
+        if (wasChanged) {
+            populateSessionDropdown();
+        }
+    }
 }
 
 function setupSidebarAgents() {
@@ -2705,6 +2778,10 @@ function setupSidebarAgents() {
         el.addEventListener('click', async () => {
             const agentId = el.getAttribute('data-agent');
             if (!agentId) return;
+            
+            // Update current agent ID first so dropdown filters correctly
+            currentAgentId = agentId;
+            
             const sessionKey = `agent:${agentId}:main`;
             showPage('chat');
             await switchToSession(sessionKey);
@@ -2714,7 +2791,10 @@ function setupSidebarAgents() {
 
     const currentSession = GATEWAY_CONFIG?.sessionKey || 'main';
     const match = currentSession.match(/^agent:([^:]+):/);
-    if (match) setActiveSidebarAgent(match[1]);
+    if (match) {
+        currentAgentId = match[1];
+        setActiveSidebarAgent(match[1]);
+    }
 }
 
 async function sendChatPageMessage() {
@@ -2830,72 +2910,84 @@ async function clearChatHistory(skipConfirm = false, clearCache = false) {
     renderChatPage();
 }
 
-window.startNewSession = async function() {
-    // Generate a new session name: "Dashboard" + timestamp
+// Start a new session for a specific agent
+window.startNewAgentSession = async function(agentId) {
+    // Close dropdown first
+    toggleChatPageSessionMenu();
+    
+    // Generate a new session name with timestamp
     const now = new Date();
     const timestamp = now.toISOString().slice(5, 16).replace('T', '-').replace(':', ''); // MM-DD-HHMM
-    const defaultName = `Dashboard-${timestamp}`;
+    const agentLabel = getAgentLabel(agentId);
+    const defaultName = `${agentLabel}-${timestamp}`;
 
-    const newSessionKey = prompt('Enter name for new session:', defaultName);
-    if (!newSessionKey || !newSessionKey.trim()) return;
+    const sessionName = prompt(`Enter name for new ${agentLabel} session:`, defaultName);
+    if (!sessionName || !sessionName.trim()) return;
 
-    const sessionKey = newSessionKey.trim();
+    // Build the full session key: agent:{agentId}:{sessionName}
+    const sessionKey = `agent:${agentId}:${sessionName.trim()}`;
 
     // Check if session already exists
     if (availableSessions.some(s => s.key === sessionKey)) {
-        showToast(`Session "${sessionKey}" already exists. Switching to it.`, 'info');
+        showToast(`Session "${sessionName}" already exists. Switching to it.`, 'info');
         await switchToSession(sessionKey);
         return;
     }
 
-    showToast(`Creating new session "${sessionKey}"...`, 'info');
+    showToast(`Creating new ${agentLabel} session "${sessionName}"...`, 'info');
 
     // Increment session version to invalidate any in-flight history loads
     sessionVersion++;
-    console.log(`[Dashboard] Session version now ${sessionVersion} (new session)`);
+    console.log(`[Dashboard] Session version now ${sessionVersion} (new agent session)`);
 
     // Clear local chat and cache
-    console.log(`[Dashboard] Clearing chat (had ${state.chat.messages.length} messages)`);
     state.chat.messages = [];
     state.system.messages = [];
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
     localStorage.removeItem('solobot-chat-messages');
-    console.log(`[Dashboard] Chat cleared, now ${state.chat.messages.length} messages`);
+
+    // Update agent context
+    currentAgentId = agentId;
 
     // Render immediately to show empty chat
     renderChat();
     renderChatPage();
 
-    // Switch gateway to new session - need to reconnect with new session key
+    // Switch gateway to new session
     currentSessionName = sessionKey;
     GATEWAY_CONFIG.sessionKey = sessionKey;
 
-    // Update session input field (so connectToGateway uses it)
+    // Update session input field
     const sessionInput = document.getElementById('gateway-session');
     if (sessionInput) sessionInput.value = sessionKey;
 
     // Update session display
     const nameEl = document.getElementById('chat-page-session-name');
-    if (nameEl) nameEl.textContent = sessionKey;
+    if (nameEl) nameEl.textContent = sessionName.trim();
 
     // Disconnect and reconnect with new session key
     if (gateway && gateway.isConnected()) {
         gateway.disconnect();
-        // Short delay then reconnect
         await new Promise(resolve => setTimeout(resolve, 300));
-        connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
+        connectToGateway();
     }
 
-    // Refresh sessions list to include the new one
+    // Refresh sessions list and dropdown
     await fetchSessions();
     populateSessionDropdown();
+    setActiveSidebarAgent(agentId);
 
     renderChat();
     renderChatPage();
     renderSystemPage();
 
-    showToast(`New session "${sessionKey}" created`, 'success');
+    showToast(`New ${agentLabel} session "${sessionName}" created`, 'success');
+}
+
+// Legacy function - creates session for current agent
+window.startNewSession = async function() {
+    await startNewAgentSession(currentAgentId);
 }
 
 // ===================
