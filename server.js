@@ -2,7 +2,10 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { exec } = require('child_process');
+
+process.env.TZ = process.env.TZ || 'America/New_York';
 
 // ============================================
 // Dynamic Model Fetching from OpenClaw Config
@@ -181,6 +184,58 @@ const DEFAULT_STATE_FILE = './data/default-state.json';
 const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
+const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
+const BACKUP_PREFIX = 'state-backup-';
+const BACKUP_RETENTION = 10;
+const LATEST_STATE_FILE = path.join(path.dirname(STATE_FILE), 'state.latest.json');
+
+// ============================================
+// Sessions: Read directly from OpenClaw
+// ============================================
+const SESSIONS_PATHS = [
+  '/app/sessions/sessions.json',
+  '/home/node/.openclaw/agents/main/sessions/sessions.json'
+];
+
+function loadSessionsFromOpenClaw() {
+  try {
+    let sessionsData = null;
+    for (const p of SESSIONS_PATHS) {
+      if (fs.existsSync(p)) {
+        sessionsData = JSON.parse(fs.readFileSync(p, 'utf8'));
+        break;
+      }
+    }
+    if (!sessionsData) return [];
+
+    const sessions = [];
+    for (const key of Object.keys(sessionsData)) {
+      const data = sessionsData[key] || {};
+      const parts = key.split(':');
+      const shortName = parts.length ? parts[parts.length - 1] : key;
+      let displayName = data.displayName;
+      if (!displayName && data.origin) displayName = data.origin.label;
+      if (!displayName) displayName = shortName;
+
+      sessions.push({
+        key,
+        name: shortName,
+        displayName,
+        kind: data.chatType || 'unknown',
+        channel: (data.deliveryContext && data.deliveryContext.channel) || 'unknown',
+        model: data.model || 'unknown',
+        updatedAt: data.updatedAt,
+        sessionId: data.sessionId,
+        totalTokens: data.totalTokens || 0
+      });
+    }
+
+    return sessions;
+  } catch (e) {
+    console.warn('[Sessions] Failed to load sessions:', e.message);
+    return [];
+  }
+}
 
 // Google Drive backup config (for auto-restore on startup)
 // Set these in Coolify environment variables for auto-restore to work
@@ -193,6 +248,107 @@ const AUTO_RESTORE_ENABLED = GDRIVE_BACKUP_FILE_ID && GDRIVE_CLIENT_ID && GDRIVE
 // Ensure data directories exist
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+function ensureBackupDir() {
+  if (!fs.existsSync(BACKUP_DIR)) {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  }
+}
+
+function formatBackupTimestamp(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = pad(date.getUTCMonth() + 1);
+  const day = pad(date.getUTCDate());
+  const hours = pad(date.getUTCHours());
+  const minutes = pad(date.getUTCMinutes());
+  const seconds = pad(date.getUTCSeconds());
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
+function pruneStateBackups() {
+  try {
+    const backups = fs.readdirSync(BACKUP_DIR)
+      .filter(name => name.startsWith(BACKUP_PREFIX) && name.endsWith('.json'))
+      .sort();
+    while (backups.length > BACKUP_RETENTION) {
+      const toRemove = backups.shift();
+      fs.unlinkSync(path.join(BACKUP_DIR, toRemove));
+    }
+  } catch (err) {
+    console.error('[Backup] Failed to prune backups:', err.message);
+  }
+}
+
+function createStateBackup(serializedState) {
+  try {
+    ensureBackupDir();
+    const fileName = `${BACKUP_PREFIX}${formatBackupTimestamp(new Date())}.json`;
+    const targetPath = path.join(BACKUP_DIR, fileName);
+    fs.writeFileSync(targetPath, serializedState);
+    fs.writeFileSync(LATEST_STATE_FILE, serializedState);
+    pruneStateBackups();
+    console.log(`[Backup] Saved state snapshot to ${fileName}`);
+    return targetPath;
+  } catch (err) {
+    console.error('[Backup] Failed to snapshot state:', err.message);
+  }
+}
+
+// ============================================
+// Google Drive Instant Backup (Debounced)
+// ============================================
+const DRIVE_BACKUP_DEBOUNCE_MS = 5000;
+let driveBackupTimer = null;
+let driveBackupInFlight = false;
+let lastDriveBackupHash = '';
+let pendingDriveBackup = null;
+
+function hashState(serializedState) {
+  return crypto.createHash('sha256').update(serializedState).digest('hex');
+}
+
+function queueDriveBackup(serializedState) {
+  if (!AUTO_RESTORE_ENABLED) return;
+  pendingDriveBackup = serializedState;
+  if (driveBackupTimer) clearTimeout(driveBackupTimer);
+  driveBackupTimer = setTimeout(() => {
+    const toBackup = pendingDriveBackup;
+    pendingDriveBackup = null;
+    performDriveBackup(toBackup).catch(err => {
+      console.warn('[Backup] Drive backup failed:', err.message);
+    });
+  }, DRIVE_BACKUP_DEBOUNCE_MS);
+}
+
+async function performDriveBackup(serializedState) {
+  if (!serializedState || driveBackupInFlight) return;
+  const currentHash = hashState(serializedState);
+  if (currentHash === lastDriveBackupHash) return;
+  driveBackupInFlight = true;
+  try {
+    const accessToken = await getGoogleAccessToken();
+    const result = await httpsRequest({
+      hostname: 'www.googleapis.com',
+      path: `/upload/drive/v3/files/${GDRIVE_BACKUP_FILE_ID}?uploadType=media`,
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }, serializedState);
+
+    if (result.status >= 200 && result.status < 300) {
+      lastDriveBackupHash = currentHash;
+      console.log('[Backup] Updated Google Drive backup file');
+    } else {
+      throw new Error(`Drive backup failed: ${result.status}`);
+    }
+  } finally {
+    driveBackupInFlight = false;
+  }
+}
 
 // ============================================
 // Google Drive Auto-Restore on Startup
@@ -271,14 +427,19 @@ async function checkAndRestoreFromBackup(localState) {
   
   console.log(`[Auto-Restore] Local state: ${localTaskCount} tasks, lastSync: ${localLastSync ? new Date(localLastSync).toISOString() : 'never'}`);
   
-  // If local state has tasks and recent sync, skip restore
-  if (localTaskCount > 0 && localLastSync > Date.now() - 24 * 60 * 60 * 1000) {
+  const localNotesCount = (localState?.notes?.length || 0);
+  const localChatCount = (localState?.chat?.messages?.length || 0);
+  const localLooksEmpty = localTaskCount === 0 && localNotesCount === 0 && localChatCount === 0;
+  const localLooksFresh = localLastSync > Date.now() - 24 * 60 * 60 * 1000;
+
+  // Only restore if local is truly empty or missing
+  if (!localLooksEmpty || localLooksFresh) {
     console.log('[Auto-Restore] Local state looks good, skipping restore');
     return localState;
   }
   
   try {
-    console.log('[Auto-Restore] Local state empty/stale, fetching backup from Google Drive...');
+    console.log('[Auto-Restore] Local state empty, fetching backup from Google Drive...');
     const accessToken = await getGoogleAccessToken();
     const backupState = await fetchBackupFromDrive(accessToken);
     
@@ -425,8 +586,11 @@ let state = {};
 
 function saveState() {
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    const serialized = JSON.stringify(state, null, 2);
+    fs.writeFileSync(STATE_FILE, serialized);
     console.log(`[Server] State saved to ${STATE_FILE}`);
+    createStateBackup(serialized);
+    queueDriveBackup(serialized);
   } catch (e) {
     console.error('[Server] Failed to save state:', e.message);
     throw e; // Re-throw to make error visible
@@ -1300,8 +1464,7 @@ const server = http.createServer((req, res) => {
   
   // List sessions endpoint (fetches from OpenClaw)
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
-    // Return sessions from state, or empty if not cached
-    const sessions = state.sessions || [];
+    const sessions = loadSessionsFromOpenClaw();
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ sessions, count: sessions.length }));
     return;
@@ -1341,9 +1504,10 @@ const server = http.createServer((req, res) => {
       const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
       
       console.log(`[Server] History request for session: ${sessionKey}`);
-      console.log(`[Server] Available sessions: ${state.sessions?.map(s => s.key).join(', ')}`);
+      const sessions = loadSessionsFromOpenClaw();
+      console.log(`[Server] Available sessions: ${sessions.map(s => s.key).join(', ')}`);
       
-      const sessionInfo = state.sessions?.find(s => s.key === sessionKey);
+      const sessionInfo = sessions.find(s => s.key === sessionKey);
       
       if (!sessionInfo?.sessionId) {
         console.log(`[Server] Session not found: ${sessionKey}`);
