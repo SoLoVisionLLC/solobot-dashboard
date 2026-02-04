@@ -776,18 +776,17 @@ async function fetchSessions() {
             const result = await gateway.listSessions({});
             let sessions = result?.sessions || [];
 
-            // Filter on client side: include sessions with origin.label matching "SoLoBot Dashboard"
-            // or sessions without any label/origin (custom dashboard sessions)
-            const dashboardLabel = 'SoLoBot Dashboard';
+            // Filter sessions - show all non-system sessions (matches Android app logic)
             sessions = sessions.filter(s => {
-                // Include if origin.label matches
-                if (s.origin?.label === dashboardLabel) return true;
-                // Include if entry.label matches (older format)
-                if (s.label === dashboardLabel) return true;
-                // Include sessions created with custom keys from dashboard (no label/origin)
-                // These are direct sessions without group info
-                if (s.kind === 'direct' && !s.origin?.label && !s.label) return true;
-                return false;
+                // Exclude cron jobs (internal scheduled tasks)
+                if (s.key?.includes(':cron:')) return false;
+                // Exclude health-check sessions
+                if (s.key?.includes('health-check')) return false;
+                // Exclude system noise (heartbeats, message_id entries, etc.)
+                if (s.key?.startsWith('heartbeat:')) return false;
+                if (s.key?.includes(':message_id:')) return false;
+                // Include everything else (main, recovered, direct, webchat, etc.)
+                return true;
             });
 
             // Map gateway response to expected format
