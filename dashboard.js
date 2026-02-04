@@ -1525,6 +1525,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize chat input behavior
     setupChatPageInput();
 
+    // Initialize sidebar agent shortcuts
+    setupSidebarAgents();
+
     // Initialize Gateway client
     initGateway();
 
@@ -2654,6 +2657,21 @@ function setupChatPageInput() {
     });
 
     resizeChatPageInput();
+}
+
+function setupSidebarAgents() {
+    const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
+    if (!agentEls.length) return;
+
+    agentEls.forEach(el => {
+        el.addEventListener('click', async () => {
+            const agentId = el.getAttribute('data-agent');
+            if (!agentId) return;
+            const sessionKey = `agent:${agentId}:main`;
+            showPage('chat');
+            await switchToSession(sessionKey);
+        });
+    });
 }
 
 async function sendChatPageMessage() {
