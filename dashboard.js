@@ -2153,6 +2153,7 @@ function renderChat() {
 
 function createChatMessageElement(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
+    if (!msg.text.trim() && !msg.image) return null;
 
     const isUser = msg.from === 'user';
     const isSystem = msg.from === 'system';
@@ -2494,6 +2495,7 @@ function renderChatPage() {
 // Create a chat page message element (different styling from widget)
 function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
+    if (!msg.text.trim() && !msg.image) return null;
     
     const isUser = msg.from === 'user';
     const isSystem = msg.from === 'system';
