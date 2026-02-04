@@ -3070,26 +3070,39 @@ window.startNewAgentSession = async function(agentId) {
     // Close dropdown first
     toggleChatPageSessionMenu();
     
-    // Generate a new session name with timestamp
+    // Generate default name with timestamp: MM/DD/YYYY hh:mm:ss AM/PM
     const now = new Date();
-    const timestamp = now.toISOString().slice(5, 16).replace('T', '-').replace(':', ''); // MM-DD-HHMM
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = now.getFullYear();
+    let hours = now.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const defaultTimestamp = `${month}/${day}/${year} ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+    
     const agentLabel = getAgentLabel(agentId);
-    const defaultName = `${agentLabel}-${timestamp}`;
 
-    const sessionName = prompt(`Enter name for new ${agentLabel} session:`, defaultName);
-    if (!sessionName || !sessionName.trim()) return;
+    // Prompt only shows timestamp - agent prefix is added automatically
+    const userInput = prompt(`Enter name for new ${agentLabel} session:`, defaultTimestamp);
+    if (!userInput || !userInput.trim()) return;
 
-    // Build the full session key: agent:{agentId}:{sessionName}
-    const sessionKey = `agent:${agentId}:${sessionName.trim()}`;
+    // Always prepend agent ID to the session name (lowercase)
+    const sessionName = `${agentId.toLowerCase()}-${userInput.trim()}`;
+    
+    // Build the full session key: agent:{agentId}:{agentId}-{userInput}
+    const sessionKey = `agent:${agentId}:${sessionName}`;
 
     // Check if session already exists
     if (availableSessions.some(s => s.key === sessionKey)) {
-        showToast(`Session "${sessionName}" already exists. Switching to it.`, 'info');
+        showToast(`Session "${userInput.trim()}" already exists. Switching to it.`, 'info');
         await switchToSession(sessionKey);
         return;
     }
 
-    showToast(`Creating new ${agentLabel} session "${sessionName}"...`, 'info');
+    showToast(`Creating new ${agentLabel} session "${userInput.trim()}"...`, 'info');
 
     // Increment session version to invalidate any in-flight history loads
     sessionVersion++;
@@ -3117,9 +3130,10 @@ window.startNewAgentSession = async function(agentId) {
     const sessionInput = document.getElementById('gateway-session');
     if (sessionInput) sessionInput.value = sessionKey;
 
-    // Update session display
+    // Update session display (show user's input, not the full session name with agent prefix)
+    const displayName = userInput.trim();
     const nameEl = document.getElementById('chat-page-session-name');
-    if (nameEl) nameEl.textContent = sessionName.trim();
+    if (nameEl) nameEl.textContent = displayName;
 
     // Disconnect and reconnect with new session key
     if (gateway && gateway.isConnected()) {
@@ -3131,8 +3145,8 @@ window.startNewAgentSession = async function(agentId) {
     // Add new session to availableSessions locally (gateway won't return it until there's activity)
     const newSession = {
         key: sessionKey,
-        name: sessionName.trim(),
-        displayName: sessionName.trim(),
+        name: sessionName,
+        displayName: displayName,  // Display without agent prefix for cleaner UI
         updatedAt: Date.now(),
         totalTokens: 0,
         model: currentModel || 'unknown',
@@ -3157,7 +3171,7 @@ window.startNewAgentSession = async function(agentId) {
     renderChatPage();
     renderSystemPage();
 
-    showToast(`New ${agentLabel} session "${sessionName}" created`, 'success');
+    showToast(`New ${agentLabel} session "${displayName}" created`, 'success');
 }
 
 // Legacy function - creates session for current agent
