@@ -927,6 +927,10 @@ window.switchToSession = async function(sessionKey) {
         // Refresh dropdown to show new selection
         populateSessionDropdown();
 
+        const agentMatch = sessionKey.match(/^agent:([^:]+):/);
+        if (agentMatch) setActiveSidebarAgent(agentMatch[1]);
+        else setActiveSidebarAgent(null);
+
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
@@ -2659,6 +2663,17 @@ function setupChatPageInput() {
     resizeChatPageInput();
 }
 
+function setActiveSidebarAgent(agentId) {
+    const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
+    agentEls.forEach(el => {
+        if (agentId && el.getAttribute('data-agent') === agentId) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
+    });
+}
+
 function setupSidebarAgents() {
     const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
     if (!agentEls.length) return;
@@ -2670,8 +2685,13 @@ function setupSidebarAgents() {
             const sessionKey = `agent:${agentId}:main`;
             showPage('chat');
             await switchToSession(sessionKey);
+            setActiveSidebarAgent(agentId);
         });
     });
+
+    const currentSession = GATEWAY_CONFIG?.sessionKey || 'main';
+    const match = currentSession.match(/^agent:([^:]+):/);
+    if (match) setActiveSidebarAgent(match[1]);
 }
 
 async function sendChatPageMessage() {
