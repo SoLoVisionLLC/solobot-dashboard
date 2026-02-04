@@ -1682,7 +1682,7 @@
         .chat-page-input-row {
             display: flex;
             gap: var(--space-2);
-            align-items: center;
+            align-items: flex-end;
             background: var(--surface-2);
             border: 1px solid var(--border-default);
             border-radius: var(--radius-md);
@@ -1695,7 +1695,7 @@
             box-shadow: 0 0 0 3px rgba(188, 32, 38, 0.1);
         }
         
-        .chat-page-input-row input {
+        .chat-page-input-row textarea {
             flex: 1;
             background: transparent;
             border: none;
@@ -1703,10 +1703,13 @@
             font-size: 14px;
             color: var(--text-primary);
             padding: 6px 8px;
-            height: 32px;
+            min-height: 32px;
+            line-height: 1.5;
+            resize: none;
+            overflow-y: hidden;
         }
         
-        .chat-page-input-row input::placeholder {
+        .chat-page-input-row textarea::placeholder {
             color: var(--text-muted);
         }
         
@@ -2491,19 +2494,18 @@
                             <!-- Hidden decoy fields to trick password managers -->
                             <input type="text" name="fake_username_field" style="display:none;" tabindex="-1" aria-hidden="true">
                             <input type="password" name="fake_password_field" style="display:none;" tabindex="-1" aria-hidden="true">
-                            <input type="text" 
-                                   id="chat-page-input" 
-                                   name="chat_message_input_field_"
-                                   placeholder="Message SoLoBot..." 
-                                   onkeypress="if(event.key==='Enter' && !event.shiftKey) sendChatPageMessage()"
-                                   onpaste="handleChatPagePaste(event)"
-                                   autocomplete="off"
-                                   autocorrect="off"
-                                   autocapitalize="off"
-                                   spellcheck="false"
-                                   data-lpignore="true"
-                                   data-form-type="other"
-                                   data-1p-ignore="true">
+                            <textarea id="chat-page-input" 
+                                      name="chat_message_input_field_"
+                                      placeholder="Message SoLoBot..." 
+                                      onpaste="handleChatPagePaste(event)"
+                                      autocomplete="off"
+                                      autocorrect="off"
+                                      autocapitalize="off"
+                                      spellcheck="false"
+                                      data-lpignore="true"
+                                      data-form-type="other"
+                                      data-1p-ignore="true"
+                                      rows="1"></textarea>
                             <button onclick="sendChatPageMessage()" class="btn btn-primary">
                                 Send
                             </button>

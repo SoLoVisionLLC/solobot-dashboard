@@ -1522,6 +1522,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     render({ includeSystem: true }); // Initial render includes system page
     updateLastSync();
 
+    // Initialize chat input behavior
+    setupChatPageInput();
+
     // Initialize Gateway client
     initGateway();
 
@@ -2628,6 +2631,30 @@ function clearChatPageImagePreviews() {
     if (input) input.value = '';
 }
 
+function resizeChatPageInput() {
+    const input = document.getElementById('chat-page-input');
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = input.scrollHeight + 'px';
+}
+
+function setupChatPageInput() {
+    const input = document.getElementById('chat-page-input');
+    if (!input) return;
+
+    input.addEventListener('input', resizeChatPageInput);
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.shiftKey) return;
+        if (!gateway || !gateway.isConnected()) return;
+        e.preventDefault();
+        sendChatPageMessage();
+    });
+
+    resizeChatPageInput();
+}
+
 async function sendChatPageMessage() {
     const input = document.getElementById('chat-page-input');
     const text = input.value.trim();
@@ -2650,6 +2677,8 @@ async function sendChatPageMessage() {
     }
     
     input.value = '';
+    resizeChatPageInput();
+    input.focus();
     clearChatPageImagePreviews();
     
     // Force scroll to bottom when user sends
