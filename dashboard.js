@@ -2396,6 +2396,15 @@ function updateScrollToBottomButton() {
     }
 }
 
+function forceRefreshHistory() {
+    if (!gateway || !gateway.isConnected()) return;
+    const pollVersion = sessionVersion;
+    gateway.loadHistory().then(result => {
+        if (pollVersion !== sessionVersion) return;
+        if (result?.messages) mergeHistoryMessages(result.messages);
+    }).catch(() => {});
+}
+
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
     if (!container) {
@@ -4318,6 +4327,9 @@ if (typeof originalShowPage === 'function') {
         originalShowPage(pageName, updateURL);
         if (pageName === 'health') {
             initHealthPage();
+        }
+        if (pageName === 'chat') {
+            forceRefreshHistory();
         }
     };
 }
