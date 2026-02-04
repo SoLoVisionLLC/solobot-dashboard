@@ -2635,7 +2635,8 @@ function resizeChatPageInput() {
     const input = document.getElementById('chat-page-input');
     if (!input) return;
     input.style.height = 'auto';
-    input.style.height = input.scrollHeight + 'px';
+    const maxHeight = 150;
+    input.style.height = Math.min(input.scrollHeight, maxHeight) + 'px';
 }
 
 function setupChatPageInput() {
