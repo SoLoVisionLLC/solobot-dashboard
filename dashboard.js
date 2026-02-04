@@ -774,11 +774,76 @@ function getAgentIdFromSession(sessionKey) {
 }
 
 // Filter sessions to only show those belonging to a specific agent
+// Also includes spawned subagent sessions (agent:main:subagent:*) where the label starts with the agentId
+// Example: agentId="dev" matches:
+//   - agent:dev:main (direct match)
+//   - agent:main:subagent:abc123 with label "dev-avatar-fix" (label prefix match)
 function filterSessionsForAgent(sessions, agentId) {
     return sessions.filter(s => {
+        // Direct match: session belongs to this agent
         const sessAgent = getAgentIdFromSession(s.key);
-        return sessAgent === agentId;
+        if (sessAgent === agentId) return true;
+        
+        // Subagent match: spawned by main but labeled for this agent
+        // Pattern: agent:main:subagent:* with label starting with "{agentId}-"
+        if (s.key?.startsWith('agent:main:subagent:')) {
+            const label = s.displayName || s.name || '';
+            // Label pattern: {agentId}-{taskname} (e.g., "dev-avatar-fix", "cmp-marketing-research")
+            if (label.toLowerCase().startsWith(agentId.toLowerCase() + '-')) {
+                return true;
+            }
+        }
+        
+        return false;
     });
+}
+
+// Check URL parameters for auto-session connection
+function checkUrlSessionParam() {
+    const params = new URLSearchParams(window.location.search);
+    const sessionParam = params.get('session');
+    if (sessionParam) {
+        console.log(`[Dashboard] URL session param detected: ${sessionParam}`);
+        return sessionParam;
+    }
+    return null;
+}
+
+// For subagent sessions (agent:main:subagent:*), determine the correct agent from the label
+// and update currentAgentId so the sidebar highlights correctly
+function handleSubagentSessionAgent() {
+    if (!currentSessionName?.startsWith('agent:main:subagent:')) {
+        return; // Not a subagent session
+    }
+    
+    // Find the session in availableSessions
+    const session = availableSessions.find(s => s.key === currentSessionName);
+    if (!session) {
+        console.log(`[Dashboard] Subagent session not found in available sessions: ${currentSessionName}`);
+        return;
+    }
+    
+    const label = session.displayName || session.name || '';
+    console.log(`[Dashboard] Subagent session label: ${label}`);
+    
+    // Extract agent ID from label pattern: {agentId}-{taskname}
+    const labelMatch = label.match(/^([a-z]+)-/i);
+    if (labelMatch) {
+        const agentFromLabel = labelMatch[1].toLowerCase();
+        console.log(`[Dashboard] Determined agent from label: ${agentFromLabel}`);
+        
+        // Update current agent ID
+        currentAgentId = agentFromLabel;
+        
+        // Update sidebar highlight
+        setActiveSidebarAgent(agentFromLabel);
+        
+        // Update agent name display
+        const agentNameEl = document.getElementById('chat-page-agent-name');
+        if (agentNameEl) {
+            agentNameEl.textContent = getAgentLabel(agentFromLabel);
+        }
+    }
 }
 
 async function fetchSessions() {
@@ -809,6 +874,10 @@ async function fetchSessions() {
             });
 
             console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from gateway (filtered from ${result?.sessions?.length || 0} total)`);
+            
+            // If current session is a subagent, determine the correct agent from its label
+            handleSubagentSessionAgent();
+            
             populateSessionDropdown();
             return availableSessions;
         } catch (e) {
@@ -823,6 +892,10 @@ async function fetchSessions() {
         const data = await response.json();
         availableSessions = data.sessions || [];
         console.log(`[Dashboard] Fetched ${availableSessions.length} sessions from server`);
+        
+        // If current session is a subagent, determine the correct agent from its label
+        handleSubagentSessionAgent();
+        
         populateSessionDropdown();
         return availableSessions;
     } catch (e) {
@@ -987,6 +1060,48 @@ window.switchToSession = async function(sessionKey) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
     }
+}
+
+// Navigate to a session by key - can be called from external links
+// Usage: window.goToSession('agent:main:subagent:abc123')
+// Or via URL: ?session=agent:main:subagent:abc123
+window.goToSession = async function(sessionKey) {
+    if (!sessionKey) {
+        showToast('No session key provided', 'warning');
+        return;
+    }
+    
+    console.log(`[Dashboard] goToSession called with: ${sessionKey}`);
+    
+    // Wait for gateway to be connected
+    if (!gateway || !gateway.isConnected()) {
+        showToast('Connecting to gateway...', 'info');
+        // If not connected, set the session key and let auto-connect handle it
+        GATEWAY_CONFIG.sessionKey = sessionKey;
+        currentSessionName = sessionKey;
+        const sessionInput = document.getElementById('gateway-session');
+        if (sessionInput) sessionInput.value = sessionKey;
+        
+        // Try to connect
+        if (GATEWAY_CONFIG.host) {
+            connectToGateway();
+        } else {
+            showToast('Please configure gateway settings first', 'warning');
+        }
+        return;
+    }
+    
+    // Show chat page first
+    showPage('chat');
+    
+    // Switch to the session
+    await switchToSession(sessionKey);
+}
+
+// Generate a URL for a specific session (for sharing/linking)
+window.getSessionUrl = function(sessionKey) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?session=${encodeURIComponent(sessionKey)}`;
 }
 
 async function saveCurrentChat() {
@@ -1602,6 +1717,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (portEl) portEl.value = GATEWAY_CONFIG.port || 443;
     if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
     if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
+
+    // Check URL for session parameter (?session=agent:main:subagent:abc123)
+    const urlSession = checkUrlSessionParam();
+    if (urlSession) {
+        GATEWAY_CONFIG.sessionKey = urlSession;
+        currentSessionName = urlSession;
+        if (sessionEl) sessionEl.value = urlSession;
+        
+        // Extract agent ID from session key for sidebar highlighting
+        const agentMatch = urlSession.match(/^agent:([^:]+):/);
+        if (agentMatch) {
+            currentAgentId = agentMatch[1];
+        }
+        
+        // If it's a subagent session, try to determine the target agent from the label
+        // We'll do this after sessions are fetched
+        
+        // Clear URL parameter to avoid re-loading on refresh
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        console.log(`[Dashboard] Will connect to session from URL: ${urlSession}`);
+    }
 
     // Auto-connect if we have saved host
     if (GATEWAY_CONFIG.host) {
