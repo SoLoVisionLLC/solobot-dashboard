@@ -1288,20 +1288,30 @@ function loadHistoryMessages(messages) {
     const chatMessages = [];
     const systemMessages = [];
 
+    const extractContentText = (container) => {
+        if (!container) return '';
+        let text = '';
+        if (Array.isArray(container.content)) {
+            for (const part of container.content) {
+                if (part.type === 'text') text += part.text || '';
+                if (part.type === 'input_text') text += part.text || part.input_text || '';
+            }
+        } else if (typeof container.content === 'string') {
+            text = container.content;
+        }
+        if (!text && typeof container.text === 'string') text = container.text;
+        return (text || '').trim();
+    };
+
     messages.forEach(msg => {
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
         }
         
-        let textContent = '';
-        if (msg.content) {
-            for (const part of msg.content) {
-                // Only extract actual text, skip tool calls
-                if (part.type === 'text') {
-                    textContent += part.text || '';
-                }
-            }
+        let textContent = extractContentText(msg);
+        if (!textContent && msg.message) {
+            textContent = extractContentText(msg.message);
         }
 
         const message = {
@@ -1400,6 +1410,21 @@ function mergeHistoryMessages(messages) {
     let newChatCount = 0;
     let newSystemCount = 0;
 
+    const extractContentText = (container) => {
+        if (!container) return '';
+        let text = '';
+        if (Array.isArray(container.content)) {
+            for (const part of container.content) {
+                if (part.type === 'text') text += part.text || '';
+                if (part.type === 'input_text') text += part.text || part.input_text || '';
+            }
+        } else if (typeof container.content === 'string') {
+            text = container.content;
+        }
+        if (!text && typeof container.text === 'string') text = container.text;
+        return (text || '').trim();
+    };
+
     for (const msg of messages) {
         const msgId = msg.id || 'm' + msg.timestamp;
 
@@ -1414,13 +1439,9 @@ function mergeHistoryMessages(messages) {
         }
 
         {
-            let textContent = '';
-            if (msg.content) {
-                for (const part of msg.content) {
-                    if (part.type === 'text') {
-                        textContent += part.text || '';
-                    }
-                }
+            let textContent = extractContentText(msg);
+            if (!textContent && msg.message) {
+                textContent = extractContentText(msg.message);
             }
 
             // Only add if we have content and it's not a duplicate by text
