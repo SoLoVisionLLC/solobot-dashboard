@@ -1374,28 +1374,24 @@ function loadHistoryMessages(messages) {
 function startHistoryPolling() {
     stopHistoryPolling(); // Clear any existing interval
 
-    // Poll every 10 seconds to catch user messages from other clients
-    // Increased interval and added buffer to prevent race conditions
-    historyPollInterval = setInterval(() => {
-        // Skip if not connected, processing, or just finished processing (3 second buffer)
+    const refreshHistory = () => {
         if (!gateway || !gateway.isConnected() || isProcessing) return;
-        if (Date.now() - lastProcessingEndTime < 3000) return;
-
-        // Capture session version to detect stale responses
+        if (Date.now() - lastProcessingEndTime < 1500) return;
         const pollVersion = sessionVersion;
         gateway.loadHistory().then(result => {
-            // Ignore if session changed during async load
-            if (pollVersion !== sessionVersion) {
-                console.log(`[Dashboard] Ignoring stale poll history (version ${pollVersion} != ${sessionVersion})`);
-                return;
-            }
-            if (result?.messages) {
-                mergeHistoryMessages(result.messages);
-            }
-        }).catch(() => {
-            // History poll failed - not critical
-        });
-    }, 3000);
+            if (pollVersion !== sessionVersion) return;
+            if (result?.messages) mergeHistoryMessages(result.messages);
+        }).catch(() => {});
+    };
+
+    // Poll every 3 seconds to catch user messages from other clients
+    historyPollInterval = setInterval(refreshHistory, 3000);
+
+    // Also refresh on focus/visibility to avoid missed polls
+    window.addEventListener('focus', refreshHistory);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refreshHistory();
+    });
 }
 
 function stopHistoryPolling() {
