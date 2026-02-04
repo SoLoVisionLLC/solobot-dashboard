@@ -184,9 +184,10 @@ const DEFAULT_STATE_FILE = './data/default-state.json';
 const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
-const BACKUP_DIR = path.resolve(__dirname, '../dashboard-backups');
+const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
 const BACKUP_PREFIX = 'state-backup-';
 const BACKUP_RETENTION = 10;
+const LATEST_STATE_FILE = path.join(path.dirname(STATE_FILE), 'state.latest.json');
 
 // ============================================
 // Sessions: Read directly from OpenClaw
@@ -247,6 +248,7 @@ const AUTO_RESTORE_ENABLED = GDRIVE_BACKUP_FILE_ID && GDRIVE_CLIENT_ID && GDRIVE
 // Ensure data directories exist
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 function ensureBackupDir() {
   if (!fs.existsSync(BACKUP_DIR)) {
@@ -285,6 +287,7 @@ function createStateBackup(serializedState) {
     const fileName = `${BACKUP_PREFIX}${formatBackupTimestamp(new Date())}.json`;
     const targetPath = path.join(BACKUP_DIR, fileName);
     fs.writeFileSync(targetPath, serializedState);
+    fs.writeFileSync(LATEST_STATE_FILE, serializedState);
     pruneStateBackups();
     console.log(`[Backup] Saved state snapshot to ${fileName}`);
     return targetPath;
