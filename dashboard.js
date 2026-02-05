@@ -3262,10 +3262,20 @@ function createChatPageMessage(msg) {
             avatar.classList.add('user-avatar');
             avatar.textContent = 'U';
         } else {
-            // Bot avatar - SoLoBot image
+            // Bot avatar - agent-specific image and color
+            const agentId = currentAgentId || 'main';
+            avatar.setAttribute('data-agent', agentId);
+            
+            // Get avatar path (fallback to main for agents without custom avatars)
+            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family'].includes(agentId) 
+                ? `/avatars/${agentId === 'main' ? 'solobot' : agentId}.png`
+                : (agentId === 'tax' || agentId === 'sec') 
+                    ? `/avatars/${agentId}.svg`
+                    : '/avatars/solobot.png';
+            
             const avatarImg = document.createElement('img');
-            avatarImg.src = '/avatars/solobot.png';
-            avatarImg.alt = 'SoLoBot';
+            avatarImg.src = avatarPath;
+            avatarImg.alt = getAgentDisplayName(agentId);
             avatarImg.onerror = () => { avatarImg.style.display = 'none'; avatar.textContent = '🤖'; };
             avatar.appendChild(avatarImg);
         }

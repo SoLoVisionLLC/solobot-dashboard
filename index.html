@@ -1429,10 +1429,22 @@
             width: 26px;
             height: 26px;
             border-radius: 50%;
-            border: 1px solid var(--border-default);
+            border: 2px solid var(--border-default);
             object-fit: cover;
             flex-shrink: 0;
+            background: var(--surface-2);
         }
+        
+        /* Agent-specific avatar colors */
+        .agent-avatar[data-agent="main"], .agent-avatar[alt="Main"] { background: #BC2026; border-color: #BC2026; }
+        .agent-avatar[data-agent="dev"], .agent-avatar[alt="DEV"] { background: #6366F1; border-color: #6366F1; }
+        .agent-avatar[data-agent="exec"], .agent-avatar[alt="EXEC"] { background: #F59E0B; border-color: #F59E0B; }
+        .agent-avatar[data-agent="coo"], .agent-avatar[alt="COO"] { background: #10B981; border-color: #10B981; }
+        .agent-avatar[data-agent="cfo"], .agent-avatar[alt="CFO"] { background: #EAB308; border-color: #EAB308; }
+        .agent-avatar[data-agent="cmp"], .agent-avatar[alt="CMP"] { background: #EC4899; border-color: #EC4899; }
+        .agent-avatar[data-agent="family"], .agent-avatar[alt="Family"] { background: #14B8A6; border-color: #14B8A6; }
+        .agent-avatar[data-agent="tax"], .agent-avatar[alt="TAX"] { background: #78716C; border-color: #78716C; }
+        .agent-avatar[data-agent="sec"], .agent-avatar[alt="SEC"] { background: #3B82F6; border-color: #3B82F6; }
         
         .sidebar-footer {
             margin-top: auto; /* Push to bottom of sidebar */
@@ -1875,6 +1887,17 @@
             font-size: 14px;
             border-color: var(--brand-red);
         }
+        
+        /* Chat page agent-specific avatar colors */
+        .chat-page-avatar[data-agent="main"] { background: #BC2026; border-color: #BC2026; }
+        .chat-page-avatar[data-agent="dev"] { background: #6366F1; border-color: #6366F1; }
+        .chat-page-avatar[data-agent="exec"] { background: #F59E0B; border-color: #F59E0B; }
+        .chat-page-avatar[data-agent="coo"] { background: #10B981; border-color: #10B981; }
+        .chat-page-avatar[data-agent="cfo"] { background: #EAB308; border-color: #EAB308; }
+        .chat-page-avatar[data-agent="cmp"] { background: #EC4899; border-color: #EC4899; }
+        .chat-page-avatar[data-agent="family"] { background: #14B8A6; border-color: #14B8A6; }
+        .chat-page-avatar[data-agent="tax"] { background: #78716C; border-color: #78716C; }
+        .chat-page-avatar[data-agent="sec"] { background: #3B82F6; border-color: #3B82F6; }
         
         .chat-page-bubble {
             max-width: 70%;
