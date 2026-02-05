@@ -354,6 +354,13 @@ function isSystemMessage(text, from) {
     // Exact heartbeat matches
     if (trimmed === 'HEARTBEAT_OK') return true;
     
+    // === INTERNAL CONTROL MESSAGES ===
+    // OpenClaw internal signals that should never appear in chat
+    if (trimmed === 'NO_REPLY') return true;
+    if (trimmed === 'REPLY_SKIP') return true;
+    if (trimmed === 'ANNOUNCE_SKIP') return true;
+    if (trimmed.startsWith('Agent-to-agent announce')) return true;
+    
     // System timestamped messages
     if (trimmed.startsWith('System: [')) return true;
     if (trimmed.startsWith('System:')) return true;
