@@ -2665,10 +2665,11 @@ async function sendChatMessage() {
     
     // Add to local display
     if (hasImages) {
-        // Show first image in local preview, note if there are more
+        // Show all images in local preview
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        addLocalChatMessage(displayText, 'user', imagesToSend[0].data);
+        const imageDataArray = imagesToSend.map(img => img.data);
+        addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
     }
@@ -2703,24 +2704,39 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
     if (!state.chat) state.chat = { messages: [] };
     if (!state.system) state.system = { messages: [] };
     
-    // Handle both (text, from, image) and (text, from, model) call signatures
-    // If third param is a string that looks like a model name, treat it as model
-    let image = null;
+    // Handle multiple parameter signatures:
+    // (text, from)
+    // (text, from, image) - single image data URI
+    // (text, from, images) - array of image data URIs
+    // (text, from, model) - model name string
+    // (text, from, image, model)
+    let images = [];
     let messageModel = model;
-    if (imageOrModel && typeof imageOrModel === 'string') {
-        if (imageOrModel.includes('/') || imageOrModel.includes('claude') || imageOrModel.includes('gpt') || imageOrModel.includes('MiniMax')) {
-            messageModel = imageOrModel;
-        } else if (imageOrModel.startsWith('data:')) {
-            image = imageOrModel;
+    
+    if (imageOrModel) {
+        if (Array.isArray(imageOrModel)) {
+            // Array of images
+            images = imageOrModel.filter(img => img && typeof img === 'string' && img.includes('data:'));
+        } else if (typeof imageOrModel === 'string') {
+            if (imageOrModel.includes('data:image') || imageOrModel.includes('data:application')) {
+                // Single image data URI
+                images = [imageOrModel];
+            } else if (imageOrModel.includes('/') || imageOrModel.includes('claude') || imageOrModel.includes('gpt') || imageOrModel.includes('MiniMax')) {
+                // Model name
+                messageModel = imageOrModel;
+            }
         }
     }
+    
+    console.log(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
         id: 'm' + Date.now(),
         from,
         text,
         time: Date.now(),
-        image: image,
+        image: images[0] || null, // Legacy single image field
+        images: images, // New array field
         model: messageModel // Store which AI model generated this response
     };
 
@@ -3538,7 +3554,8 @@ async function sendChatPageMessage() {
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        addLocalChatMessage(displayText, 'user', imagesToSend[0].data);
+        const imageDataArray = imagesToSend.map(img => img.data);
+        addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
     }
