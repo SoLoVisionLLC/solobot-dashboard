@@ -1562,19 +1562,49 @@ function loadHistoryMessages(messages) {
     const chatMessages = [];
     const systemMessages = [];
 
-    const extractContentText = (container) => {
-        if (!container) return '';
+    const extractContent = (container) => {
+        if (!container) return { text: '', images: [] };
         let text = '';
+        let images = [];
+        
         if (Array.isArray(container.content)) {
             for (const part of container.content) {
-                if (part.type === 'text') text += part.text || '';
-                if (part.type === 'input_text') text += part.text || part.input_text || '';
+                if (part.type === 'text') {
+                    text += part.text || '';
+                } else if (part.type === 'input_text') {
+                    text += part.text || part.input_text || '';
+                } else if (part.type === 'image') {
+                    // Image attachment - reconstruct data URI
+                    if (part.content && part.mimeType) {
+                        images.push(`data:${part.mimeType};base64,${part.content}`);
+                    } else if (part.source?.data) {
+                        // Alternative format: source.data with media_type
+                        const mimeType = part.source.media_type || 'image/jpeg';
+                        images.push(`data:${mimeType};base64,${part.source.data}`);
+                    } else if (part.data) {
+                        // Direct data field
+                        images.push(`data:image/jpeg;base64,${part.data}`);
+                    }
+                } else if (part.type === 'image_url' && part.image_url?.url) {
+                    // OpenAI-style image_url format
+                    images.push(part.image_url.url);
+                }
             }
         } else if (typeof container.content === 'string') {
             text = container.content;
         }
+        
+        // Check for attachments array (our send format)
+        if (Array.isArray(container.attachments)) {
+            for (const att of container.attachments) {
+                if (att.type === 'image' && att.content && att.mimeType) {
+                    images.push(`data:${att.mimeType};base64,${att.content}`);
+                }
+            }
+        }
+        
         if (!text && typeof container.text === 'string') text = container.text;
-        return (text || '').trim();
+        return { text: (text || '').trim(), images };
     };
 
     messages.forEach(msg => {
@@ -1583,15 +1613,17 @@ function loadHistoryMessages(messages) {
             return;
         }
         
-        let textContent = extractContentText(msg);
-        if (!textContent && msg.message) {
-            textContent = extractContentText(msg.message);
+        let content = extractContent(msg);
+        if (!content.text && !content.images.length && msg.message) {
+            content = extractContent(msg.message);
         }
 
         const message = {
             id: msg.id || 'm' + Date.now() + Math.random(),
             from: msg.role === 'user' ? 'user' : 'solobot',
-            text: textContent,
+            text: content.text,
+            image: content.images[0] || null, // First image as thumbnail
+            images: content.images, // All images
             time: msg.timestamp || Date.now()
         };
 
@@ -2901,19 +2933,30 @@ function createChatMessageElement(msg) {
     content.style.whiteSpace = 'pre-wrap';
     content.textContent = msg.text; // Use textContent for safety - no HTML injection
 
-    // Image if present - small thumbnail
-    if (msg.image) {
-        const img = document.createElement('img');
-        img.src = msg.image;
-        img.style.maxWidth = '150px';
-        img.style.maxHeight = '100px';
-        img.style.borderRadius = 'var(--radius-md)';
-        img.style.marginBottom = 'var(--space-2)';
-        img.style.cursor = 'pointer';
-        img.style.objectFit = 'cover';
-        img.style.border = '1px solid var(--border-default)';
-        img.onclick = () => openImageModal(msg.image);
-        bubble.appendChild(img);
+    // Images if present - show thumbnails
+    const images = msg.images || (msg.image ? [msg.image] : []);
+    if (images.length > 0) {
+        const imageContainer = document.createElement('div');
+        imageContainer.style.display = 'flex';
+        imageContainer.style.flexWrap = 'wrap';
+        imageContainer.style.gap = '8px';
+        imageContainer.style.marginBottom = 'var(--space-2)';
+        
+        images.forEach((imgSrc, idx) => {
+            const img = document.createElement('img');
+            img.src = imgSrc;
+            img.style.maxWidth = images.length > 1 ? '100px' : '150px';
+            img.style.maxHeight = images.length > 1 ? '80px' : '100px';
+            img.style.borderRadius = 'var(--radius-md)';
+            img.style.cursor = 'pointer';
+            img.style.objectFit = 'cover';
+            img.style.border = '1px solid var(--border-default)';
+            img.title = `Image ${idx + 1} of ${images.length} - Click to view`;
+            img.onclick = () => openImageModal(imgSrc);
+            imageContainer.appendChild(img);
+        });
+        
+        bubble.appendChild(imageContainer);
     }
 
     bubble.appendChild(header);
@@ -3211,13 +3254,27 @@ function createChatPageMessage(msg) {
     const bubble = document.createElement('div');
     bubble.className = 'chat-page-bubble';
     
-    // Image if present
-    if (msg.image) {
-        const img = document.createElement('img');
-        img.src = msg.image;
-        img.className = 'chat-page-bubble-image';
-        img.onclick = () => openImageModal(msg.image);
-        bubble.appendChild(img);
+    // Images if present - show thumbnails
+    const images = msg.images || (msg.image ? [msg.image] : []);
+    if (images.length > 0) {
+        const imageContainer = document.createElement('div');
+        imageContainer.style.display = 'flex';
+        imageContainer.style.flexWrap = 'wrap';
+        imageContainer.style.gap = '8px';
+        imageContainer.style.marginBottom = '8px';
+        
+        images.forEach((imgSrc, idx) => {
+            const img = document.createElement('img');
+            img.src = imgSrc;
+            img.className = 'chat-page-bubble-image';
+            img.style.maxWidth = images.length > 1 ? '120px' : '200px';
+            img.style.cursor = 'pointer';
+            img.title = `Image ${idx + 1} of ${images.length} - Click to view`;
+            img.onclick = () => openImageModal(imgSrc);
+            imageContainer.appendChild(img);
+        });
+        
+        bubble.appendChild(imageContainer);
     }
     
     // Header with sender and time
