@@ -1108,6 +1108,7 @@ window.switchToSession = async function(sessionKey) {
         // 3. Update session config and input field
         currentSessionName = sessionKey;
         GATEWAY_CONFIG.sessionKey = sessionKey;
+        localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
         
@@ -1164,6 +1165,7 @@ window.goToSession = async function(sessionKey) {
         // If not connected, set the session key and let auto-connect handle it
         GATEWAY_CONFIG.sessionKey = sessionKey;
         currentSessionName = sessionKey;
+        localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
         
@@ -3295,6 +3297,7 @@ window.startNewAgentSession = async function(agentId) {
     // Switch gateway to new session
     currentSessionName = sessionKey;
     GATEWAY_CONFIG.sessionKey = sessionKey;
+    localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
 
     // Update session input field
     const sessionInput = document.getElementById('gateway-session');
