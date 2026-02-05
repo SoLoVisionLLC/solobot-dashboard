@@ -907,7 +907,21 @@ async function fetchSessions() {
         const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        const serverSessions = data.sessions || [];
+        const rawServerSessions = data.sessions || [];
+        
+        // Map server sessions to expected format (same as gateway mapping)
+        const serverSessions = rawServerSessions.map(s => {
+            const friendlyName = getFriendlySessionName(s.key);
+            return {
+                key: s.key,
+                name: friendlyName,
+                displayName: s.displayName || friendlyName,
+                updatedAt: s.updatedAt,
+                totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                model: s.model || 'unknown',
+                sessionId: s.sessionId
+            };
+        });
         
         // Merge: server sessions + local sessions not in server
         const serverKeys = new Set(serverSessions.map(s => s.key));
@@ -961,15 +975,15 @@ function populateSessionDropdown() {
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
-                <div class="session-name">${escapeHtml(s.displayName || s.name)}</div>
+                <div class="session-name">${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}</div>
                 <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
             </div>
             <span class="session-model">${s.model}</span>
             <div class="session-actions">
-                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Rename session">
+                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Rename session">
                     ✏️
                 </button>
-                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Delete session" style="color: var(--error);">
+                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Delete session" style="color: var(--error);">
                     🗑️
                 </button>
             </div>
