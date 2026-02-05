@@ -2290,6 +2290,11 @@ async function sendChatMessage() {
     adjustChatInputHeight(input);
     chatInputSelection = { start: 0, end: 0 };
 
+    // Show typing indicator immediately
+    isProcessing = true;
+    renderChat();
+    renderChatPage();
+
     // Send via Gateway WebSocket
     try {
         console.log(`[Chat] Sending message with model: ${currentModel}`);
@@ -3132,6 +3137,9 @@ async function sendChatPageMessage() {
     
     // Force scroll to bottom when user sends
     chatPageUserScrolled = false;
+    
+    // Show typing indicator immediately
+    isProcessing = true;
     
     // Render both areas
     renderChat();
