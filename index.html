@@ -2164,10 +2164,21 @@
             margin-bottom: var(--space-2);
             cursor: pointer;
             transition: transform 0.2s;
+            object-fit: cover;
+            border: 1px solid var(--border-default);
         }
         
         .chat-page-bubble-image:hover {
             transform: scale(1.02);
+        }
+        
+        /* Image preview thumbnails in input area */
+        .image-preview-wrapper img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-default);
         }
         
         /* Empty state */

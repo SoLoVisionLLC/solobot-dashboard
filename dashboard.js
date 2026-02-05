@@ -3283,7 +3283,9 @@ function createChatPageMessage(msg) {
             const img = document.createElement('img');
             img.src = imgSrc;
             img.className = 'chat-page-bubble-image';
-            img.style.maxWidth = images.length > 1 ? '120px' : '200px';
+            img.style.maxWidth = images.length > 1 ? '100px' : '200px';
+            img.style.maxHeight = images.length > 1 ? '100px' : '150px';
+            img.style.objectFit = 'cover';
             img.style.cursor = 'pointer';
             img.title = `Image ${idx + 1} of ${images.length} - Click to view`;
             img.onclick = () => openImageModal(imgSrc);
