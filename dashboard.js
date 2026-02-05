@@ -1805,6 +1805,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize voice input
     initVoiceInput();
+    initPushToTalk();
+    updateVoiceAutoSendUI();
 
     // Populate saved gateway settings
     const hostEl = document.getElementById('gateway-host');
@@ -2098,6 +2100,9 @@ function initSampleData() {
 
 let voiceRecognition = null;
 let voiceInputState = 'idle'; // idle, listening, processing
+let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-send after speech
+let voicePushToTalk = false; // Track if currently in push-to-talk mode
+let lastVoiceTranscript = ''; // Store last transcript for auto-send
 
 function initVoiceInput() {
     // Check for Web Speech API support
@@ -2162,6 +2167,7 @@ function initVoiceInput() {
             input.style.fontStyle = 'normal';
             input.style.color = '';
             input.focus();
+            lastVoiceTranscript = finalTranscript;
             console.log('[Voice] Final transcript:', finalTranscript);
         }
     };
@@ -2189,7 +2195,21 @@ function initVoiceInput() {
                 input.style.color = '';
             }
         }
+        
+        // Auto-send if enabled and we have a transcript
+        if (voiceAutoSend && lastVoiceTranscript.trim()) {
+            console.log('[Voice] Auto-sending:', lastVoiceTranscript);
+            // Determine which send function to use based on target
+            if (activeVoiceTarget === 'chat-page-input') {
+                sendChatPageMessage();
+            } else {
+                sendChatMessage();
+            }
+            lastVoiceTranscript = '';
+        }
+        
         setVoiceState('idle');
+        voicePushToTalk = false;
         activeVoiceTarget = 'chat-input'; // Reset target
     };
 
@@ -2300,6 +2320,64 @@ function toggleVoiceInput() {
     if (voiceInputState !== 'listening') {
         activeVoiceTarget = 'chat-input';
     }
+}
+
+// Toggle auto-send setting
+function toggleVoiceAutoSend() {
+    voiceAutoSend = !voiceAutoSend;
+    localStorage.setItem('voice_auto_send', voiceAutoSend);
+    updateVoiceAutoSendUI();
+    showToast(voiceAutoSend ? 'Voice auto-send enabled' : 'Voice auto-send disabled', 'info');
+}
+
+function updateVoiceAutoSendUI() {
+    const toggles = document.querySelectorAll('.voice-auto-send-toggle');
+    toggles.forEach(toggle => {
+        toggle.classList.toggle('active', voiceAutoSend);
+        toggle.title = voiceAutoSend ? 'Auto-send ON (click to disable)' : 'Auto-send OFF (click to enable)';
+    });
+}
+
+// Push-to-talk: Hold spacebar to speak
+function initPushToTalk() {
+    document.addEventListener('keydown', (e) => {
+        // Only trigger if spacebar, not already listening, and not typing in an input
+        if (e.code === 'Space' && 
+            !voicePushToTalk && 
+            voiceInputState !== 'listening' &&
+            !isTypingInInput(e.target)) {
+            
+            e.preventDefault();
+            voicePushToTalk = true;
+            
+            // Determine which input to target based on current page
+            const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
+            activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
+            
+            console.log('[Voice] Push-to-talk started, target:', activeVoiceTarget);
+            startVoiceInput();
+        }
+    });
+    
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' && voicePushToTalk) {
+            e.preventDefault();
+            console.log('[Voice] Push-to-talk released');
+            voicePushToTalk = false;
+            stopVoiceInput();
+        }
+    });
+    
+    console.log('[Voice] Push-to-talk initialized (hold spacebar to speak)');
+}
+
+// Check if user is typing in an input field
+function isTypingInInput(element) {
+    if (!element) return false;
+    const tagName = element.tagName.toLowerCase();
+    const isEditable = element.isContentEditable;
+    const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+    return isInput || isEditable;
 }
 
 // ===================
