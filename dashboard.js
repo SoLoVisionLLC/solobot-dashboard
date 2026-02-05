@@ -2134,18 +2134,31 @@ function initVoiceInput() {
     voiceRecognition.lang = 'en-US';
 
     voiceRecognition.onstart = () => {
-        console.log('[Voice] Started listening');
+        console.log('[Voice] Started listening, target input:', activeVoiceTarget);
+        lastVoiceTranscript = ''; // Reset transcript
         setVoiceState('listening');
+        
+        // Focus the target input
+        const input = document.getElementById(activeVoiceTarget);
+        if (input) {
+            input.focus();
+            input.placeholder = 'Listening...';
+        }
     };
 
     voiceRecognition.onresult = (event) => {
+        console.log('[Voice] onresult fired, target:', activeVoiceTarget);
         const input = document.getElementById(activeVoiceTarget);
-        if (!input) return;
+        if (!input) {
+            console.error('[Voice] Input not found:', activeVoiceTarget);
+            return;
+        }
 
         let interimTranscript = '';
         let finalTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        // Process all results
+        for (let i = 0; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
                 finalTranscript += transcript;
@@ -2154,21 +2167,34 @@ function initVoiceInput() {
             }
         }
 
-        // Show interim results in input
-        if (interimTranscript) {
-            input.value = interimTranscript;
-            input.style.fontStyle = 'italic';
-            input.style.color = 'var(--text-muted)';
+        // Combine: show final + interim (interim in progress)
+        const displayText = finalTranscript + interimTranscript;
+        console.log('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
+
+        // Always update the input with current text
+        if (displayText) {
+            input.value = displayText;
+            
+            // Style based on whether we have final or interim
+            if (interimTranscript && !finalTranscript) {
+                // All interim - show as in-progress
+                input.style.fontStyle = 'italic';
+                input.style.opacity = '0.8';
+            } else {
+                // Has final content
+                input.style.fontStyle = 'normal';
+                input.style.opacity = '1';
+            }
+            
+            // Keep input focused and cursor at end
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
         }
 
-        // When we have final results, update properly
+        // Store final transcript for auto-send
         if (finalTranscript) {
-            input.value = finalTranscript;
-            input.style.fontStyle = 'normal';
-            input.style.color = '';
-            input.focus();
             lastVoiceTranscript = finalTranscript;
-            console.log('[Voice] Final transcript:', finalTranscript);
+            console.log('[Voice] Final transcript stored:', finalTranscript);
         }
     };
 
@@ -2186,13 +2212,19 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onend = () => {
-        console.log('[Voice] Ended');
+        console.log('[Voice] Ended, last transcript:', lastVoiceTranscript);
         // Reset styling on both inputs
         for (const inputId of ['chat-input', 'chat-page-input']) {
             const input = document.getElementById(inputId);
             if (input) {
                 input.style.fontStyle = 'normal';
-                input.style.color = '';
+                input.style.opacity = '1';
+                // Reset placeholder
+                if (inputId === 'chat-input') {
+                    input.placeholder = 'Type a message...';
+                } else {
+                    input.placeholder = 'Message SoLoBot...';
+                }
             }
         }
         
