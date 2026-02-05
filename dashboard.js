@@ -1491,6 +1491,15 @@ function handleChatEvent(event) {
 
     // Handle assistant messages
     switch (eventState) {
+        case 'start':
+        case 'thinking':
+            // AI has started processing - show typing indicator
+            isProcessing = true;
+            streamingText = '';  // Clear any stale streaming text
+            renderChat();
+            renderChatPage();
+            break;
+            
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
             // Safety: If we have significant streaming content and new content is much shorter,
@@ -2423,6 +2432,19 @@ function renderChat() {
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
+    
+    // Show typing indicator when processing but no streaming text yet
+    if (isProcessing && !streamingText) {
+        const typingIndicator = document.createElement('div');
+        typingIndicator.className = 'typing-indicator';
+        typingIndicator.innerHTML = `
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+        `;
+        container.appendChild(typingIndicator);
+    }
 
     // Auto-scroll if was at bottom, otherwise maintain position
     if (wasAtBottom) {
@@ -2763,6 +2785,20 @@ function renderChatPage() {
             isStreaming: true
         });
         if (streamingMsg) container.appendChild(streamingMsg);
+    }
+    
+    // Show typing indicator when processing but no streaming text yet
+    if (isProcessing && !streamingText) {
+        const typingIndicator = document.createElement('div');
+        typingIndicator.className = 'typing-indicator';
+        typingIndicator.style.cssText = 'margin: 12px 0 12px 12px;';
+        typingIndicator.innerHTML = `
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+        `;
+        container.appendChild(typingIndicator);
     }
     
     // Smart scroll behavior - only auto-scroll if user was truly at the bottom
