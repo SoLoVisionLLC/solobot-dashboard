@@ -1803,6 +1803,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Gateway client
     initGateway();
 
+    // Initialize voice input
+    initVoiceInput();
+
     // Populate saved gateway settings
     const hostEl = document.getElementById('gateway-host');
     const portEl = document.getElementById('gateway-port');
@@ -2087,6 +2090,220 @@ function initSampleData() {
 
 // ===================
 // CHAT FUNCTIONS (Gateway WebSocket)
+// ===================
+
+// ===================
+// VOICE INPUT (Web Speech API)
+// ===================
+
+let voiceRecognition = null;
+let voiceInputState = 'idle'; // idle, listening, processing
+
+function initVoiceInput() {
+    // Check for Web Speech API support
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    // Update both voice buttons
+    const btns = [
+        document.getElementById('voice-input-btn'),
+        document.getElementById('voice-input-btn-chatpage')
+    ];
+    
+    if (!SpeechRecognition) {
+        for (const btn of btns) {
+            if (btn) {
+                btn.disabled = true;
+                btn.title = 'Voice input not supported in this browser';
+                btn.innerHTML = '<span class="voice-unsupported">🎤✗</span>';
+            }
+        }
+        console.log('[Voice] Web Speech API not supported');
+        return;
+    }
+    
+    if (btns.every(b => !b)) return;
+
+    voiceRecognition = new SpeechRecognition();
+    voiceRecognition.continuous = false;
+    voiceRecognition.interimResults = true;
+    voiceRecognition.lang = 'en-US';
+
+    voiceRecognition.onstart = () => {
+        console.log('[Voice] Started listening');
+        setVoiceState('listening');
+    };
+
+    voiceRecognition.onresult = (event) => {
+        const input = document.getElementById(activeVoiceTarget);
+        if (!input) return;
+
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+
+        // Show interim results in input
+        if (interimTranscript) {
+            input.value = interimTranscript;
+            input.style.fontStyle = 'italic';
+            input.style.color = 'var(--text-muted)';
+        }
+
+        // When we have final results, update properly
+        if (finalTranscript) {
+            input.value = finalTranscript;
+            input.style.fontStyle = 'normal';
+            input.style.color = '';
+            input.focus();
+            console.log('[Voice] Final transcript:', finalTranscript);
+        }
+    };
+
+    voiceRecognition.onerror = (event) => {
+        console.error('[Voice] Error:', event.error);
+        setVoiceState('idle');
+        
+        if (event.error === 'not-allowed') {
+            showToast('Microphone access denied. Please allow microphone in browser settings.', 'error');
+        } else if (event.error === 'no-speech') {
+            showToast('No speech detected. Try again.', 'info');
+        } else if (event.error !== 'aborted') {
+            showToast(`Voice error: ${event.error}`, 'error');
+        }
+    };
+
+    voiceRecognition.onend = () => {
+        console.log('[Voice] Ended');
+        // Reset styling on both inputs
+        for (const inputId of ['chat-input', 'chat-page-input']) {
+            const input = document.getElementById(inputId);
+            if (input) {
+                input.style.fontStyle = 'normal';
+                input.style.color = '';
+            }
+        }
+        setVoiceState('idle');
+        activeVoiceTarget = 'chat-input'; // Reset target
+    };
+
+    console.log('[Voice] Initialized successfully');
+}
+
+function toggleVoiceInput() {
+    if (!voiceRecognition) {
+        showToast('Voice input not available', 'error');
+        return;
+    }
+
+    if (voiceInputState === 'listening') {
+        stopVoiceInput();
+    } else {
+        startVoiceInput();
+    }
+}
+
+function startVoiceInput() {
+    if (!voiceRecognition) return;
+    
+    try {
+        voiceRecognition.start();
+        console.log('[Voice] Starting...');
+    } catch (e) {
+        console.error('[Voice] Start error:', e);
+        // May already be running
+        if (e.message.includes('already started')) {
+            stopVoiceInput();
+        }
+    }
+}
+
+function stopVoiceInput() {
+    if (!voiceRecognition) return;
+    
+    try {
+        voiceRecognition.stop();
+        console.log('[Voice] Stopping...');
+    } catch (e) {
+        console.error('[Voice] Stop error:', e);
+    }
+}
+
+function setVoiceState(state, targetInput = 'chat-input') {
+    voiceInputState = state;
+    
+    // Update both buttons to stay in sync
+    const btns = [
+        { btn: document.getElementById('voice-input-btn'), mic: document.getElementById('voice-icon-mic'), stop: document.getElementById('voice-icon-stop') },
+        { btn: document.getElementById('voice-input-btn-chatpage'), mic: document.getElementById('voice-icon-mic-chatpage'), stop: document.getElementById('voice-icon-stop-chatpage') }
+    ];
+    
+    for (const { btn, mic, stop } of btns) {
+        if (!btn) continue;
+        
+        btn.classList.remove('listening', 'processing');
+        
+        switch (state) {
+            case 'listening':
+                btn.classList.add('listening');
+                btn.title = 'Listening... (click to stop)';
+                if (mic) mic.style.display = 'none';
+                if (stop) stop.style.display = 'block';
+                break;
+            case 'processing':
+                btn.classList.add('processing');
+                btn.title = 'Processing...';
+                break;
+            default: // idle
+                btn.title = 'Voice input (click to speak)';
+                if (mic) mic.style.display = 'block';
+                if (stop) stop.style.display = 'none';
+                break;
+        }
+    }
+}
+
+// Active voice target tracks which input field is receiving voice
+let activeVoiceTarget = 'chat-input';
+
+function toggleVoiceInputChatPage() {
+    activeVoiceTarget = 'chat-page-input';
+    toggleVoiceInput();
+}
+
+// Override the original toggleVoiceInput to use the sidebar input
+const originalToggleVoiceInput = toggleVoiceInput;
+function toggleVoiceInput() {
+    // If called directly (not via chat page), target sidebar
+    if (activeVoiceTarget !== 'chat-page-input') {
+        activeVoiceTarget = 'chat-input';
+    }
+    
+    if (!voiceRecognition) {
+        showToast('Voice input not available', 'error');
+        return;
+    }
+
+    if (voiceInputState === 'listening') {
+        stopVoiceInput();
+    } else {
+        startVoiceInput();
+    }
+    
+    // Reset target after toggle
+    if (voiceInputState !== 'listening') {
+        activeVoiceTarget = 'chat-input';
+    }
+}
+
+// ===================
+// IMAGE HANDLING
 // ===================
 
 // Image handling - supports multiple images
