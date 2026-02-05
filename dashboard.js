@@ -2129,9 +2129,10 @@ function initVoiceInput() {
     if (btns.every(b => !b)) return;
 
     voiceRecognition = new SpeechRecognition();
-    voiceRecognition.continuous = false;
+    voiceRecognition.continuous = true; // Keep listening until manually stopped
     voiceRecognition.interimResults = true;
     voiceRecognition.lang = 'en-US';
+    voiceRecognition.maxAlternatives = 1;
 
     voiceRecognition.onstart = () => {
         console.log('[Voice] Started listening, target input:', activeVoiceTarget);
@@ -2142,7 +2143,23 @@ function initVoiceInput() {
         const input = document.getElementById(activeVoiceTarget);
         if (input) {
             input.focus();
-            input.placeholder = 'Listening...';
+            input.placeholder = 'Listening... (speak now)';
+        }
+    };
+    
+    voiceRecognition.onaudiostart = () => {
+        console.log('[Voice] Audio capture started - microphone is working');
+    };
+    
+    voiceRecognition.onsoundstart = () => {
+        console.log('[Voice] Sound detected');
+    };
+    
+    voiceRecognition.onspeechstart = () => {
+        console.log('[Voice] Speech detected - processing...');
+        const input = document.getElementById(activeVoiceTarget);
+        if (input) {
+            input.placeholder = 'Hearing you...';
         }
     };
 
@@ -2199,14 +2216,26 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onerror = (event) => {
-        console.error('[Voice] Error:', event.error);
-        setVoiceState('idle');
+        console.error('[Voice] Error:', event.error, event.message || '');
         
         if (event.error === 'not-allowed') {
-            showToast('Microphone access denied. Please allow microphone in browser settings.', 'error');
+            setVoiceState('idle');
+            showToast('Microphone access denied. Click the lock icon in your browser address bar to allow.', 'error');
         } else if (event.error === 'no-speech') {
-            showToast('No speech detected. Try again.', 'info');
+            // Don't stop on no-speech if continuous mode - just keep listening
+            console.log('[Voice] No speech detected yet, still listening...');
+            // Only show toast if we're ending
+            if (!voiceRecognition || voiceInputState !== 'listening') {
+                showToast('No speech detected. Make sure your microphone is working.', 'info');
+            }
+        } else if (event.error === 'audio-capture') {
+            setVoiceState('idle');
+            showToast('No microphone found. Please connect a microphone and try again.', 'error');
+        } else if (event.error === 'network') {
+            setVoiceState('idle');
+            showToast('Network error. Speech recognition requires internet connection.', 'error');
         } else if (event.error !== 'aborted') {
+            setVoiceState('idle');
             showToast(`Voice error: ${event.error}`, 'error');
         }
     };
