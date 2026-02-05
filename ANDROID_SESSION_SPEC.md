@@ -32,6 +32,7 @@ Examples:
 | `dev` | DEV |
 | `family` | Family Coordinator |
 | `tax` | Tax Compliance |
+| `sec` | Security Operations |
 
 ## Behavior Changes
 
@@ -124,6 +125,7 @@ fun getAgentLabel(agentId: String): String {
         "dev" -> "DEV"
         "family" -> "Family"
         "tax" -> "Tax"
+        "sec" -> "SEC"
         else -> agentId.uppercase()
     }
 }
