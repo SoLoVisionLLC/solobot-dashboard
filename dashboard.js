@@ -763,6 +763,15 @@ window.toggleChatPageSessionMenu = function() {
     menu.classList.toggle('hidden');
 }
 
+// Close session menu when clicking outside
+document.addEventListener('click', function(e) {
+    const menu = document.getElementById('chat-page-session-menu');
+    const trigger = e.target.closest('[onclick*="toggleChatPageSessionMenu"]');
+    if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !trigger) {
+        menu.classList.add('hidden');
+    }
+});
+
 // Session Management
 let availableSessions = [];
 let currentAgentId = 'main'; // Track which agent's sessions we're viewing
@@ -960,6 +969,9 @@ function populateSessionDropdown() {
                 <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Rename session">
                     ✏️
                 </button>
+                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name)}')" title="Delete session" style="color: var(--error);">
+                    🗑️
+                </button>
             </div>
         </div>
         `;
@@ -1026,6 +1038,39 @@ window.editSessionName = function(sessionKey, currentName) {
         console.error('[Dashboard] Failed to rename session:', e);
         showToast('Failed to rename session', 'error');
     });
+}
+
+window.deleteSession = async function(sessionKey, sessionName) {
+    // Don't allow deleting the current active session
+    if (sessionKey === currentSessionName) {
+        showToast('Cannot delete the active session. Switch to another session first.', 'warning');
+        return;
+    }
+    
+    // Confirm deletion
+    if (!confirm(`Delete session "${sessionName}"?\n\nThis will permanently delete all messages in this session.`)) {
+        return;
+    }
+    
+    try {
+        // Use gateway RPC to delete the session
+        if (gateway && gateway.isConnected()) {
+            const result = await gateway.request('sessions.delete', { sessionKey });
+            if (result && result.ok) {
+                showToast(`Session "${sessionName}" deleted`, 'success');
+                // Remove from local list
+                availableSessions = availableSessions.filter(s => s.key !== sessionKey);
+                populateSessionDropdown();
+            } else {
+                showToast(`Failed to delete: ${result?.error || 'Unknown error'}`, 'error');
+            }
+        } else {
+            showToast('Not connected to gateway', 'error');
+        }
+    } catch (e) {
+        console.error('[Dashboard] Failed to delete session:', e);
+        showToast('Failed to delete session: ' + e.message, 'error');
+    }
 }
 
 window.switchToSession = async function(sessionKey) {
