@@ -865,6 +865,59 @@ function getConfiguredModels() {
 let currentProvider = 'anthropic';
 let currentModel = 'anthropic/claude-opus-4-5';
 
+/**
+ * Sync the model dropdown and display elements with the actual model in use.
+ * Called when we get model info from gateway connect or chat responses.
+ */
+function syncModelDisplay(model, provider) {
+    if (!model || model === currentModel) return;
+    
+    console.log(`[Dashboard] Model sync: ${currentModel} → ${model}`);
+    currentModel = model;
+    if (provider) currentProvider = provider;
+    
+    // Update localStorage
+    localStorage.setItem('selected_model', model);
+    if (provider) localStorage.setItem('selected_provider', provider);
+    
+    // Update display elements
+    const modelNameEl = document.getElementById('model-name');
+    const currentModelDisplay = document.getElementById('current-model-display');
+    if (modelNameEl) modelNameEl.textContent = model;
+    if (currentModelDisplay) currentModelDisplay.textContent = model;
+    
+    // Update provider display
+    if (provider) {
+        const providerNameEl = document.getElementById('provider-name');
+        const currentProviderDisplay = document.getElementById('current-provider-display');
+        const providerSelectEl = document.getElementById('provider-select');
+        if (providerNameEl) providerNameEl.textContent = provider;
+        if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
+        if (providerSelectEl) providerSelectEl.value = provider;
+    }
+    
+    // Update the model dropdown selection
+    const modelSelect = document.getElementById('model-select');
+    const settingModel = document.getElementById('setting-model');
+    [modelSelect, settingModel].forEach(select => {
+        if (!select) return;
+        // Try to select the matching option
+        const options = Array.from(select.options);
+        const match = options.find(o => o.value === model);
+        if (match) {
+            select.value = model;
+        } else {
+            // Model not in dropdown - add it dynamically
+            const shortName = model.split('/').pop() || model;
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = shortName;
+            option.selected = true;
+            select.appendChild(option);
+        }
+    });
+}
+
 // Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', async function() {
     try {
@@ -1519,6 +1572,11 @@ function initGateway() {
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
             
+            // Sync model display from server info
+            const serverModel = localStorage.getItem('server_model');
+            const serverProvider = localStorage.getItem('server_provider');
+            if (serverModel) syncModelDisplay(serverModel, serverProvider);
+            
             // Update session name displays (use friendly name without agent prefix)
             currentSessionName = sessionKey;
             const friendlyName = getFriendlySessionName(sessionKey);
@@ -1711,10 +1769,11 @@ function handleChatEvent(event) {
         return;
     }
     
-    // Track the current model being used for responses
+    // Track the current model being used for responses and sync UI
     if (model) {
         window._lastResponseModel = model;
         window._lastResponseProvider = provider;
+        syncModelDisplay(model, provider);
     }
 
     // Handle user messages from other clients (WebUI, Telegram, etc.)
