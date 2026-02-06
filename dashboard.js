@@ -2260,9 +2260,32 @@ function mergeHistoryMessages(messages) {
         // Persist system messages (chat comes from Gateway)
         persistSystemMessages();
 
-        renderChat();
-        renderChatPage();
-        renderSystemPage();
+        // Don't re-render if user has text selected (would destroy their selection)
+        const selection = window.getSelection();
+        const hasSelection = selection && selection.toString().trim().length > 0;
+        if (!hasSelection) {
+            renderChat();
+            renderChatPage();
+            renderSystemPage();
+        } else {
+            // Defer render until selection is cleared
+            console.log('[Dashboard] Deferring render — text is selected');
+            if (!window._pendingRender) {
+                window._pendingRender = true;
+                const checkSelection = () => {
+                    const sel = window.getSelection();
+                    if (!sel || sel.toString().trim().length === 0) {
+                        window._pendingRender = false;
+                        renderChat();
+                        renderChatPage();
+                        renderSystemPage();
+                    } else {
+                        requestAnimationFrame(checkSelection);
+                    }
+                };
+                requestAnimationFrame(checkSelection);
+            }
+        }
     }
 }
 
