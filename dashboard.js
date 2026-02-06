@@ -707,9 +707,56 @@ window.refreshModels = async function() {
     }
 }
 
-window.changeModel = async function() {
-    // Support both model-select and setting-model IDs
-    const modelSelect = document.getElementById('model-select') || document.getElementById('setting-model');
+/**
+ * Header dropdown: change model for the CURRENT SESSION only.
+ * Uses sessions.patch to set a per-session model override.
+ */
+window.changeSessionModel = async function() {
+    const modelSelect = document.getElementById('model-select');
+    const selectedModel = modelSelect?.value;
+    
+    if (!selectedModel) {
+        showToast('Please select a model', 'warning');
+        return;
+    }
+    
+    if (!gateway || !gateway.isConnected()) {
+        showToast('Not connected to gateway', 'warning');
+        return;
+    }
+    
+    try {
+        const sessionKey = GATEWAY_CONFIG.sessionKey || 'main';
+        console.log(`[Dashboard] Setting session model: ${selectedModel} (session: ${sessionKey})`);
+        
+        await gateway.patchSession(sessionKey, { model: selectedModel });
+        
+        // Update local state
+        currentModel = selectedModel;
+        const provider = selectedModel.split('/')[0];
+        currentProvider = provider;
+        localStorage.setItem('selected_model', selectedModel);
+        localStorage.setItem('selected_provider', provider);
+        
+        // Update settings display
+        const currentModelDisplay = document.getElementById('current-model-display');
+        if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
+        const currentProviderDisplay = document.getElementById('current-provider-display');
+        if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
+        
+        showToast(`Session model → ${selectedModel.split('/').pop()}`, 'success');
+    } catch (error) {
+        console.error('[Dashboard] Failed to set session model:', error);
+        showToast(`Failed: ${error.message}`, 'error');
+    }
+};
+
+/**
+ * Settings: change the GLOBAL DEFAULT model for all agents.
+ * Patches openclaw.json via the server API and triggers gateway restart.
+ */
+window.changeGlobalModel = async function() {
+    const modelSelect = document.getElementById('setting-model');
     const selectedModel = modelSelect?.value;
     
     if (!selectedModel) {
@@ -723,84 +770,63 @@ window.changeModel = async function() {
     }
     
     try {
-        console.log(`[Dashboard] Attempting to change model to: ${selectedModel}`);
+        console.log(`[Dashboard] Changing global default model to: ${selectedModel}`);
         
         const response = await fetch('/api/models/set', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ modelId: selectedModel })
         });
         
         const result = await response.json();
         
         if (response.ok) {
-            console.log(`[Dashboard] Model successfully changed to: ${selectedModel}`);
-
-            // Update state (with null checks)
-            const providerSelectEl = document.getElementById('provider-select');
             currentModel = selectedModel;
-            if (providerSelectEl) currentProvider = providerSelectEl.value;
-
-            // Sync to localStorage so gateway client uses correct model
-            localStorage.setItem('selected_provider', currentProvider);
-            localStorage.setItem('selected_model', currentModel);
-
-            // Update displays
-            const modelNameEl = document.getElementById('model-name');
-            const currentModelDisplay = document.getElementById('current-model-display');
-
-            if (modelNameEl) modelNameEl.textContent = selectedModel;
-            if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
-
-            // Refresh model list in settings
-            if (providerSelectEl) await updateModelDropdown(providerSelectEl.value);
-
-            // Gateway will automatically reload when the server updates openclaw.json
-            showToast(`Model changed to ${selectedModel}. System updating...`, 'success');
-        } else {
-            console.error('[Dashboard] Failed to change model:', result);
-            showToast(`Failed to change model: ${result.error || 'Unknown error'}`, 'error');
+            const provider = selectedModel.split('/')[0];
+            currentProvider = provider;
+            localStorage.setItem('selected_provider', provider);
+            localStorage.setItem('selected_model', selectedModel);
             
-            // Make error visible - don't hide it
-            throw new Error(`Model change failed: ${result.error || 'Unknown error'}`);
+            // Update all displays
+            const currentModelDisplay = document.getElementById('current-model-display');
+            const currentProviderDisplay = document.getElementById('current-provider-display');
+            if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
+            if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
+            
+            // Sync header dropdown
+            selectModelInDropdowns(selectedModel);
+            
+            showToast(`Global default → ${selectedModel.split('/').pop()}. Gateway restarting...`, 'success');
+        } else {
+            showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
         }
     } catch (error) {
-        console.error('[Dashboard] Error changing model:', error);
-        showToast(`Failed to change model: ${error.message}`, 'error');
-        
-        // Re-throw to make error visible
-        throw error;
+        console.error('[Dashboard] Error changing global model:', error);
+        showToast(`Failed: ${error.message}`, 'error');
     }
 };
 
+// Legacy alias — keep for any old references
+window.changeModel = window.changeSessionModel;
+
 async function updateModelDropdown(provider) {
-    // Support both model-select and setting-model IDs
-    const modelSelect = document.getElementById('model-select') || document.getElementById('setting-model');
-    if (!modelSelect) {
-        console.warn('[Dashboard] No model select element found (tried model-select and setting-model)');
-        return;
-    }
-    
     const models = await getModelsForProvider(provider);
     
-    // Clear current options
-    modelSelect.innerHTML = '';
+    // Populate both dropdowns independently
+    const selects = [
+        document.getElementById('model-select'),
+        document.getElementById('setting-model')
+    ].filter(Boolean);
     
-    // Add new options
-    models.forEach(model => {
-        const option = document.createElement('option');
-        option.value = model.value;
-        option.textContent = model.name;
-        if (model.selected) option.selected = true;
-        modelSelect.appendChild(option);
-    });
-    
-    // Also update setting-model if it's a different element
-    const settingModel = document.getElementById('setting-model');
-    if (settingModel && settingModel !== modelSelect) {
-        settingModel.innerHTML = modelSelect.innerHTML;
+    for (const select of selects) {
+        select.innerHTML = '';
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.value;
+            option.textContent = model.name;
+            if (model.selected) option.selected = true;
+            select.appendChild(option);
+        });
     }
 }
 

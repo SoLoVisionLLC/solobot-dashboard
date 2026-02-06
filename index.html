@@ -2654,12 +2654,9 @@
                     </div>
                     <div>
                         Model: 
-                        <select id="model-select" class="header-select" onchange="changeModel()">
+                        <select id="model-select" class="header-select" onchange="changeSessionModel()" title="Change model for this session">
                             <!-- Populated dynamically -->
                         </select>
-                        <button class="header-select" onclick="changeModel()" title="Apply selected model" style="margin-left: 5px; padding: 4px 8px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            Apply
-                        </button>
                     </div>
                 </div>
 
@@ -3530,15 +3527,19 @@
                     </div>
                     <div class="setting-row">
                         <div class="setting-info">
-                            <div class="setting-title">Change Model</div>
-                            <div class="setting-desc">Select a different AI model</div>
+                            <div class="setting-title">Change Default Model</div>
+                            <div class="setting-desc">Change the global default for all agents</div>
                         </div>
-                        <select id="setting-model" onchange="changeModel()" class="select">
+                        <select id="setting-model" class="select">
                             <!-- Populated dynamically -->
                         </select>
+                        <button onclick="changeGlobalModel()" class="btn btn-primary" style="margin-left: 8px; padding: 4px 12px; font-size: 12px;" title="Apply as global default">
+                            Apply
+                        </button>
                     </div>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2);">
-                        Model changes take effect immediately for new conversations
+                        ⚡ Header dropdown changes the current session only<br>
+                        🌐 This setting changes the global default (restarts gateway)
                     </p>
                 </div>
             </div>
