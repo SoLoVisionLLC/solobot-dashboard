@@ -2227,23 +2227,26 @@ function initVoiceInput() {
         const displayText = finalTranscript + interimTranscript;
         console.log('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
 
-        // Always update the input with current text
-        if (displayText) {
-            input.value = displayText;
-            
-            // Style based on whether we have final or interim
-            if (interimTranscript && !finalTranscript) {
-                // All interim - show as in-progress
-                input.style.fontStyle = 'italic';
-                input.style.opacity = '0.8';
-            } else {
-                // Has final content
-                input.style.fontStyle = 'normal';
-                input.style.opacity = '1';
-            }
-            
-            // Keep input focused and cursor at end
-            input.focus();
+        // Always update the input with current text (even if empty during pauses)
+        input.value = displayText;
+        
+        // Style based on whether we have final or interim
+        if (interimTranscript) {
+            // Has interim - show as in-progress with subtle indicator
+            input.style.fontStyle = 'italic';
+            input.style.color = 'var(--text-secondary)';
+        } else if (finalTranscript) {
+            // Only final content - solid style
+            input.style.fontStyle = 'normal';
+            input.style.color = 'var(--text-primary)';
+        }
+        
+        // Trigger input event to handle auto-resize and any listeners
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // Keep input focused and cursor at end
+        input.focus();
+        if (input.setSelectionRange) {
             input.setSelectionRange(input.value.length, input.value.length);
         }
 
@@ -2286,7 +2289,7 @@ function initVoiceInput() {
             const input = document.getElementById(inputId);
             if (input) {
                 input.style.fontStyle = 'normal';
-                input.style.opacity = '1';
+                input.style.color = 'var(--text-primary)';
                 // Reset placeholder
                 if (inputId === 'chat-input') {
                     input.placeholder = 'Type a message...';
