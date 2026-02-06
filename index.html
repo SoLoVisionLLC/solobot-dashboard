@@ -1985,11 +1985,14 @@
             display: flex;
             gap: 2px;
             opacity: 0;
-            transition: opacity 0.15s ease;
+            pointer-events: none;
+            transition: opacity 0.15s ease, pointer-events 0s 0.15s;
         }
         
         .chat-page-bubble:hover .chat-page-bubble-actions {
             opacity: 1;
+            pointer-events: auto;
+            transition: opacity 0.15s ease, pointer-events 0s;
         }
         
         .chat-action-btn {
