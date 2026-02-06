@@ -951,24 +951,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         // First populate the provider dropdown dynamically
         await populateProviderDropdown();
         
-        // Try to get current model from API, but prefer localStorage (may have been
-        // synced from a previous gateway connection which is more accurate)
-        const savedModel = localStorage.getItem('selected_model');
-        const savedProvider = localStorage.getItem('selected_provider');
+        // Always fetch current model from server API (reads openclaw.json — source of truth)
+        // Don't trust localStorage as it can get stale across sessions/deploys
+        let modelId = null;
+        let provider = null;
         
-        let modelId = savedModel;
-        let provider = savedProvider;
-        
-        // If no saved model, try the server API
-        if (!modelId) {
-            try {
-                const response = await fetch('/api/models/current');
-                const modelInfo = await response.json();
-                modelId = modelInfo?.modelId;
-                provider = modelInfo?.provider;
-            } catch (e) {
-                console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
-            }
+        try {
+            const response = await fetch('/api/models/current');
+            const modelInfo = await response.json();
+            modelId = modelInfo?.modelId;
+            provider = modelInfo?.provider;
+            console.log(`[Dashboard] Model from API: ${modelId} (provider: ${provider})`);
+        } catch (e) {
+            console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
+            // Fall back to localStorage only if API fails
+            modelId = localStorage.getItem('selected_model');
+            provider = localStorage.getItem('selected_provider');
         }
         
         // Final fallback
