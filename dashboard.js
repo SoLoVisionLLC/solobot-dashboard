@@ -2376,78 +2376,10 @@ let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-
 let voicePushToTalk = false; // Track if currently in push-to-talk mode
 let lastVoiceTranscript = ''; // Store last transcript for auto-send
 
-// Live transcript indicator - shows real-time transcription above input
-function createLiveTranscriptIndicator() {
-    if (document.getElementById('live-transcript-indicator')) return;
-    
-    const indicator = document.createElement('div');
-    indicator.id = 'live-transcript-indicator';
-    indicator.style.cssText = `
-        position: fixed;
-        bottom: 100px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(188, 32, 38, 0.95);
-        color: white;
-        padding: 12px 20px;
-        border-radius: 12px;
-        font-size: 14px;
-        max-width: 80%;
-        text-align: center;
-        z-index: 10000;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        display: none;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.2);
-    `;
-    indicator.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 10px; justify-content: center;">
-            <span id="live-transcript-pulse" style="width: 10px; height: 10px; background: #fff; border-radius: 50%; animation: pulse 1s infinite;"></span>
-            <span id="live-transcript-text" style="font-weight: 500;">Listening...</span>
-        </div>
-        <style>
-            @keyframes pulse {
-                0%, 100% { opacity: 1; transform: scale(1); }
-                50% { opacity: 0.5; transform: scale(0.9); }
-            }
-        </style>
-    `;
-    document.body.appendChild(indicator);
-}
-
-function showLiveTranscriptIndicator() {
-    createLiveTranscriptIndicator();
-    const indicator = document.getElementById('live-transcript-indicator');
-    if (indicator) {
-        indicator.style.display = 'block';
-        const textEl = document.getElementById('live-transcript-text');
-        if (textEl) textEl.textContent = 'Listening...';
-    }
-}
-
-function hideLiveTranscriptIndicator() {
-    const indicator = document.getElementById('live-transcript-indicator');
-    if (indicator) {
-        indicator.style.display = 'none';
-    }
-}
-
-function updateLiveTranscriptIndicator(text, isInterim) {
-    const textEl = document.getElementById('live-transcript-text');
-    if (!textEl) return;
-    
-    if (text) {
-        // Show the transcript text, truncate if too long
-        const displayText = text.length > 100 ? '...' + text.slice(-100) : text;
-        textEl.textContent = displayText;
-        textEl.style.fontStyle = isInterim ? 'italic' : 'normal';
-        textEl.style.opacity = isInterim ? '0.85' : '1';
-    } else {
-        textEl.textContent = 'Listening...';
-        textEl.style.fontStyle = 'normal';
-        textEl.style.opacity = '1';
-    }
-}
+// Live transcript indicator functions (disabled - transcript shows directly in input field)
+function showLiveTranscriptIndicator() { }
+function hideLiveTranscriptIndicator() { }
+function updateLiveTranscriptIndicator(text, isInterim) { }
 
 function initVoiceInput() {
     // Check for Web Speech API support
