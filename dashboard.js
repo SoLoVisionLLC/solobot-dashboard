@@ -45,6 +45,239 @@ let state = {
     }
 };
 
+// ===================
+// FOCUS TIMER
+// ===================
+
+let focusTimer = {
+    running: false,
+    isBreak: false,
+    timeLeft: 25 * 60, // 25 minutes in seconds
+    interval: null,
+    sessions: parseInt(localStorage.getItem('focusSessions') || '0'),
+    workDuration: 25 * 60,
+    breakDuration: 5 * 60,
+    sessionStart: null
+};
+
+function toggleFocusTimer() {
+    if (focusTimer.running) {
+        pauseFocusTimer();
+    } else {
+        startFocusTimer();
+    }
+}
+
+function startFocusTimer() {
+    focusTimer.running = true;
+    focusTimer.sessionStart = Date.now();
+    updateFocusTimerUI();
+    
+    focusTimer.interval = setInterval(() => {
+        focusTimer.timeLeft--;
+        updateFocusTimerDisplay();
+        
+        if (focusTimer.timeLeft <= 0) {
+            completeFocusSession();
+        }
+    }, 1000);
+    
+    showToast(focusTimer.isBreak ? '☕ Break started!' : '🎯 Focus session started!', 'success', 2000);
+}
+
+function pauseFocusTimer() {
+    focusTimer.running = false;
+    clearInterval(focusTimer.interval);
+    updateFocusTimerUI();
+    showToast('⏸️ Timer paused', 'info', 1500);
+}
+
+function resetFocusTimer() {
+    focusTimer.running = false;
+    focusTimer.isBreak = false;
+    clearInterval(focusTimer.interval);
+    focusTimer.timeLeft = focusTimer.workDuration;
+    updateFocusTimerUI();
+    updateFocusTimerDisplay();
+    showToast('🔄 Timer reset', 'info', 1500);
+}
+
+function completeFocusSession() {
+    clearInterval(focusTimer.interval);
+    focusTimer.running = false;
+    
+    if (!focusTimer.isBreak) {
+        // Completed a work session
+        focusTimer.sessions++;
+        localStorage.setItem('focusSessions', focusTimer.sessions.toString());
+        localStorage.setItem('focusSessionsDate', new Date().toDateString());
+        updateQuickStats();
+        
+        // Play notification sound (if available)
+        try {
+            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2telehn2d7DYv49iHxtfns/hoGwaCEGWz9+1aTIOO4nK2sBxIg0zdsXN0HgsEjFnusbRgjQXKVmrxNKTPSkfSJ28zZpDKhhAd6/J0p9JLRlAd6/J0p9JLRlAd6/K0p9JLRlAd6/K0p9JLRk/dq/K0p9JLRk/dq/K0aBKLRk/dq/K0aBKLRk=');
+            audio.volume = 0.3;
+            audio.play().catch(() => {});
+        } catch (e) {}
+        
+        showToast(`🎉 Focus session complete! (${focusTimer.sessions} today)`, 'success', 3000);
+        
+        // Start break
+        focusTimer.isBreak = true;
+        focusTimer.timeLeft = focusTimer.breakDuration;
+    } else {
+        // Completed a break
+        showToast('☕ Break over! Ready for another focus session?', 'info', 3000);
+        focusTimer.isBreak = false;
+        focusTimer.timeLeft = focusTimer.workDuration;
+    }
+    
+    updateFocusTimerUI();
+    updateFocusTimerDisplay();
+}
+
+function updateFocusTimerUI() {
+    const timer = document.getElementById('focus-timer');
+    const playIcon = document.getElementById('focus-play-icon');
+    const pauseIcon = document.getElementById('focus-pause-icon');
+    const sessionsEl = document.getElementById('focus-sessions');
+    
+    if (!timer) return;
+    
+    timer.classList.remove('active', 'break');
+    if (focusTimer.running) {
+        timer.classList.add(focusTimer.isBreak ? 'break' : 'active');
+    }
+    
+    if (playIcon && pauseIcon) {
+        playIcon.style.display = focusTimer.running ? 'none' : 'block';
+        pauseIcon.style.display = focusTimer.running ? 'block' : 'none';
+    }
+    
+    if (sessionsEl) {
+        sessionsEl.textContent = `${focusTimer.sessions} 🎯`;
+    }
+}
+
+function updateFocusTimerDisplay() {
+    const display = document.getElementById('focus-timer-display');
+    if (!display) return;
+    
+    const minutes = Math.floor(focusTimer.timeLeft / 60);
+    const seconds = focusTimer.timeLeft % 60;
+    display.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Check if we need to reset sessions (new day)
+function checkFocusSessionsReset() {
+    const lastDate = localStorage.getItem('focusSessionsDate');
+    const today = new Date().toDateString();
+    if (lastDate !== today) {
+        focusTimer.sessions = 0;
+        localStorage.setItem('focusSessions', '0');
+        localStorage.setItem('focusSessionsDate', today);
+    }
+}
+
+// ===================
+// QUICK STATS
+// ===================
+
+let statsState = {
+    tasksDoneThisWeek: 0,
+    messagesToday: 0,
+    streak: parseInt(localStorage.getItem('dashboardStreak') || '0'),
+    sessionStartTime: Date.now()
+};
+
+function updateQuickStats() {
+    // Tasks done this week
+    const tasksDone = state.tasks?.done?.length || 0;
+    const tasksDoneEl = document.getElementById('stat-tasks-done');
+    if (tasksDoneEl) tasksDoneEl.textContent = tasksDone;
+    
+    // Focus sessions
+    const focusEl = document.getElementById('stat-focus-sessions');
+    if (focusEl) focusEl.textContent = focusTimer.sessions;
+    
+    // Messages today (count from chat)
+    const today = new Date().toDateString();
+    const messagesToday = (state.chat?.messages || []).filter(m => {
+        const msgDate = new Date(m.time).toDateString();
+        return msgDate === today;
+    }).length;
+    const messagesEl = document.getElementById('stat-messages');
+    if (messagesEl) messagesEl.textContent = messagesToday;
+    
+    // Streak
+    updateStreak();
+    const streakEl = document.getElementById('stat-streak');
+    if (streakEl) streakEl.textContent = statsState.streak;
+    
+    // Session time
+    const uptimeEl = document.getElementById('stat-uptime');
+    if (uptimeEl) {
+        const elapsed = Math.floor((Date.now() - statsState.sessionStartTime) / 60000);
+        if (elapsed < 60) {
+            uptimeEl.textContent = `${elapsed}m`;
+        } else {
+            const hours = Math.floor(elapsed / 60);
+            const mins = elapsed % 60;
+            uptimeEl.textContent = `${hours}h ${mins}m`;
+        }
+    }
+    
+    // Update timestamp
+    const lastUpdatedEl = document.getElementById('stats-last-updated');
+    if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = 'Updated just now';
+    }
+}
+
+function updateStreak() {
+    const lastActiveDate = localStorage.getItem('lastActiveDate');
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    
+    if (lastActiveDate === today) {
+        // Already active today, streak maintained
+        return;
+    } else if (lastActiveDate === yesterday) {
+        // Was active yesterday, increment streak
+        statsState.streak++;
+    } else if (lastActiveDate !== today) {
+        // Streak broken or first day
+        statsState.streak = 1;
+    }
+    
+    localStorage.setItem('dashboardStreak', statsState.streak.toString());
+    localStorage.setItem('lastActiveDate', today);
+}
+
+// Update stats every minute
+setInterval(updateQuickStats, 60000);
+
+// ===================
+// KEYBOARD SHORTCUTS ENHANCEMENT
+// ===================
+
+function showShortcutsModal() {
+    showModal('shortcuts-modal');
+}
+
+// Expose functions globally
+window.toggleFocusTimer = toggleFocusTimer;
+window.resetFocusTimer = resetFocusTimer;
+window.showShortcutsModal = showShortcutsModal;
+
+// Initialize focus timer and stats on load
+document.addEventListener('DOMContentLoaded', () => {
+    checkFocusSessionsReset();
+    updateFocusTimerUI();
+    updateFocusTimerDisplay();
+    updateQuickStats();
+});
+
 // Load persisted system messages from localStorage (chat from localStorage + server fallback)
 function loadPersistedMessages() {
     try {
@@ -2143,6 +2376,79 @@ let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-
 let voicePushToTalk = false; // Track if currently in push-to-talk mode
 let lastVoiceTranscript = ''; // Store last transcript for auto-send
 
+// Live transcript indicator - shows real-time transcription above input
+function createLiveTranscriptIndicator() {
+    if (document.getElementById('live-transcript-indicator')) return;
+    
+    const indicator = document.createElement('div');
+    indicator.id = 'live-transcript-indicator';
+    indicator.style.cssText = `
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(188, 32, 38, 0.95);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 12px;
+        font-size: 14px;
+        max-width: 80%;
+        text-align: center;
+        z-index: 10000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        display: none;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+    `;
+    indicator.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; justify-content: center;">
+            <span id="live-transcript-pulse" style="width: 10px; height: 10px; background: #fff; border-radius: 50%; animation: pulse 1s infinite;"></span>
+            <span id="live-transcript-text" style="font-weight: 500;">Listening...</span>
+        </div>
+        <style>
+            @keyframes pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.5; transform: scale(0.9); }
+            }
+        </style>
+    `;
+    document.body.appendChild(indicator);
+}
+
+function showLiveTranscriptIndicator() {
+    createLiveTranscriptIndicator();
+    const indicator = document.getElementById('live-transcript-indicator');
+    if (indicator) {
+        indicator.style.display = 'block';
+        const textEl = document.getElementById('live-transcript-text');
+        if (textEl) textEl.textContent = 'Listening...';
+    }
+}
+
+function hideLiveTranscriptIndicator() {
+    const indicator = document.getElementById('live-transcript-indicator');
+    if (indicator) {
+        indicator.style.display = 'none';
+    }
+}
+
+function updateLiveTranscriptIndicator(text, isInterim) {
+    const textEl = document.getElementById('live-transcript-text');
+    if (!textEl) return;
+    
+    if (text) {
+        // Show the transcript text, truncate if too long
+        const displayText = text.length > 100 ? '...' + text.slice(-100) : text;
+        textEl.textContent = displayText;
+        textEl.style.fontStyle = isInterim ? 'italic' : 'normal';
+        textEl.style.opacity = isInterim ? '0.85' : '1';
+    } else {
+        textEl.textContent = 'Listening...';
+        textEl.style.fontStyle = 'normal';
+        textEl.style.opacity = '1';
+    }
+}
+
 function initVoiceInput() {
     // Check for Web Speech API support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2178,6 +2484,9 @@ function initVoiceInput() {
         lastVoiceTranscript = ''; // Reset transcript
         setVoiceState('listening');
         
+        // Show live transcript indicator
+        showLiveTranscriptIndicator();
+        
         // Focus the target input
         const input = document.getElementById(activeVoiceTarget);
         if (input) {
@@ -2203,7 +2512,7 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onresult = (event) => {
-        console.log('[Voice] onresult fired, target:', activeVoiceTarget);
+        console.log('[Voice] onresult fired, resultIndex:', event.resultIndex, 'results.length:', event.results.length, 'target:', activeVoiceTarget);
         const input = document.getElementById(activeVoiceTarget);
         if (!input) {
             console.error('[Voice] Input not found:', activeVoiceTarget);
@@ -2215,8 +2524,11 @@ function initVoiceInput() {
 
         // Process all results
         for (let i = 0; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            const confidence = result[0].confidence;
+            console.log(`[Voice] Result[${i}]: isFinal=${result.isFinal}, confidence=${confidence?.toFixed(2) || 'n/a'}, text="${transcript}"`);
+            if (result.isFinal) {
                 finalTranscript += transcript;
             } else {
                 interimTranscript += transcript;
@@ -2226,6 +2538,9 @@ function initVoiceInput() {
         // Combine: show final + interim (interim in progress)
         const displayText = finalTranscript + interimTranscript;
         console.log('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
+
+        // Update live transcript indicator
+        updateLiveTranscriptIndicator(displayText, !!interimTranscript);
 
         // Always update the input with current text (even if empty during pauses)
         input.value = displayText;
@@ -2284,6 +2599,8 @@ function initVoiceInput() {
 
     voiceRecognition.onend = () => {
         console.log('[Voice] Ended, last transcript:', lastVoiceTranscript);
+        // Note: hideLiveTranscriptIndicator is called by setVoiceState('idle') below
+        
         // Reset styling on both inputs
         for (const inputId of ['chat-input', 'chat-page-input']) {
             const input = document.getElementById(inputId);
@@ -2360,6 +2677,11 @@ function stopVoiceInput() {
 
 function setVoiceState(state, targetInput = 'chat-input') {
     voiceInputState = state;
+    
+    // Hide live transcript indicator when going idle
+    if (state === 'idle') {
+        hideLiveTranscriptIndicator();
+    }
     
     // Update both buttons to stay in sync
     const btns = [
@@ -4094,6 +4416,11 @@ function renderTasks() {
 
         count.textContent = state.tasks[column].length;
     });
+    
+    // Update quick stats when tasks change
+    if (typeof updateQuickStats === 'function') {
+        updateQuickStats();
+    }
 }
 
 function renderNotes() {
@@ -5647,7 +5974,12 @@ document.addEventListener('keydown', (e) => {
             showPage('chat');
             break;
         case 's':
-            showPage('system');
+            if (e.shiftKey) {
+                // Shift+S: Sync tasks
+                syncFromVPS();
+            } else {
+                showPage('system');
+            }
             break;
         case 'h':
             showPage('health');
@@ -5655,22 +5987,46 @@ document.addEventListener('keydown', (e) => {
         case 'm':
             showPage('memory');
             break;
+        case 'd':
+            showPage('dashboard');
+            break;
+        case 'p':
+            showPage('products');
+            break;
         case 't':
             toggleTheme();
             break;
-        case '/':
-            e.preventDefault();
-            focusChatInput();
+        case 'f':
+            if (e.shiftKey) {
+                // Shift+F: Reset focus timer
+                resetFocusTimer();
+            } else {
+                // F: Toggle focus timer
+                toggleFocusTimer();
+            }
             break;
         case 'n':
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 createNewSession();
+            } else {
+                // N: New task
+                openAddTask('todo');
             }
+            break;
+        case '/':
+            e.preventDefault();
+            focusChatInput();
             break;
         case '?':
             e.preventDefault();
-            openCommandPalette();
+            showModal('shortcuts-modal');
+            break;
+        case ',':
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                openSettingsModal();
+            }
             break;
     }
     

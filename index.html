@@ -2345,6 +2345,183 @@
             font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
         }
 
+        /* =================== FOCUS TIMER STYLES =================== */
+        .focus-timer {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-1) var(--space-3);
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            font-weight: 500;
+            margin-right: var(--space-4);
+        }
+        .focus-timer.active {
+            background: var(--success-muted);
+            border-color: var(--success);
+            color: var(--success);
+        }
+        .focus-timer.break {
+            background: var(--warning-muted);
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+        .focus-timer-display {
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 14px;
+            min-width: 50px;
+            text-align: center;
+        }
+        .focus-timer-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            opacity: 0.8;
+        }
+        .focus-timer-btn:hover {
+            opacity: 1;
+        }
+        .focus-timer-sessions {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: var(--space-1);
+        }
+
+        /* =================== QUICK STATS STYLES =================== */
+        .quick-stats-card {
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-bottom: var(--space-6);
+        }
+        .quick-stats-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+        .quick-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: var(--space-4);
+        }
+        @media (max-width: 1024px) {
+            .quick-stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        @media (max-width: 768px) {
+            .quick-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        .stat-item {
+            text-align: center;
+            padding: var(--space-3);
+            background: var(--surface-2);
+            border-radius: var(--radius-md);
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+        .stat-value.brand {
+            color: var(--brand-red);
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: var(--space-1);
+        }
+
+        /* =================== KEYBOARD SHORTCUTS MODAL =================== */
+        .shortcuts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: var(--space-4);
+        }
+        @media (max-width: 600px) {
+            .shortcuts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .shortcut-group {
+            margin-bottom: var(--space-4);
+        }
+        .shortcut-group-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--brand-red);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: var(--space-2);
+        }
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-2) 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .shortcut-item:last-child {
+            border-bottom: none;
+        }
+        .shortcut-keys {
+            display: flex;
+            gap: 4px;
+        }
+        .shortcut-key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            padding: 0 6px;
+            background: var(--surface-3);
+            border: 1px solid var(--border-default);
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        .shortcut-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .shortcuts-hint {
+            position: fixed;
+            bottom: var(--space-4);
+            right: var(--space-4);
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            padding: var(--space-2) var(--space-3);
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            z-index: 100;
+            opacity: 0.7;
+            transition: opacity var(--transition-fast);
+        }
+        .shortcuts-hint:hover {
+            opacity: 1;
+            cursor: pointer;
+        }
+
         }
     </style>
 </head>
@@ -2444,6 +2621,25 @@
             </div>
 
             <div class="header-status">
+                <!-- Focus Timer -->
+                <div id="focus-timer" class="focus-timer" title="Focus Timer - Click to start a 25-min focus session">
+                    <button class="focus-timer-btn" onclick="toggleFocusTimer()" title="Start/Pause">
+                        <svg id="focus-play-icon" style="width: 16px; height: 16px;" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        <svg id="focus-pause-icon" style="width: 16px; height: 16px; display: none;" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                        </svg>
+                    </button>
+                    <span class="focus-timer-display" id="focus-timer-display">25:00</span>
+                    <button class="focus-timer-btn" onclick="resetFocusTimer()" title="Reset">
+                        <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </button>
+                    <span class="focus-timer-sessions" id="focus-sessions">0 🎯</span>
+                </div>
+
                 <div class="status-chip">
                     <div id="status-indicator" class="status-dot success pulse"></div>
                     <span id="status-text">IDLE</span>
@@ -2504,6 +2700,41 @@
         <!-- =================== DASHBOARD PAGE =================== -->
         <div id="page-dashboard" class="page active">
         <div class="container">
+
+            <!-- Quick Stats -->
+            <section class="quick-stats-card">
+                <div class="quick-stats-header">
+                    <h2 class="section-title" style="margin-bottom: 0;">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                        Quick Stats
+                    </h2>
+                    <span id="stats-last-updated" style="font-size: 11px; color: var(--text-muted);">Updated just now</span>
+                </div>
+                <div class="quick-stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value brand" id="stat-tasks-done">0</div>
+                        <div class="stat-label">Tasks Done (Week)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-focus-sessions">0</div>
+                        <div class="stat-label">Focus Sessions</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-messages">0</div>
+                        <div class="stat-label">Messages Today</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-streak">0</div>
+                        <div class="stat-label">Day Streak 🔥</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-uptime">--</div>
+                        <div class="stat-label">Session Time</div>
+                    </div>
+                </div>
+            </section>
 
             <!-- Task Board -->
             <section class="section">
@@ -3499,11 +3730,94 @@
     </div>
 
     <!-- Toast Notifications Container -->
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>⌨️ Keyboard Shortcuts</h3>
+                <button onclick="hideModal('shortcuts-modal')" class="btn-icon">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-grid">
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">Navigation</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Dashboard</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">G</span><span class="shortcut-key">D</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Chat</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">G</span><span class="shortcut-key">C</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Memory</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">G</span><span class="shortcut-key">M</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Products</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">G</span><span class="shortcut-key">P</span></div>
+                        </div>
+                    </div>
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">Focus Timer</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Start/Pause Timer</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">F</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Reset Timer</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">Shift</span><span class="shortcut-key">F</span></div>
+                        </div>
+                    </div>
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">Tasks</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">New Task</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">N</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Sync Tasks</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">S</span></div>
+                        </div>
+                    </div>
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">General</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Show Shortcuts</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">?</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Toggle Theme</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">T</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Settings</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">Ctrl</span><span class="shortcut-key">,</span></div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Focus Chat Input</span>
+                            <div class="shortcut-keys"><span class="shortcut-key">/</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="hideModal('shortcuts-modal')" class="btn btn-ghost">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shortcuts Hint (bottom right) -->
+    <div class="shortcuts-hint" onclick="showModal('shortcuts-modal')">
+        <span class="shortcut-key">?</span>
+        <span>Shortcuts</span>
+    </div>
+
     <div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;"></div>
 
     <script src="gateway-client.js?v=3.6.0"></script>
     <script src="docs-hub-memory-files.js?v=2.5.0"></script>
-    <script src="dashboard.js?v=3.46.0"></script>
+    <script src="dashboard.js?v=3.47.0"></script>
     <script>
         // Valid page names
         const VALID_PAGES = ['dashboard', 'memory', 'chat', 'system', 'products'];
