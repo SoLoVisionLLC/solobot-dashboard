@@ -2702,12 +2702,11 @@ function updateVoiceAutoSendUI() {
     });
 }
 
-// Push-to-talk: Hold Ctrl+Space (or Cmd+Space on Mac) to speak
+// Push-to-talk: Hold Alt+Space to speak
 function initPushToTalk() {
     document.addEventListener('keydown', (e) => {
-        // Trigger on Ctrl+Space or Cmd+Space (works even in input fields)
-        const modifierHeld = e.ctrlKey || e.metaKey;
-        if (e.code === 'Space' && modifierHeld && !voicePushToTalk && voiceInputState !== 'listening') {
+        // Trigger on Alt+Space (works even in input fields)
+        if (e.code === 'Space' && e.altKey && !voicePushToTalk && voiceInputState !== 'listening') {
             e.preventDefault();
             voicePushToTalk = true;
             
@@ -2715,14 +2714,14 @@ function initPushToTalk() {
             const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
             activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
             
-            console.log('[Voice] Push-to-talk started (Ctrl/Cmd+Space), target:', activeVoiceTarget);
+            console.log('[Voice] Push-to-talk started (Alt+Space), target:', activeVoiceTarget);
             startVoiceInput();
         }
     });
     
     document.addEventListener('keyup', (e) => {
-        // Stop on releasing Space OR releasing the modifier while push-to-talk is active
-        if ((e.code === 'Space' || e.key === 'Control' || e.key === 'Meta') && voicePushToTalk) {
+        // Stop on releasing Space OR releasing Alt while push-to-talk is active
+        if ((e.code === 'Space' || e.key === 'Alt') && voicePushToTalk) {
             e.preventDefault();
             console.log('[Voice] Push-to-talk released');
             voicePushToTalk = false;
@@ -2730,7 +2729,7 @@ function initPushToTalk() {
         }
     });
     
-    console.log('[Voice] Push-to-talk initialized (hold Ctrl+Space or Cmd+Space to speak)');
+    console.log('[Voice] Push-to-talk initialized (hold Alt+Space to speak)');
 }
 
 // Check if user is typing in an input field
