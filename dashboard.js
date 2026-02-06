@@ -2515,9 +2515,17 @@ function initVoiceInput() {
         console.log('[Voice] onresult fired, resultIndex:', event.resultIndex, 'results.length:', event.results.length, 'target:', activeVoiceTarget);
         const input = document.getElementById(activeVoiceTarget);
         if (!input) {
-            console.error('[Voice] Input not found:', activeVoiceTarget);
-            return;
+            console.error('[Voice] Input not found:', activeVoiceTarget, '- trying fallback');
+            // Fallback: try both inputs
+            const fallback = document.getElementById('chat-page-input') || document.getElementById('chat-input');
+            if (!fallback) {
+                console.error('[Voice] No input found at all!');
+                return;
+            }
+            console.log('[Voice] Using fallback input:', fallback.id);
         }
+        const targetInput = input || document.getElementById('chat-page-input') || document.getElementById('chat-input');
+        console.log('[Voice] Updating input element:', targetInput?.id, targetInput?.tagName);
 
         let interimTranscript = '';
         let finalTranscript = '';
@@ -2539,30 +2547,31 @@ function initVoiceInput() {
         const displayText = finalTranscript + interimTranscript;
         console.log('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
 
-        // Update live transcript indicator
+        // Update live transcript indicator (banner)
         updateLiveTranscriptIndicator(displayText, !!interimTranscript);
 
         // Always update the input with current text (even if empty during pauses)
-        input.value = displayText;
+        console.log('[Voice] Setting targetInput.value to:', displayText);
+        targetInput.value = displayText;
         
         // Style based on whether we have final or interim
         if (interimTranscript) {
             // Has interim - show as in-progress with subtle indicator
-            input.style.fontStyle = 'italic';
-            input.style.color = 'var(--text-secondary)';
+            targetInput.style.fontStyle = 'italic';
+            targetInput.style.color = 'var(--text-secondary)';
         } else if (finalTranscript) {
             // Only final content - solid style
-            input.style.fontStyle = 'normal';
-            input.style.color = 'var(--text-primary)';
+            targetInput.style.fontStyle = 'normal';
+            targetInput.style.color = 'var(--text-primary)';
         }
         
         // Trigger input event to handle auto-resize and any listeners
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
         
         // Keep input focused and cursor at end
-        input.focus();
-        if (input.setSelectionRange) {
-            input.setSelectionRange(input.value.length, input.value.length);
+        targetInput.focus();
+        if (targetInput.setSelectionRange) {
+            targetInput.setSelectionRange(targetInput.value.length, targetInput.value.length);
         }
 
         // Store final transcript for auto-send
@@ -2726,7 +2735,8 @@ function toggleVoiceInputChatPage() {
 const originalToggleVoiceInput = toggleVoiceInput;
 function toggleVoiceInput() {
     // If called directly (not via chat page), target sidebar
-    if (activeVoiceTarget !== 'chat-page-input') {
+    // Only set to chat-input if we're starting a NEW recording
+    if (activeVoiceTarget !== 'chat-page-input' && voiceInputState !== 'listening') {
         activeVoiceTarget = 'chat-input';
     }
     
@@ -2741,10 +2751,7 @@ function toggleVoiceInput() {
         startVoiceInput();
     }
     
-    // Reset target after toggle
-    if (voiceInputState !== 'listening') {
-        activeVoiceTarget = 'chat-input';
-    }
+    // Don't reset target here - it should persist until onend resets it
 }
 
 // Toggle auto-send setting
