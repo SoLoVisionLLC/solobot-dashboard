@@ -1593,8 +1593,12 @@ window.switchToSession = async function(sessionKey) {
         // Refresh dropdown to show new selection (filtered by agent)
         populateSessionDropdown();
 
-        if (agentMatch) setActiveSidebarAgent(agentMatch[1]);
-        else setActiveSidebarAgent(null);
+        if (agentMatch) {
+            setActiveSidebarAgent(agentMatch[1]);
+            saveLastAgentSession(agentMatch[1], sessionKey);
+        } else {
+            setActiveSidebarAgent(null);
+        }
 
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
@@ -1749,6 +1753,10 @@ function initGateway() {
             if (nameEl) nameEl.textContent = friendlyName;
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) chatPageNameEl.textContent = friendlyName;
+            
+            // Remember this session for the agent
+            const agentMatch = sessionKey.match(/^agent:([^:]+):/);
+            if (agentMatch) saveLastAgentSession(agentMatch[1], sessionKey);
             
             checkRestartToast();
 
@@ -4038,6 +4046,22 @@ function setActiveSidebarAgent(agentId) {
     }
 }
 
+// Track last-used session per agent (persisted to localStorage)
+function getLastAgentSession(agentId) {
+    try {
+        const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
+        return map[agentId] || null;
+    } catch { return null; }
+}
+
+function saveLastAgentSession(agentId, sessionKey) {
+    try {
+        const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
+        map[agentId] = sessionKey;
+        localStorage.setItem('agent_last_sessions', JSON.stringify(map));
+    } catch {}
+}
+
 function setupSidebarAgents() {
     const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
     if (!agentEls.length) return;
@@ -4050,7 +4074,8 @@ function setupSidebarAgents() {
             // Update current agent ID first so dropdown filters correctly
             currentAgentId = agentId;
             
-            const sessionKey = `agent:${agentId}:main`;
+            // Restore last session for this agent, or default to main
+            const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
             showPage('chat');
             await switchToSession(sessionKey);
             setActiveSidebarAgent(agentId);
