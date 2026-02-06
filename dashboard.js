@@ -805,8 +805,18 @@ async function updateModelDropdown(provider) {
 }
 
 async function getModelsForProvider(provider) {
+    // Prefer gateway-sourced models (fetched via WebSocket — most reliable)
+    if (window._gatewayModels && window._gatewayModels[provider]) {
+        const providerModels = window._gatewayModels[provider];
+        return providerModels.map(m => ({
+            value: m.id,
+            name: m.name,
+            selected: (m.id === currentModel)
+        }));
+    }
+    
+    // Fallback: fetch from server API
     try {
-        // Fetch models from server API
         const response = await fetch('/api/models/list');
         if (!response.ok) {
             throw new Error(`API returned ${response.status}`);
@@ -827,7 +837,6 @@ async function getModelsForProvider(provider) {
         return models;
     } catch (e) {
         console.error('[Dashboard] Failed to get models from API:', e);
-        // Return empty array on error - don't hide the problem
         return [];
     }
 }
@@ -915,6 +924,97 @@ function syncModelDisplay(model, provider) {
         });
     } else {
         selectModelInDropdowns(model);
+    }
+}
+
+/**
+ * Fetch model configuration directly from the gateway via WebSocket RPC.
+ * This is the most reliable source — it reads the live openclaw.json from the running gateway.
+ */
+async function fetchModelsFromGateway() {
+    if (!gateway || !gateway.isConnected()) return;
+    
+    try {
+        const config = await gateway.getConfig();
+        
+        // Parse the config to find model info
+        let configData = config;
+        if (typeof config === 'string') {
+            configData = JSON.parse(config);
+        }
+        // config.get might return { raw: "...", hash: "..." }
+        if (configData?.raw) {
+            configData = JSON.parse(configData.raw);
+        }
+        
+        const modelConfig = configData?.agents?.defaults?.model;
+        if (!modelConfig) {
+            console.warn('[Dashboard] No model config in gateway response');
+            return;
+        }
+        
+        const primary = modelConfig.primary;
+        const fallbacks = modelConfig.fallbacks || [];
+        const picker = modelConfig.picker || [];
+        
+        // Combine all model IDs
+        const allModelIds = [...new Set([
+            ...(primary ? [primary] : []),
+            ...picker,
+            ...fallbacks
+        ])];
+        
+        if (allModelIds.length === 0) return;
+        
+        console.log(`[Dashboard] Got ${allModelIds.length} models from gateway config`);
+        
+        // Group by provider
+        const modelsByProvider = {};
+        for (const modelId of allModelIds) {
+            const slashIdx = modelId.indexOf('/');
+            if (slashIdx === -1) continue;
+            
+            const provider = modelId.substring(0, slashIdx);
+            const modelName = modelId.substring(slashIdx + 1);
+            
+            if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
+            
+            // Create a clean display name
+            const isPrimary = modelId === primary;
+            const displayName = modelName + (isPrimary ? ' ⭐' : '');
+            
+            if (!modelsByProvider[provider].some(m => m.id === modelId)) {
+                modelsByProvider[provider].push({
+                    id: modelId,
+                    name: displayName,
+                    tier: isPrimary ? 'default' : 'fallback'
+                });
+            }
+        }
+        
+        // Update the provider dropdown
+        const providerSelect = document.getElementById('provider-select');
+        if (providerSelect) {
+            const providers = Object.keys(modelsByProvider);
+            providerSelect.innerHTML = '';
+            providers.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                providerSelect.appendChild(opt);
+            });
+        }
+        
+        // Store for getModelsForProvider to use
+        window._gatewayModels = modelsByProvider;
+        
+        // Sync current model from primary
+        if (primary) {
+            syncModelDisplay(primary, primary.split('/')[0]);
+        }
+        
+    } catch (e) {
+        console.warn('[Dashboard] Failed to fetch models from gateway:', e.message);
     }
 }
 
@@ -1612,6 +1712,9 @@ function initGateway() {
             const serverModel = localStorage.getItem('server_model');
             const serverProvider = localStorage.getItem('server_provider');
             if (serverModel) syncModelDisplay(serverModel, serverProvider);
+            
+            // Fetch model config directly from gateway (most reliable source)
+            fetchModelsFromGateway();
             
             // Update session name displays (use friendly name without agent prefix)
             currentSessionName = sessionKey;

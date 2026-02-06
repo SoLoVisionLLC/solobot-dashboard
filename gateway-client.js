@@ -440,6 +440,14 @@ class GatewayClient {
         }
     }
 
+    // Get current config from gateway (source of truth for models)
+    async getConfig() {
+        if (!this.connected) {
+            return Promise.reject(new Error('Not connected'));
+        }
+        return this._request('config.get', {});
+    }
+
     // Patch gateway config and trigger restart (e.g., for model change)
     async patchConfig(configPatch) {
         if (!this.connected) {
