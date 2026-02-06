@@ -868,47 +868,74 @@ let currentModel = 'anthropic/claude-opus-4-5';
 /**
  * Sync the model dropdown and display elements with the actual model in use.
  * Called when we get model info from gateway connect or chat responses.
+ * This is the source of truth — gateway tells us what model is actually running.
  */
 function syncModelDisplay(model, provider) {
-    if (!model || model === currentModel) return;
+    if (!model) return;
+    if (model === currentModel && provider === currentProvider) return;
     
-    console.log(`[Dashboard] Model sync: ${currentModel} → ${model}`);
+    console.log(`[Dashboard] Model sync: ${currentModel} → ${model} (provider: ${provider || currentProvider})`);
     currentModel = model;
+    
+    // Extract provider from model ID if not provided
+    if (!provider && model.includes('/')) {
+        provider = model.split('/')[0];
+    }
     if (provider) currentProvider = provider;
     
     // Update localStorage
     localStorage.setItem('selected_model', model);
     if (provider) localStorage.setItem('selected_provider', provider);
     
-    // Update display elements
-    const modelNameEl = document.getElementById('model-name');
+    // Update settings modal displays
     const currentModelDisplay = document.getElementById('current-model-display');
-    if (modelNameEl) modelNameEl.textContent = model;
     if (currentModelDisplay) currentModelDisplay.textContent = model;
     
-    // Update provider display
+    // Update provider display & dropdown
     if (provider) {
-        const providerNameEl = document.getElementById('provider-name');
         const currentProviderDisplay = document.getElementById('current-provider-display');
-        const providerSelectEl = document.getElementById('provider-select');
-        if (providerNameEl) providerNameEl.textContent = provider;
         if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
-        if (providerSelectEl) providerSelectEl.value = provider;
+        
+        const providerSelectEl = document.getElementById('provider-select');
+        if (providerSelectEl) {
+            // Make sure provider option exists
+            const providerOptions = Array.from(providerSelectEl.options);
+            if (!providerOptions.find(o => o.value === provider)) {
+                const opt = document.createElement('option');
+                opt.value = provider;
+                opt.textContent = provider.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                providerSelectEl.appendChild(opt);
+            }
+            providerSelectEl.value = provider;
+        }
+        
+        // Refresh model dropdown for this provider, then select the right model
+        updateModelDropdown(provider).then(() => {
+            selectModelInDropdowns(model);
+        });
+    } else {
+        selectModelInDropdowns(model);
     }
+}
+
+/**
+ * Select a model in both header and settings dropdowns.
+ * Adds the option dynamically if it's not already listed.
+ */
+function selectModelInDropdowns(model) {
+    const shortName = model.split('/').pop() || model;
     
-    // Update the model dropdown selection
     const modelSelect = document.getElementById('model-select');
     const settingModel = document.getElementById('setting-model');
+    
     [modelSelect, settingModel].forEach(select => {
         if (!select) return;
-        // Try to select the matching option
         const options = Array.from(select.options);
         const match = options.find(o => o.value === model);
         if (match) {
             select.value = model;
         } else {
-            // Model not in dropdown - add it dynamically
-            const shortName = model.split('/').pop() || model;
+            // Model not in dropdown — add it
             const option = document.createElement('option');
             option.value = model;
             option.textContent = shortName;
@@ -924,39 +951,50 @@ document.addEventListener('DOMContentLoaded', async function() {
         // First populate the provider dropdown dynamically
         await populateProviderDropdown();
         
-        // Get current model from OpenClaw
-        const response = await fetch('/api/models/current');
-        const modelInfo = await response.json();
+        // Try to get current model from API, but prefer localStorage (may have been
+        // synced from a previous gateway connection which is more accurate)
+        const savedModel = localStorage.getItem('selected_model');
+        const savedProvider = localStorage.getItem('selected_provider');
         
-        currentProvider = modelInfo.provider;
-        currentModel = modelInfo.modelId;
-
-        // Sync to localStorage so gateway client uses correct model
-        localStorage.setItem('selected_provider', currentProvider);
-        localStorage.setItem('selected_model', currentModel);
-
-        console.log(`[Dashboard] Current model: ${currentModel}`);
+        let modelId = savedModel;
+        let provider = savedProvider;
         
-        // Update displays (with null checks)
-        const providerNameEl = document.getElementById('provider-name');
-        const modelNameEl = document.getElementById('model-name');
+        // If no saved model, try the server API
+        if (!modelId) {
+            try {
+                const response = await fetch('/api/models/current');
+                const modelInfo = await response.json();
+                modelId = modelInfo?.modelId;
+                provider = modelInfo?.provider;
+            } catch (e) {
+                console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
+            }
+        }
+        
+        // Final fallback
+        if (!modelId) modelId = 'anthropic/claude-opus-4-5';
+        if (!provider) provider = modelId.split('/')[0];
+        
+        currentProvider = provider;
+        currentModel = modelId;
+
+        console.log(`[Dashboard] Init model: ${currentModel} (source: ${savedModel ? 'localStorage' : 'API'})`);
+        
+        // Update displays
         const currentProviderDisplay = document.getElementById('current-provider-display');
         const currentModelDisplay = document.getElementById('current-model-display');
         const providerSelectEl = document.getElementById('provider-select');
         
-        if (providerNameEl) providerNameEl.textContent = currentProvider;
-        if (modelNameEl) modelNameEl.textContent = currentModel;
         if (currentProviderDisplay) currentProviderDisplay.textContent = currentProvider;
         if (currentModelDisplay) currentModelDisplay.textContent = currentModel;
         if (providerSelectEl) providerSelectEl.value = currentProvider;
         
-        // Populate model dropdown for current provider
+        // Populate model dropdown for current provider and select current model
         await updateModelDropdown(currentProvider);
+        selectModelInDropdowns(currentModel);
         
     } catch (error) {
-        console.error('[Dashboard] Failed to get current model:', error);
-        // Don't crash the whole page - just log the error
-        console.warn('[Dashboard] Model display may be incomplete');
+        console.error('[Dashboard] Failed to initialize model display:', error);
     }
 });
 

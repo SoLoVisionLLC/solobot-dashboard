@@ -1294,28 +1294,43 @@ const server = http.createServer((req, res) => {
 
   // Get current model endpoint
   if (url.pathname === '/api/models/current' && req.method === 'GET') {
-    // Get current model from state.json (updated by OpenClaw agent)
+    // Get current model — try multiple sources in priority order
     try {
-      const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      let modelInfo = state.currentModel;
+      let modelInfo = null;
       
-      // Fallback: if missing, try reading OpenClaw config primary model
+      // 1. Check state.json for explicitly set currentModel
+      try {
+        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        if (state.currentModel?.modelId) {
+          modelInfo = state.currentModel;
+        }
+      } catch (e) { /* continue to fallback */ }
+      
+      // 2. Try reading OpenClaw config primary model (multiple paths)
       if (!modelInfo) {
-        try {
-          const oc = JSON.parse(fs.readFileSync('/home/node/.openclaw/openclaw.json', 'utf8'));
-          const primary = oc?.agents?.defaults?.model?.primary;
-          if (primary) {
-            modelInfo = {
-              modelId: primary,
-              provider: primary.split('/')[0],
-              name: primary.split('/').pop()
-            };
-          }
-        } catch (e) {
-          // ignore fallback errors
+        const configPaths = [
+          OPENCLAW_CONFIG_PATH,       // ./openclaw/openclaw.json (Coolify volume mount)
+          OPENCLAW_CONFIG_FALLBACK,   // /home/node/.openclaw/openclaw.json (local)
+        ];
+        for (const configPath of configPaths) {
+          try {
+            if (fs.existsSync(configPath)) {
+              const oc = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+              const primary = oc?.agents?.defaults?.model?.primary;
+              if (primary) {
+                modelInfo = {
+                  modelId: primary,
+                  provider: primary.split('/')[0],
+                  name: primary.split('/').pop()
+                };
+                break;
+              }
+            }
+          } catch (e) { /* try next path */ }
         }
       }
       
+      // 3. Hardcoded fallback
       if (!modelInfo) {
         modelInfo = { 
           modelId: 'anthropic/claude-opus-4-5',
@@ -1330,7 +1345,6 @@ const server = http.createServer((req, res) => {
         if (parts.length >= 3 && parts[0] === parts[1]) {
           modelInfo.modelId = parts.slice(1).join('/');
         }
-        // Ensure provider/name are consistent with modelId
         modelInfo.provider = modelInfo.modelId.split('/')[0];
         modelInfo.name = modelInfo.modelId.split('/').pop();
       }
@@ -1338,7 +1352,7 @@ const server = http.createServer((req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(modelInfo));
     } catch (e) {
-      console.error('[Server] Failed to get current model from state:', e.message);
+      console.error('[Server] Failed to get current model:', e.message);
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({
         modelId: 'anthropic/claude-opus-4-5',
