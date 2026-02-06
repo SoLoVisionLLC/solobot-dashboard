@@ -2702,15 +2702,12 @@ function updateVoiceAutoSendUI() {
     });
 }
 
-// Push-to-talk: Hold spacebar to speak
+// Push-to-talk: Hold Ctrl+Space (or Cmd+Space on Mac) to speak
 function initPushToTalk() {
     document.addEventListener('keydown', (e) => {
-        // Only trigger if spacebar, not already listening, and not typing in an input
-        if (e.code === 'Space' && 
-            !voicePushToTalk && 
-            voiceInputState !== 'listening' &&
-            !isTypingInInput(e.target)) {
-            
+        // Trigger on Ctrl+Space or Cmd+Space (works even in input fields)
+        const modifierHeld = e.ctrlKey || e.metaKey;
+        if (e.code === 'Space' && modifierHeld && !voicePushToTalk && voiceInputState !== 'listening') {
             e.preventDefault();
             voicePushToTalk = true;
             
@@ -2718,13 +2715,14 @@ function initPushToTalk() {
             const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
             activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
             
-            console.log('[Voice] Push-to-talk started, target:', activeVoiceTarget);
+            console.log('[Voice] Push-to-talk started (Ctrl/Cmd+Space), target:', activeVoiceTarget);
             startVoiceInput();
         }
     });
     
     document.addEventListener('keyup', (e) => {
-        if (e.code === 'Space' && voicePushToTalk) {
+        // Stop on releasing Space OR releasing the modifier while push-to-talk is active
+        if ((e.code === 'Space' || e.key === 'Control' || e.key === 'Meta') && voicePushToTalk) {
             e.preventDefault();
             console.log('[Voice] Push-to-talk released');
             voicePushToTalk = false;
@@ -2732,7 +2730,7 @@ function initPushToTalk() {
         }
     });
     
-    console.log('[Voice] Push-to-talk initialized (hold spacebar to speak)');
+    console.log('[Voice] Push-to-talk initialized (hold Ctrl+Space or Cmd+Space to speak)');
 }
 
 // Check if user is typing in an input field
