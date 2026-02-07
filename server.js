@@ -181,8 +181,12 @@ function parseModelsOutput(output) {
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
-const OPENCLAW_DATA = '/app/openclaw-data';  // Full .openclaw dir (read-only mount)
+// All OpenClaw data mounted at /app/openclaw-data (single bind mount of /home/node/.openclaw)
+// Falls back to ./memory for local dev or legacy mount
+const OPENCLAW_DATA = '/app/openclaw-data';
+const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace')) 
+    ? path.join(OPENCLAW_DATA, 'workspace') 
+    : './memory';
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
 const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
@@ -194,7 +198,8 @@ const LATEST_STATE_FILE = path.join(path.dirname(STATE_FILE), 'state.latest.json
 // Sessions: Read directly from OpenClaw
 // ============================================
 const SESSIONS_PATHS = [
-  '/app/sessions/sessions.json',
+  path.join(OPENCLAW_DATA, 'agents/main/sessions/sessions.json'),
+  '/app/sessions/sessions.json',  // legacy mount fallback
   '/home/node/.openclaw/agents/main/sessions/sessions.json'
 ];
 
