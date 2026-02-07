@@ -4579,6 +4579,12 @@ function renderTasks() {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
 
+        if (!state.tasks[column] || state.tasks[column].length === 0) {
+            container.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: var(--space-6) var(--space-2);">No tasks</div>`;
+            count.textContent = '0';
+            return;
+        }
+
         container.innerHTML = state.tasks[column].map((task, index) => {
             const isSelected = selectedTasks.has(task.id);
             const doneStyle = column === 'done' ? 'text-decoration: line-through; color: var(--text-muted);' : '';
