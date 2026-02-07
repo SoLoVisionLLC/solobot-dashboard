@@ -2513,7 +2513,24 @@ async function loadState() {
         return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0);
     };
 
-    // Load from VPS first
+    // Load localStorage tasks as a safety net (in case server state is empty)
+    let localTasks = null;
+    try {
+        const localSaved = localStorage.getItem('solovision-dashboard');
+        if (localSaved) {
+            const parsed = JSON.parse(localSaved);
+            if (parsed.tasks && countTasks(parsed) > 0) {
+                localTasks = JSON.parse(JSON.stringify(parsed.tasks));
+            }
+        }
+    } catch (e) { /* ignore */ }
+
+    // Also check in-memory tasks
+    if (!localTasks && countTasks(state) > 0) {
+        localTasks = JSON.parse(JSON.stringify(state.tasks));
+    }
+
+    // Load from VPS
     try {
         const response = await fetch('/api/state', { cache: 'no-store' });
         if (response.ok) {
@@ -2521,36 +2538,28 @@ async function loadState() {
             if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
             if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
 
-            // Don't overwrite pendingChat
             delete vpsState.pendingChat;
-            // Don't overwrite chat - it's session-specific and comes from Gateway
             delete vpsState.chat;
 
-            // PROTECT: Don't let empty server state wipe local tasks
+            // PROTECT: Don't let empty server state wipe tasks we have locally
             const serverTaskCount = countTasks(vpsState);
-            const localTaskCount = countTasks(state);
-            if (serverTaskCount === 0 && localTaskCount > 0) {
-                console.warn('[loadState] Server has 0 tasks but local has', localTaskCount, '— preserving local tasks');
-                const preservedTasks = JSON.parse(JSON.stringify(state.tasks));
+            if (serverTaskCount === 0 && localTasks && countTasks({ tasks: localTasks }) > 0) {
+                console.warn('[loadState] Server has 0 tasks but localStorage has', countTasks({ tasks: localTasks }), '— preserving local tasks');
                 state = {
                     ...state,
                     ...vpsState,
-                    tasks: preservedTasks,  // Keep local tasks
+                    tasks: localTasks,
                     chat: currentChat,
                     system: currentSystem,
                     console: currentConsole
                 };
-                // Push our tasks BACK to server so it's in sync
-                try {
-                    await fetch('/api/sync', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tasks: preservedTasks })
-                    });
-                    console.log('[loadState] Pushed local tasks back to server');
-                } catch (pushErr) {
-                    console.warn('[loadState] Failed to push tasks to server:', pushErr);
-                }
+                // Push tasks back to server
+                fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tasks: localTasks })
+                }).then(() => console.log('[loadState] Pushed local tasks back to server'))
+                  .catch(() => {});
             } else {
                 state = {
                     ...state,
@@ -2561,8 +2570,6 @@ async function loadState() {
                 };
             }
             delete state.localModified;
-
-            // Save state to localStorage
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
             return;
         }
@@ -2574,7 +2581,6 @@ async function loadState() {
     const localSaved = localStorage.getItem('solovision-dashboard');
     if (localSaved) {
         const parsed = JSON.parse(localSaved);
-        // Keep local-only data
         delete parsed.system;
         delete parsed.console;
         state = { ...state, ...parsed, chat: currentChat, system: currentSystem, console: currentConsole };
