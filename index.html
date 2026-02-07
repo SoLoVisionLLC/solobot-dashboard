@@ -3995,6 +3995,51 @@
                                     </div>
                                 </div>
                                 <div class="bento-widget-content">
+                                    <!-- Task Board Toolbar -->
+                                    <div id="task-toolbar" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px;">
+                                        <!-- Search -->
+                                        <div style="position: relative; flex: 1; min-width: 140px; max-width: 240px;">
+                                            <input type="text" id="task-search" placeholder="Search tasks..."
+                                                   oninput="applyTaskFilters()"
+                                                   class="input" style="padding: 4px 8px 4px 28px; font-size: 12px; height: 30px; width: 100%;">
+                                            <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 12px; opacity: 0.5;">🔍</span>
+                                        </div>
+                                        
+                                        <!-- Sort -->
+                                        <select id="task-sort" onchange="applyTaskFilters()" class="input" style="padding: 4px 6px; font-size: 12px; height: 30px; min-width: 100px;">
+                                            <option value="newest">Newest first</option>
+                                            <option value="oldest">Oldest first</option>
+                                            <option value="priority-high">Priority ↑</option>
+                                            <option value="priority-low">Priority ↓</option>
+                                            <option value="alpha-az">A → Z</option>
+                                            <option value="alpha-za">Z → A</option>
+                                        </select>
+                                        
+                                        <!-- Filter by Priority -->
+                                        <select id="task-filter-priority" onchange="applyTaskFilters()" class="input" style="padding: 4px 6px; font-size: 12px; height: 30px; min-width: 70px;">
+                                            <option value="all">All P</option>
+                                            <option value="0">🔴 P0</option>
+                                            <option value="1">🟡 P1</option>
+                                            <option value="2">🟢 P2</option>
+                                        </select>
+                                        
+                                        <!-- Filter by Agent -->
+                                        <select id="task-filter-agent" onchange="applyTaskFilters()" class="input" style="padding: 4px 6px; font-size: 12px; height: 30px; min-width: 80px;">
+                                            <option value="all">All agents</option>
+                                        </select>
+                                        
+                                        <!-- Bulk Actions -->
+                                        <div id="task-bulk-actions" style="display: none; gap: 4px; align-items: center;">
+                                            <span id="task-selected-count" style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">0 selected</span>
+                                            <button onclick="bulkMoveTo('done')" class="btn btn-ghost" style="padding: 2px 6px; font-size: 11px;" title="Move selected to Done">✓ Done</button>
+                                            <button onclick="bulkMoveTo('archive')" class="btn btn-ghost" style="padding: 2px 6px; font-size: 11px;" title="Archive selected">📦</button>
+                                            <button onclick="bulkDelete()" class="btn btn-ghost" style="padding: 2px 6px; font-size: 11px; color: var(--error);" title="Delete selected">🗑️</button>
+                                        </div>
+                                        
+                                        <!-- Task Stats -->
+                                        <div id="task-stats" style="font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap;"></div>
+                                    </div>
+                                    
                                     <div class="grid-3">
                                         <!-- To-Do Column -->
                                         <div class="column">
