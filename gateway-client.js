@@ -1,3 +1,8 @@
+const GATEWAY_DEBUG = false;
+const GATEWAY_DEBUG_EVENTS = false;
+function gwLog(...args){ if (GATEWAY_DEBUG) console.log(...args); }
+function gwEventLog(...args){ if (GATEWAY_DEBUG_EVENTS) console.log(...args); }
+function gwWarn(...args){ if (GATEWAY_DEBUG) console.warn(...args); }
 // Gateway WebSocket Client v3
 // Connects to OpenClaw Gateway for shared session chat
 
@@ -39,7 +44,7 @@ class GatewayClient {
         const protocol = pageIsSecure || port === 443 || host.includes('wss') || host.includes('https') ? 'wss' : 'ws';
         const url = `${protocol}://${cleanHost}:${port}`;
 
-        console.log(`[Gateway] Connecting to ${url}`);
+        gwLog(`[Gateway] Connecting to ${url}`);
 
         try {
             this.socket = new WebSocket(url);
@@ -66,7 +71,7 @@ class GatewayClient {
         };
 
         this.socket.onclose = (event) => {
-            console.log(`[Gateway] Disconnected: ${event.code}`);
+            gwLog(`[Gateway] Disconnected: ${event.code}`);
             this.connected = false;
             this.onDisconnected(event.reason || 'Connection closed');
 
@@ -105,11 +110,11 @@ class GatewayClient {
             this.reconnectAttempts = 0;
 
             const serverName = result?.server?.host || 'moltbot';
-            console.log(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
+            gwLog(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
             
             // Check if provider/model info is available
             if (result?.provider || result?.model) {
-                console.log(`[Gateway] Server provider: ${result.provider || 'unknown'}, model: ${result.model || 'unknown'}`);
+                gwLog(`[Gateway] Server provider: ${result.provider || 'unknown'}, model: ${result.model || 'unknown'}`);
                 // Store in localStorage so dashboard can display it
                 if (result.provider) localStorage.setItem('server_provider', result.provider);
                 if (result.model) localStorage.setItem('server_model', result.model);
@@ -268,7 +273,7 @@ class GatewayClient {
             const message = payload.message;
             const role = message?.role || '';
             
-            console.log(`[Gateway] Cross-session event: session=${eventSessionKey}, state=${state}, role=${role}`);
+            gwLog(`[Gateway] Cross-session event: session=${eventSessionKey}, state=${state}, role=${role}`);
             
             if (state === 'final' && role === 'assistant') {
                 let contentText = '';
@@ -280,7 +285,7 @@ class GatewayClient {
                     }
                 }
                 if (contentText.trim()) {
-                    console.log(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars)`);
+                    gwLog(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars)`);
                     this.onCrossSessionMessage({
                         sessionKey: eventSessionKey,
                         content: contentText,
@@ -311,7 +316,7 @@ class GatewayClient {
         if (state === 'delta') {
             // Only log first delta to avoid spam
             if (!this._loggedDelta) {
-                console.log(`[Gateway] ⬇️ Receiving response (model: ${message?.model || 'unknown'}, provider: ${message?.provider || 'unknown'})`);
+                gwLog(`[Gateway] ⬇️ Receiving response (model: ${message?.model || 'unknown'}, provider: ${message?.provider || 'unknown'})`);
                 this._loggedDelta = true;
             }
         } else if (state === 'final') {
@@ -325,9 +330,9 @@ class GatewayClient {
                 console.error(`[Gateway]    Provider: ${message?.provider || 'unknown'}, Model: ${message?.model || 'unknown'}`);
                 console.error(`[Gateway]    Stop reason: ${stopReason || 'none'}`);
             } else if (contentLen === 0 && role === 'assistant') {
-                console.warn(`[Gateway] ⚠️ Empty response from AI (stopReason: ${stopReason}, provider: ${message?.provider})`);
+                gwWarn(`[Gateway] ⚠️ Empty response from AI (stopReason: ${stopReason}, provider: ${message?.provider})`);
             } else {
-                console.log(`[Gateway] ✅ Response complete: ${contentLen} chars (stopReason: ${stopReason || 'end_turn'})`);
+                gwLog(`[Gateway] ✅ Response complete: ${contentLen} chars (stopReason: ${stopReason || 'end_turn'})`);
             }
         } else if (state === 'error') {
             this._loggedDelta = false;
@@ -360,12 +365,12 @@ class GatewayClient {
 
         // Log model and session info
         const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
-        console.log(`[Gateway] ⬆️ Sending message to session "${this.sessionKey}"`);
-        console.log(`[Gateway]    Model: ${model}`);
-        console.log(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+        gwLog(`[Gateway] ⬆️ Sending message to session "${this.sessionKey}"`);
+        gwLog(`[Gateway]    Model: ${model}`);
+        gwLog(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
         return this._request('chat.send', params).then(result => {
-            console.log(`[Gateway] ✅ Message sent, runId: ${result?.runId || 'none'}`);
+            gwLog(`[Gateway] ✅ Message sent, runId: ${result?.runId || 'none'}`);
             return result;
         }).catch(err => {
             console.error(`[Gateway] ❌ Failed to send message: ${err.message}`);
@@ -387,7 +392,7 @@ class GatewayClient {
         for (const imageDataUrl of imageDataUrls) {
             const matches = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
             if (!matches) {
-                console.warn('[Gateway] Skipping invalid image data URL');
+                gwWarn('[Gateway] Skipping invalid image data URL');
                 continue;
             }
             const mimeType = matches[1];
@@ -410,12 +415,12 @@ class GatewayClient {
             attachments: attachments
         };
 
-        console.log('[Gateway] Sending', attachments.length, 'image(s), total size:', 
+        gwLog('[Gateway] Sending', attachments.length, 'image(s), total size:', 
             Math.round(attachments.reduce((sum, a) => sum + a.content.length, 0) / 1024), 'KB');
 
         // Log model info if available
         const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
-        console.log(`[Gateway] Sending with ${model}`);
+        gwLog(`[Gateway] Sending with ${model}`);
 
         return this._request('chat.send', params);
     }
@@ -425,18 +430,18 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log(`[Gateway] Loading history for session: ${this.sessionKey}`);
+        gwLog(`[Gateway] Loading history for session: ${this.sessionKey}`);
         return this._request('chat.history', {
             sessionKey: this.sessionKey,
             limit: 50
         }).then(result => {
-            console.log(`[Gateway] History returned ${result?.messages?.length || 0} messages`);
+            gwLog(`[Gateway] History returned ${result?.messages?.length || 0} messages`);
             return result;
         }).catch(() => ({ messages: [] }));
     }
 
     setSessionKey(key) {
-        console.log(`[Gateway] Switching session from "${this.sessionKey}" to "${key}"`);
+        gwLog(`[Gateway] Switching session from "${this.sessionKey}" to "${key}"`);
         this.sessionKey = key;
         if (this.connected) {
             this._subscribeToSession(key);
@@ -448,12 +453,12 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log('[Gateway] Listing sessions...');
+        gwLog('[Gateway] Listing sessions...');
         return this._request('sessions.list', {
             includeDerivedTitles: true,
             ...opts
         }).then(result => {
-            console.log(`[Gateway] Sessions list returned ${result?.sessions?.length || 0} sessions`);
+            gwLog(`[Gateway] Sessions list returned ${result?.sessions?.length || 0} sessions`);
             return result;
         });
     }
@@ -463,12 +468,12 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log(`[Gateway] Patching session "${sessionKey}":`, patch);
+        gwLog(`[Gateway] Patching session "${sessionKey}":`, patch);
         return this._request('sessions.patch', {
             key: sessionKey,
             ...patch
         }).then(result => {
-            console.log(`[Gateway] Session patched:`, result);
+            gwLog(`[Gateway] Session patched:`, result);
             return result;
         });
     }
@@ -496,16 +501,16 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log('[Gateway] Patching config...', configPatch);
+        gwLog('[Gateway] Patching config...', configPatch);
 
         // First get current config to get the baseHash
         let baseHash;
         try {
             const current = await this._request('config.get', {});
             baseHash = current?.hash;
-            console.log('[Gateway] Current config hash:', baseHash);
+            gwLog('[Gateway] Current config hash:', baseHash);
         } catch (err) {
-            console.warn('[Gateway] Could not get current config hash:', err.message);
+            gwWarn('[Gateway] Could not get current config hash:', err.message);
         }
 
         // Apply the patch - this will merge with existing config and restart
@@ -516,7 +521,7 @@ class GatewayClient {
         };
 
         return this._request('config.patch', params).then(result => {
-            console.log('[Gateway] Config patch applied, gateway will restart');
+            gwLog('[Gateway] Config patch applied, gateway will restart');
             return result;
         });
     }
@@ -527,13 +532,13 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        console.log('[Gateway] Requesting restart...');
+        gwLog('[Gateway] Requesting restart...');
 
         // Try the restart RPC call
         return this._request('gateway.restart', { reason, delayMs: 500 }).catch(err => {
             // If gateway.restart doesn't exist, try via config.patch with empty patch
             // which still triggers a restart
-            console.log('[Gateway] gateway.restart not available, trying config refresh...');
+            gwLog('[Gateway] gateway.restart not available, trying config refresh...');
             return this._request('config.patch', { raw: '{}', restartDelayMs: 500 });
         });
     }
@@ -547,7 +552,7 @@ class GatewayClient {
 
         this.reconnectAttempts++;
         const delay = Math.min(8000, 350 * Math.pow(1.7, this.reconnectAttempts));
-        console.log(`[Gateway] Reconnecting in ${Math.round(delay)}ms`);
+        gwLog(`[Gateway] Reconnecting in ${Math.round(delay)}ms`);
 
         setTimeout(() => this._doConnect(), delay);
     }

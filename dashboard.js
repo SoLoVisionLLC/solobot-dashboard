@@ -1848,6 +1848,8 @@ function initGateway() {
 // CROSS-SESSION NOTIFICATIONS
 // ===================
 const unreadSessions = new Map(); // sessionKey → count
+const NOTIFICATION_DEBUG = true;
+function notifLog(...args){ if (NOTIFICATION_DEBUG) console.log(...args); }
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -1871,11 +1873,12 @@ function handleCrossSessionNotification(msg) {
     const friendlyName = getFriendlySessionName(sessionKey);
     const preview = content.length > 120 ? content.slice(0, 120) + '…' : content;
     
-    console.log(`[Notifications] 🔔 Message from ${friendlyName}: ${preview.slice(0, 60)}`);
+    notifLog(`[Notifications] 🔔 Message from ${friendlyName}: ${preview.slice(0, 60)}`);
     
     // Track unread count
     unreadSessions.set(sessionKey, (unreadSessions.get(sessionKey) || 0) + 1);
     updateUnreadBadges();
+    notifLog(`[Notifications] Unread total: ${Array.from(unreadSessions.values()).reduce((a,b)=>a+b,0)}`);
     
     // Always show in-app toast (works regardless of browser notification permission)
     showNotificationToast(friendlyName, preview, sessionKey);
@@ -1969,6 +1972,7 @@ function showNotificationToast(title, body, sessionKey) {
     });
     
     container.appendChild(toast);
+    notifLog(`[Notifications] Toast rendered for ${title} (session=${sessionKey})`);
     
     // Animate in
     requestAnimationFrame(() => {
