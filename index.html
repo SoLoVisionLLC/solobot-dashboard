@@ -2476,12 +2476,12 @@
             grid-row: 1;
         }
 
-        .bento-quick-stats {
-            display: none; /* hidden in bento layout */
+        .bento-widget.bento-quick-stats {
+            display: none; /* hidden in bento layout — needs .bento-widget prefix to beat .bento-widget{display:flex} */
         }
 
-        .bento-terminal {
-            display: none; /* hidden in bento layout */
+        .bento-widget.bento-terminal {
+            display: none;
         }
 
         .bento-activity {
@@ -2489,12 +2489,12 @@
             grid-row: 1;
         }
 
-        .bento-notes {
-            display: none; /* hidden in bento layout */
+        .bento-widget.bento-notes {
+            display: none;
         }
 
-        .bento-chat {
-            display: none; /* hidden in bento layout */
+        .bento-widget.bento-chat {
+            display: none;
         }
 
         /* Tablet layout (2 columns) */
