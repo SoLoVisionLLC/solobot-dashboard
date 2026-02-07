@@ -1102,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         currentProvider = provider;
         currentModel = modelId;
 
-        console.log(`[Dashboard] Init model: ${currentModel} (source: ${savedModel ? 'localStorage' : 'API'})`);
+        console.log(`[Dashboard] Init model: ${currentModel} (provider: ${currentProvider})`);
         
         // Update displays
         const currentProviderDisplay = document.getElementById('current-provider-display');
@@ -1760,30 +1760,26 @@ function initGateway() {
             
             checkRestartToast();
 
-            // Load chat history on connect
-            // Capture session version to detect stale responses after session switch
+            // Load chat history on connect (one-time full load)
+            _historyRefreshInFlight = true;
+            _lastHistoryLoadTime = Date.now();
             const loadVersion = sessionVersion;
             gateway.loadHistory().then(result => {
-                // Ignore if session changed during async load
+                _historyRefreshInFlight = false;
                 if (loadVersion !== sessionVersion) {
                     console.log(`[Dashboard] Ignoring stale history (version ${loadVersion} != ${sessionVersion})`);
                     return;
                 }
                 if (result?.messages) {
-                    // Only do full replacement if chat is empty (first load)
                     if (!state.chat?.messages?.length) {
                         loadHistoryMessages(result.messages);
                     } else {
-                        // On reconnect, only merge new messages - don't replace
                         mergeHistoryMessages(result.messages);
                     }
                 }
-            }).catch(() => {
-                // History load failed - not critical
-            });
+            }).catch(() => { _historyRefreshInFlight = false; });
 
-            // Poll history periodically to catch user messages from other clients
-            // (Gateway doesn't broadcast user messages as events, only assistant messages)
+            // Poll history periodically (guarded — won't overlap with initial load)
             startHistoryPolling();
 
             // Fetch sessions list from gateway (now that we're connected)
@@ -2002,14 +1998,8 @@ function handleChatEvent(event) {
             streamingText = '';
             isProcessing = false;
             lastProcessingEndTime = Date.now();
-            // Immediate history refresh to catch user messages from other clients
-            if (gateway && gateway.isConnected()) {
-                const pollVersion = sessionVersion;
-                gateway.loadHistory().then(result => {
-                    if (pollVersion !== sessionVersion) return;
-                    if (result?.messages) mergeHistoryMessages(result.messages);
-                }).catch(() => {});
-            }
+            // Schedule a history refresh (guarded, won't spam)
+            setTimeout(_doHistoryRefresh, 2000);
             renderChat();
             renderChatPage();
             break;
@@ -2145,12 +2135,16 @@ function loadHistoryMessages(messages) {
 let _historyRefreshFn = null;
 let _historyVisibilityFn = null;
 let _historyRefreshInFlight = false;
+let _lastHistoryLoadTime = 0;
+const HISTORY_MIN_INTERVAL = 2000; // Minimum 2 seconds between loads
 
 function _doHistoryRefresh() {
     if (!gateway || !gateway.isConnected() || isProcessing) return;
     if (Date.now() - lastProcessingEndTime < 1500) return;
     if (_historyRefreshInFlight) return; // Prevent overlapping calls
+    if (Date.now() - _lastHistoryLoadTime < HISTORY_MIN_INTERVAL) return; // Rate limit
     _historyRefreshInFlight = true;
+    _lastHistoryLoadTime = Date.now();
     const pollVersion = sessionVersion;
     gateway.loadHistory().then(result => {
         _historyRefreshInFlight = false;
@@ -3709,12 +3703,8 @@ function updateScrollToBottomButton() {
 }
 
 function forceRefreshHistory() {
-    if (!gateway || !gateway.isConnected()) return;
-    const pollVersion = sessionVersion;
-    gateway.loadHistory().then(result => {
-        if (pollVersion !== sessionVersion) return;
-        if (result?.messages) mergeHistoryMessages(result.messages);
-    }).catch(() => {});
+    // Route through guarded function to prevent spam
+    _doHistoryRefresh();
 }
 
 function renderChatPage() {
