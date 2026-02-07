@@ -13,10 +13,16 @@ body.theme-transitioning * {
 }
 
 /* ========================================
+   BACKWARD COMPATIBILITY
+   "dark" → midnight, "light" → snow
+   ======================================== */
+
+/* ========================================
    DARK THEMES
    ======================================== */
 
 /* 1. MIDNIGHT - Deep slate grays (Default) */
+[data-theme="dark"],
 [data-theme="midnight"] {
     /* Surfaces - slate grays with subtle cool undertone */
     --surface-base: #0c0d10;
@@ -280,6 +286,7 @@ body.theme-transitioning * {
    ======================================== */
 
 /* 8. SNOW - Clean whites and cool grays (Default Light) */
+[data-theme="light"],
 [data-theme="snow"] {
     --surface-base: #F8FAFC;
     --surface-1: #FFFFFF;

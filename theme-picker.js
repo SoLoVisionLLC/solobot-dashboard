@@ -5,7 +5,14 @@
 
 class ThemePicker {
     constructor() {
-        this.currentTheme = this.getStoredTheme() || 'midnight';
+        // Migrate stale "dark"/"light" values
+        const MIGRATION = { dark: 'midnight', light: 'snow' };
+        let stored = this.getStoredTheme();
+        if (stored && MIGRATION[stored]) {
+            stored = MIGRATION[stored];
+            this.storeTheme(stored);
+        }
+        this.currentTheme = stored || 'midnight';
         this.init();
     }
 

@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SoLoVision Command Center</title>
     <link rel="icon" type="image/png" href="/solobot-avatar.png">
+    <script>
+        // Apply theme immediately before paint to prevent flash
+        (function() {
+            var m = { dark: 'midnight', light: 'snow' };
+            var t = localStorage.getItem('solobot-theme') || localStorage.getItem('theme') || 'midnight';
+            if (m[t]) t = m[t];
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,6 +30,34 @@
             --brand-navy: #1B2232;
             --brand-grey: #A9B2BC;
             --brand-white: #FFFFFF;
+            --accent: #BC2026;
+
+            /* Fallback theme values (midnight) — ensures UI isn't transparent
+               if themes.css loads late or fails */
+            --surface-base: #0c0d10;
+            --surface-1: #14161a;
+            --surface-2: #1c1e23;
+            --surface-3: #24262c;
+            --surface-overlay: #2c2f36;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A9B2BC;
+            --text-muted: rgba(169, 178, 188, 0.6);
+            --text-faint: rgba(169, 178, 188, 0.4);
+            --border-default: rgba(169, 178, 188, 0.12);
+            --border-subtle: rgba(169, 178, 188, 0.08);
+            --border-strong: rgba(169, 178, 188, 0.2);
+            --border-focus: rgba(188, 32, 38, 0.5);
+            --control-bg: #1B2232;
+            --control-border: rgba(169, 178, 188, 0.2);
+            --control-focus: rgba(188, 32, 38, 0.3);
+            --success: #22c55e;
+            --success-muted: rgba(34, 197, 94, 0.15);
+            --warning: #BC2026;
+            --warning-muted: rgba(188, 32, 38, 0.15);
+            --error: #ef4444;
+            --error-muted: rgba(239, 68, 68, 0.15);
+            --scrollbar-track: #14161a;
+            --scrollbar-thumb: #A9B2BC;
 
             /* Spacing Scale (8px base) */
             --space-1: 4px;
@@ -45,20 +82,20 @@
         }
 
         /* Light mode overrides for themes with light base — uses :is() to match all light themes */
-        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble {
+        :is([data-theme="light"], [data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble {
             background: rgba(27, 34, 50, 0.08);
             border: 1px solid rgba(188, 32, 38, 0.2);
         }
         
-        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble-content {
+        :is([data-theme="light"], [data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble-content {
             color: var(--text-primary);
         }
         
-        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble-time {
+        :is([data-theme="light"], [data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble-time {
             color: var(--text-secondary);
         }
         
-        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .chat-page-message.solobot .chat-page-bubble {
+        :is([data-theme="light"], [data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .chat-page-message.solobot .chat-page-bubble {
             background: var(--surface-2);
             color: var(--text-primary);
         }
@@ -868,7 +905,9 @@
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
             display: none;
             align-items: center;
             justify-content: center;
@@ -880,8 +919,8 @@
         }
 
         .modal {
-            background: var(--surface-1);
-            border: 1px solid var(--border-default);
+            background: var(--surface-1, #14161a);
+            border: 1px solid var(--border-default, rgba(169, 178, 188, 0.12));
             border-radius: var(--radius-lg);
             padding: var(--space-6);
             width: 100%;
@@ -3979,14 +4018,24 @@
         }
 
         // Load saved theme — migrate old 'theme' key to new 'solobot-theme'
+        // Also handle stale "dark"/"light" values from before theme system
+        const THEME_MIGRATION = { 'dark': 'midnight', 'light': 'snow' };
         const legacyTheme = localStorage.getItem('theme');
         let savedTheme = localStorage.getItem('solobot-theme');
+        
+        // Migrate from old key
         if (!savedTheme && legacyTheme) {
-            // Migrate: "dark" → "midnight", "light" → "snow"
-            savedTheme = legacyTheme === 'light' ? 'snow' : 'midnight';
+            savedTheme = THEME_MIGRATION[legacyTheme] || 'midnight';
             localStorage.setItem('solobot-theme', savedTheme);
             localStorage.removeItem('theme');
         }
+        
+        // Fix any stale "dark"/"light" values in the new key too
+        if (savedTheme && THEME_MIGRATION[savedTheme]) {
+            savedTheme = THEME_MIGRATION[savedTheme];
+            localStorage.setItem('solobot-theme', savedTheme);
+        }
+        
         savedTheme = savedTheme || 'midnight';
         document.documentElement.setAttribute('data-theme', savedTheme);
         updateThemeIcon(savedTheme);
@@ -3997,10 +4046,10 @@
             .then(html => {
                 const container = document.getElementById('theme-picker-container');
                 if (container) container.innerHTML = html;
-                // Re-init theme picker cards if already loaded
+                // Re-init theme picker cards after HTML is loaded
                 if (window.themePicker) window.themePicker.setupThemeCards();
             })
-            .catch(() => {});
+            .catch(err => console.warn('Failed to load theme picker:', err));
 
         // Strict scroll containment - route scroll to element under cursor
         let currentScrollTarget = null;
