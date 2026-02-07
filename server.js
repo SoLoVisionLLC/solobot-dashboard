@@ -668,30 +668,52 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const update = JSON.parse(body);
+        const protections = { tasks: false, notes: false, activity: false };
         
-        // PROTECT tasks and notes from being wiped by empty client state!
-        // Only update tasks/notes if client has actual content, or if server is empty
-        const serverHasTasks = countTasks(state) > 0;
-        const serverHasNotes = (state.notes?.length || 0) > 0;
-        const clientHasTasks = countTasks(update) > 0;
-        const clientHasNotes = (update.notes?.length || 0) > 0;
+        // ============================================================
+        // BULLETPROOF DATA PROTECTION
+        // Tasks, notes, and activity are NEVER overwritten with less data.
+        // The server always keeps the version with MORE content.
+        // ============================================================
         
-        // If server has tasks but client doesn't, preserve server tasks
-        if (serverHasTasks && !clientHasTasks) {
-          console.log('[Sync] Protecting tasks - server has', countTasks(state), 'tasks, client has 0');
-          delete update.tasks;
+        const serverTaskCount = countTasks(state);
+        const clientTaskCount = countTasks(update);
+        const serverActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
+        const clientActivityCount = Array.isArray(update.activity) ? update.activity.length : 0;
+        const serverNoteCount = state.notes?.length || 0;
+        const clientNoteCount = update.notes?.length || 0;
+        
+        // PROTECT TASKS: never allow fewer tasks to replace more tasks
+        if (update.tasks !== undefined) {
+          if (serverTaskCount > 0 && clientTaskCount < serverTaskCount) {
+            console.log(`[Sync] PROTECTING tasks - server has ${serverTaskCount}, client has ${clientTaskCount}`);
+            delete update.tasks;
+            protections.tasks = true;
+          }
         }
         
-        // If server has notes but client doesn't, preserve server notes
-        if (serverHasNotes && !clientHasNotes) {
-          console.log('[Sync] Protecting notes - server has', state.notes.length, 'notes, client has 0');
-          delete update.notes;
+        // PROTECT ACTIVITY: never allow fewer entries to replace more entries
+        if (update.activity !== undefined) {
+          if (serverActivityCount > 0 && clientActivityCount < serverActivityCount) {
+            console.log(`[Sync] PROTECTING activity - server has ${serverActivityCount}, client has ${clientActivityCount}`);
+            delete update.activity;
+            protections.activity = true;
+          }
+        }
+        
+        // PROTECT NOTES: never allow fewer notes to replace more notes
+        if (update.notes !== undefined) {
+          if (serverNoteCount > 0 && clientNoteCount < serverNoteCount) {
+            console.log(`[Sync] PROTECTING notes - server has ${serverNoteCount}, client has ${clientNoteCount}`);
+            delete update.notes;
+            protections.notes = true;
+          }
         }
         
         state = { ...state, ...update, lastSync: Date.now() };
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, protected: { tasks: serverHasTasks && !clientHasTasks, notes: serverHasNotes && !clientHasNotes } }));
+        res.end(JSON.stringify({ ok: true, protected: protections }));
       } catch (e) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: e.message }));

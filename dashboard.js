@@ -2541,33 +2541,45 @@ async function loadState() {
             delete vpsState.pendingChat;
             delete vpsState.chat;
 
-            // PROTECT: Don't let empty server state wipe tasks we have locally
+            // BULLETPROOF PROTECTION: Always keep whichever has MORE data
             const serverTaskCount = countTasks(vpsState);
-            if (serverTaskCount === 0 && localTasks && countTasks({ tasks: localTasks }) > 0) {
-                console.warn('[loadState] Server has 0 tasks but localStorage has', countTasks({ tasks: localTasks }), '— preserving local tasks');
-                state = {
-                    ...state,
-                    ...vpsState,
-                    tasks: localTasks,
-                    chat: currentChat,
-                    system: currentSystem,
-                    console: currentConsole
-                };
-                // Push tasks back to server
+            const localTaskCount = localTasks ? countTasks({ tasks: localTasks }) : 0;
+            const serverActivityCount = Array.isArray(vpsState.activity) ? vpsState.activity.length : 0;
+            const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
+
+            // Use whichever has more tasks
+            const tasksToUse = (localTaskCount > serverTaskCount && localTasks) ? localTasks : vpsState.tasks;
+            // Use whichever has more activity
+            const activityToUse = (localActivityCount > serverActivityCount) ? state.activity : vpsState.activity;
+
+            if (localTaskCount > serverTaskCount && localTasks) {
+                console.warn(`[loadState] Preserving local tasks (${localTaskCount}) over server (${serverTaskCount})`);
+            }
+            if (localActivityCount > serverActivityCount) {
+                console.warn(`[loadState] Preserving local activity (${localActivityCount}) over server (${serverActivityCount})`);
+            }
+
+            state = {
+                ...state,
+                ...vpsState,
+                tasks: tasksToUse,
+                activity: activityToUse || [],
+                chat: currentChat,
+                system: currentSystem,
+                console: currentConsole
+            };
+
+            // If local had more data, push it back to server
+            if (localTaskCount > serverTaskCount || localActivityCount > serverActivityCount) {
+                const pushData = {};
+                if (localTaskCount > serverTaskCount) pushData.tasks = tasksToUse;
+                if (localActivityCount > serverActivityCount) pushData.activity = activityToUse;
                 fetch('/api/sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tasks: localTasks })
-                }).then(() => console.log('[loadState] Pushed local tasks back to server'))
+                    body: JSON.stringify(pushData)
+                }).then(() => console.log('[loadState] Pushed preserved data back to server'))
                   .catch(() => {});
-            } else {
-                state = {
-                    ...state,
-                    ...vpsState,
-                    chat: currentChat,
-                    system: currentSystem,
-                    console: currentConsole
-                };
             }
             delete state.localModified;
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
@@ -2632,13 +2644,50 @@ async function saveState(changeDescription = null) {
 
 async function syncToServer() {
     try {
+        // PROTECTION: Fetch server state first and never send fewer tasks/activity
+        let serverTaskCount = 0;
+        let serverActivityCount = 0;
+        try {
+            const checkResp = await fetch('/api/state', { cache: 'no-store' });
+            if (checkResp.ok) {
+                const serverState = await checkResp.json();
+                const st = serverState.tasks || {};
+                serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0);
+                serverActivityCount = Array.isArray(serverState.activity) ? serverState.activity.length : 0;
+            }
+        } catch (e) { /* continue with sync */ }
+
+        // Build sync payload — exclude tasks/activity if we'd wipe server data
+        const syncPayload = JSON.parse(JSON.stringify(state));
+
+        const localTaskCount = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0);
+        const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
+
+        if (serverTaskCount > 0 && localTaskCount < serverTaskCount) {
+            console.warn(`[Sync] Skipping tasks — server has ${serverTaskCount}, local has ${localTaskCount}`);
+            delete syncPayload.tasks;
+        }
+        if (serverActivityCount > 0 && localActivityCount < serverActivityCount) {
+            console.warn(`[Sync] Skipping activity — server has ${serverActivityCount}, local has ${localActivityCount}`);
+            delete syncPayload.activity;
+        }
+
+        // Don't sync transient local-only data
+        delete syncPayload.chat;
+        delete syncPayload.system;
+        delete syncPayload.console;
+
         const response = await fetch(SYNC_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state)
+            body: JSON.stringify(syncPayload)
         });
         
         if (response.ok) {
+            const result = await response.json();
+            if (result.protected?.tasks || result.protected?.activity) {
+                console.log('[Sync] Server protected data:', result.protected);
+            }
             if (state.console && state.console.logs) {
                 state.console.logs.push({
                     text: 'State synced to server',
