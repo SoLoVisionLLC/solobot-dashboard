@@ -4087,8 +4087,7 @@
         document.documentElement.setAttribute('data-theme', savedTheme);
         updateThemeIcon(savedTheme);
 
-        // Theme picker is inlined — just init cards
-        if (window.themePicker) window.themePicker.setupThemeCards();
+        // Theme picker is inlined — cards init via ThemePicker constructor at end of body
 
         // Strict scroll containment - route scroll to element under cursor
         let currentScrollTarget = null;
@@ -4541,6 +4540,60 @@
             z-index: 100;
         }
     </style>
-    <script src="/theme-picker.js"></script>
+    <script>
+    // ===== THEME PICKER ENGINE =====
+    class ThemePicker {
+        constructor() {
+            const M = { dark: 'midnight', light: 'snow' };
+            let s = localStorage.getItem('solobot-theme');
+            if (s && M[s]) { s = M[s]; localStorage.setItem('solobot-theme', s); }
+            this.currentTheme = s || 'midnight';
+            this.applyTheme(this.currentTheme, false);
+            this.setupThemeCards();
+            this.observeThemeChanges();
+        }
+        setupThemeCards() {
+            document.querySelectorAll('.theme-card').forEach(card => {
+                const t = card.getAttribute('data-theme');
+                if (!t) return;
+                card.classList.toggle('active', t === this.currentTheme);
+                card.onclick = () => this.selectTheme(t);
+            });
+        }
+        selectTheme(t) {
+            if (t === this.currentTheme) return;
+            this.currentTheme = t;
+            this.applyTheme(t, true);
+            localStorage.setItem('solobot-theme', t);
+            this.updateActiveCard();
+            window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: t } }));
+        }
+        applyTheme(t, animated) {
+            if (animated) {
+                document.body.classList.add('theme-transitioning');
+                setTimeout(() => document.body.classList.remove('theme-transitioning'), 350);
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        }
+        updateActiveCard() {
+            document.querySelectorAll('.theme-card').forEach(c => {
+                c.classList.toggle('active', c.getAttribute('data-theme') === this.currentTheme);
+            });
+        }
+        observeThemeChanges() {
+            new MutationObserver(muts => {
+                muts.forEach(m => {
+                    if (m.attributeName === 'data-theme') {
+                        const nt = document.documentElement.getAttribute('data-theme');
+                        if (nt && nt !== this.currentTheme) { this.currentTheme = nt; this.updateActiveCard(); }
+                    }
+                });
+            }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        }
+        setTheme(t) { this.selectTheme(t); }
+        getTheme() { return this.currentTheme; }
+    }
+    window.themePicker = new ThemePicker();
+    </script>
 </body>
 </html>
