@@ -2141,33 +2141,52 @@ function loadHistoryMessages(messages) {
     renderSystemPage();
 }
 
-function startHistoryPolling() {
-    stopHistoryPolling(); // Clear any existing interval
+// Shared refresh function (one instance, never duplicated)
+let _historyRefreshFn = null;
+let _historyVisibilityFn = null;
+let _historyRefreshInFlight = false;
 
-    const refreshHistory = () => {
-        if (!gateway || !gateway.isConnected() || isProcessing) return;
-        if (Date.now() - lastProcessingEndTime < 1500) return;
-        const pollVersion = sessionVersion;
-        gateway.loadHistory().then(result => {
-            if (pollVersion !== sessionVersion) return;
-            if (result?.messages) mergeHistoryMessages(result.messages);
-        }).catch(() => {});
-    };
+function _doHistoryRefresh() {
+    if (!gateway || !gateway.isConnected() || isProcessing) return;
+    if (Date.now() - lastProcessingEndTime < 1500) return;
+    if (_historyRefreshInFlight) return; // Prevent overlapping calls
+    _historyRefreshInFlight = true;
+    const pollVersion = sessionVersion;
+    gateway.loadHistory().then(result => {
+        _historyRefreshInFlight = false;
+        if (pollVersion !== sessionVersion) return;
+        if (result?.messages) mergeHistoryMessages(result.messages);
+    }).catch(() => { _historyRefreshInFlight = false; });
+}
+
+function startHistoryPolling() {
+    stopHistoryPolling(); // Clear any existing interval + listeners
 
     // Poll every 3 seconds to catch user messages from other clients
-    historyPollInterval = setInterval(refreshHistory, 3000);
+    historyPollInterval = setInterval(_doHistoryRefresh, 3000);
 
-    // Also refresh on focus/visibility to avoid missed polls
-    window.addEventListener('focus', refreshHistory);
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') refreshHistory();
-    });
+    // Only add focus/visibility listeners ONCE (remove old ones first)
+    if (!_historyRefreshFn) {
+        _historyRefreshFn = _doHistoryRefresh;
+        _historyVisibilityFn = () => {
+            if (document.visibilityState === 'visible') _doHistoryRefresh();
+        };
+        window.addEventListener('focus', _historyRefreshFn);
+        document.addEventListener('visibilitychange', _historyVisibilityFn);
+    }
 }
 
 function stopHistoryPolling() {
     if (historyPollInterval) {
         clearInterval(historyPollInterval);
         historyPollInterval = null;
+    }
+    // Clean up event listeners
+    if (_historyRefreshFn) {
+        window.removeEventListener('focus', _historyRefreshFn);
+        document.removeEventListener('visibilitychange', _historyVisibilityFn);
+        _historyRefreshFn = null;
+        _historyVisibilityFn = null;
     }
 }
 
