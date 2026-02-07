@@ -6715,7 +6715,7 @@
                                         --
                                     </div>
                                 </div>
-                                <div class="setting-row">
+                                <div class="setting-row" style="flex-wrap: wrap; gap: 8px;">
                                     <div class="setting-info">
                                         <div class="setting-title">
                                             Change Default Model
@@ -6725,17 +6725,23 @@
                                             agents
                                         </div>
                                     </div>
-                                    <select id="setting-model" class="select">
-                                        <!-- Populated dynamically -->
-                                    </select>
-                                    <button
-                                        onclick="changeGlobalModel()"
-                                        class="btn btn-primary"
-                                        style="margin-left: 8px; padding: 4px 12px; font-size: 12px"
-                                        title="Apply as global default"
-                                    >
-                                        Apply
-                                    </button>
+                                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                        <select id="setting-provider" class="select" style="min-width: 130px;"
+                                                onchange="onSettingsProviderChange()">
+                                            <!-- Populated dynamically -->
+                                        </select>
+                                        <select id="setting-model" class="select" style="min-width: 180px;">
+                                            <!-- Populated dynamically -->
+                                        </select>
+                                        <button
+                                            onclick="changeGlobalModel()"
+                                            class="btn btn-primary"
+                                            style="padding: 4px 12px; font-size: 12px"
+                                            title="Apply as global default"
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
                                 </div>
                                 <p
                                     style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2)"
@@ -6890,6 +6896,18 @@
                                 👁️ Visible Panels
                             </h4>
                             <div class="modal-section-content">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <span class="setting-title">🎨 Theme</span>
+                                        <div class="setting-desc">Dashboard color theme</div>
+                                    </div>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <button onclick="scrollToThemePicker()" id="theme-current-label"
+                                                class="btn btn-ghost" style="padding: 4px 10px; font-size: 12px; border: 1px solid var(--border);">
+                                            🎨 Choose Theme
+                                        </button>
+                                    </div>
+                                </div>
                                 <div class="setting-row">
                                     <span class="setting-title"
                                     >SoLoBot Live Panel</span>

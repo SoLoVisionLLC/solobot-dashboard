@@ -648,9 +648,13 @@ window.updateProviderDisplay = function() {
 
 // Populate provider dropdown dynamically from API
 async function populateProviderDropdown() {
-    const providerSelect = document.getElementById('provider-select');
-    if (!providerSelect) {
-        console.warn('[Dashboard] provider-select element not found');
+    const selects = [
+        document.getElementById('provider-select'),
+        document.getElementById('setting-provider')
+    ].filter(Boolean);
+    
+    if (selects.length === 0) {
+        console.warn('[Dashboard] No provider-select elements found');
         return [];
     }
     
@@ -661,19 +665,18 @@ async function populateProviderDropdown() {
         const allModels = await response.json();
         const providers = Object.keys(allModels);
         
-        // Clear existing options
-        providerSelect.innerHTML = '';
-        
-        // Add options for each provider
-        providers.forEach(provider => {
-            const option = document.createElement('option');
-            option.value = provider;
-            // Format display name (capitalize, replace hyphens)
-            option.textContent = provider.split('-').map(w => 
-                w.charAt(0).toUpperCase() + w.slice(1)
-            ).join(' ');
-            providerSelect.appendChild(option);
-        });
+        for (const select of selects) {
+            select.innerHTML = '';
+            providers.forEach(provider => {
+                const option = document.createElement('option');
+                option.value = provider;
+                option.textContent = provider.split('-').map(w => 
+                    w.charAt(0).toUpperCase() + w.slice(1)
+                ).join(' ');
+                if (provider === currentProvider) option.selected = true;
+                select.appendChild(option);
+            });
+        }
 
         return providers;
     } catch (e) {
@@ -681,6 +684,25 @@ async function populateProviderDropdown() {
         return [];
     }
 }
+
+// Handler for settings page provider dropdown change
+window.onSettingsProviderChange = async function() {
+    const providerSelect = document.getElementById('setting-provider');
+    const modelSelect = document.getElementById('setting-model');
+    if (!providerSelect || !modelSelect) return;
+    
+    const provider = providerSelect.value;
+    const models = await getModelsForProvider(provider);
+    
+    modelSelect.innerHTML = '';
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.name;
+        if (model.selected) option.selected = true;
+        modelSelect.appendChild(option);
+    });
+};
 
 // Refresh models from CLI (force cache invalidation)
 window.refreshModels = async function() {
@@ -757,7 +779,9 @@ window.changeSessionModel = async function() {
  */
 window.changeGlobalModel = async function() {
     const modelSelect = document.getElementById('setting-model');
+    const providerSelect = document.getElementById('setting-provider');
     const selectedModel = modelSelect?.value;
+    const selectedProvider = providerSelect?.value;
     
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
@@ -1112,6 +1136,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (currentProviderDisplay) currentProviderDisplay.textContent = currentProvider;
         if (currentModelDisplay) currentModelDisplay.textContent = currentModel;
         if (providerSelectEl) providerSelectEl.value = currentProvider;
+        
+        // Also sync settings provider dropdown
+        const settingProviderEl = document.getElementById('setting-provider');
+        if (settingProviderEl) settingProviderEl.value = currentProvider;
         
         // Populate model dropdown for current provider and select current model
         await updateModelDropdown(currentProvider);
