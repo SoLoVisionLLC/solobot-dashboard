@@ -182,6 +182,7 @@ const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
 const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
+const OPENCLAW_DATA = '/app/openclaw-data';  // Full .openclaw dir (read-only mount)
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
 const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
@@ -819,51 +820,51 @@ const server = http.createServer((req, res) => {
   }
   
   // Sub-agent workspaces API
-  // Scans for workspace-{agent} directories at the same level as the main workspace volume
+  // Scans /app/openclaw-data/workspace-{agent} directories (read-only mount of .openclaw)
   if (url.pathname === '/api/agents' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
       const agents = [];
-      // The main workspace is at MEMORY_DIR (./memory -> openclaw workspace)
-      // Sub-agent workspaces would be at the same parent level: workspace-dev, workspace-exec, etc.
-      const parentDir = path.resolve(MEMORY_DIR, '..');
-      const mainWorkspaceName = path.basename(path.resolve(MEMORY_DIR));
       
-      const items = fs.readdirSync(parentDir);
-      for (const item of items) {
-        if (item.startsWith('workspace-') && item !== mainWorkspaceName) {
-          const agentDir = path.join(parentDir, item);
-          const stat = fs.statSync(agentDir);
-          if (stat.isDirectory()) {
-            const agentId = item.replace('workspace-', '');
-            const mdFiles = [];
-            
-            // List .md files in the agent workspace
-            try {
-              const agentFiles = fs.readdirSync(agentDir);
-              for (const f of agentFiles) {
-                if (f.endsWith('.md')) {
-                  const fstat = fs.statSync(path.join(agentDir, f));
-                  mdFiles.push({ name: f, size: fstat.size, modified: fstat.mtime.toISOString() });
-                }
-              }
-              // Also check memory/ subdirectory
-              const memDir = path.join(agentDir, 'memory');
-              if (fs.existsSync(memDir) && fs.statSync(memDir).isDirectory()) {
-                const memFiles = fs.readdirSync(memDir);
-                for (const f of memFiles) {
-                  if (f.endsWith('.md')) {
-                    const fstat = fs.statSync(path.join(memDir, f));
-                    mdFiles.push({ name: `memory/${f}`, size: fstat.size, modified: fstat.mtime.toISOString() });
-                  }
-                }
-              }
-            } catch (e) { /* skip unreadable dirs */ }
-            
-            agents.push({ id: agentId, workspace: item, files: mdFiles });
-          }
-        }
+      if (!fs.existsSync(OPENCLAW_DATA)) {
+        return res.end(JSON.stringify({ agents: [], error: 'OpenClaw data not mounted' }));
       }
+      
+      const items = fs.readdirSync(OPENCLAW_DATA);
+      for (const item of items) {
+        if (!item.startsWith('workspace-')) continue;
+        const agentDir = path.join(OPENCLAW_DATA, item);
+        const stat = fs.statSync(agentDir);
+        if (!stat.isDirectory()) continue;
+        
+        const agentId = item.replace('workspace-', '');
+        const mdFiles = [];
+        
+        try {
+          // List .md files in agent root
+          const agentFiles = fs.readdirSync(agentDir);
+          for (const f of agentFiles) {
+            if (!f.endsWith('.md')) continue;
+            const fstat = fs.statSync(path.join(agentDir, f));
+            mdFiles.push({ name: f, size: fstat.size, modified: fstat.mtime.toISOString() });
+          }
+          // Also check memory/ subdirectory
+          const memDir = path.join(agentDir, 'memory');
+          if (fs.existsSync(memDir) && fs.statSync(memDir).isDirectory()) {
+            const memFiles = fs.readdirSync(memDir);
+            for (const f of memFiles) {
+              if (!f.endsWith('.md')) continue;
+              const fstat = fs.statSync(path.join(memDir, f));
+              mdFiles.push({ name: `memory/${f}`, size: fstat.size, modified: fstat.mtime.toISOString() });
+            }
+          }
+        } catch (e) { /* skip unreadable dirs */ }
+        
+        agents.push({ id: agentId, workspace: item, files: mdFiles });
+      }
+      
+      // Sort agents alphabetically
+      agents.sort((a, b) => a.id.localeCompare(b.id));
       
       return res.end(JSON.stringify({ agents }));
     } catch (e) {
@@ -876,11 +877,10 @@ const server = http.createServer((req, res) => {
     const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
     const agentId = decodeURIComponent(match[1]);
     const filename = decodeURIComponent(match[2]);
-    const parentDir = path.resolve(MEMORY_DIR, '..');
-    const filePath = path.resolve(parentDir, `workspace-${agentId}`, filename);
+    const filePath = path.resolve(OPENCLAW_DATA, `workspace-${agentId}`, filename);
     
     // Security: ensure path is within workspace
-    const agentDir = path.resolve(parentDir, `workspace-${agentId}`);
+    const agentDir = path.resolve(OPENCLAW_DATA, `workspace-${agentId}`);
     if (!filePath.startsWith(agentDir)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
