@@ -1860,7 +1860,13 @@ function handleCrossSessionNotification(msg) {
         
         notification.onclick = () => {
             window.focus();
-            // Switch to that session
+            // Navigate to chat page and switch to that session
+            if (typeof showPage === 'function') showPage('chat');
+            // Determine agent from session key and set sidebar
+            const agentMatch = sessionKey.match(/^agent:([^:]+):/);
+            if (agentMatch && typeof setActiveSidebarAgent === 'function') {
+                setActiveSidebarAgent(agentMatch[1]);
+            }
             if (typeof switchToSessionKey === 'function') {
                 switchToSessionKey(sessionKey);
             }
