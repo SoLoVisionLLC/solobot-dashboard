@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="midnight">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoLoBot Theme Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/themes.css">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--surface-base);
+            color: var(--text-primary);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            padding: 24px;
+        }
+
+        .demo-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .demo-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .demo-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--text-primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .demo-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+
+        .theme-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 48px;
+            padding: 20px;
+            background: var(--surface-1);
+            border-radius: 16px;
+            border: 1px solid var(--border-default);
+        }
+
+        .theme-btn {
+            padding: 8px 16px;
+            background: var(--surface-2);
+            border: 2px solid var(--border-default);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .theme-btn:hover {
+            border-color: var(--border-strong);
+            background: var(--surface-3);
+        }
+
+        .theme-btn.active {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: white;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+
+        .demo-card {
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .color-swatches {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .swatch {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            border: 1px solid var(--border-default);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .swatch-surface { background: var(--surface-2); color: var(--text-primary); }
+        .swatch-text { background: var(--text-primary); color: var(--surface-1); }
+        .swatch-accent { background: var(--accent); color: white; }
+        .swatch-success { background: var(--success); color: white; }
+        .swatch-warning { background: var(--warning); color: white; }
+        .swatch-error { background: var(--error); color: white; }
+
+        .demo-text {
+            margin-bottom: 12px;
+        }
+
+        .text-primary-demo { color: var(--text-primary); font-weight: 600; }
+        .text-secondary-demo { color: var(--text-secondary); }
+        .text-muted-demo { color: var(--text-muted); font-size: 13px; }
+
+        .demo-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border-default);
+            color: var(--text-secondary);
+        }
+
+        .btn-ghost:hover {
+            background: var(--surface-2);
+            border-color: var(--border-strong);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-error {
+            background: var(--error);
+            color: white;
+        }
+
+        .demo-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: var(--success-muted);
+            color: var(--success);
+        }
+
+        .badge-warning {
+            background: var(--warning-muted);
+            color: var(--warning);
+        }
+
+        .badge-error {
+            background: var(--error-muted);
+            color: var(--error);
+        }
+
+        .demo-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .demo-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--control-focus);
+        }
+
+        .demo-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .current-theme-info {
+            text-align: center;
+            padding: 24px;
+            background: var(--surface-1);
+            border-radius: 12px;
+            border: 2px solid var(--accent);
+        }
+
+        .current-theme-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 8px;
+            text-transform: capitalize;
+        }
+
+        .current-theme-desc {
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-header">
+            <h1 class="demo-title">SoLoBot Theme System</h1>
+            <p class="demo-subtitle">15 Premium Apple-Quality Themes</p>
+        </div>
+
+        <div class="theme-selector">
+            <button class="theme-btn active" onclick="setDemoTheme('midnight')">Midnight</button>
+            <button class="theme-btn" onclick="setDemoTheme('obsidian')">Obsidian</button>
+            <button class="theme-btn" onclick="setDemoTheme('nord')">Nord</button>
+            <button class="theme-btn" onclick="setDemoTheme('dracula')">Dracula</button>
+            <button class="theme-btn" onclick="setDemoTheme('tokyo-night')">Tokyo Night</button>
+            <button class="theme-btn" onclick="setDemoTheme('monokai')">Monokai</button>
+            <button class="theme-btn" onclick="setDemoTheme('catppuccin-mocha')">Catppuccin Mocha</button>
+            <button class="theme-btn" onclick="setDemoTheme('snow')">Snow</button>
+            <button class="theme-btn" onclick="setDemoTheme('latte')">Latte</button>
+            <button class="theme-btn" onclick="setDemoTheme('rose-pine-dawn')">Rose Pine Dawn</button>
+            <button class="theme-btn" onclick="setDemoTheme('solarized-light')">Solarized Light</button>
+            <button class="theme-btn" onclick="setDemoTheme('paper')">Paper</button>
+            <button class="theme-btn" onclick="setDemoTheme('solovision-red')">SoLoVision Red</button>
+            <button class="theme-btn" onclick="setDemoTheme('cyberpunk')">Cyberpunk</button>
+            <button class="theme-btn" onclick="setDemoTheme('ocean')">Ocean</button>
+        </div>
+
+        <div class="current-theme-info">
+            <div class="current-theme-name" id="currentThemeName">Midnight</div>
+            <div class="current-theme-desc">Click any theme above to preview it instantly</div>
+        </div>
+
+        <br><br>
+
+        <div class="demo-grid">
+            <!-- Color Swatches -->
+            <div class="demo-card">
+                <h3 class="card-title">🎨 Color Palette</h3>
+                <div class="color-swatches">
+                    <div class="swatch swatch-surface">Surface</div>
+                    <div class="swatch swatch-text">Text</div>
+                    <div class="swatch swatch-accent">Accent</div>
+                    <div class="swatch swatch-success">Success</div>
+                    <div class="swatch swatch-warning">Warning</div>
+                    <div class="swatch swatch-error">Error</div>
+                </div>
+            </div>
+
+            <!-- Typography -->
+            <div class="demo-card">
+                <h3 class="card-title">📝 Typography</h3>
+                <div class="demo-text text-primary-demo">Primary Text - High Emphasis</div>
+                <div class="demo-text text-secondary-demo">Secondary Text - Medium Emphasis</div>
+                <div class="demo-text text-muted-demo">Muted Text - Low Emphasis</div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="demo-card">
+                <h3 class="card-title">🔘 Buttons</h3>
+                <div class="demo-buttons">
+                    <button class="btn btn-primary">Primary</button>
+                    <button class="btn btn-ghost">Ghost</button>
+                    <button class="btn btn-success">Success</button>
+                    <button class="btn btn-warning">Warning</button>
+                    <button class="btn btn-error">Error</button>
+                </div>
+            </div>
+
+            <!-- Badges -->
+            <div class="demo-card">
+                <h3 class="card-title">🏷️ Badges & Status</h3>
+                <div class="demo-badges">
+                    <span class="badge badge-success">✓ Online</span>
+                    <span class="badge badge-warning">⚠ Pending</span>
+                    <span class="badge badge-error">✕ Offline</span>
+                </div>
+            </div>
+
+            <!-- Inputs -->
+            <div class="demo-card">
+                <h3 class="card-title">📥 Form Controls</h3>
+                <input type="text" class="demo-input" placeholder="Type something...">
+                <input type="text" class="demo-input" value="Focused input" onfocus="this.select()">
+            </div>
+
+            <!-- Info Card -->
+            <div class="demo-card">
+                <h3 class="card-title">ℹ️ Information</h3>
+                <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
+                    This demo showcases all UI components with the current theme. 
+                    Each theme has been carefully crafted with consistent contrast ratios 
+                    and harmonious color relationships.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setDemoTheme(themeName) {
+            // Add transition class
+            document.body.classList.add('theme-transitioning');
+            
+            // Set theme
+            document.documentElement.setAttribute('data-theme', themeName);
+            
+            // Update active button
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update theme name display
+            document.getElementById('currentThemeName').textContent = 
+                themeName.split('-').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+            
+            // Remove transition class after animation
+            setTimeout(() => {
+                document.body.classList.remove('theme-transitioning');
+            }, 300);
+        }
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="midnight">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/themes.css">
     <style>
         /* ========================================
            DESIGN SYSTEM - SoLoVision Brand
@@ -43,99 +44,21 @@
             --transition-normal: 200ms ease;
         }
 
-        /* Dark Theme (Default) - Slate/metal cool grays */
-        [data-theme="dark"] {
-            /* Surfaces - slate grays with subtle cool undertone */
-            --surface-base: #0c0d10;
-            --surface-1: #14161a;
-            --surface-2: #1c1e23;
-            --surface-3: #24262c;
-            --surface-overlay: #2c2f36;
-
-            /* Text hierarchy */
-            --text-primary: #FFFFFF;
-            --text-secondary: #A9B2BC;
-            --text-muted: rgba(169, 178, 188, 0.6);
-            --text-faint: rgba(169, 178, 188, 0.4);
-
-            /* Borders - subtle, not harsh */
-            --border-default: rgba(169, 178, 188, 0.12);
-            --border-subtle: rgba(169, 178, 188, 0.08);
-            --border-strong: rgba(169, 178, 188, 0.2);
-            --border-focus: rgba(188, 32, 38, 0.5);
-
-            /* Controls */
-            --control-bg: #1B2232;
-            --control-border: rgba(169, 178, 188, 0.2);
-            --control-focus: rgba(188, 32, 38, 0.3);
-
-            /* Semantic */
-            --success: #22c55e;
-            --success-muted: rgba(34, 197, 94, 0.15);
-            --warning: #BC2026; /* Deep Red brand color */
-            --warning-muted: rgba(188, 32, 38, 0.15); /* Deep Red with opacity */
-            --error: #ef4444;
-            --error-muted: rgba(239, 68, 68, 0.15);
-
-            /* Scrollbar */
-            --scrollbar-track: var(--surface-1);
-            --scrollbar-thumb: var(--brand-grey);
-        }
-
-        /* Light Theme */
-        [data-theme="light"] {
-            /* Surfaces */
-            --surface-base: #F8FAFC;
-            --surface-1: #FFFFFF;
-            --surface-2: #F1F5F9;
-            --surface-3: #E2E8F0;
-            --surface-overlay: #FFFFFF;
-
-            /* Text hierarchy */
-            --text-primary: #1B2232;
-            --text-secondary: #64748b;
-            --text-muted: rgba(27, 34, 50, 0.5);
-            --text-faint: rgba(27, 34, 50, 0.3);
-
-            /* Borders */
-            --border-default: rgba(27, 34, 50, 0.1);
-            --border-subtle: rgba(27, 34, 50, 0.06);
-            --border-strong: rgba(27, 34, 50, 0.15);
-            --border-focus: rgba(188, 32, 38, 0.4);
-
-            /* Controls */
-            --control-bg: #FFFFFF;
-            --control-border: rgba(27, 34, 50, 0.15);
-            --control-focus: rgba(188, 32, 38, 0.2);
-
-            /* Semantic - slightly adjusted for light bg */
-            --success: #16a34a;
-            --success-muted: rgba(22, 163, 74, 0.1);
-            --warning: #BC2026; /* Deep Red brand color */
-            --warning-muted: rgba(188, 32, 38, 0.1); /* Deep Red with opacity */
-            --error: #dc2626;
-            --error-muted: rgba(220, 38, 38, 0.1);
-
-            /* Scrollbar */
-            --scrollbar-track: var(--surface-2);
-            --scrollbar-thumb: var(--brand-grey);
-        }
-        
-        /* Light mode system message overrides */
-        [data-theme="light"] .system-bubble {
+        /* Light mode overrides for themes with light base — uses :is() to match all light themes */
+        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble {
             background: rgba(27, 34, 50, 0.08);
             border: 1px solid rgba(188, 32, 38, 0.2);
         }
         
-        [data-theme="light"] .system-bubble-content {
-            color: #1B2232;
+        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble-content {
+            color: var(--text-primary);
         }
         
-        [data-theme="light"] .system-bubble-time {
-            color: #64748b;
+        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .system-bubble-time {
+            color: var(--text-secondary);
         }
         
-        [data-theme="light"] .chat-page-message.solobot .chat-page-bubble {
+        :is([data-theme="snow"], [data-theme="latte"], [data-theme="rose-pine-dawn"], [data-theme="solarized-light"], [data-theme="paper"]) .chat-page-message.solobot .chat-page-bubble {
             background: var(--surface-2);
             color: var(--text-primary);
         }
@@ -3470,6 +3393,9 @@
                 <button onclick="closeSettingsModal()" class="modal-close">✕</button>
             </div>
 
+            <!-- Theme Picker -->
+            <div class="modal-section" id="theme-picker-container"></div>
+
             <!-- Gateway Connection -->
             <div class="modal-section">
                 <h4 class="modal-section-title">🔌 Gateway Connection</h4>
@@ -4022,31 +3948,59 @@
         }
         
         // Theme toggle
+        // Light themes list for icon toggle
+        const LIGHT_THEMES = ['snow', 'latte', 'rose-pine-dawn', 'solarized-light', 'paper'];
+
         function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
+            // Cycle: if currently dark-ish, go to snow. If light-ish, go to midnight.
+            const current = document.documentElement.getAttribute('data-theme') || 'midnight';
+            const isLight = LIGHT_THEMES.includes(current);
+            const newTheme = isLight ? 'midnight' : 'snow';
+            if (window.themePicker) {
+                window.themePicker.setTheme(newTheme);
+            } else {
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('solobot-theme', newTheme);
+            }
             updateThemeIcon(newTheme);
         }
 
         function updateThemeIcon(theme) {
             const darkIcon = document.getElementById('theme-icon-dark');
             const lightIcon = document.getElementById('theme-icon-light');
-            if (theme === 'dark') {
-                darkIcon.classList.remove('hidden');
-                lightIcon.classList.add('hidden');
+            const isLight = LIGHT_THEMES.includes(theme);
+            if (!isLight) {
+                darkIcon?.classList.remove('hidden');
+                lightIcon?.classList.add('hidden');
             } else {
-                darkIcon.classList.add('hidden');
-                lightIcon.classList.remove('hidden');
+                darkIcon?.classList.add('hidden');
+                lightIcon?.classList.remove('hidden');
             }
         }
 
-        // Load saved theme
-        const savedTheme = localStorage.getItem('theme') || 'dark';
+        // Load saved theme — migrate old 'theme' key to new 'solobot-theme'
+        const legacyTheme = localStorage.getItem('theme');
+        let savedTheme = localStorage.getItem('solobot-theme');
+        if (!savedTheme && legacyTheme) {
+            // Migrate: "dark" → "midnight", "light" → "snow"
+            savedTheme = legacyTheme === 'light' ? 'snow' : 'midnight';
+            localStorage.setItem('solobot-theme', savedTheme);
+            localStorage.removeItem('theme');
+        }
+        savedTheme = savedTheme || 'midnight';
         document.documentElement.setAttribute('data-theme', savedTheme);
         updateThemeIcon(savedTheme);
+
+        // Load theme picker HTML into settings modal
+        fetch('/theme-picker.html')
+            .then(r => r.text())
+            .then(html => {
+                const container = document.getElementById('theme-picker-container');
+                if (container) container.innerHTML = html;
+                // Re-init theme picker cards if already loaded
+                if (window.themePicker) window.themePicker.setupThemeCards();
+            })
+            .catch(() => {});
 
         // Strict scroll containment - route scroll to element under cursor
         let currentScrollTarget = null;
@@ -4499,5 +4453,6 @@
             z-index: 100;
         }
     </style>
+    <script src="/theme-picker.js"></script>
 </body>
 </html>
