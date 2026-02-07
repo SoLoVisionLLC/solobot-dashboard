@@ -1576,43 +1576,30 @@
 
         /* =================== CHAT PAGE STYLES =================== */
         
-        /* All content pages: fixed viewport below header */
+        /* Chat/system pages: fixed viewport below header */
         #page-chat,
-        #page-system,
-        #page-memory,
-        #page-products {
+        #page-system {
             position: fixed;
             top: 60px; /* header height */
             left: 64px; /* sidebar collapsed width */
             right: 0;
             bottom: 0;
-            overflow-y: auto;
-            overflow-x: hidden;
+            overflow: hidden;
             z-index: 50;
             background: var(--surface-base);
         }
         
-        /* Chat/system have their own scroll containers */
-        #page-chat,
-        #page-system {
-            overflow: hidden;
-        }
-
-        /* Memory/products need padding */
+        /* Memory/products: normal flow inside .app-content (sidebar offset handled by parent margin) */
         #page-memory,
         #page-products {
             padding: var(--space-6);
         }
         
-        /* Adjust for pinned/hovered sidebar */
+        /* Adjust fixed pages for pinned/hovered sidebar */
         .sidebar.pinned ~ .app-content #page-chat,
         .sidebar.pinned ~ .app-content #page-system,
-        .sidebar.pinned ~ .app-content #page-memory,
-        .sidebar.pinned ~ .app-content #page-products,
         .sidebar:hover ~ .app-content #page-chat,
-        .sidebar:hover ~ .app-content #page-system,
-        .sidebar:hover ~ .app-content #page-memory,
-        .sidebar:hover ~ .app-content #page-products {
+        .sidebar:hover ~ .app-content #page-system {
             left: 200px;
         }
         
@@ -1630,9 +1617,7 @@
         /* Hide footer on chat/system/dashboard pages (full viewport layouts) */
         body:has(#page-chat.active) .footer,
         body:has(#page-system.active) .footer,
-        body:has(#page-dashboard.active) .footer,
-        body:has(#page-memory.active) .footer,
-        body:has(#page-products.active) .footer {
+        body:has(#page-dashboard.active) .footer {
             display: none;
         }
         
