@@ -1945,20 +1945,22 @@ function showNotificationToast(title, body, sessionKey) {
     toast.className = 'notification-toast';
     toast.style.cssText = `
         pointer-events: auto; cursor: pointer;
-        background: var(--card-bg, #1a1a2e); border: 1px solid ${color};
+        background: var(--card-bg, #1a1a2e); color: var(--text-primary, #e0e0e0);
+        border: 1px solid color-mix(in srgb, ${color} 60%, transparent);
         border-left: 4px solid ${color}; border-radius: 8px;
-        padding: 10px 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.35);
         opacity: 0; transform: translateX(100%);
         transition: all 0.3s ease; max-width: 360px;
         font-family: var(--font-family, system-ui);
+        backdrop-filter: blur(6px);
     `;
     toast.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 50%; background: ${color}; flex-shrink: 0;"></span>
-            <strong style="color: ${color}; font-size: 13px;">${title}</strong>
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: ${color}; flex-shrink: 0; box-shadow: 0 0 0 2px color-mix(in srgb, ${color} 30%, transparent);"></span>
+            <strong style="color: var(--text-primary, #e0e0e0); font-size: 13px;">${title}</strong>
             <span style="margin-left: auto; color: var(--text-muted, #666); font-size: 11px; cursor: pointer;" class="toast-close">✕</span>
         </div>
-        <div style="color: var(--text-primary, #e0e0e0); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
+        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
     `;
     
     // Click toast → navigate to session
@@ -1980,8 +1982,8 @@ function showNotificationToast(title, body, sessionKey) {
         toast.style.transform = 'translateX(0)';
     });
     
-    // Auto-dismiss after 6 seconds
-    const timer = setTimeout(() => dismissToast(toast), 6000);
+    // Auto-dismiss after 12 seconds
+    const timer = setTimeout(() => dismissToast(toast), 12000);
     toast._dismissTimer = timer;
     
     // Limit to 4 toasts max
