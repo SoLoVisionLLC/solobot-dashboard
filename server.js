@@ -1691,7 +1691,10 @@ const server = http.createServer((req, res) => {
     // Dynamic assets (HTML, JS, CSS) — always revalidate so updates appear instantly
     if (['.html', '.js', '.css'].includes(ext)) {
       const hash = crypto.createHash('md5').update(content).digest('hex').slice(0, 12);
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
       res.setHeader('ETag', `"${hash}"`);
       
       // If browser sends matching ETag, return 304 Not Modified
@@ -1712,7 +1715,10 @@ const server = http.createServer((req, res) => {
   const indexContent = fs.readFileSync('./index.html');
   const indexHash = crypto.createHash('md5').update(indexContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('ETag', `"${indexHash}"`);
   
   const ifNoneMatch = req.headers['if-none-match'];
