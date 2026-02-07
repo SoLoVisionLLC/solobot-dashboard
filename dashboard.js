@@ -4511,6 +4511,7 @@ async function clearSystemHistory() {
 // ===================
 
 function render(options = {}) {
+    try {
     renderStatus();
     renderConsole();
     renderTasks();
@@ -4530,6 +4531,9 @@ function render(options = {}) {
     // Re-apply scroll containment after rendering
     if (window.setupScrollContainment) {
         window.setupScrollContainment();
+    }
+    } catch (e) {
+        console.error('[render] Error during render:', e);
     }
 }
 
@@ -4628,9 +4632,11 @@ function renderTasks() {
         const container = document.getElementById(`${column === 'progress' ? 'progress' : column}-tasks`);
         const count = document.getElementById(`${column === 'progress' ? 'progress' : column}-count`);
 
+        if (!container) { console.warn('[renderTasks] Missing container for', column); return; }
+
         if (!state.tasks[column] || state.tasks[column].length === 0) {
             container.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: var(--space-6) var(--space-2);">No tasks</div>`;
-            count.textContent = '0';
+            if (count) count.textContent = '0';
             return;
         }
 
