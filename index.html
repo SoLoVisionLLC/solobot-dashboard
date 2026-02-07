@@ -1558,7 +1558,7 @@
             max-width: 100%;
         }
         .docs-category {
-            margin-bottom: var(--space-6);
+            margin-bottom: var(--space-4);
         }
         .docs-category .category-title {
             font-size: 14px;
@@ -1568,11 +1568,38 @@
             padding-bottom: var(--space-2);
             border-bottom: 1px solid var(--border-default);
         }
+        .category-collapsible {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.15s;
+        }
+        .category-collapsible:hover { color: var(--accent); }
+        .category-chevron {
+            font-size: 10px;
+            width: 14px;
+            text-align: center;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+        .category-count {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-faint);
+            background: var(--surface-3);
+            padding: 1px 8px;
+            border-radius: 10px;
+            margin-left: auto;
+        }
         .docs-category-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: var(--space-4);
+            gap: var(--space-3);
+            animation: fadeIn 0.15s ease;
         }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         /* =================== CHAT PAGE STYLES =================== */
         
@@ -4014,7 +4041,7 @@
     <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column-reverse; gap: 10px;"></div>
 
     <script src="gateway-client.js?v=3.7.0"></script>
-    <script src="docs-hub-memory-files.js?v=2.8.0"></script>
+    <script src="docs-hub-memory-files.js?v=3.0.0"></script>
     <script src="dashboard.js?v=3.53.0"></script>
     <script>
         // Valid page names
@@ -4155,17 +4182,29 @@
             }, {});
             
             // Sort categories
-            const categoryOrder = ['Core Identity', 'Guides & Reference', 'Daily Logs', 'Other Documents'];
+            const categoryOrder = ['🧠 Core Identity', '📖 Guides & Reference', '📋 Planning & PRDs', 
+                                   '⚙️ System & Operations', '💼 Business', '💻 Code & Technical',
+                                   '📅 Daily Logs', '📁 Other'];
             const sortedCategories = Object.keys(grouped).sort((a, b) => {
-                return categoryOrder.indexOf(a) - categoryOrder.indexOf(b);
+                const ai = categoryOrder.indexOf(a), bi = categoryOrder.indexOf(b);
+                return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
             });
+            
+            const collapsedCats = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
             
             // Render
             let html = '';
             sortedCategories.forEach(category => {
-                html += `<div class="docs-category">`;
-                html += `<h3 class="category-title">${category}</h3>`;
-                html += `<div class="docs-category-grid">`;
+                const count = grouped[category].length;
+                const isCollapsed = collapsedCats[category] === true;
+                html += `<div class="docs-category" data-category="${category}">`;
+                html += `<h3 class="category-title category-collapsible${isCollapsed ? ' collapsed' : ''}" 
+                             onclick="toggleMemoryCategory(this)">
+                            <span class="category-chevron">${isCollapsed ? '▶' : '▼'}</span>
+                            ${category} 
+                            <span class="category-count">${count}</span>
+                         </h3>`;
+                html += `<div class="docs-category-grid" style="${isCollapsed ? 'display:none;' : ''}">`;
                 
                 const sortedFiles = grouped[category].sort((a, b) => {
                     if (category === 'Daily Logs') return b.name.localeCompare(a.name);
@@ -4176,6 +4215,8 @@
                     const modifiedDate = file.modified ? new Date(file.modified).toLocaleDateString() : '';
                     const botBadge = file.botUpdated && !file.acknowledged 
                         ? `<span class="badge badge-warning bot-updated-badge" title="Updated by SoLoBot">🤖 Updated</span>` 
+                        : file.acknowledged
+                        ? `<span class="badge badge-success">✓ Read</span>`
                         : '';
                     const botUpdatedClass = file.botUpdated && !file.acknowledged ? 'bot-updated' : '';
                     html += `

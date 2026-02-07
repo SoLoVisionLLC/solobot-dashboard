@@ -818,6 +818,84 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify(fileMeta));
   }
   
+  // Sub-agent workspaces API
+  // Scans for workspace-{agent} directories at the same level as the main workspace volume
+  if (url.pathname === '/api/agents' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const agents = [];
+      // The main workspace is at MEMORY_DIR (./memory -> openclaw workspace)
+      // Sub-agent workspaces would be at the same parent level: workspace-dev, workspace-exec, etc.
+      const parentDir = path.resolve(MEMORY_DIR, '..');
+      const mainWorkspaceName = path.basename(path.resolve(MEMORY_DIR));
+      
+      const items = fs.readdirSync(parentDir);
+      for (const item of items) {
+        if (item.startsWith('workspace-') && item !== mainWorkspaceName) {
+          const agentDir = path.join(parentDir, item);
+          const stat = fs.statSync(agentDir);
+          if (stat.isDirectory()) {
+            const agentId = item.replace('workspace-', '');
+            const mdFiles = [];
+            
+            // List .md files in the agent workspace
+            try {
+              const agentFiles = fs.readdirSync(agentDir);
+              for (const f of agentFiles) {
+                if (f.endsWith('.md')) {
+                  const fstat = fs.statSync(path.join(agentDir, f));
+                  mdFiles.push({ name: f, size: fstat.size, modified: fstat.mtime.toISOString() });
+                }
+              }
+              // Also check memory/ subdirectory
+              const memDir = path.join(agentDir, 'memory');
+              if (fs.existsSync(memDir) && fs.statSync(memDir).isDirectory()) {
+                const memFiles = fs.readdirSync(memDir);
+                for (const f of memFiles) {
+                  if (f.endsWith('.md')) {
+                    const fstat = fs.statSync(path.join(memDir, f));
+                    mdFiles.push({ name: `memory/${f}`, size: fstat.size, modified: fstat.mtime.toISOString() });
+                  }
+                }
+              }
+            } catch (e) { /* skip unreadable dirs */ }
+            
+            agents.push({ id: agentId, workspace: item, files: mdFiles });
+          }
+        }
+      }
+      
+      return res.end(JSON.stringify({ agents }));
+    } catch (e) {
+      return res.end(JSON.stringify({ agents: [], error: e.message }));
+    }
+  }
+  
+  // Read sub-agent file
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+    const parentDir = path.resolve(MEMORY_DIR, '..');
+    const filePath = path.resolve(parentDir, `workspace-${agentId}`, filename);
+    
+    // Security: ensure path is within workspace
+    const agentDir = path.resolve(parentDir, `workspace-${agentId}`);
+    if (!filePath.startsWith(agentDir)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      return res.end(JSON.stringify({ name: filename, content }));
+    } catch (e) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ error: 'File not found' }));
+    }
+  }
+  
   // Acknowledge bot update (clear badge)
   if (url.pathname === '/api/memory-meta/acknowledge' && req.method === 'POST') {
     let body = '';

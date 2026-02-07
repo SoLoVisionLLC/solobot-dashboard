@@ -56,41 +56,95 @@ window.currentMemoryFile = null;
 
 // Categorize files based on name
 function categorizeFile(filename) {
-    const coreDocs = ['SOUL.md', 'USER.md', 'AGENTS.md', 'MEMORY.md', 'TOOLS.md', 'HEARTBEAT.md', 'IDENTITY.md'];
-    const guideDocs = ['SOLOBOT-GUIDE.md', 'LESSONS-LEARNED.md', 'DEPLOY_INSTRUCTIONS.md'];
+    const name = filename.replace(/^memory\//, '');
     
-    if (filename.startsWith('memory/') || filename.match(/^\d{4}-\d{2}-\d{2}\.md$/)) {
-        return 'Daily Logs';
-    } else if (coreDocs.includes(filename)) {
-        return 'Core Identity';
-    } else if (guideDocs.includes(filename)) {
-        return 'Guides & Reference';
-    } else {
-        return 'Other Documents';
-    }
+    // Core identity files
+    const coreDocs = ['SOUL.md', 'USER.md', 'AGENTS.md', 'MEMORY.md', 'TOOLS.md', 'HEARTBEAT.md', 
+                      'IDENTITY.md', 'BOOTSTRAP.md'];
+    if (coreDocs.includes(name)) return '🧠 Core Identity';
+    
+    // Daily logs (YYYY-MM-DD.md or memory-YYYY-MM-DD.md)
+    if (name.match(/^\d{4}-\d{2}-\d{2}\.md$/) || name.match(/^memory-\d{4}-\d{2}-\d{2}\.md$/))
+        return '📅 Daily Logs';
+    if (filename.startsWith('memory/')) return '📅 Daily Logs';
+    
+    // Planning & PRDs
+    if (name.match(/^PRD|^PLAN|^ROADMAP|DASHBOARD-PLAN|PROJECTS-OVERVIEW/i))
+        return '📋 Planning & PRDs';
+    
+    // System & Operations
+    const sysDocs = ['CHANGELOG.md', 'SECURITY.md', 'DEBUG.md', 'CREDITS.md', 'LICENSE.md',
+                     'COOLIFY-CHEATSHEET.md', 'DEPLOY_INSTRUCTIONS.md', 'STATE-PERSISTENCE-ISSUE.md',
+                     'NOTES-SESSION-SYNC.md', 'CHAT_SYSTEM.md'];
+    if (sysDocs.includes(name)) return '⚙️ System & Operations';
+    
+    // Guides & Reference
+    const guideDocs = ['SOLOBOT-GUIDE.md', 'LESSONS-LEARNED.md', 'CLAWBOT-TIPS.md', 'PERSONAS.md',
+                       'SoLoStandBy.md', 'TASKS.md', 'RUNNING-CONTEXT.md'];
+    if (guideDocs.includes(name)) return '📖 Guides & Reference';
+    
+    // Business & Finance
+    if (name.match(/^Taxes|COMPETITOR/i)) return '💼 Business';
+    
+    // README files
+    if (name.match(/^readme/i)) return '📖 Guides & Reference';
+    
+    // Code examples / technical docs  
+    if (name.match(/Example\.md$|^PR-|^system\.md$|^index\.md$|^license\.md$/))
+        return '💻 Code & Technical';
+
+    // Memory context files
+    if (name.match(/^memory-/)) return '📅 Daily Logs';
+    
+    return '📁 Other';
 }
 
-// Get file description based on name
 function getFileDescription(filename) {
     const descriptions = {
-        'SOUL.md': 'Who SoLoBot is, core beliefs, personality, and operational guidelines',
-        'USER.md': 'Information about SoLo (Jeremy Smith) - goals, work style, preferences',
-        'AGENTS.md': 'Workspace guidelines, memory management rules, and procedures',
-        'MEMORY.md': 'Long-term curated memories, decisions, and important context',
-        'TOOLS.md': 'Tool configurations, credentials, and technical setup notes',
-        'HEARTBEAT.md': 'Proactive check schedule, task management, and maintenance',
-        'IDENTITY.md': 'Bot identity summary and avatar information',
-        'SOLOBOT-GUIDE.md': 'Comprehensive guide for working with SoLoBot',
-        'LESSONS-LEARNED.md': 'Documented mistakes and lessons for future reference',
-        'RUNNING-CONTEXT.md': 'Current work context and active project status'
+        'SOUL.md': 'Core personality, beliefs, and operational guidelines',
+        'USER.md': 'About SoLo — goals, preferences, work style',
+        'AGENTS.md': 'Workspace rules, memory management, procedures',
+        'MEMORY.md': 'Long-term curated memories and decisions',
+        'TOOLS.md': 'Tool configs, credentials, technical setup',
+        'HEARTBEAT.md': 'Proactive checks, task scheduling, maintenance',
+        'IDENTITY.md': 'Bot identity and avatar info',
+        'BOOTSTRAP.md': 'First-run initialization instructions',
+        'SOLOBOT-GUIDE.md': 'Comprehensive SoLoBot user guide',
+        'LESSONS-LEARNED.md': 'Past mistakes and lessons learned',
+        'RUNNING-CONTEXT.md': 'Current work context and active projects',
+        'CHANGELOG.md': 'Version history and changes',
+        'SECURITY.md': 'Security policies and access control',
+        'DEBUG.md': 'Debugging notes and troubleshooting',
+        'TASKS.md': 'Task tracking and management',
+        'COOLIFY-CHEATSHEET.md': 'Coolify deployment reference',
+        'DEPLOY_INSTRUCTIONS.md': 'Deployment procedures',
+        'CHAT_SYSTEM.md': 'Chat system architecture',
+        'PERSONAS.md': 'Bot persona configurations',
+        'PROJECTS-OVERVIEW.md': 'All projects overview',
+        'ROADMAP.md': 'Product roadmap',
+        'CLAWBOT-TIPS.md': 'Tips for working with OpenClaw',
+        'CREDITS.md': 'Credits and acknowledgments',
+        'SoLoStandBy.md': 'Standby mode configuration',
+        'COMPETITOR-TRACKING.md': 'Competitor analysis and tracking',
+        'NOTES-SESSION-SYNC.md': 'Session sync implementation notes'
     };
     
-    if (filename.startsWith('memory/')) {
-        const date = filename.replace('memory/', '').replace('.md', '');
-        return `Daily activity log for ${date}`;
-    }
+    const name = filename.replace(/^memory\//, '');
     
-    return descriptions[filename] || 'Documentation file';
+    if (name.match(/^\d{4}-\d{2}-\d{2}\.md$/)) {
+        return `Activity log for ${name.replace('.md', '')}`;
+    }
+    if (name.match(/^memory-\d{4}-\d{2}-\d{2}\.md$/)) {
+        return `Memory log for ${name.replace('memory-', '').replace('.md', '')}`;
+    }
+    if (name.match(/^PRD/)) return 'Product requirements document';
+    if (name.match(/^PLAN/)) return 'Project plan';
+    if (name.match(/^Taxes/)) return 'Tax & financial records';
+    if (name.match(/^README/i)) return 'Project documentation';
+    if (name.match(/Example\.md$/)) return 'Code example';
+    if (name.match(/^PR-/)) return 'Pull request documentation';
+    
+    return descriptions[name] || '';
 }
 
 // Fetch memory files list from server
@@ -160,18 +214,31 @@ async function renderMemoryFiles(filter = '') {
     }, {});
     
     // Sort categories
-    const categoryOrder = ['Core Identity', 'Guides & Reference', 'Daily Logs', 'Other Documents'];
+    const categoryOrder = ['🧠 Core Identity', '📖 Guides & Reference', '📋 Planning & PRDs', 
+                           '⚙️ System & Operations', '💼 Business', '💻 Code & Technical',
+                           '📅 Daily Logs', '📁 Other'];
     const sortedCategories = Object.keys(grouped).sort((a, b) => {
-        return categoryOrder.indexOf(a) - categoryOrder.indexOf(b);
+        const ai = categoryOrder.indexOf(a), bi = categoryOrder.indexOf(b);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
+    
+    // Load collapsed state from localStorage
+    const collapsedCats = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
     
     const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
     let html = '';
     
     sortedCategories.forEach(category => {
-        html += `<div class="docs-category">`;
-        html += `<h3 class="category-title">${escape(category)}</h3>`;
-        html += `<div class="docs-category-grid">`;
+        const count = grouped[category].length;
+        const isCollapsed = collapsedCats[category] === true;
+        html += `<div class="docs-category" data-category="${escape(category)}">`;
+        html += `<h3 class="category-title category-collapsible${isCollapsed ? ' collapsed' : ''}" 
+                     onclick="toggleMemoryCategory(this)">
+                    <span class="category-chevron">${isCollapsed ? '▶' : '▼'}</span>
+                    ${escape(category)} 
+                    <span class="category-count">${count}</span>
+                 </h3>`;
+        html += `<div class="docs-category-grid" style="${isCollapsed ? 'display:none;' : ''}">`;
         
         const sortedFiles = grouped[category].sort((a, b) => {
             if (category === 'Daily Logs') return b.name.localeCompare(a.name);
@@ -213,6 +280,9 @@ async function renderMemoryFiles(filter = '') {
     }
     
     container.innerHTML = html;
+    
+    // Load sub-agent files (appended below main files)
+    renderAgentSection(container);
 }
 
 // View a memory file - fetch content and show in modal
@@ -709,6 +779,119 @@ async function saveMemoryFile() {
     }
 }
 
+// === SUB-AGENT FILES ===
+
+async function fetchAgentFiles() {
+    try {
+        const resp = await fetch('/api/agents');
+        const data = await resp.json();
+        return data.agents || [];
+    } catch (e) {
+        console.error('Failed to fetch agents:', e);
+        return [];
+    }
+}
+
+async function renderAgentSection(container) {
+    const agents = await fetchAgentFiles();
+    if (agents.length === 0) return; // No sub-agents, nothing to show
+    
+    const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
+    const collapsedCats = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
+    
+    let html = '';
+    agents.forEach(agent => {
+        if (agent.files.length === 0) return;
+        const catKey = `🤖 ${agent.id}`;
+        const isCollapsed = collapsedCats[catKey] !== false; // Collapsed by default
+        
+        html += `<div class="docs-category" data-category="${escape(catKey)}">`;
+        html += `<h3 class="category-title category-collapsible${isCollapsed ? ' collapsed' : ''}" 
+                     onclick="toggleMemoryCategory(this)">
+                    <span class="category-chevron">${isCollapsed ? '▶' : '▼'}</span>
+                    🤖 Agent: ${escape(agent.id)}
+                    <span class="category-count">${agent.files.length}</span>
+                 </h3>`;
+        html += `<div class="docs-category-grid" style="${isCollapsed ? 'display:none;' : ''}">`;
+        
+        agent.files.sort((a, b) => a.name.localeCompare(b.name)).forEach(file => {
+            const modDate = file.modified ? new Date(file.modified).toLocaleDateString() : '';
+            html += `
+                <div class="doc-card memory-file" onclick="viewAgentFile('${escape(agent.id)}', '${escape(file.name)}')"
+                     data-filepath="${escape(agent.id)}/${escape(file.name)}">
+                    <div style="display: flex; align-items: center; gap: var(--space-3);">
+                        <div class="doc-icon icon-md">🤖</div>
+                        <div style="min-width: 0; flex: 1;">
+                            <div class="doc-title">${escape(file.name)}</div>
+                            <div class="doc-description" style="font-size: 11px; color: var(--text-muted);">Agent: ${escape(agent.id)}</div>
+                            ${modDate ? `<div class="doc-meta">Modified: ${modDate}</div>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+        });
+        html += '</div></div>';
+    });
+    
+    if (html) container.insertAdjacentHTML('beforeend', html);
+}
+
+async function viewAgentFile(agentId, filename) {
+    const titleEl = document.getElementById('memory-file-title');
+    const contentEl = document.getElementById('memory-file-content');
+    const saveBtn = document.getElementById('memory-save-btn');
+    
+    if (titleEl) titleEl.textContent = `${agentId}/${filename}`;
+    if (contentEl) contentEl.value = 'Loading...';
+    if (saveBtn) saveBtn.style.display = 'none'; // Read-only for sub-agent files
+    
+    showModal('memory-file-modal');
+    
+    try {
+        const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}`);
+        const data = await resp.json();
+        
+        if (data.error) {
+            contentEl.value = `Error: ${data.error}`;
+            return;
+        }
+        
+        // Fix single-line markdown
+        let content = data.content || '';
+        const lineCount = content.split('\n').length;
+        if (content.length > 200 && lineCount <= 3) {
+            content = fixSingleLineMarkdown(content);
+        }
+        
+        if (titleEl) titleEl.innerHTML = `${escapeHtmlLocal(data.name)} <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">— Agent: ${escapeHtmlLocal(agentId)}</span>`;
+        if (contentEl) contentEl.value = content;
+        
+        window.currentMemoryFile = null; // Not editable
+    } catch (e) {
+        contentEl.value = `Failed to load: ${e.message}`;
+    }
+}
+
+// Toggle category collapse
+function toggleMemoryCategory(el) {
+    const grid = el.nextElementSibling;
+    const chevron = el.querySelector('.category-chevron');
+    const category = el.closest('.docs-category').dataset.category;
+    const collapsed = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
+    
+    if (grid.style.display === 'none') {
+        grid.style.display = '';
+        el.classList.remove('collapsed');
+        if (chevron) chevron.textContent = '▼';
+        delete collapsed[category];
+    } else {
+        grid.style.display = 'none';
+        el.classList.add('collapsed');
+        if (chevron) chevron.textContent = '▶';
+        collapsed[category] = true;
+    }
+    localStorage.setItem('solobot-memory-collapsed', JSON.stringify(collapsed));
+}
+
 // Make functions globally available
 window.viewMemoryFile = viewMemoryFile;
 window.saveMemoryFile = saveMemoryFile;
@@ -721,3 +904,5 @@ window.previewVersion = previewVersion;
 window.restoreVersion = restoreVersion;
 window.closeDiffModal = closeDiffModal;
 window.restoreFromDiff = restoreFromDiff;
+window.toggleMemoryCategory = toggleMemoryCategory;
+window.viewAgentFile = viewAgentFile;
