@@ -259,11 +259,18 @@ class GatewayClient {
 
         // Route by session key (case-insensitive)
         const eventSessionKey = payload.sessionKey || 'main';
-        if (eventSessionKey.toLowerCase() !== this.sessionKey.toLowerCase()) {
-            // Cross-session message — route to notification callback instead of dropping
+        const currentKey = this.sessionKey.toLowerCase();
+        const eventKey = eventSessionKey.toLowerCase();
+        
+        if (eventKey !== currentKey) {
+            // Cross-session message — route to notification callback
             const state = payload.state;
             const message = payload.message;
-            if (state === 'final' && message?.role === 'assistant') {
+            const role = message?.role || '';
+            
+            console.log(`[Gateway] Cross-session event: session=${eventSessionKey}, state=${state}, role=${role}`);
+            
+            if (state === 'final' && role === 'assistant') {
                 let contentText = '';
                 if (message?.content) {
                     for (const part of message.content) {
@@ -273,6 +280,7 @@ class GatewayClient {
                     }
                 }
                 if (contentText.trim()) {
+                    console.log(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars)`);
                     this.onCrossSessionMessage({
                         sessionKey: eventSessionKey,
                         content: contentText,
