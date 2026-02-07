@@ -491,6 +491,11 @@
             padding: var(--space-6) 0;
         }
 
+        /* Dashboard page doesn't use .main padding (has fixed layout) */
+        #page-dashboard .container {
+            padding: 0;
+        }
+
         /* Grid layouts */
         .grid-2 {
             display: grid;
@@ -1581,9 +1586,10 @@
             overflow: hidden;
         }
         
-        /* Hide footer on chat/system pages (but keep header for consistent navbar) */
+        /* Hide footer on chat/system/dashboard pages (full viewport layouts) */
         body:has(#page-chat.active) .footer,
-        body:has(#page-system.active) .footer {
+        body:has(#page-system.active) .footer,
+        body:has(#page-dashboard.active) .footer {
             display: none;
         }
         
@@ -2406,56 +2412,273 @@
             margin-left: var(--space-1);
         }
 
-        /* =================== QUICK STATS STYLES =================== */
-        .quick-stats-card {
+        /* =================== BENTO GRID DASHBOARD STYLES =================== */
+        /* Dashboard page uses a fixed viewport bento grid layout */
+        #page-dashboard {
+            position: fixed;
+            top: 60px; /* header height */
+            left: 64px; /* sidebar collapsed width */
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            z-index: 50;
+            padding: var(--space-4);
+        }
+
+        /* Adjust for pinned/hovered sidebar */
+        .sidebar.pinned ~ .app-content #page-dashboard,
+        .sidebar:hover ~ .app-content #page-dashboard {
+            left: 200px;
+        }
+
+        /* Bento grid container */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1fr;
+            grid-template-rows: 1.5fr 0.8fr 0.7fr;
+            gap: var(--space-4);
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Grid cell placement */
+        .bento-task-board {
+            grid-column: 1;
+            grid-row: 1 / 3; /* span first two rows */
+        }
+
+        .bento-quick-stats {
+            grid-column: 1;
+            grid-row: 3;
+        }
+
+        .bento-terminal {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        .bento-activity {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        .bento-notes {
+            grid-column: 2;
+            grid-row: 3;
+        }
+
+        .bento-chat {
+            grid-column: 3;
+            grid-row: 1 / 4; /* span all three rows */
+        }
+
+        /* Tablet layout (2 columns) */
+        @media (max-width: 1200px) {
+            .bento-grid {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto auto auto auto auto;
+            }
+
+            .bento-task-board {
+                grid-column: 1 / 3;
+                grid-row: 1;
+                min-height: 400px;
+            }
+
+            .bento-quick-stats {
+                grid-column: 1 / 3;
+                grid-row: 2;
+            }
+
+            .bento-terminal {
+                grid-column: 1;
+                grid-row: 3;
+                min-height: 300px;
+            }
+
+            .bento-chat {
+                grid-column: 2;
+                grid-row: 3 / 6; /* span multiple rows */
+                min-height: 500px;
+            }
+
+            .bento-activity {
+                grid-column: 1;
+                grid-row: 4;
+                min-height: 250px;
+            }
+
+            .bento-notes {
+                grid-column: 1;
+                grid-row: 5;
+                min-height: 250px;
+            }
+        }
+
+        /* Mobile layout (1 column) */
+        @media (max-width: 768px) {
+            .bento-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+                overflow-y: auto;
+                height: auto;
+                min-height: 100%;
+            }
+
+            .bento-task-board,
+            .bento-quick-stats,
+            .bento-terminal,
+            .bento-activity,
+            .bento-notes,
+            .bento-chat {
+                grid-column: 1;
+                grid-row: auto;
+            }
+        }
+
+        /* Bento widget card */
+        .bento-widget {
             background: var(--surface-1);
             border: 1px solid var(--border-default);
             border-radius: var(--radius-lg);
-            padding: var(--space-4);
-            margin-bottom: var(--space-6);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0; /* Important for flex child scrolling */
         }
+
+        /* Widget header */
+        .bento-widget-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-3) var(--space-4);
+            border-bottom: 1px solid var(--border-default);
+            background: var(--surface-1);
+            flex-shrink: 0;
+        }
+
+        .bento-widget-title {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .bento-widget-title svg {
+            width: 18px;
+            height: 18px;
+            color: var(--brand-red);
+        }
+
+        .bento-widget-actions {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        /* Widget content - scrollable */
+        .bento-widget-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: var(--space-4);
+            min-height: 0; /* Important for flex child scrolling */
+        }
+
+        .bento-widget-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .bento-widget-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .bento-widget-content::-webkit-scrollbar-thumb {
+            background: var(--border-default);
+            border-radius: 3px;
+        }
+
+        .bento-widget-content::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* =================== QUICK STATS STYLES (Bento Version) =================== */
         .quick-stats-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: var(--space-4);
+            margin-bottom: var(--space-3);
         }
+
         .quick-stats-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: var(--space-4);
+            gap: var(--space-3);
         }
-        @media (max-width: 1024px) {
+
+        @media (max-width: 1400px) {
             .quick-stats-grid {
                 grid-template-columns: repeat(3, 1fr);
             }
         }
+
         @media (max-width: 768px) {
             .quick-stats-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+
         .stat-item {
             text-align: center;
             padding: var(--space-3);
             background: var(--surface-2);
             border-radius: var(--radius-md);
         }
+
         .stat-value {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 700;
             color: var(--text-primary);
             line-height: 1.2;
         }
+
         .stat-value.brand {
             color: var(--brand-red);
         }
+
         .stat-label {
             font-size: 11px;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-top: var(--space-1);
+        }
+
+        /* Task board inside bento widget */
+        .bento-widget.bento-task-board .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-3);
+            height: 100%;
+        }
+
+        .bento-widget.bento-task-board .column {
+            background: var(--surface-2);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: var(--space-3);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .bento-widget.bento-task-board .drop-zone {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
         }
 
         /* =================== KEYBOARD SHORTCUTS MODAL =================== */
@@ -2704,132 +2927,133 @@
     <!-- Main Content -->
     <main class="main">
         
-        <!-- =================== DASHBOARD PAGE =================== -->
+        <!-- =================== DASHBOARD PAGE (BENTO GRID) =================== -->
         <div id="page-dashboard" class="page active">
-        <div class="container">
+            <div class="bento-grid">
 
-            <!-- Quick Stats -->
-            <section class="quick-stats-card">
-                <div class="quick-stats-header">
-                    <h2 class="section-title" style="margin-bottom: 0;">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                        </svg>
-                        Quick Stats
-                    </h2>
-                    <span id="stats-last-updated" style="font-size: 11px; color: var(--text-muted);">Updated just now</span>
-                </div>
-                <div class="quick-stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-value brand" id="stat-tasks-done">0</div>
-                        <div class="stat-label">Tasks Done (Week)</div>
+                <!-- Task Board Widget -->
+                <div class="bento-widget bento-task-board">
+                    <div class="bento-widget-header">
+                        <div class="bento-widget-title">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            Task Board
+                        </div>
+                        <div class="bento-widget-actions">
+                            <button onclick="openArchiveModal()" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">
+                                <span>📦</span>
+                                <span id="archive-badge" class="badge badge-error hidden" style="margin-left: 4px;">0</span>
+                            </button>
+                            <button onclick="syncFromVPS()" class="btn btn-ghost" title="Pull latest state from VPS" style="padding: 4px 8px; font-size: 12px;">
+                                <span>🔄</span>
+                            </button>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-focus-sessions">0</div>
-                        <div class="stat-label">Focus Sessions</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-messages">0</div>
-                        <div class="stat-label">Messages Today</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-streak">0</div>
-                        <div class="stat-label">Day Streak 🔥</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-uptime">--</div>
-                        <div class="stat-label">Session Time</div>
-                    </div>
-                </div>
-            </section>
+                    <div class="bento-widget-content">
+                        <div class="grid-3">
+                            <!-- To-Do Column -->
+                            <div class="column">
+                                <div class="column-header">
+                                    <h3 class="column-title">
+                                        <span class="status-dot idle"></span>
+                                        To-Do
+                                        <span id="todo-count" class="badge badge-default">0</span>
+                                    </h3>
+                                    <button onclick="openAddTask('todo')" class="btn-icon" title="Add task">
+                                        <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div id="todo-tasks" class="drop-zone space-y-2"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event, 'todo')"
+                                     ondragleave="handleDragLeave(event, 'todo')"
+                                     ondrop="handleDrop(event, 'todo')">
+                                </div>
+                            </div>
 
-            <!-- Task Board -->
-            <section class="section">
-                <div class="board-header">
-                    <h2 class="section-title">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                        </svg>
-                        Task Board
-                    </h2>
-                    <div class="board-actions">
-                        <button onclick="openArchiveModal()" class="btn btn-ghost">
-                            <span>📦</span> Archive
-                            <span id="archive-badge" class="badge badge-error hidden">0</span>
-                        </button>
-                        <button onclick="syncFromVPS()" class="btn btn-ghost" title="Pull latest state from VPS">
-                            <span>🔄</span> Sync
-                        </button>
+                            <!-- In Progress Column -->
+                            <div class="column">
+                                <div class="column-header">
+                                    <h3 class="column-title">
+                                        <span class="status-dot warning"></span>
+                                        In Progress
+                                        <span id="progress-count" class="badge badge-default">0</span>
+                                    </h3>
+                                </div>
+                                <div id="progress-tasks" class="drop-zone space-y-2"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event, 'progress')"
+                                     ondragleave="handleDragLeave(event, 'progress')"
+                                     ondrop="handleDrop(event, 'progress')">
+                                </div>
+                            </div>
+
+                            <!-- Done Column -->
+                            <div class="column">
+                                <div class="column-header">
+                                    <h3 class="column-title">
+                                        <span class="status-dot success"></span>
+                                        Done
+                                        <span id="done-count" class="badge badge-default">0</span>
+                                    </h3>
+                                    <button onclick="clearDone()" class="btn-icon" title="Clear done" style="font-size: 11px; color: var(--text-muted);">
+                                        Clear
+                                    </button>
+                                </div>
+                                <div id="done-tasks" class="drop-zone space-y-2"
+                                     ondragover="handleDragOver(event)"
+                                     ondragenter="handleDragEnter(event, 'done')"
+                                     ondragleave="handleDragLeave(event, 'done')"
+                                     ondrop="handleDrop(event, 'done')">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="grid-3">
-                    <!-- To-Do Column -->
-                    <div class="column">
-                        <div class="column-header">
-                            <h3 class="column-title">
-                                <span class="status-dot idle"></span>
-                                To-Do
-                                <span id="todo-count" class="badge badge-default">0</span>
-                            </h3>
-                            <button onclick="openAddTask('todo')" class="btn-icon" title="Add task">
-                                <svg style="width: 18px; height: 18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                <!-- Quick Stats Widget -->
+                <div class="bento-widget bento-quick-stats">
+                    <div class="bento-widget-content" style="padding: var(--space-3);">
+                        <div class="quick-stats-header">
+                            <div class="bento-widget-title" style="margin-bottom: 0;">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                                 </svg>
-                            </button>
+                                Quick Stats
+                            </div>
+                            <span id="stats-last-updated" style="font-size: 10px; color: var(--text-muted);">Updated just now</span>
                         </div>
-                        <div id="todo-tasks" class="drop-zone space-y-2"
-                             ondragover="handleDragOver(event)"
-                             ondragenter="handleDragEnter(event, 'todo')"
-                             ondragleave="handleDragLeave(event, 'todo')"
-                             ondrop="handleDrop(event, 'todo')">
-                        </div>
-                    </div>
-
-                    <!-- In Progress Column -->
-                    <div class="column">
-                        <div class="column-header">
-                            <h3 class="column-title">
-                                <span class="status-dot warning"></span>
-                                In Progress
-                                <span id="progress-count" class="badge badge-default">0</span>
-                            </h3>
-                        </div>
-                        <div id="progress-tasks" class="drop-zone space-y-2"
-                             ondragover="handleDragOver(event)"
-                             ondragenter="handleDragEnter(event, 'progress')"
-                             ondragleave="handleDragLeave(event, 'progress')"
-                             ondrop="handleDrop(event, 'progress')">
-                        </div>
-                    </div>
-
-                    <!-- Done Column -->
-                    <div class="column">
-                        <div class="column-header">
-                            <h3 class="column-title">
-                                <span class="status-dot success"></span>
-                                Done
-                                <span id="done-count" class="badge badge-default">0</span>
-                            </h3>
-                            <button onclick="clearDone()" class="btn-icon" title="Clear done" style="font-size: 12px; color: var(--text-muted);">
-                                Clear
-                            </button>
-                        </div>
-                        <div id="done-tasks" class="drop-zone space-y-2"
-                             ondragover="handleDragOver(event)"
-                             ondragenter="handleDragEnter(event, 'done')"
-                             ondragleave="handleDragLeave(event, 'done')"
-                             ondrop="handleDrop(event, 'done')">
+                        <div class="quick-stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value brand" id="stat-tasks-done">0</div>
+                                <div class="stat-label">Tasks Done</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-focus-sessions">0</div>
+                                <div class="stat-label">Focus</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-messages">0</div>
+                                <div class="stat-label">Messages</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-streak">0</div>
+                                <div class="stat-label">Streak 🔥</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-uptime">--</div>
+                                <div class="stat-label">Session</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Terminal + Activity -->
-            <section class="section">
-                <div class="grid-2">
-                    <!-- Terminal -->
-                    <div class="terminal" id="console-section">
+                <!-- Terminal Widget -->
+                <div class="bento-widget bento-terminal">
+                    <div class="terminal" id="console-section" style="height: 100%; display: flex; flex-direction: column; border: none; border-radius: 0;">
                         <div class="terminal-header">
                             <div class="flex items-center gap-3">
                                 <div class="terminal-dots">
@@ -2837,80 +3061,76 @@
                                     <span class="yellow"></span>
                                     <span class="green"></span>
                                 </div>
-                                <span class="terminal-title">SoLoBot Terminal</span>
+                                <span class="terminal-title">Terminal</span>
                                 <span id="console-status-badge" class="badge badge-success">IDLE</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button onclick="clearConsole()" class="btn-icon" style="font-size: 12px;">Clear</button>
-                                <button onclick="toggleConsoleExpand()" class="btn-icon" style="font-size: 12px;" id="console-expand-btn">Expand</button>
+                                <button onclick="clearConsole()" class="btn-icon" style="font-size: 11px;">Clear</button>
                             </div>
                         </div>
-                        <div id="console-output" class="terminal-output">
+                        <div id="console-output" class="terminal-output" style="flex: 1; overflow-y: auto;">
                             <div class="cmd">$ solobot --init</div>
                             <div class="info">Ready for commands...</div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Activity Log -->
-                    <div class="card" style="padding: var(--space-4);">
-                        <h2 class="section-title" style="margin-bottom: var(--space-3);">
+                <!-- Activity Log Widget -->
+                <div class="bento-widget bento-activity">
+                    <div class="bento-widget-header">
+                        <div class="bento-widget-title">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
-                            Activity Log
-                        </h2>
+                            Activity
+                        </div>
+                    </div>
+                    <div class="bento-widget-content">
                         <div id="activity-log" class="activity-list">
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Chat + Notes -->
-            <section class="section">
-                <div class="grid-2" style="grid-template-columns: 1fr 1.2fr;">
-                    <!-- Chat -->
-                    <div class="card chat-container">
-                        <div class="chat-header">
-                            <div class="flex items-center gap-3">
-                                <h2 class="section-title" style="margin-bottom: 0;">
-                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-                                    </svg>
-                                    Chat
-                                </h2>
-                                <div class="flex items-center gap-2" style="position: relative;">
-                                    <span id="current-session-name" style="font-size: 13px; color: var(--accent-color); font-weight: 600; background: var(--surface-elevated); padding: 2px 8px; border-radius: 4px;">main</span>
-                                    <button onclick="toggleSessionMenu()" style="background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted);">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                        </svg>
-                                    </button>
-                                    <div id="session-menu" class="hidden" style="position: absolute; top: 100%; right: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100; min-width: 180px; margin-top: 4px;">
-                                        <div style="padding: 8px 0;">
-                                            <button onclick="renameSession()" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 13px; text-align: left;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='none'">
-                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                                </svg>
-                                                Rename Session
-                                            </button>
-                                            <button onclick="showSessionSwitcher()" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 13px; text-align: left;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='none'">
-                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
-                                                </svg>
-                                                Switch Session
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span id="gateway-status-dot" class="status-dot idle"></span>
-                                <span id="gateway-status" style="font-size: 12px; color: var(--text-muted);">Disconnected</span>
+                <!-- Notes Widget -->
+                <div class="bento-widget bento-notes">
+                    <div class="bento-widget-header">
+                        <div class="bento-widget-title">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                            </svg>
+                            Notes
+                        </div>
+                    </div>
+                    <div class="bento-widget-content">
+                        <div class="notes-input" style="margin-bottom: var(--space-3);">
+                            <input type="text" id="note-input" class="input flex-1" placeholder="Leave a note for SoLoBot..." style="font-size: 13px;">
+                            <button onclick="addNote()" class="btn btn-primary" style="padding: 6px 12px; font-size: 13px;">Add</button>
+                        </div>
+                        <div id="notes-list" class="notes-list">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Widget -->
+                <div class="bento-widget bento-chat">
+                    <div class="bento-widget-header">
+                        <div class="bento-widget-title">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                            Chat
+                            <div class="flex items-center gap-2" style="margin-left: auto;">
+                                <span id="current-session-name" style="font-size: 11px; color: var(--accent-color); font-weight: 600; background: var(--surface-2); padding: 2px 6px; border-radius: 4px;">main</span>
                             </div>
                         </div>
-
-                        <div id="chat-messages" class="chat-messages">
-                            <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: var(--space-8) 0;">
+                        <div class="bento-widget-actions">
+                            <span id="gateway-status-dot" class="status-dot idle"></span>
+                            <span id="gateway-status" style="font-size: 11px; color: var(--text-muted);">Disconnected</span>
+                        </div>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div id="chat-messages" class="chat-messages" style="flex: 1; overflow-y: auto; padding: var(--space-3);">
+                            <div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: var(--space-8) 0;">
                                 🔌 Connect to Gateway in Settings to start chatting
                             </div>
                         </div>
@@ -2920,26 +3140,26 @@
                             <!-- Thumbnails rendered dynamically -->
                         </div>
 
-                        <div class="chat-input-area">
+                        <div class="chat-input-area" style="border-top: 1px solid var(--border-default); padding: var(--space-2);">
                             <label class="btn-icon" style="cursor: pointer;">
                                 <input type="file" id="image-upload" accept="image/*" multiple class="hidden" onchange="handleImageSelect(event)">
-                                <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                 </svg>
                             </label>
                             <div class="voice-controls">
-                                <button id="voice-input-btn" class="voice-btn" onclick="toggleVoiceInput()" title="Voice input (click to speak, or hold spacebar)">
-                                    <svg id="voice-icon-mic" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <button id="voice-input-btn" class="voice-btn" onclick="toggleVoiceInput()" title="Voice input">
+                                    <svg id="voice-icon-mic" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
                                     </svg>
-                                    <svg id="voice-icon-stop" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;">
+                                    <svg id="voice-icon-stop" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none; width: 16px; height: 16px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
                                     </svg>
                                 </button>
-                                <button class="voice-auto-send-toggle" onclick="toggleVoiceAutoSend()" title="Auto-send OFF (click to enable)">⚡</button>
+                                <button class="voice-auto-send-toggle" onclick="toggleVoiceAutoSend()" title="Auto-send">⚡</button>
                             </div>
-                            <input type="text" id="chat-input" class="input flex-1" placeholder="Type a message..."
+                            <input type="text" id="chat-input" class="input flex-1" placeholder="Message..."
                                    name="dashboard_chat_field_" 
                                    onkeypress="if(event.key==='Enter')sendChatMessage()"
                                    onpaste="handlePaste(event)"
@@ -2949,54 +3169,41 @@
                                    spellcheck="false"
                                    data-lpignore="true"
                                    data-1p-ignore="true"
-                                   data-form-type="other">
-                            <button onclick="sendChatMessage()" class="btn btn-primary">Send</button>
-                        </div>
-                    </div>
-
-                    <!-- Notes -->
-                    <div class="card" style="padding: var(--space-4);">
-                        <h2 class="section-title" style="margin-bottom: var(--space-3);">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                            </svg>
-                            Notes for SoLoBot
-                        </h2>
-                        <div class="notes-input">
-                            <input type="text" id="note-input" class="input flex-1" placeholder="Leave a note for SoLoBot...">
-                            <button onclick="addNote()" class="btn btn-primary">Send</button>
-                        </div>
-                        <div id="notes-list" class="notes-list">
+                                   data-form-type="other"
+                                   style="font-size: 13px; padding: 6px 8px;">
+                            <button onclick="sendChatMessage()" class="btn btn-primary" style="padding: 6px 12px; font-size: 13px;">Send</button>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Product Status -->
-            <section class="section">
-                <h2 class="section-title">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                    </svg>
-                    Product Status
-                </h2>
-                <div class="grid-4">
-                    <div class="product-card">
-                        <div class="product-header">
-                            <span class="product-name">SoLoLink</span>
-                            <span class="status-dot success"></span>
-                        </div>
-                        <p class="product-desc">Link/widget tool</p>
-                        <p class="product-meta">Last update: Active</p>
+            </div>
+        </div>
+
+        <!-- Product Status (Hidden - moved out of main bento for now) -->
+        <section class="section" style="display: none;">
+            <h2 class="section-title">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+                Product Status
+            </h2>
+            <div class="grid-4">
+                <div class="product-card">
+                    <div class="product-header">
+                        <span class="product-name">SoLoLink</span>
+                        <span class="status-dot success"></span>
                     </div>
-                    <div class="product-card">
-                        <div class="product-header">
-                            <span class="product-name">SoLoRecall</span>
-                            <span class="status-dot warning"></span>
-                        </div>
-                        <p class="product-desc">AI productivity app</p>
-                        <p class="product-meta">Last update: In dev</p>
+                    <p class="product-desc">Link/widget tool</p>
+                    <p class="product-meta">Last update: Active</p>
+                </div>
+                <div class="product-card">
+                    <div class="product-header">
+                        <span class="product-name">SoLoRecall</span>
+                        <span class="status-dot warning"></span>
                     </div>
+                    <p class="product-desc">AI productivity app</p>
+                    <p class="product-meta">Last update: In dev</p>
+                </div>
                     <div class="product-card">
                         <div class="product-header">
                             <span class="product-name">SoLoVoice</span>
