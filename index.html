@@ -3584,32 +3584,38 @@
     </div>
 
     <!-- Diff View Modal -->
+    <!-- IDE-style Diff Viewer -->
     <div id="diff-modal" class="modal-overlay">
         <div class="modal" style="max-width: 95vw; width: 1400px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-            <div class="modal-header" style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--border-default);">
-                <h3 class="modal-title" id="diff-modal-title">Compare Versions</h3>
+            <div class="modal-header" style="flex-shrink: 0; padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--border-default); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: var(--space-4);">
+                    <h3 class="modal-title" id="diff-modal-title" style="margin: 0;">Compare Versions</h3>
+                    <div id="diff-stats" style="font-size: 12px; color: var(--text-muted);"></div>
+                </div>
                 <button onclick="closeDiffModal()" class="modal-close">✕</button>
             </div>
-            <div class="modal-body" style="flex: 1; display: flex; overflow: hidden; padding: 0; min-height: 0;">
-                <!-- Current Version -->
+            <!-- Side-by-side diff panes -->
+            <div style="flex: 1; display: flex; overflow: hidden; min-height: 0;">
+                <!-- Current (left) -->
                 <div style="flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border-default);">
-                    <div style="padding: var(--space-3) var(--space-4); background: var(--surface-1); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 13px;">
+                    <div style="padding: 6px 16px; background: var(--surface-1); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 12px; color: var(--text-secondary);">
                         📄 Current Version
                     </div>
-                    <div id="diff-current" style="flex: 1; overflow: auto; padding: var(--space-4); font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: var(--surface-2);"></div>
+                    <div id="diff-current" class="diff-pane"></div>
                 </div>
-                <!-- Historical Version -->
+                <!-- Historical (right) -->
                 <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                    <div style="padding: var(--space-3) var(--space-4); background: var(--surface-1); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 13px;">
+                    <div style="padding: 6px 16px; background: var(--surface-1); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 12px; color: var(--text-secondary);">
                         📜 <span id="diff-version-date">Historical Version</span>
                     </div>
-                    <div id="diff-historical" style="flex: 1; overflow: auto; padding: var(--space-4); font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: var(--surface-2);"></div>
+                    <div id="diff-historical" class="diff-pane"></div>
                 </div>
             </div>
-            <div class="modal-footer" style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-size: 12px; color: var(--text-muted);">
-                    <span style="background: var(--success); color: white; padding: 2px 6px; border-radius: 3px; margin-right: 8px;">Added</span>
-                    <span style="background: var(--error); color: white; padding: 2px 6px; border-radius: 3px;">Removed</span>
+            <div class="modal-footer" style="flex-shrink: 0; padding: var(--space-3) var(--space-6); border-top: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 12px;">
+                    <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 12px; height: 12px; background: rgba(46,160,67,0.25); border-left: 3px solid #3fb950; border-radius: 2px;"></span> Added</span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 12px; height: 12px; background: rgba(248,81,73,0.25); border-left: 3px solid #f85149; border-radius: 2px;"></span> Removed</span>
+                    <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 12px; height: 12px; background: rgba(210,153,34,0.15); border-left: 3px solid #d29922; border-radius: 2px;"></span> Modified</span>
                 </div>
                 <div style="display: flex; gap: var(--space-2);">
                     <button onclick="closeDiffModal()" class="btn btn-ghost">Close</button>
@@ -4008,7 +4014,7 @@
     <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column-reverse; gap: 10px;"></div>
 
     <script src="gateway-client.js?v=3.7.0"></script>
-    <script src="docs-hub-memory-files.js?v=2.7.0"></script>
+    <script src="docs-hub-memory-files.js?v=2.8.0"></script>
     <script src="dashboard.js?v=3.53.0"></script>
     <script>
         // Valid page names
@@ -4660,6 +4666,68 @@
             50% { opacity: 0.7; }
         }
         
+        /* IDE-style diff viewer */
+        .diff-pane {
+            flex: 1;
+            overflow: auto;
+            background: var(--surface-2);
+            font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 20px;
+            white-space: pre;
+            tab-size: 4;
+        }
+        .diff-line {
+            display: flex;
+            min-height: 20px;
+        }
+        .diff-line-num {
+            width: 50px;
+            flex-shrink: 0;
+            text-align: right;
+            padding: 0 8px 0 4px;
+            color: var(--text-faint);
+            user-select: none;
+            border-right: 1px solid var(--border-subtle);
+            background: var(--surface-1);
+            font-size: 11px;
+        }
+        .diff-line-content {
+            flex: 1;
+            padding: 0 8px;
+            min-width: 0;
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        /* Diff line types */
+        .diff-line.added { background: rgba(46, 160, 67, 0.15); }
+        .diff-line.added .diff-line-num { background: rgba(46, 160, 67, 0.2); color: #3fb950; }
+        .diff-line.added .diff-line-content { border-left: 3px solid #3fb950; }
+        .diff-line.removed { background: rgba(248, 81, 73, 0.15); }
+        .diff-line.removed .diff-line-num { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+        .diff-line.removed .diff-line-content { border-left: 3px solid #f85149; }
+        .diff-line.modified { background: rgba(210, 153, 34, 0.1); }
+        .diff-line.modified .diff-line-num { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+        .diff-line.modified .diff-line-content { border-left: 3px solid #d29922; }
+        .diff-line.empty { opacity: 0.4; }
+        .diff-line.empty .diff-line-content { background: repeating-linear-gradient(
+            -45deg, transparent, transparent 4px,
+            var(--border-subtle) 4px, var(--border-subtle) 5px
+        ); }
+        /* Chunk separator */
+        .diff-chunk-sep {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            background: var(--surface-3);
+            color: var(--text-muted);
+            font-size: 11px;
+            border-top: 1px solid var(--border-default);
+            border-bottom: 1px solid var(--border-default);
+            user-select: none;
+        }
+
         /* Version history panel */
         .version-item:hover {
             background: var(--surface-2);

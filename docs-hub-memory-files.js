@@ -445,71 +445,133 @@ async function previewVersion(filepath, timestamp) {
     }
 }
 
-// Simple line-by-line diff renderer
+// === IDE-STYLE DIFF RENDERER ===
+
 function renderDiff(currentText, historicalText) {
-    const currentLines = currentText.split('\n');
-    const historicalLines = historicalText.split('\n');
+    const curLines = currentText.split('\n');
+    const hisLines = historicalText.split('\n');
+    const curPane = document.getElementById('diff-current');
+    const hisPane = document.getElementById('diff-historical');
+    const statsEl = document.getElementById('diff-stats');
     
-    const currentContainer = document.getElementById('diff-current');
-    const historicalContainer = document.getElementById('diff-historical');
+    // Compute LCS-based diff
+    const ops = diffLines(hisLines, curLines);
     
-    // Build a simple LCS-based diff
-    const diff = computeLineDiff(historicalLines, currentLines);
+    let curHtml = '', hisHtml = '';
+    let curNum = 0, hisNum = 0;
+    let added = 0, removed = 0, modified = 0;
     
-    let currentHtml = '';
-    let historicalHtml = '';
-    
-    diff.forEach(item => {
-        const escapedLine = escapeHtmlLocal(item.line);
-        if (item.type === 'same') {
-            currentHtml += `<div style="padding: 2px 4px;">${escapedLine || '&nbsp;'}</div>`;
-            historicalHtml += `<div style="padding: 2px 4px;">${escapedLine || '&nbsp;'}</div>`;
-        } else if (item.type === 'added') {
-            currentHtml += `<div style="padding: 2px 4px; background: rgba(46, 160, 67, 0.3); border-left: 3px solid var(--success);">${escapedLine || '&nbsp;'}</div>`;
-            historicalHtml += `<div style="padding: 2px 4px; opacity: 0.3;">&nbsp;</div>`;
-        } else if (item.type === 'removed') {
-            currentHtml += `<div style="padding: 2px 4px; opacity: 0.3;">&nbsp;</div>`;
-            historicalHtml += `<div style="padding: 2px 4px; background: rgba(248, 81, 73, 0.3); border-left: 3px solid var(--error);">${escapedLine || '&nbsp;'}</div>`;
+    ops.forEach(op => {
+        const esc = (s) => escapeHtmlLocal(s);
+        if (op.type === 'equal') {
+            curNum++; hisNum++;
+            curHtml += diffLine(curNum, esc(op.cur), '');
+            hisHtml += diffLine(hisNum, esc(op.his), '');
+        } else if (op.type === 'added') {
+            curNum++;
+            added++;
+            curHtml += diffLine(curNum, esc(op.cur), 'added');
+            hisHtml += diffLine('', '', 'empty');
+        } else if (op.type === 'removed') {
+            hisNum++;
+            removed++;
+            curHtml += diffLine('', '', 'empty');
+            hisHtml += diffLine(hisNum, esc(op.his), 'removed');
+        } else if (op.type === 'modified') {
+            curNum++; hisNum++;
+            modified++;
+            curHtml += diffLine(curNum, esc(op.cur), 'added');
+            hisHtml += diffLine(hisNum, esc(op.his), 'removed');
         }
     });
     
-    currentContainer.innerHTML = currentHtml;
-    historicalContainer.innerHTML = historicalHtml;
+    curPane.innerHTML = curHtml;
+    hisPane.innerHTML = hisHtml;
+    
+    // Stats
+    if (statsEl) {
+        const parts = [];
+        if (added) parts.push(`<span style="color: #3fb950;">+${added}</span>`);
+        if (removed) parts.push(`<span style="color: #f85149;">-${removed}</span>`);
+        if (modified) parts.push(`<span style="color: #d29922;">~${modified}</span>`);
+        statsEl.innerHTML = parts.length ? parts.join(' &nbsp;') : '<span>No changes</span>';
+    }
+    
+    // Sync scrolling between panes
+    setupDiffScrollSync(curPane, hisPane);
 }
 
-// Compute line-by-line diff using simple algorithm
-function computeLineDiff(oldLines, newLines) {
-    const result = [];
-    const oldSet = new Set(oldLines);
-    const newSet = new Set(newLines);
+function diffLine(num, content, type) {
+    const cls = type ? ` ${type}` : '';
+    const txt = content || '&nbsp;';
+    return `<div class="diff-line${cls}"><span class="diff-line-num">${num}</span><span class="diff-line-content">${txt}</span></div>`;
+}
+
+// Synchronized scrolling for both diff panes
+function setupDiffScrollSync(paneA, paneB) {
+    let syncing = false;
+    function sync(src, tgt) {
+        if (syncing) return;
+        syncing = true;
+        tgt.scrollTop = src.scrollTop;
+        tgt.scrollLeft = src.scrollLeft;
+        syncing = false;
+    }
+    paneA.onscroll = () => sync(paneA, paneB);
+    paneB.onscroll = () => sync(paneB, paneA);
+}
+
+// Diff algorithm: LCS-based line diff with modify detection
+function diffLines(oldLines, newLines) {
+    const N = oldLines.length, M = newLines.length;
     
-    let oldIdx = 0, newIdx = 0;
+    // For very large files, use simple O(n) approach
+    if (N + M > 5000) return diffSimple(oldLines, newLines);
     
-    while (oldIdx < oldLines.length || newIdx < newLines.length) {
-        if (oldIdx >= oldLines.length) {
-            // Remaining new lines are additions
-            result.push({ type: 'added', line: newLines[newIdx++] });
-        } else if (newIdx >= newLines.length) {
-            // Remaining old lines are deletions
-            result.push({ type: 'removed', line: oldLines[oldIdx++] });
-        } else if (oldLines[oldIdx] === newLines[newIdx]) {
-            // Lines match
-            result.push({ type: 'same', line: oldLines[oldIdx] });
-            oldIdx++;
-            newIdx++;
-        } else if (!newSet.has(oldLines[oldIdx])) {
-            // Old line not in new - it was removed
-            result.push({ type: 'removed', line: oldLines[oldIdx++] });
-        } else if (!oldSet.has(newLines[newIdx])) {
-            // New line not in old - it was added
-            result.push({ type: 'added', line: newLines[newIdx++] });
-        } else {
-            // Both exist elsewhere - treat as remove then add
-            result.push({ type: 'removed', line: oldLines[oldIdx++] });
+    // Build LCS table
+    const dp = Array.from({ length: N + 1 }, () => new Uint16Array(M + 1));
+    for (let i = N - 1; i >= 0; i--) {
+        for (let j = M - 1; j >= 0; j--) {
+            if (oldLines[i] === newLines[j]) dp[i][j] = dp[i+1][j+1] + 1;
+            else dp[i][j] = Math.max(dp[i+1][j], dp[i][j+1]);
         }
     }
     
-    return result;
+    // Trace back to produce operations
+    const ops = [];
+    let i = 0, j = 0;
+    while (i < N || j < M) {
+        if (i < N && j < M && oldLines[i] === newLines[j]) {
+            ops.push({ type: 'equal', cur: newLines[j], his: oldLines[i] });
+            i++; j++;
+        } else if (j < M && (i >= N || dp[i][j+1] >= dp[i+1][j])) {
+            // Check if this is a modification (next old line is also not equal)
+            if (i < N && i + 1 <= N && j + 1 <= M && dp[i+1][j+1] >= dp[i+1][j] && dp[i+1][j+1] >= dp[i][j+1]) {
+                ops.push({ type: 'modified', cur: newLines[j], his: oldLines[i] });
+                i++; j++;
+            } else {
+                ops.push({ type: 'added', cur: newLines[j] });
+                j++;
+            }
+        } else {
+            ops.push({ type: 'removed', his: oldLines[i] });
+            i++;
+        }
+    }
+    return ops;
+}
+
+// Simple fallback for very large files
+function diffSimple(oldLines, newLines) {
+    const ops = [];
+    let oi = 0, ni = 0;
+    while (oi < oldLines.length || ni < newLines.length) {
+        if (oi >= oldLines.length) { ops.push({ type: 'added', cur: newLines[ni++] }); }
+        else if (ni >= newLines.length) { ops.push({ type: 'removed', his: oldLines[oi++] }); }
+        else if (oldLines[oi] === newLines[ni]) { ops.push({ type: 'equal', cur: newLines[ni], his: oldLines[oi] }); oi++; ni++; }
+        else { ops.push({ type: 'modified', cur: newLines[ni], his: oldLines[oi] }); oi++; ni++; }
+    }
+    return ops;
 }
 
 // Close diff modal
