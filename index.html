@@ -4240,6 +4240,11 @@
             });
             
             container.innerHTML = html || '<div class="empty-state">No files match your search</div>';
+            
+            // Append sub-agent file sections
+            if (typeof renderAgentSection === 'function') {
+                renderAgentSection(container);
+            }
         }
         
         // Sync memory files now (manual trigger)
