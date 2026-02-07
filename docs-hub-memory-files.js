@@ -182,6 +182,8 @@ async function renderMemoryFiles(filter = '') {
             const modifiedDate = new Date(file.modified).toLocaleDateString();
             const botBadge = file.botUpdated && !file.acknowledged 
                 ? `<span class="badge badge-warning bot-updated-badge" title="Updated by SoLoBot - click to acknowledge">🤖 Updated</span>` 
+                : file.acknowledged
+                ? `<span class="badge badge-success" title="Reviewed">✓ Read</span>`
                 : '';
             
             html += `
@@ -260,7 +262,7 @@ async function viewMemoryFile(filepath) {
         // Load version history
         loadVersionHistory(filepath);
         
-        // If bot-updated, show acknowledge option in title
+        // Show bot-update status in title
         const file = memoryFilesCache.find(f => f.path === filepath);
         if (file && file.botUpdated && !file.acknowledged) {
             titleEl.innerHTML = `
@@ -270,6 +272,11 @@ async function viewMemoryFile(filepath) {
                         class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
                     ✓ Mark as Read
                 </button>
+            `;
+        } else if (file && file.acknowledged) {
+            titleEl.innerHTML = `
+                ${escapeHtmlLocal(data.name)}
+                <span class="badge badge-success" style="margin-left: 8px;">✓ Read</span>
             `;
         }
     } catch (e) {
@@ -327,10 +334,13 @@ async function acknowledgeUpdate(filepath) {
         memoryFilesCache = [];
         lastFetchTime = 0;
         
-        // Update title
+        // Update title to show ✓ Read badge
         const titleEl = document.getElementById('memory-file-title');
         if (titleEl && window.currentMemoryFile) {
-            titleEl.textContent = window.currentMemoryFile.path;
+            titleEl.innerHTML = `
+                ${escapeHtmlLocal(window.currentMemoryFile.path)}
+                <span class="badge badge-success" style="margin-left: 8px;">✓ Read</span>
+            `;
         }
         
         // Refresh file list with newest metadata
