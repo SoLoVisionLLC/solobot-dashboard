@@ -3259,6 +3259,42 @@
                 margin-left: var(--space-1);
             }
 
+            /* =================== NOTIFICATION BELL =================== */
+            .notification-bell {
+                position: relative;
+                cursor: pointer;
+                font-size: 18px;
+                padding: 4px 8px;
+                border-radius: 6px;
+                transition: background 0.2s;
+                user-select: none;
+            }
+            .notification-bell:hover {
+                background: var(--bg-card-hover, rgba(255,255,255,0.08));
+            }
+            .notification-bell-badge {
+                position: absolute;
+                top: -2px;
+                right: 0px;
+                background: var(--brand-red, #BC2026);
+                color: white;
+                border-radius: 50%;
+                min-width: 16px;
+                height: 16px;
+                font-size: 10px;
+                font-weight: 700;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 3px;
+                pointer-events: none;
+                animation: bellPulse 1s ease-in-out;
+            }
+            @keyframes bellPulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.3); }
+            }
+
             /* =================== BENTO GRID DASHBOARD STYLES =================== */
             /* Dashboard page uses a fixed viewport bento grid layout */
             #page-dashboard {
@@ -3815,6 +3851,12 @@
                                     class="focus-timer-sessions"
                                     id="focus-sessions"
                                 >0 🎯</span>
+                            </div>
+
+                            <!-- Notification Bell -->
+                            <div id="notification-bell" class="notification-bell" onclick="toggleNotificationPanel()" title="Notifications">
+                                🔔
+                                <span id="notification-bell-badge" class="notification-bell-badge" style="display:none;">0</span>
                             </div>
 
                             <div class="status-chip">

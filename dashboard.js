@@ -1871,42 +1871,152 @@ function handleCrossSessionNotification(msg) {
     const friendlyName = getFriendlySessionName(sessionKey);
     const preview = content.length > 120 ? content.slice(0, 120) + '…' : content;
     
-    console.log(`[Notifications] Message from ${friendlyName}: ${preview.slice(0, 60)}`);
+    console.log(`[Notifications] 🔔 Message from ${friendlyName}: ${preview.slice(0, 60)}`);
     
     // Track unread count
     unreadSessions.set(sessionKey, (unreadSessions.get(sessionKey) || 0) + 1);
     updateUnreadBadges();
     
-    // Browser notification (only if page is not focused or user is on different session)
+    // Always show in-app toast (works regardless of browser notification permission)
+    showNotificationToast(friendlyName, preview, sessionKey);
+    
+    // Browser notification (best-effort — may not be permitted)
     if ('Notification' in window && Notification.permission === 'granted') {
-        const notification = new Notification(`${friendlyName}`, {
-            body: preview,
-            icon: '/solobot-avatar.png',
-            tag: `session-${sessionKey}`, // Replace previous notification from same session
-            silent: false
-        });
-        
-        notification.onclick = () => {
-            window.focus();
-            // Navigate to chat page and switch to that session
-            if (typeof showPage === 'function') showPage('chat');
-            // Determine agent from session key and set sidebar
-            const agentMatch = sessionKey.match(/^agent:([^:]+):/);
-            if (agentMatch && typeof setActiveSidebarAgent === 'function') {
-                setActiveSidebarAgent(agentMatch[1]);
-            }
-            if (typeof switchToSessionKey === 'function') {
-                switchToSessionKey(sessionKey);
-            }
-            notification.close();
-        };
-        
-        // Auto-close after 8 seconds
-        setTimeout(() => notification.close(), 8000);
+        try {
+            const notification = new Notification(`${friendlyName}`, {
+                body: preview,
+                icon: '/solobot-avatar.png',
+                tag: `session-${sessionKey}`,
+                silent: false
+            });
+            
+            notification.onclick = () => {
+                window.focus();
+                navigateToSession(sessionKey);
+                notification.close();
+            };
+            
+            setTimeout(() => notification.close(), 8000);
+        } catch (e) {
+            console.warn('[Notifications] Browser notification failed:', e);
+        }
     }
     
     // Play notification sound
     playNotificationSound();
+}
+
+// Navigate to a specific session (used by notification click handlers)
+function navigateToSession(sessionKey) {
+    if (typeof showPage === 'function') showPage('chat');
+    const agentMatch = sessionKey.match(/^agent:([^:]+):/);
+    if (agentMatch && typeof setActiveSidebarAgent === 'function') {
+        setActiveSidebarAgent(agentMatch[1]);
+    }
+    if (typeof switchToSessionKey === 'function') {
+        switchToSessionKey(sessionKey);
+    }
+    // Clear unread for this session
+    unreadSessions.delete(sessionKey);
+    updateUnreadBadges();
+}
+
+// In-app toast notification — always visible, no browser permission needed
+function showNotificationToast(title, body, sessionKey) {
+    // Create toast container if it doesn't exist
+    let container = document.getElementById('notification-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-toast-container';
+        container.style.cssText = 'position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
+        document.body.appendChild(container);
+    }
+    
+    // Determine agent color from session key
+    const agentMatch = sessionKey?.match(/^agent:([^:]+):/);
+    const agentId = agentMatch ? agentMatch[1] : 'main';
+    const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
+    const color = agentColors[agentId] || '#BC2026';
+    
+    const toast = document.createElement('div');
+    toast.className = 'notification-toast';
+    toast.style.cssText = `
+        pointer-events: auto; cursor: pointer;
+        background: var(--card-bg, #1a1a2e); border: 1px solid ${color};
+        border-left: 4px solid ${color}; border-radius: 8px;
+        padding: 10px 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        opacity: 0; transform: translateX(100%);
+        transition: all 0.3s ease; max-width: 360px;
+        font-family: var(--font-family, system-ui);
+    `;
+    toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: ${color}; flex-shrink: 0;"></span>
+            <strong style="color: ${color}; font-size: 13px;">${title}</strong>
+            <span style="margin-left: auto; color: var(--text-muted, #666); font-size: 11px; cursor: pointer;" class="toast-close">✕</span>
+        </div>
+        <div style="color: var(--text-primary, #e0e0e0); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
+    `;
+    
+    // Click toast → navigate to session
+    toast.addEventListener('click', (e) => {
+        if (e.target.classList?.contains('toast-close')) {
+            dismissToast(toast);
+            return;
+        }
+        navigateToSession(sessionKey);
+        dismissToast(toast);
+    });
+    
+    container.appendChild(toast);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(0)';
+    });
+    
+    // Auto-dismiss after 6 seconds
+    const timer = setTimeout(() => dismissToast(toast), 6000);
+    toast._dismissTimer = timer;
+    
+    // Limit to 4 toasts max
+    while (container.children.length > 4) {
+        dismissToast(container.firstChild);
+    }
+}
+
+function dismissToast(toast) {
+    if (!toast || toast._dismissed) return;
+    toast._dismissed = true;
+    clearTimeout(toast._dismissTimer);
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 300);
+}
+
+// Toggle notification panel — click bell to navigate to most-unread session
+function toggleNotificationPanel() {
+    if (unreadSessions.size === 0) {
+        // No unreads — just flash the bell
+        const bell = document.getElementById('notification-bell');
+        if (bell) {
+            bell.style.animation = 'none';
+            bell.offsetHeight; // trigger reflow
+            bell.style.animation = 'bellPulse 0.3s ease-in-out';
+        }
+        return;
+    }
+    
+    // Find session with most unreads
+    let maxKey = null, maxCount = 0;
+    for (const [key, count] of unreadSessions) {
+        if (count > maxCount) { maxCount = count; maxKey = key; }
+    }
+    
+    if (maxKey) {
+        navigateToSession(maxKey);
+    }
 }
 
 function playNotificationSound() {
@@ -1975,8 +2085,19 @@ function updateUnreadBadges() {
         }
     });
 
-    // Update the tab/title with total unread count
+    // Update notification bell badge
     const totalUnread = Array.from(unreadSessions.values()).reduce((a, b) => a + b, 0);
+    const bellBadge = document.getElementById('notification-bell-badge');
+    if (bellBadge) {
+        if (totalUnread > 0) {
+            bellBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+            bellBadge.style.display = 'flex';
+        } else {
+            bellBadge.style.display = 'none';
+        }
+    }
+
+    // Update the tab/title with total unread count
     const baseTitle = 'SoLoVision Dashboard';
     document.title = totalUnread > 0 ? `(${totalUnread}) ${baseTitle}` : baseTitle;
 }
