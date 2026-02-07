@@ -1459,7 +1459,8 @@ function getAgentLabel(agentId) {
         'cmp': 'CMP',
         'dev': 'DEV',
         'family': 'Family',
-        'tax': 'Tax'
+        'tax': 'Tax',
+        'smm': 'SMM'
     };
     return labels[agentId] || agentId.toUpperCase();
 }
@@ -3881,7 +3882,7 @@ function createChatPageMessage(msg) {
             avatar.setAttribute('data-agent', agentId);
             
             // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family'].includes(agentId) 
+            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm'].includes(agentId) 
                 ? `/avatars/${agentId === 'main' ? 'solobot' : agentId}.png`
                 : (agentId === 'tax' || agentId === 'sec') 
                     ? `/avatars/${agentId}.svg`
