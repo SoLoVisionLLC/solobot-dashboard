@@ -2457,8 +2457,8 @@
         /* Bento grid container */
         .bento-grid {
             display: grid;
-            grid-template-columns: 3fr 0.5fr 0.5fr;
-            grid-template-rows: 1.5fr 0.8fr 0.7fr;
+            grid-template-columns: 3fr 1fr;
+            grid-template-rows: 1fr;
             gap: var(--space-4);
             height: 100%;
             width: 100%;
@@ -2467,32 +2467,28 @@
         /* Grid cell placement */
         .bento-task-board {
             grid-column: 1;
-            grid-row: 1 / 3; /* span first two rows */
+            grid-row: 1;
         }
 
         .bento-quick-stats {
-            grid-column: 1;
-            grid-row: 3;
+            display: none; /* hidden in bento layout */
         }
 
         .bento-terminal {
-            grid-column: 2;
-            grid-row: 1;
+            display: none; /* hidden in bento layout */
         }
 
         .bento-activity {
             grid-column: 2;
-            grid-row: 2;
+            grid-row: 1;
         }
 
         .bento-notes {
-            grid-column: 2;
-            grid-row: 3;
+            display: none; /* hidden in bento layout */
         }
 
         .bento-chat {
-            grid-column: 3;
-            grid-row: 1 / 4; /* span all three rows */
+            display: none; /* hidden in bento layout */
         }
 
         /* Tablet layout (2 columns) */
