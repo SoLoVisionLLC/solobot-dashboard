@@ -659,6 +659,7 @@ const server = http.createServer((req, res) => {
   // API Routes
   if (url.pathname === '/api/state') {
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
     return res.end(JSON.stringify(state));
   }
   
@@ -1683,14 +1684,43 @@ const server = http.createServer((req, res) => {
   const ext = path.extname(filePath);
   
   if (ext && fs.existsSync(filePath)) {
-    res.setHeader('Content-Type', MIME_TYPES[ext] || 'application/octet-stream');
-    return res.end(fs.readFileSync(filePath));
+    const content = fs.readFileSync(filePath);
+    const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', mimeType);
+    
+    // Dynamic assets (HTML, JS, CSS) — always revalidate so updates appear instantly
+    if (['.html', '.js', '.css'].includes(ext)) {
+      const hash = crypto.createHash('md5').update(content).digest('hex').slice(0, 12);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('ETag', `"${hash}"`);
+      
+      // If browser sends matching ETag, return 304 Not Modified
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (ifNoneMatch === `"${hash}"`) {
+        res.writeHead(304);
+        return res.end();
+      }
+    } else {
+      // Static assets (images, fonts) — cache for 1 hour
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+    
+    return res.end(content);
   }
   
   // SPA fallback: return index.html for all other routes
-  // This allows client-side routing to handle /chat, /memory, /system, etc.
+  const indexContent = fs.readFileSync('./index.html');
+  const indexHash = crypto.createHash('md5').update(indexContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');
-  return res.end(fs.readFileSync('./index.html'));
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('ETag', `"${indexHash}"`);
+  
+  const ifNoneMatch = req.headers['if-none-match'];
+  if (ifNoneMatch === `"${indexHash}"`) {
+    res.writeHead(304);
+    return res.end();
+  }
+  return res.end(indexContent);
 });
 
 // Start server after async initialization
