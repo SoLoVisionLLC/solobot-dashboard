@@ -2493,6 +2493,13 @@ async function loadState() {
     const currentSystem = state.system;
     const currentConsole = state.console;
 
+    // Count tasks helper
+    const countTasks = (s) => {
+        if (!s || !s.tasks) return 0;
+        const t = s.tasks;
+        return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0);
+    };
+
     // Load from VPS first
     try {
         const response = await fetch('/api/state', { cache: 'no-store' });
@@ -2506,16 +2513,43 @@ async function loadState() {
             // Don't overwrite chat - it's session-specific and comes from Gateway
             delete vpsState.chat;
 
-            state = {
-                ...state,
-                ...vpsState,
-                chat: currentChat,  // Keep current session's chat
-                system: currentSystem,  // Keep system messages local
-                console: currentConsole  // Keep terminal logs local
-            };
+            // PROTECT: Don't let empty server state wipe local tasks
+            const serverTaskCount = countTasks(vpsState);
+            const localTaskCount = countTasks(state);
+            if (serverTaskCount === 0 && localTaskCount > 0) {
+                console.warn('[loadState] Server has 0 tasks but local has', localTaskCount, '— preserving local tasks');
+                const preservedTasks = JSON.parse(JSON.stringify(state.tasks));
+                state = {
+                    ...state,
+                    ...vpsState,
+                    tasks: preservedTasks,  // Keep local tasks
+                    chat: currentChat,
+                    system: currentSystem,
+                    console: currentConsole
+                };
+                // Push our tasks BACK to server so it's in sync
+                try {
+                    await fetch('/api/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tasks: preservedTasks })
+                    });
+                    console.log('[loadState] Pushed local tasks back to server');
+                } catch (pushErr) {
+                    console.warn('[loadState] Failed to push tasks to server:', pushErr);
+                }
+            } else {
+                state = {
+                    ...state,
+                    ...vpsState,
+                    chat: currentChat,
+                    system: currentSystem,
+                    console: currentConsole
+                };
+            }
             delete state.localModified;
 
-            // Save state to localStorage (without overwriting chat)
+            // Save state to localStorage
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
             return;
         }
