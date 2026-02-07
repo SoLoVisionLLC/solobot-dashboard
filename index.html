@@ -2629,12 +2629,9 @@
                     </svg>
                 </button>
 
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
-                    <svg id="theme-icon-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-                    </svg>
-                    <svg id="theme-icon-light" class="hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                <button class="theme-toggle" onclick="openSettingsModal(); scrollToThemePicker();" title="Change theme">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 18px; height: 18px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
                     </svg>
                 </button>
             </div>
@@ -3987,35 +3984,22 @@
         }
         
         // Theme toggle
-        // Light themes list for icon toggle
-        const LIGHT_THEMES = ['snow', 'latte', 'rose-pine-dawn', 'solarized-light', 'paper'];
-
+        // Toggle theme (keyboard shortcut T) — opens settings to theme picker
         function toggleTheme() {
-            // Cycle: if currently dark-ish, go to snow. If light-ish, go to midnight.
-            const current = document.documentElement.getAttribute('data-theme') || 'midnight';
-            const isLight = LIGHT_THEMES.includes(current);
-            const newTheme = isLight ? 'midnight' : 'snow';
-            if (window.themePicker) {
-                window.themePicker.setTheme(newTheme);
-            } else {
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('solobot-theme', newTheme);
-            }
-            updateThemeIcon(newTheme);
+            openSettingsModal();
+            scrollToThemePicker();
         }
 
-        function updateThemeIcon(theme) {
-            const darkIcon = document.getElementById('theme-icon-dark');
-            const lightIcon = document.getElementById('theme-icon-light');
-            const isLight = LIGHT_THEMES.includes(theme);
-            if (!isLight) {
-                darkIcon?.classList.remove('hidden');
-                lightIcon?.classList.add('hidden');
-            } else {
-                darkIcon?.classList.add('hidden');
-                lightIcon?.classList.remove('hidden');
-            }
+        // Scroll the settings modal to the theme picker section
+        function scrollToThemePicker() {
+            setTimeout(() => {
+                const container = document.getElementById('theme-picker-container');
+                if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
         }
+
+        // Legacy stub — no longer needed but called by some init code
+        function updateThemeIcon() {}
 
         // Load saved theme — migrate old 'theme' key to new 'solobot-theme'
         // Also handle stale "dark"/"light" values from before theme system

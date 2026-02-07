@@ -76,11 +76,6 @@ class ThemePicker {
         window.dispatchEvent(new CustomEvent('themeChanged', { 
             detail: { theme: themeName }
         }));
-        
-        // Update header theme icon if the function exists
-        if (typeof updateThemeIcon === 'function') {
-            updateThemeIcon(themeName);
-        }
     }
 
     applyTheme(themeName, animated = true) {
