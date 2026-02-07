@@ -206,12 +206,35 @@ async function viewMemoryFile(filepath) {
         }
         
         if (titleEl) titleEl.textContent = data.name;
-        if (contentEl) contentEl.value = data.content;
         
-        // Store current file for editing
+        // Fix single-line markdown files (newlines stripped by some agents)
+        let content = data.content || '';
+        if (content.length > 200 && content.split('\n').length <= 2) {
+            // Content is on one line — restore markdown structure
+            content = content
+                // Headers: add newline before # at start or after period/backtick
+                .replace(/([^\n])(#{1,6}\s)/g, '$1\n\n$2')
+                // --- or *** horizontal rules
+                .replace(/([^\n])(---+|\*\*\*+)/g, '$1\n\n$2')
+                .replace(/(---+|\*\*\*+)([^\n])/g, '$1\n\n$2')
+                // Bullet lists: - or * at start of item
+                .replace(/([.!?\`])\s+([-*]\s)/g, '$1\n$2')
+                .replace(/([^\n])([-*] \[[ x]\])/g, '$1\n$2')
+                // Numbered lists
+                .replace(/([.!?\`])\s+(\d+\.\s)/g, '$1\n$2')
+                // Code blocks
+                .replace(/([^\n])(```)/g, '$1\n$2')
+                .replace(/(```[^\n]*\n?)([^\n])/g, '$1\n$2')
+                // Double newline before headers for spacing
+                .replace(/\n(#{1,6}\s)/g, '\n\n$1');
+        }
+        
+        if (contentEl) contentEl.value = content;
+        
+        // Store current file for editing (with fixed content)
         window.currentMemoryFile = {
             path: filepath,
-            content: data.content,
+            content: content,
             botUpdated: data.botUpdated
         };
         
