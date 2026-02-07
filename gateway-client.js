@@ -19,6 +19,10 @@ class GatewayClient {
         this.onChatEvent = options.onChatEvent || (() => {});
         this.onToolEvent = options.onToolEvent || (() => {});
         this.onError = options.onError || (() => {});
+        this.onCrossSessionMessage = options.onCrossSessionMessage || (() => {});
+        
+        // Track all subscribed sessions for cross-session notifications
+        this._subscribedSessions = new Set();
     }
 
     connect(host, port, token, password = null) {
@@ -122,12 +126,21 @@ class GatewayClient {
     }
 
     _subscribeToSession(sessionKey) {
+        this._subscribedSessions.add(sessionKey.toLowerCase());
         this._request('node.event', {
             event: 'chat.subscribe',
             payload: { sessionKey }
         }).catch(() => {
             // Subscription may fail but chat events still work
         });
+    }
+
+    subscribeToAllSessions(sessionKeys) {
+        for (const key of sessionKeys) {
+            if (!this._subscribedSessions.has(key.toLowerCase())) {
+                this._subscribeToSession(key);
+            }
+        }
     }
 
     async _request(method, params, timeoutMs = 15000) {
@@ -244,9 +257,30 @@ class GatewayClient {
     _handleChatEvent(payload) {
         if (!payload) return;
 
-        // Filter by session key (case-insensitive - gateway returns lowercase)
+        // Route by session key (case-insensitive)
         const eventSessionKey = payload.sessionKey || 'main';
         if (eventSessionKey.toLowerCase() !== this.sessionKey.toLowerCase()) {
+            // Cross-session message — route to notification callback instead of dropping
+            const state = payload.state;
+            const message = payload.message;
+            if (state === 'final' && message?.role === 'assistant') {
+                let contentText = '';
+                if (message?.content) {
+                    for (const part of message.content) {
+                        if (part.type === 'text') {
+                            contentText += part.text || '';
+                        }
+                    }
+                }
+                if (contentText.trim()) {
+                    this.onCrossSessionMessage({
+                        sessionKey: eventSessionKey,
+                        content: contentText,
+                        model: message?.model,
+                        provider: message?.provider
+                    });
+                }
+            }
             return;
         }
 

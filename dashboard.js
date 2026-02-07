@@ -1351,6 +1351,8 @@ async function fetchSessions() {
             handleSubagentSessionAgent();
             
             populateSessionDropdown();
+            // Subscribe to all sessions for cross-session notifications
+            subscribeToAllSessions();
             return availableSessions;
         } catch (e) {
             console.warn('[Dashboard] Gateway sessions.list failed, falling back to server:', e.message);
@@ -1428,9 +1430,9 @@ function populateSessionDropdown() {
         const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
         
         return `
-        <div class="session-dropdown-item ${isActive ? 'active' : ''}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
+        <div class="session-dropdown-item ${isActive ? 'active' : ''}" data-session-key="${s.key}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
-                <div class="session-name">${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}</div>
+                <div class="session-name">${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
                 <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
             </div>
             <span class="session-model">${s.model}</span>
@@ -1543,8 +1545,11 @@ window.deleteSession = async function(sessionKey, sessionName) {
     }
 }
 
-window.switchToSession = async function(sessionKey) {
+window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
     toggleChatPageSessionMenu();
+    
+    // Clear unread notifications for this session
+    clearUnreadForSession(sessionKey);
     
     if (sessionKey === currentSessionName) {
         showToast('Already on this session', 'info');
@@ -1801,11 +1806,152 @@ function initGateway() {
                 addTerminalLog(event.summary, 'info', event.timestamp);
             }
         },
+        onCrossSessionMessage: (msg) => {
+            handleCrossSessionNotification(msg);
+        },
         onError: (error) => {
             console.error(`[Dashboard] Gateway error: ${error}`);
             updateConnectionUI('error', error);
         }
     });
+}
+
+// ===================
+// CROSS-SESSION NOTIFICATIONS
+// ===================
+const unreadSessions = new Map(); // sessionKey → count
+
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(perm => {
+            console.log(`[Notifications] Permission: ${perm}`);
+        });
+    }
+}
+
+function subscribeToAllSessions() {
+    if (!gateway || !gateway.isConnected()) return;
+    const keys = availableSessions.map(s => s.key).filter(k => k);
+    if (keys.length > 0) {
+        gateway.subscribeToAllSessions(keys);
+        console.log(`[Notifications] Subscribed to ${keys.length} sessions for cross-session notifications`);
+    }
+}
+
+function handleCrossSessionNotification(msg) {
+    const { sessionKey, content } = msg;
+    const friendlyName = getFriendlySessionName(sessionKey);
+    const preview = content.length > 120 ? content.slice(0, 120) + '…' : content;
+    
+    console.log(`[Notifications] Message from ${friendlyName}: ${preview.slice(0, 60)}`);
+    
+    // Track unread count
+    unreadSessions.set(sessionKey, (unreadSessions.get(sessionKey) || 0) + 1);
+    updateUnreadBadges();
+    
+    // Browser notification (only if page is not focused or user is on different session)
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification(`${friendlyName}`, {
+            body: preview,
+            icon: '/solobot-avatar.png',
+            tag: `session-${sessionKey}`, // Replace previous notification from same session
+            silent: false
+        });
+        
+        notification.onclick = () => {
+            window.focus();
+            // Switch to that session
+            if (typeof switchToSessionKey === 'function') {
+                switchToSessionKey(sessionKey);
+            }
+            notification.close();
+        };
+        
+        // Auto-close after 8 seconds
+        setTimeout(() => notification.close(), 8000);
+    }
+    
+    // Play notification sound
+    playNotificationSound();
+}
+
+function playNotificationSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(1047, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+    } catch (e) { /* audio not available */ }
+}
+
+function updateUnreadBadges() {
+    // Update session dropdown badges
+    document.querySelectorAll('.session-option, [data-session-key]').forEach(el => {
+        const key = el.dataset?.sessionKey || el.getAttribute('data-session-key');
+        if (!key) return;
+        
+        let badge = el.querySelector('.unread-badge');
+        const count = unreadSessions.get(key) || 0;
+        
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'unread-badge';
+                el.appendChild(badge);
+            }
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.cssText = 'background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 6px;';
+        } else if (badge) {
+            badge.remove();
+        }
+    });
+
+    // Update sidebar agent dots
+    document.querySelectorAll('.sidebar-agent[data-agent]').forEach(el => {
+        const agentId = el.getAttribute('data-agent');
+        if (!agentId) return;
+        
+        // Sum unread across all sessions for this agent
+        let agentUnread = 0;
+        for (const [key, count] of unreadSessions) {
+            if (key.startsWith(`agent:${agentId}:`) || (agentId === 'main' && key === 'main')) {
+                agentUnread += count;
+            }
+        }
+        
+        let dot = el.querySelector('.agent-unread-dot');
+        if (agentUnread > 0) {
+            if (!dot) {
+                dot = document.createElement('span');
+                dot.className = 'agent-unread-dot';
+                dot.style.cssText = 'position: absolute; top: 2px; right: 2px; background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 16px; height: 16px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 3px; pointer-events: none;';
+                el.style.position = 'relative';
+                el.appendChild(dot);
+            }
+            dot.textContent = agentUnread > 99 ? '99+' : agentUnread;
+        } else if (dot) {
+            dot.remove();
+        }
+    });
+
+    // Update the tab/title with total unread count
+    const totalUnread = Array.from(unreadSessions.values()).reduce((a, b) => a + b, 0);
+    const baseTitle = 'SoLoVision Dashboard';
+    document.title = totalUnread > 0 ? `(${totalUnread}) ${baseTitle}` : baseTitle;
+}
+
+function clearUnreadForSession(sessionKey) {
+    if (unreadSessions.has(sessionKey)) {
+        unreadSessions.delete(sessionKey);
+        updateUnreadBadges();
+    }
 }
 
 function connectToGateway() {
@@ -2325,6 +2471,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Load gateway settings from server state if localStorage is empty
     loadGatewaySettingsFromServer();
+    
+    // Request browser notification permission
+    requestNotificationPermission();
     
     render({ includeSystem: true }); // Initial render includes system page
     updateLastSync();
