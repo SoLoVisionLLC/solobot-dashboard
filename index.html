@@ -488,7 +488,7 @@
 
         /* Main content */
         .main {
-            padding: var(--space-6) 0;
+            padding: var(--space-4) 0;
         }
 
         /* Dashboard page doesn't use .main padding (has fixed layout) */
@@ -1506,6 +1506,8 @@
         /* Memory page specific styles */
         .memory-page {
             padding: var(--space-6);
+            max-width: 100%;
+            overflow-x: hidden;
         }
         
         .memory-page .page-header {
@@ -1551,6 +1553,27 @@
         
         .sync-status.synced {
             color: var(--success);
+        }
+
+        /* Memory file grid */
+        .docs-grid {
+            max-width: 100%;
+        }
+        .docs-category {
+            margin-bottom: var(--space-6);
+        }
+        .docs-category .category-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: var(--space-3);
+            padding-bottom: var(--space-2);
+            border-bottom: 1px solid var(--border-default);
+        }
+        .docs-category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: var(--space-4);
         }
 
         /* =================== CHAT PAGE STYLES =================== */
