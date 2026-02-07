@@ -12,6 +12,40 @@ function escapeHtmlLocal(str) {
         .replace(/'/g, '&#39;');
 }
 
+// Restore newlines in markdown files that got squished to a single line
+function fixSingleLineMarkdown(text) {
+    // Step 1: Add newlines before markdown headers (# ## ### etc.)
+    // But not inside words like C# — require space or start-of-string before #
+    text = text.replace(/ (#{1,6} )/g, '\n\n$1');
+    
+    // Step 2: Add newlines around horizontal rules (--- or ***)
+    text = text.replace(/ (---+) /g, '\n\n$1\n\n');
+    
+    // Step 3: Add newlines before code fences
+    text = text.replace(/ (```)/g, '\n\n$1');
+    text = text.replace(/(```)(\S*) /g, '$1$2\n');
+    
+    // Step 4: Add newlines before list items (- item or * item or 1. item)
+    // Match: space + dash/asterisk + space + word char (list marker)
+    text = text.replace(/ (- \*\*)/g, '\n$1');        // - **bold key:**
+    text = text.replace(/ (- \[[ x]\])/g, '\n$1');    // - [ ] checkbox
+    text = text.replace(/ (\d+\. )/g, '\n$1');         // 1. numbered list
+    // Generic bullet: "text. - next" or "text - Next" (capital after dash)
+    text = text.replace(/([.!?:]) (- [A-Z])/g, '$1\n$2');
+    text = text.replace(/([.!?:]) (\* [A-Z])/g, '$1\n$2');
+    
+    // Step 5: Add newlines before bold section markers like **Key:** at start of line context
+    text = text.replace(/ (\*\*[A-Z][^*]+:\*\*)/g, '\n$1');
+    
+    // Step 6: Clean up — collapse 3+ newlines to 2
+    text = text.replace(/\n{3,}/g, '\n\n');
+    
+    // Step 7: Trim leading whitespace on lines
+    text = text.replace(/\n +/g, '\n');
+    
+    return text.trim();
+}
+
 // Cache for memory files list
 let memoryFilesCache = [];
 let lastFetchTime = 0;
@@ -209,24 +243,9 @@ async function viewMemoryFile(filepath) {
         
         // Fix single-line markdown files (newlines stripped by some agents)
         let content = data.content || '';
-        if (content.length > 200 && content.split('\n').length <= 2) {
-            // Content is on one line — restore markdown structure
-            content = content
-                // Headers: add newline before # at start or after period/backtick
-                .replace(/([^\n])(#{1,6}\s)/g, '$1\n\n$2')
-                // --- or *** horizontal rules
-                .replace(/([^\n])(---+|\*\*\*+)/g, '$1\n\n$2')
-                .replace(/(---+|\*\*\*+)([^\n])/g, '$1\n\n$2')
-                // Bullet lists: - or * at start of item
-                .replace(/([.!?\`])\s+([-*]\s)/g, '$1\n$2')
-                .replace(/([^\n])([-*] \[[ x]\])/g, '$1\n$2')
-                // Numbered lists
-                .replace(/([.!?\`])\s+(\d+\.\s)/g, '$1\n$2')
-                // Code blocks
-                .replace(/([^\n])(```)/g, '$1\n$2')
-                .replace(/(```[^\n]*\n?)([^\n])/g, '$1\n$2')
-                // Double newline before headers for spacing
-                .replace(/\n(#{1,6}\s)/g, '\n\n$1');
+        const lineCount = content.split('\n').length;
+        if (content.length > 200 && lineCount <= 3) {
+            content = fixSingleLineMarkdown(content);
         }
         
         if (contentEl) contentEl.value = content;
