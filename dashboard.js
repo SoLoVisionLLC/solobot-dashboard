@@ -1899,6 +1899,7 @@ function initGateway() {
 // ===================
 // CROSS-SESSION NOTIFICATIONS
 // ===================
+const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
 const NOTIFICATION_DEBUG = true;
 function notifLog(...args){ if (NOTIFICATION_DEBUG) console.log(...args); }
@@ -2160,10 +2161,22 @@ function updateUnreadBadges() {
     document.title = totalUnread > 0 ? `(${totalUnread}) ${baseTitle}` : baseTitle;
 }
 
+async function sendReadAck(sessionKey) {
+    try {
+        if (gateway && gateway.isConnected()) {
+            await gateway.injectChat(sessionKey, READ_ACK_PREFIX, 'read-sync');
+        }
+    } catch (e) {
+        console.warn('[Notifications] Failed to send read ack:', e.message);
+    }
+}
+
 function clearUnreadForSession(sessionKey) {
     if (unreadSessions.has(sessionKey)) {
         unreadSessions.delete(sessionKey);
         updateUnreadBadges();
+        // Notify other clients (Android) to clear this session unread
+        sendReadAck(sessionKey);
     }
 }
 
@@ -2277,6 +2290,12 @@ function updateConnectionUI(status, message) {
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey } = event;
     
+    // Ignore read-ack sync events
+    if (content && content.startsWith(READ_ACK_PREFIX)) {
+        if (sessionKey) clearUnreadForSession(sessionKey);
+        return;
+    }
+
     // Intercept health check events
     if (sessionKey && sessionKey.startsWith('health-check-')) {
         const pending = pendingHealthChecks.get(sessionKey);

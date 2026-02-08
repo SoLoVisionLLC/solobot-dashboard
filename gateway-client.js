@@ -285,6 +285,10 @@ class GatewayClient {
                     }
                 }
                 if (contentText.trim()) {
+                    // Skip read-ack sync messages
+                    if (contentText.startsWith('[[read_ack]]')) {
+                        return;
+                    }
                     gwLog(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars)`);
                     this.onCrossSessionMessage({
                         sessionKey: eventSessionKey,
@@ -559,6 +563,13 @@ class GatewayClient {
 
     isConnected() {
         return this.connected;
+    }
+
+    // Inject a message into the transcript without running the agent
+    injectChat(sessionKey, message, label = null) {
+        const params = { sessionKey, message };
+        if (label) params.label = label;
+        return this._request('chat.inject', params);
     }
 }
 
