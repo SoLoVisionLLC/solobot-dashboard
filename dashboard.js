@@ -766,6 +766,19 @@ window.changeSessionModel = async function() {
         const currentProviderDisplay = document.getElementById('current-provider-display');
         if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
         
+        // Ensure provider dropdown matches model provider
+        const providerSelectEl = document.getElementById('provider-select');
+        if (providerSelectEl) {
+            const providerOptions = Array.from(providerSelectEl.options);
+            if (!providerOptions.find(o => o.value === provider)) {
+                const opt = document.createElement('option');
+                opt.value = provider;
+                opt.textContent = provider.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                providerSelectEl.appendChild(opt);
+            }
+            providerSelectEl.value = provider;
+        }
+        
         showToast(`Session model → ${selectedModel.split('/').pop()}`, 'success');
     } catch (error) {
         console.error('[Dashboard] Failed to set session model:', error);
