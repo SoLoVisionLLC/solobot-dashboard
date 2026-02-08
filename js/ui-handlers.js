@@ -397,7 +397,7 @@ function addTerminalLog(text, type = 'info', timestamp = null) {
 let lastActivitySync = 0;
 async function syncActivitiesFromFile() {
     try {
-        const response = await fetch('/api/memory/memory/recent-activity.json');
+        const response = await fetch('/api/memory/recent-activity.json');
         if (!response.ok) return;
         
         const wrapper = await response.json();
