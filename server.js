@@ -13,8 +13,8 @@ process.env.TZ = process.env.TZ || 'America/New_York';
 
 // Path to mounted OpenClaw config (from Coolify volume mount)
 // We mount the whole .openclaw directory to avoid Docker EISDIR issues with single files
-const OPENCLAW_CONFIG_PATH = './openclaw/openclaw.json';
-// Fallback path (direct access if running on same machine)
+const OPENCLAW_CONFIG_PATH = '/app/openclaw-data/openclaw.json';
+// Fallback paths (legacy mount or direct access)
 const OPENCLAW_CONFIG_FALLBACK = '/home/node/.openclaw/openclaw.json';
 
 // Cache for models list (refreshed every 5 minutes)
@@ -1339,8 +1339,8 @@ const server = http.createServer((req, res) => {
           changedAt: Date.now()
         };
 
-        // Update OpenClaw config file directly
-        const openclawConfigPath = '/home/node/.openclaw/openclaw.json';
+        // Update OpenClaw config file directly — try mounted path first, then fallback
+        const openclawConfigPath = fs.existsSync(OPENCLAW_CONFIG_PATH) ? OPENCLAW_CONFIG_PATH : OPENCLAW_CONFIG_FALLBACK;
         let configUpdated = false;
 
         try {
