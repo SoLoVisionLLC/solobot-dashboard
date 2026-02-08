@@ -488,17 +488,7 @@
 
             window.setupScrollContainment = () => {}; // No-op now, handled globally
 
-            // Modal helpers for the new class system
-            function showModal(id) {
-                document.getElementById(id).classList.add(
-                    "visible",
-                );
-            }
-            function hideModal(id) {
-                document.getElementById(id).classList.remove(
-                    "visible",
-                );
-            }
+            // showModal/hideModal defined in js/ui-handlers.js
 
             // Click outside to close modals
             document.addEventListener("click", function (e) {
@@ -511,49 +501,8 @@
                 }
             });
 
-            // Override modal functions for new system
-            const originalOpenSettingsModal =
-                window.openSettingsModal;
-            window.openSettingsModal = function () {
-                showModal("settings-modal");
-                if (
-                    typeof originalOpenSettingsModal ===
-                        "function"
-                ) {
-                    // Call original to load settings
-                }
-            };
-            window.closeSettingsModal = function () {
-                hideModal("settings-modal");
-            };
-
-            window.openAddTask = function (column) {
-                window.addTaskColumn = column;
-                showModal("add-task-modal");
-                document.getElementById("new-task-title")
-                    .focus();
-            };
-            window.closeAddTask = function () {
-                hideModal("add-task-modal");
-            };
-
-            window.openArchiveModal = function () {
-                showModal("archive-modal");
-                renderArchive();
-            };
-            window.closeArchiveModal = function () {
-                hideModal("archive-modal");
-            };
-
-            window.closeActionModal = function () {
-                hideModal("task-action-modal");
-            };
-            window.closeEditTitleModal = function () {
-                hideModal("edit-title-modal");
-            };
-            window.closeDeleteModal = function () {
-                hideModal("confirm-delete-modal");
-            };
+            // Modal functions defined in js/ui-handlers.js
+            // No overrides needed — those functions are global
 
             // Image preview visibility
             function showImagePreview(src) {
