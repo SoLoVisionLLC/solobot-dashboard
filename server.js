@@ -205,11 +205,36 @@ const SESSIONS_PATHS = [
 
 function loadSessionsFromOpenClaw() {
   try {
-    let sessionsData = null;
-    for (const p of SESSIONS_PATHS) {
-      if (fs.existsSync(p)) {
-        sessionsData = JSON.parse(fs.readFileSync(p, 'utf8'));
-        break;
+    // Load sessions from ALL agents, not just main
+    let sessionsData = {};
+    
+    // First try to load from all agent directories
+    const agentsDir = path.join(OPENCLAW_DATA, 'agents');
+    if (fs.existsSync(agentsDir)) {
+      const agents = fs.readdirSync(agentsDir).filter(a => {
+        const sessFile = path.join(agentsDir, a, 'sessions', 'sessions.json');
+        return fs.existsSync(sessFile);
+      });
+      for (const agent of agents) {
+        try {
+          const sessFile = path.join(agentsDir, agent, 'sessions', 'sessions.json');
+          const agentSessions = JSON.parse(fs.readFileSync(sessFile, 'utf8'));
+          // Tag each session with its agent for transcript lookup
+          for (const key of Object.keys(agentSessions)) {
+            agentSessions[key]._agent = agent;
+          }
+          Object.assign(sessionsData, agentSessions);
+        } catch (e) { /* skip broken files */ }
+      }
+    }
+    
+    // Fallback to legacy paths if no agents found
+    if (Object.keys(sessionsData).length === 0) {
+      for (const p of SESSIONS_PATHS) {
+        if (fs.existsSync(p)) {
+          sessionsData = JSON.parse(fs.readFileSync(p, 'utf8'));
+          break;
+        }
       }
     }
     if (!sessionsData) return [];
@@ -232,7 +257,8 @@ function loadSessionsFromOpenClaw() {
         model: data.model || 'unknown',
         updatedAt: data.updatedAt,
         sessionId: data.sessionId,
-        totalTokens: data.totalTokens || 0
+        totalTokens: data.totalTokens || 0,
+        _agent: data._agent || 'main'
       });
     }
 
@@ -1642,14 +1668,19 @@ const server = http.createServer((req, res) => {
         return;
       }
       
-      // Read transcript file from mounted sessions folder
-      const transcriptPath = path.join('/app/sessions', `${sessionInfo.sessionId}.jsonl`);
-      console.log(`[Server] Looking for transcript at: ${transcriptPath}`);
+      // Read transcript file from the correct agent's sessions folder
+      const agent = sessionInfo._agent || 'main';
+      const transcriptCandidates = [
+        path.join(OPENCLAW_DATA, 'agents', agent, 'sessions', `${sessionInfo.sessionId}.jsonl`),
+        path.join('/app/sessions', `${sessionInfo.sessionId}.jsonl`),  // legacy fallback
+      ];
+      const transcriptPath = transcriptCandidates.find(p => fs.existsSync(p));
+      console.log(`[Server] Looking for transcript for agent=${agent}, tried: ${transcriptCandidates.join(', ')}, found: ${transcriptPath || 'none'}`);
       
-      if (!fs.existsSync(transcriptPath)) {
-        console.log(`[Server] Transcript not found at: ${transcriptPath}`);
+      if (!transcriptPath) {
+        console.log(`[Server] Transcript not found for session ${sessionInfo.sessionId}`);
         res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Transcript not found', path: transcriptPath }));
+        res.end(JSON.stringify({ error: 'Transcript not found', tried: transcriptCandidates }));
         return;
       }
       

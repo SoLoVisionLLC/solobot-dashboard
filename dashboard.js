@@ -278,6 +278,24 @@ document.addEventListener('DOMContentLoaded', () => {
     updateQuickStats();
 });
 
+// Session-scoped localStorage key for chat messages
+function chatStorageKey(sessionKey) {
+    const key = sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'main';
+    return 'solobot-chat-' + key;
+}
+
+// In-memory session message cache (avoids full reload on agent switch)
+const _sessionMessageCache = new Map();
+
+function cacheSessionMessages(sessionKey, messages) {
+    if (!sessionKey || !messages) return;
+    _sessionMessageCache.set(sessionKey, messages.slice(-100));
+}
+
+function getCachedSessionMessages(sessionKey) {
+    return _sessionMessageCache.get(sessionKey) || null;
+}
+
 // Load persisted system messages from localStorage (chat from localStorage + server fallback)
 function loadPersistedMessages() {
     try {
@@ -288,18 +306,25 @@ function loadPersistedMessages() {
             if (Array.isArray(parsed)) {
                 const cutoff = Date.now() - (24 * 60 * 60 * 1000);
                 state.system.messages = parsed.filter(m => m.time > cutoff);
-                // console.log(`[Dashboard] Restored ${state.system.messages.length} system messages from localStorage`);
             }
         }
 
-        // Chat messages - try localStorage first, then fetch from server
-        const savedChat = localStorage.getItem('solobot-chat-messages');
-        if (savedChat) {
-            const parsed = JSON.parse(savedChat);
+        // Chat messages - use session-scoped key
+        const currentKey = chatStorageKey();
+        const savedChat = localStorage.getItem(currentKey);
+        // Also try legacy global key as fallback (one-time migration)
+        const legacyChat = !savedChat ? localStorage.getItem('solobot-chat-messages') : null;
+        const chatData = savedChat || legacyChat;
+        
+        if (chatData) {
+            const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 state.chat.messages = parsed;
-                // console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
-                return; // Have local messages, no need to fetch from server
+                // Migrate legacy key to session-scoped
+                if (legacyChat && !savedChat) {
+                    localStorage.setItem(currentKey, chatData);
+                }
+                return;
             }
         }
         
@@ -317,7 +342,7 @@ async function loadChatFromServer() {
         const serverState = await response.json();
         if (serverState.chat?.messages?.length > 0) {
             state.chat.messages = serverState.chat.messages;
-            localStorage.setItem('solobot-chat-messages', JSON.stringify(state.chat.messages));
+            localStorage.setItem(chatStorageKey(), JSON.stringify(state.chat.messages));
             // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
             // Re-render if on chat page
             if (typeof renderChatMessages === 'function') renderChatMessages();
@@ -345,7 +370,11 @@ function persistChatMessages() {
     try {
         // Limit to 50 messages to prevent localStorage quota exceeded
         const chatToSave = state.chat.messages.slice(-200);
-        localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
+        // Use session-scoped key so each agent's chat is stored separately
+        const key = chatStorageKey();
+        localStorage.setItem(key, JSON.stringify(chatToSave));
+        // Also update in-memory cache
+        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
         
         // Also sync to server for persistence across deploys
         syncChatToServer(chatToSave);
@@ -1662,8 +1691,9 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
     
     try {
-        // 1. Save current chat as safeguard
+        // 1. Save current chat and cache it for fast switching back
         await saveCurrentChat();
+        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
 
         // 2. Increment session version to invalidate any in-flight history loads
         sessionVersion++;
@@ -1682,17 +1712,25 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
             currentAgentId = agentMatch[1];
         }
 
-        // 4. Clear current chat (skip confirmation, clear cache to prevent stale data)
+        // 4. Clear current chat display
         await clearChatHistory(true, true);
+
+        // 4a. Check in-memory cache for instant switch
+        const cached = getCachedSessionMessages(sessionKey);
+        if (cached && cached.length > 0) {
+            state.chat.messages = cached.slice();
+            if (typeof renderChatPage === 'function') renderChatPage();
+            console.log(`[Dashboard] Restored ${cached.length} cached messages for ${sessionKey}`);
+        }
 
         // 5. Reconnect gateway with new session key
         if (gateway && gateway.isConnected()) {
             gateway.disconnect();
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 150));
             connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
         }
 
-        // 6. Load new session's history
+        // 6. Load new session's history (will merge with cached if any)
         await loadSessionHistory(sessionKey);
         // Apply per-session model override (if any)
         await applySessionModelOverride(sessionKey);
@@ -4712,7 +4750,7 @@ async function clearChatHistory(skipConfirm = false, clearCache = false) {
 
     // Clear localStorage cache when switching sessions to prevent stale data
     if (clearCache) {
-        localStorage.removeItem('solobot-chat-messages');
+        localStorage.removeItem(chatStorageKey());
     }
 
     renderChat();
@@ -4823,7 +4861,7 @@ window.startNewAgentSession = async function(agentId) {
     state.system.messages = [];
     chatPageNewMessageCount = 0;
     chatPageUserScrolled = false;
-    localStorage.removeItem('solobot-chat-messages');
+    localStorage.removeItem(chatStorageKey());
 
     // Update agent context
     currentAgentId = agentId;
