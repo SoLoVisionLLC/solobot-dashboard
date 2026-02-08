@@ -655,6 +655,58 @@ async function initializeState() {
   console.log(`State initialized with ${countTasks(state)} tasks`);
 }
 
+// ============================================
+// Page Assembly from Partials
+// ============================================
+function readPartial(name) {
+  try {
+    return fs.readFileSync(`./partials/${name}.html`, 'utf8');
+  } catch (e) {
+    console.error(`Missing partial: ${name}.html`);
+    return `<!-- missing partial: ${name} -->`;
+  }
+}
+
+function readPage(name) {
+  try {
+    return fs.readFileSync(`./pages/${name}.html`, 'utf8');
+  } catch (e) {
+    console.error(`Missing page: ${name}.html`);
+    return `<!-- missing page: ${name} -->`;
+  }
+}
+
+const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products'];
+
+function assemblePage(activePage) {
+  // Build all pages, marking the active one
+  const pageHtml = PAGE_NAMES.map(name => {
+    let content = readPage(name);
+    // Ensure the active page has class="page active"
+    if (name === activePage) {
+      content = content.replace('class="page"', 'class="page active"');
+    } else {
+      content = content.replace('class="page active"', 'class="page"');
+    }
+    return content;
+  }).join('\n');
+
+  return [
+    readPartial('head'),
+    readPartial('body-open'),
+    readPartial('sidebar'),
+    readPartial('header'),
+    pageHtml,
+    readPartial('footer'),
+    readPartial('modals-tasks'),
+    readPartial('modals-memory'),
+    readPartial('modals-settings-main'),
+    readPartial('modals-settings-themes'),
+    readPartial('modals-misc'),
+    readPartial('scripts'),
+  ].join('\n');
+}
+
 const MIME_TYPES = {
   '.html': 'text/html',
   '.js': 'application/javascript',
@@ -1742,22 +1794,37 @@ const server = http.createServer((req, res) => {
     return res.end(content);
   }
   
-  // SPA fallback: return index.html for all other routes
-  const indexContent = fs.readFileSync('./index.html');
-  const indexHash = crypto.createHash('md5').update(indexContent).digest('hex').slice(0, 12);
+  // Page routing: assemble pages from partials
+  const pageRoutes = {
+    '/': 'dashboard',
+    '/dashboard': 'dashboard',
+    '/memory': 'memory',
+    '/chat': 'chat',
+    '/system': 'system',
+    '/products': 'products',
+  };
+
+  const pageName = pageRoutes[url.pathname];
+  if (!pageName && !url.pathname.startsWith('/api/')) {
+    // Unknown non-API route — default to dashboard
+  }
+
+  const resolvedPage = pageName || 'dashboard';
+  const pageContent = assemblePage(resolvedPage);
+  const pageHash = crypto.createHash('md5').update(pageContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('ETag', `"${indexHash}"`);
+  res.setHeader('ETag', `"${pageHash}"`);
   
   const ifNoneMatch = req.headers['if-none-match'];
-  if (ifNoneMatch === `"${indexHash}"`) {
+  if (ifNoneMatch === `"${pageHash}"`) {
     res.writeHead(304);
     return res.end();
   }
-  return res.end(indexContent);
+  return res.end(pageContent);
 });
 
 // Start server after async initialization

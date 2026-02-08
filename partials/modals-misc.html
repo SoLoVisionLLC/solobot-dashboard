@@ -1,0 +1,269 @@
+                <div id="archive-modal" class="modal-overlay">
+                    <div
+                        class="modal modal-lg"
+                        style="max-height: 80vh; display: flex; flex-direction: column"
+                    >
+                        <div class="modal-header">
+                            <h3 class="modal-title flex items-center gap-2">
+                                📦 Archived Tasks
+                                <span
+                                    id="archive-modal-count"
+                                    class="badge badge-error"
+                                >0</span>
+                            </h3>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    onclick="clearArchive()"
+                                    style="font-size: 12px; color: var(--error); background: none; border: none; cursor: pointer"
+                                >
+                                    Clear All
+                                </button>
+                                <button
+                                    onclick="closeArchiveModal()"
+                                    class="modal-close"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                        <div
+                            id="archive-tasks-list"
+                            style="flex: 1; overflow-y: auto; min-height: 200px"
+                            class="space-y-2"
+                        >
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- END app-content -->
+        </div>
+        <!-- END app-layout -->
+
+        <!-- New Session Name Modal -->
+        <div id="new-session-modal" class="modal-overlay">
+            <div class="modal" style="max-width: 450px">
+                <div class="modal-header">
+                    <h3 class="modal-title">Enter session name:</h3>
+                    <button
+                        onclick="closeNewSessionModal(null)"
+                        class="modal-close"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div
+                    class="modal-body"
+                    style="padding: var(--space-4) var(--space-6)"
+                >
+                    <input
+                        type="text"
+                        id="new-session-name-input"
+                        class="input"
+                        style="width: 100%; font-size: 14px"
+                        placeholder="Session name"
+                    >
+                </div>
+                <div
+                    class="modal-footer"
+                    style="display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default)"
+                >
+                    <button
+                        onclick="closeNewSessionModal(null)"
+                        class="btn btn-ghost"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onclick="submitNewSessionModal()"
+                        class="btn btn-primary"
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Confirm Modal -->
+        <div id="confirm-modal" class="modal-overlay">
+            <div class="modal" style="max-width: 400px">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="confirm-modal-title">
+                        Confirm
+                    </h3>
+                    <button
+                        onclick="closeConfirmModal(false)"
+                        class="modal-close"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div
+                    class="modal-body"
+                    style="padding: var(--space-4) var(--space-6)"
+                >
+                    <p
+                        id="confirm-modal-message"
+                        style="margin: 0; color: var(--text-primary); line-height: 1.5; white-space: pre-line"
+                    >
+                    </p>
+                </div>
+                <div
+                    class="modal-footer"
+                    style="display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default)"
+                >
+                    <button
+                        onclick="closeConfirmModal(false)"
+                        class="btn btn-ghost"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onclick="closeConfirmModal(true)"
+                        class="btn btn-primary"
+                        id="confirm-modal-ok"
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications Container -->
+        <!-- Keyboard Shortcuts Modal -->
+        <div id="shortcuts-modal" class="modal-overlay">
+            <div class="modal" style="max-width: 600px">
+                <div class="modal-header">
+                    <h3>⌨️ Keyboard Shortcuts</h3>
+                    <button
+                        onclick="hideModal('shortcuts-modal')"
+                        class="btn-icon"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="shortcuts-grid">
+                        <div class="shortcut-group">
+                            <div class="shortcut-group-title">Navigation</div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Dashboard</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">G</span><span
+                                        class="shortcut-key"
+                                    >D</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Chat</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">G</span><span
+                                        class="shortcut-key"
+                                    >C</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Memory</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">G</span><span
+                                        class="shortcut-key"
+                                    >M</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Products</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">G</span><span
+                                        class="shortcut-key"
+                                    >P</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="shortcut-group">
+                            <div class="shortcut-group-title">Focus Timer</div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc"
+                                >Start/Pause Timer</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">F</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Reset Timer</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">Shift</span><span
+                                        class="shortcut-key"
+                                    >F</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="shortcut-group">
+                            <div class="shortcut-group-title">Tasks</div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">New Task</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">N</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Sync Tasks</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">S</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="shortcut-group">
+                            <div class="shortcut-group-title">General</div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc"
+                                >Show Shortcuts</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">?</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Toggle Theme</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">T</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc">Settings</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">Ctrl</span><span
+                                        class="shortcut-key"
+                                    >,</span>
+                                </div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-desc"
+                                >Focus Chat Input</span>
+                                <div class="shortcut-keys">
+                                    <span class="shortcut-key">/</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button
+                        onclick="hideModal('shortcuts-modal')"
+                        class="btn btn-ghost"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shortcuts Hint (bottom right) -->
+        <div class="shortcuts-hint" onclick="showModal('shortcuts-modal')">
+            <span class="shortcut-key">?</span>
+            <span>Shortcuts</span>
+        </div>
+
+        <div
+            id="toast-container"
+            style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column-reverse; gap: 10px"
+        >
+        </div>
+

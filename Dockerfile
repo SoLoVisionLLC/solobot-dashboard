@@ -4,7 +4,6 @@ WORKDIR /app
 # Copy application files
 COPY package.json ./
 COPY server.js ./
-COPY index.html ./
 COPY dashboard.js ./
 COPY gateway-client.js ./
 COPY docs-hub-memory-files.js ./
@@ -13,6 +12,8 @@ COPY favicon.svg ./
 COPY avatars ./avatars/
 COPY js ./js/
 COPY css ./css/
+COPY partials ./partials/
+COPY pages ./pages/
 
 # Create data directory (will be mounted as volume in production)
 RUN mkdir -p data

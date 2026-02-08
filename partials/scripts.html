@@ -1,0 +1,1064 @@
+        <script src="gateway-client.js?v=3.7.1"></script>
+        <script src="docs-hub-memory-files.js?v=3.0.0"></script>
+        <!-- Modular dashboard scripts (load order matters) -->
+        <script src="js/state.js?v=4.0.0"></script>
+        <script src="js/utils.js?v=4.0.0"></script>
+        <script src="js/ui.js?v=4.0.0"></script>
+        <script src="js/focus-timer.js?v=4.0.0"></script>
+        <script src="js/quick-stats.js?v=4.0.0"></script>
+        <script src="js/keyboard.js?v=4.0.0"></script>
+        <script src="js/models.js?v=4.0.0"></script>
+        <script src="js/sessions.js?v=4.0.0"></script>
+        <script src="js/notifications.js?v=4.0.0"></script>
+        <script src="js/chat.js?v=4.0.0"></script>
+        <script src="js/system.js?v=4.0.0"></script>
+        <script src="js/tasks.js?v=4.0.0"></script>
+        <script src="js/ui-handlers.js?v=4.0.0"></script>
+        <script src="js/memory.js?v=4.0.0"></script>
+        <script src="js/health.js?v=4.0.0"></script>
+        <!-- Main init (must be last) -->
+        <script src="dashboard.js?v=4.0.0"></script>
+        <script>
+            // Valid page names
+            const VALID_PAGES = [
+                "dashboard",
+                "memory",
+                "chat",
+                "system",
+                "products",
+            ];
+
+            // Get page from URL path
+            function getPageFromURL() {
+                const path = window.location.pathname.replace(
+                    /^\/+|\/+$/g,
+                    "",
+                ); // trim slashes
+                if (path && VALID_PAGES.includes(path)) {
+                    return path;
+                }
+                return "dashboard"; // default
+            }
+
+            // Sidebar pin toggle
+            function toggleSidebarPin() {
+                const sidebar = document.getElementById(
+                    "sidebar",
+                );
+                const icon = document.getElementById(
+                    "sidebar-pin-icon",
+                );
+                const isPinned = sidebar.classList.toggle(
+                    "pinned",
+                );
+                localStorage.setItem("sidebarPinned", isPinned);
+                icon.textContent = isPinned ? "🔒" : "🔓";
+                console.log("Sidebar pinned:", isPinned);
+            }
+
+            // Restore sidebar state on load
+            if (
+                localStorage.getItem("sidebarPinned") === "true"
+            ) {
+                document.getElementById("sidebar").classList
+                    .add("pinned");
+                document.getElementById("sidebar-pin-icon")
+                    .textContent = "🔒";
+            }
+
+            // Page navigation with URL update
+            function showPage(pageName, updateURL = true) {
+                // Validate page name
+                if (!VALID_PAGES.includes(pageName)) {
+                    pageName = "dashboard";
+                }
+
+                // Save chat scroll position before leaving chat page
+                const currentActivePage = document
+                    .querySelector(".page.active");
+                if (
+                    currentActivePage &&
+                    currentActivePage.id === "page-chat"
+                ) {
+                    if (
+                        typeof saveChatScrollPosition ===
+                            "function"
+                    ) {
+                        saveChatScrollPosition();
+                    }
+                }
+
+                // Hide all pages
+                document.querySelectorAll(".page").forEach(
+                    (page) => {
+                        page.classList.remove("active");
+                    },
+                );
+
+                // Show selected page
+                const targetPage = document.getElementById(
+                    "page-" + pageName,
+                );
+                if (targetPage) {
+                    targetPage.classList.add("active");
+                }
+
+                // Update sidebar active state
+                document.querySelectorAll(".sidebar-item")
+                    .forEach((item) => {
+                        item.classList.remove("active");
+                        if (item.dataset.page === pageName) {
+                            item.classList.add("active");
+                        }
+                    });
+
+                // Update URL without reload
+                if (updateURL) {
+                    const newPath = pageName === "dashboard"
+                        ? "/"
+                        : "/" + pageName;
+                    if (window.location.pathname !== newPath) {
+                        history.pushState(
+                            { page: pageName },
+                            "",
+                            newPath,
+                        );
+                    }
+                }
+
+                // If showing memory page, load files
+                if (pageName === "memory") {
+                    renderMemoryFilesForPage();
+                }
+
+                // If showing chat page, restore scroll position
+                if (pageName === "chat") {
+                    setTimeout(() => {
+                        if (
+                            typeof restoreChatScrollPosition ===
+                                "function"
+                        ) {
+                            restoreChatScrollPosition();
+                        }
+                    }, 50); // Small delay to ensure DOM is ready
+                }
+
+                // If showing chat page, render chat
+                if (
+                    pageName === "chat" &&
+                    typeof renderChatPage === "function"
+                ) {
+                    renderChatPage();
+                }
+
+                // If showing system page, render system messages
+                if (
+                    pageName === "system" &&
+                    typeof renderSystemPage === "function"
+                ) {
+                    renderSystemPage();
+                }
+            }
+
+            // Handle browser back/forward buttons
+            window.addEventListener("popstate", (event) => {
+                const pageName = event.state?.page ||
+                    getPageFromURL();
+                showPage(pageName, false); // Don't update URL on popstate
+            });
+
+            // Initialize page from URL on load
+            document.addEventListener(
+                "DOMContentLoaded",
+                () => {
+                    const initialPage = getPageFromURL();
+                    showPage(initialPage, false); // Don't push state on initial load
+                },
+            );
+
+            // Render memory files for the Memory page
+            async function renderMemoryFilesForPage(
+                filter = "",
+            ) {
+                const container = document.getElementById(
+                    "memory-files-grid",
+                );
+                if (!container) return;
+
+                container.innerHTML =
+                    '<div class="loading-state">Loading memory files...</div>';
+
+                // Use the existing fetch function
+                const files = await fetchMemoryFiles();
+
+                if (files.length === 0) {
+                    container.innerHTML =
+                        '<div class="empty-state"><p>⚠️ No memory files found</p></div>';
+                    return;
+                }
+
+                // Filter files
+                const filtered = files.filter((file) =>
+                    file.name.toLowerCase().includes(
+                        filter.toLowerCase(),
+                    ) ||
+                    (file.description &&
+                        file.description.toLowerCase().includes(
+                            filter.toLowerCase(),
+                        )) ||
+                    (file.category &&
+                        file.category.toLowerCase().includes(
+                            filter.toLowerCase(),
+                        ))
+                );
+
+                // Group by category
+                const grouped = filtered.reduce(
+                    (groups, file) => {
+                        const category = file.category ||
+                            "Other";
+                        if (!groups[category]) {groups[
+                                category
+                            ] = [];}
+                        groups[category].push(file);
+                        return groups;
+                    },
+                    {},
+                );
+
+                // Sort categories
+                const categoryOrder = [
+                    "🧠 Core Identity",
+                    "📖 Guides & Reference",
+                    "📋 Planning & PRDs",
+                    "⚙️ System & Operations",
+                    "💼 Business",
+                    "💻 Code & Technical",
+                    "📅 Daily Logs",
+                    "📁 Other",
+                ];
+                const sortedCategories = Object.keys(grouped)
+                    .sort((a, b) => {
+                        const ai = categoryOrder.indexOf(a),
+                            bi = categoryOrder.indexOf(b);
+                        return (ai === -1 ? 99 : ai) -
+                            (bi === -1 ? 99 : bi);
+                    });
+
+                const collapsedCats = JSON.parse(
+                    localStorage.getItem(
+                        "solobot-memory-collapsed",
+                    ) || "{}",
+                );
+
+                // Render
+                let html = "";
+                sortedCategories.forEach((category) => {
+                    const count = grouped[category].length;
+                    const isCollapsed =
+                        collapsedCats[category] === true;
+                    html +=
+                        `<div class="docs-category" data-category="${category}">`;
+                    html +=
+                        `<h3 class="category-title category-collapsible${
+                            isCollapsed ? " collapsed" : ""
+                        }" 
+                             onclick="toggleMemoryCategory(this)">
+                            <span class="category-chevron">${
+                            isCollapsed ? "▶" : "▼"
+                        }</span>
+                            ${category} 
+                            <span class="category-count">${count}</span>
+                         </h3>`;
+                    html +=
+                        `<div class="docs-category-grid" style="${
+                            isCollapsed ? "display:none;" : ""
+                        }">`;
+
+                    const sortedFiles = grouped[category].sort(
+                        (a, b) => {
+                            if (category === "Daily Logs") {
+                                return b.name.localeCompare(
+                                    a.name,
+                                );
+                            }
+                            return a.name.localeCompare(b.name);
+                        },
+                    );
+
+                    sortedFiles.forEach((file) => {
+                        const modifiedDate = file.modified
+                            ? new Date(file.modified)
+                                .toLocaleDateString()
+                            : "";
+                        const botBadge =
+                            file.botUpdated &&
+                                !file.acknowledged
+                                ? `<span class="badge badge-warning bot-updated-badge" title="Updated by SoLoBot">🤖 Updated</span>`
+                                : file.acknowledged
+                                ? `<span class="badge badge-success">✓ Read</span>`
+                                : "";
+                        const botUpdatedClass =
+                            file.botUpdated &&
+                                !file.acknowledged
+                                ? "bot-updated"
+                                : "";
+                        html += `
+                        <div class="doc-card memory-file ${botUpdatedClass}" onclick="viewMemoryFile('${
+                            file.path || file.name
+                        }')" data-filepath="${
+                            file.path || file.name
+                        }">
+                            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                <div class="doc-icon icon-md">📄</div>
+                                <div style="min-width: 0; flex: 1;">
+                                    <div class="doc-title" style="display: flex; align-items: center; gap: var(--space-2);">
+                                        ${file.name}
+                                        ${botBadge}
+                                    </div>
+                                    <div class="doc-description">${
+                            file.description || ""
+                        }</div>
+                                    ${
+                            modifiedDate
+                                ? `<div class="doc-meta">Modified: ${modifiedDate}</div>`
+                                : ""
+                        }
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    });
+
+                    html += `</div></div>`;
+                });
+
+                container.innerHTML = html ||
+                    '<div class="empty-state">No files match your search</div>';
+
+                // Append sub-agent file sections
+                if (typeof renderAgentSection === "function") {
+                    renderAgentSection(container);
+                }
+            }
+
+            // Sync memory files now (manual trigger)
+            function syncMemoryFilesNow() {
+                const statusEl = document.getElementById(
+                    "sync-status",
+                );
+                if (statusEl) {
+                    statusEl.className = "sync-status syncing";
+                    statusEl.innerHTML =
+                        '<span class="status-dot warning"></span> Syncing...';
+                }
+
+                // Clear cache and reload
+                if (typeof memoryFilesCache !== "undefined") {
+                    memoryFilesCache = [];
+                    lastFetchTime = 0;
+                }
+
+                renderMemoryFilesForPage(
+                    document.getElementById("memory-search")
+                        ?.value || "",
+                ).then(() => {
+                    if (statusEl) {
+                        statusEl.className =
+                            "sync-status synced";
+                        const now = new Date()
+                            .toLocaleTimeString();
+                        statusEl.innerHTML =
+                            `<span class="status-dot success"></span> Last synced: ${now}`;
+                    }
+                });
+            }
+
+            // Theme toggle
+            // Toggle theme (keyboard shortcut T) — opens settings to theme picker
+            function toggleTheme() {
+                openSettingsModal();
+                scrollToThemePicker();
+            }
+
+            // Scroll the settings modal to the theme picker section
+            function scrollToThemePicker() {
+                setTimeout(() => {
+                    const container = document.getElementById(
+                        "theme-picker-container",
+                    );
+                    if (container) {
+                        container.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                        });
+                    }
+                }, 100);
+            }
+
+            // Legacy stub — no longer needed but called by some init code
+            function updateThemeIcon() {}
+
+            // Load saved theme — migrate old 'theme' key to new 'solobot-theme'
+            // Also handle stale "dark"/"light" values from before theme system
+            const THEME_MIGRATION = {
+                "dark": "midnight",
+                "light": "snow",
+            };
+            const legacyTheme = localStorage.getItem("theme");
+            let savedTheme = localStorage.getItem(
+                "solobot-theme",
+            );
+
+            // Migrate from old key
+            if (!savedTheme && legacyTheme) {
+                savedTheme = THEME_MIGRATION[legacyTheme] ||
+                    "midnight";
+                localStorage.setItem(
+                    "solobot-theme",
+                    savedTheme,
+                );
+                localStorage.removeItem("theme");
+            }
+
+            // Fix any stale "dark"/"light" values in the new key too
+            if (savedTheme && THEME_MIGRATION[savedTheme]) {
+                savedTheme = THEME_MIGRATION[savedTheme];
+                localStorage.setItem(
+                    "solobot-theme",
+                    savedTheme,
+                );
+            }
+
+            savedTheme = savedTheme || "midnight";
+            document.documentElement.setAttribute(
+                "data-theme",
+                savedTheme,
+            );
+            updateThemeIcon(savedTheme);
+
+            // Theme picker is inlined — cards init via ThemePicker constructor at end of body
+
+            // Scroll containment — capture scroll only in panels that truly overflow
+            // NOTE: .drop-zone removed — kanban columns should not block page/widget scroll
+            const scrollableSelectors =
+                ".chat-messages, .activity-list, .notes-list, .terminal-output, .bento-widget-content";
+
+            document.addEventListener("wheel", (e) => {
+                const el = document.elementFromPoint(
+                    e.clientX,
+                    e.clientY,
+                );
+                const scrollable = el?.closest(
+                    scrollableSelectors,
+                );
+
+                if (scrollable) {
+                    const hasOverflow =
+                        scrollable.scrollHeight >
+                            scrollable.clientHeight + 2;
+                    if (!hasOverflow) return; // No overflow — let page scroll
+
+                    const atTop = scrollable.scrollTop <= 0;
+                    const atBottom =
+                        scrollable.scrollTop +
+                                scrollable.clientHeight >=
+                            scrollable.scrollHeight - 2;
+                    const scrollingUp = e.deltaY < 0;
+                    const scrollingDown = e.deltaY > 0;
+
+                    // At boundary — let parent/page scroll
+                    if (
+                        (atTop && scrollingUp) ||
+                        (atBottom && scrollingDown)
+                    ) return;
+
+                    e.preventDefault();
+                    scrollable.scrollTop += e.deltaY;
+                }
+            }, { passive: false });
+
+            window.setupScrollContainment = () => {}; // No-op now, handled globally
+
+            // Modal helpers for the new class system
+            function showModal(id) {
+                document.getElementById(id).classList.add(
+                    "visible",
+                );
+            }
+            function hideModal(id) {
+                document.getElementById(id).classList.remove(
+                    "visible",
+                );
+            }
+
+            // Click outside to close modals
+            document.addEventListener("click", function (e) {
+                if (
+                    e.target.classList.contains(
+                        "modal-overlay",
+                    ) && e.target.classList.contains("visible")
+                ) {
+                    e.target.classList.remove("visible");
+                }
+            });
+
+            // Override modal functions for new system
+            const originalOpenSettingsModal =
+                window.openSettingsModal;
+            window.openSettingsModal = function () {
+                showModal("settings-modal");
+                if (
+                    typeof originalOpenSettingsModal ===
+                        "function"
+                ) {
+                    // Call original to load settings
+                }
+            };
+            window.closeSettingsModal = function () {
+                hideModal("settings-modal");
+            };
+
+            window.openAddTask = function (column) {
+                window.addTaskColumn = column;
+                showModal("add-task-modal");
+                document.getElementById("new-task-title")
+                    .focus();
+            };
+            window.closeAddTask = function () {
+                hideModal("add-task-modal");
+            };
+
+            window.openArchiveModal = function () {
+                showModal("archive-modal");
+                renderArchive();
+            };
+            window.closeArchiveModal = function () {
+                hideModal("archive-modal");
+            };
+
+            window.closeActionModal = function () {
+                hideModal("task-action-modal");
+            };
+            window.closeEditTitleModal = function () {
+                hideModal("edit-title-modal");
+            };
+            window.closeDeleteModal = function () {
+                hideModal("confirm-delete-modal");
+            };
+
+            // Image preview visibility
+            function showImagePreview(src) {
+                const container = document.getElementById(
+                    "image-preview-container",
+                );
+                const img = document.getElementById(
+                    "image-preview",
+                );
+                img.src = src;
+                container.classList.add("visible");
+            }
+            function clearImagePreview() {
+                const container = document.getElementById(
+                    "image-preview-container",
+                );
+                container.classList.remove("visible");
+                pendingImage = null;
+                document.getElementById("image-upload").value =
+                    "";
+            }
+
+            // =================== TASK DETAIL MODAL ===================
+            let currentDetailTask = null;
+            let currentDetailColumn = null;
+
+            window.openTaskDetail = function (taskId, column) {
+                // Don't open detail if user is selecting text
+                const sel = window.getSelection();
+                if (sel && sel.toString().trim().length > 0) return;
+
+                const task = state.tasks[column]?.find((t) =>
+                    t.id === taskId
+                );
+                if (!task) return;
+
+                currentDetailTask = task;
+                currentDetailColumn = column;
+                taskModalOpen = true; // Pause auto-refresh while editing
+
+                // Populate modal
+                document.getElementById("task-detail-title")
+                    .value = task.title || "";
+                document.getElementById(
+                    "task-detail-description",
+                ).value = task.description || "";
+
+                // Status badge
+                const statusEl = document.getElementById(
+                    "task-detail-status",
+                );
+                const statusMap = {
+                    todo: "To-Do",
+                    progress: "In Progress",
+                    done: "Done",
+                    archive: "Archived",
+                };
+                statusEl.textContent = statusMap[column] ||
+                    column;
+                statusEl.className = "badge " +
+                    (column === "done"
+                        ? "badge-success"
+                        : column === "progress"
+                        ? "badge-warning"
+                        : "");
+
+                // Priority badge
+                const priorityEl = document.getElementById(
+                    "task-detail-priority",
+                );
+                priorityEl.textContent = "P" +
+                    (task.priority || 1);
+                priorityEl.className = "badge badge-primary";
+
+                // Date
+                const dateEl = document.getElementById(
+                    "task-detail-date",
+                );
+                dateEl.textContent = task.createdAt
+                    ? new Date(task.createdAt)
+                        .toLocaleDateString()
+                    : "";
+
+                // Render images
+                renderTaskImages();
+
+                showModal("task-detail-modal");
+            };
+
+            window.closeTaskDetailModal = async function () {
+                // Auto-save changes before closing
+                if (currentDetailTask && currentDetailColumn) {
+                    currentDetailTask.title =
+                        document.getElementById(
+                            "task-detail-title",
+                        ).value;
+                    currentDetailTask.description =
+                        document.getElementById(
+                            "task-detail-description",
+                        ).value;
+                    await saveState("Updated task");
+                    render();
+                }
+                hideModal("task-detail-modal");
+                currentDetailTask = null;
+                currentDetailColumn = null;
+                taskModalOpen = false; // Resume auto-refresh
+            };
+
+            function renderTaskImages() {
+                const container = document.getElementById(
+                    "task-detail-images",
+                );
+                const images = currentDetailTask?.images || [];
+
+                if (images.length === 0) {
+                    container.innerHTML =
+                        '<div style="color: var(--text-muted); font-size: 13px;">No attachments yet</div>';
+                    return;
+                }
+
+                container.innerHTML = images.map((img, idx) => `
+                <div style="position: relative; width: 120px; height: 90px; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-default);">
+                    <img src="${img}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;" 
+                         onclick="window.open('${img}', '_blank')">
+                    <button onclick="removeTaskImage(${idx})" 
+                            style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px;">
+                        ✕
+                    </button>
+                </div>
+            `).join("");
+            }
+
+            window.handleTaskImageUpload = function (event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                addImageToTask(file);
+                event.target.value = ""; // Reset input
+            };
+
+            // Shared function to add image to current task
+            function addImageToTask(file) {
+                if (!file || !file.type.startsWith("image/")) {
+                    return;
+                }
+                if (!currentDetailTask) return;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    if (!currentDetailTask.images) {
+                        currentDetailTask.images = [];
+                    }
+                    currentDetailTask.images.push(
+                        e.target.result,
+                    );
+                    renderTaskImages();
+                    saveState("Added image to task");
+                    showToast("Image added!", "success");
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // Drag and drop support for task detail modal
+            document.addEventListener(
+                "DOMContentLoaded",
+                function () {
+                    const modal = document.getElementById(
+                        "task-detail-modal",
+                    );
+                    if (!modal) return;
+
+                    // Prevent default drag behaviors on the modal
+                    [
+                        "dragenter",
+                        "dragover",
+                        "dragleave",
+                        "drop",
+                    ].forEach((eventName) => {
+                        modal.addEventListener(
+                            eventName,
+                            preventDefaults,
+                            false,
+                        );
+                    });
+
+                    function preventDefaults(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+
+                    // Highlight drop zone
+                    ["dragenter", "dragover"].forEach(
+                        (eventName) => {
+                            modal.addEventListener(
+                                eventName,
+                                () => {
+                                    if (currentDetailTask) {
+                                        modal.querySelector(
+                                            ".modal",
+                                        ).style.boxShadow =
+                                            "0 0 0 3px var(--brand-red)";
+                                    }
+                                },
+                                false,
+                            );
+                        },
+                    );
+
+                    ["dragleave", "drop"].forEach(
+                        (eventName) => {
+                            modal.addEventListener(
+                                eventName,
+                                () => {
+                                    modal.querySelector(
+                                        ".modal",
+                                    ).style.boxShadow = "";
+                                },
+                                false,
+                            );
+                        },
+                    );
+
+                    // Handle drop
+                    modal.addEventListener(
+                        "drop",
+                        function (e) {
+                            if (!currentDetailTask) return;
+                            const files = e.dataTransfer.files;
+                            if (files.length > 0) {
+                                [...files].forEach((file) => {
+                                    if (
+                                        file.type.startsWith(
+                                            "image/",
+                                        )
+                                    ) {
+                                        addImageToTask(file);
+                                    }
+                                });
+                            }
+                        },
+                        false,
+                    );
+
+                    // Paste support for description field
+                    const descField = document.getElementById(
+                        "task-detail-description",
+                    );
+                    if (descField) {
+                        descField.addEventListener(
+                            "paste",
+                            handleTaskPaste,
+                        );
+                    }
+                },
+            );
+
+            // Handle paste event (Ctrl+V or right-click paste)
+            function handleTaskPaste(e) {
+                if (!currentDetailTask) return;
+
+                const items = e.clipboardData?.items;
+                if (!items) return;
+
+                for (const item of items) {
+                    if (item.type.startsWith("image/")) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (file) addImageToTask(file);
+                        return;
+                    }
+                }
+            }
+
+            window.removeTaskImage = function (index) {
+                if (currentDetailTask?.images) {
+                    currentDetailTask.images.splice(index, 1);
+                    renderTaskImages();
+                    saveState("Removed image from task");
+                }
+            };
+
+            window.saveTaskDetails = function () {
+                if (
+                    !currentDetailTask || !currentDetailColumn
+                ) return;
+
+                currentDetailTask.title =
+                    document.getElementById("task-detail-title")
+                        .value;
+                currentDetailTask.description =
+                    document.getElementById(
+                        "task-detail-description",
+                    ).value;
+
+                saveState("Updated task details");
+                render();
+                showToast("Task saved!", "success");
+            };
+
+            window.taskDetailMove = function (newColumn) {
+                if (
+                    !currentDetailTask ||
+                    !currentDetailColumn ||
+                    currentDetailColumn === newColumn
+                ) return;
+
+                // Save current details first
+                currentDetailTask.title =
+                    document.getElementById("task-detail-title")
+                        .value;
+                currentDetailTask.description =
+                    document.getElementById(
+                        "task-detail-description",
+                    ).value;
+
+                // Remove from current column
+                const idx = state.tasks[currentDetailColumn]
+                    .findIndex((t) =>
+                        t.id === currentDetailTask.id
+                    );
+                if (idx > -1) {
+                    state.tasks[currentDetailColumn].splice(
+                        idx,
+                        1,
+                    );
+                }
+
+                // Add to new column
+                if (newColumn === "done") {
+                    currentDetailTask.completedAt = Date.now();
+                }
+                state.tasks[newColumn].unshift(
+                    currentDetailTask,
+                );
+
+                currentDetailColumn = newColumn;
+
+                // Update status badge
+                const statusEl = document.getElementById(
+                    "task-detail-status",
+                );
+                const statusMap = {
+                    todo: "To-Do",
+                    progress: "In Progress",
+                    done: "Done",
+                    archive: "Archived",
+                };
+                statusEl.textContent = statusMap[newColumn] ||
+                    newColumn;
+                statusEl.className = "badge " +
+                    (newColumn === "done"
+                        ? "badge-success"
+                        : newColumn === "progress"
+                        ? "badge-warning"
+                        : "");
+
+                saveState("Moved task to " + newColumn);
+                render();
+                showToast("Task moved!", "success");
+            };
+
+            window.taskDetailCyclePriority = function () {
+                if (!currentDetailTask) return;
+                currentDetailTask.priority =
+                    (currentDetailTask.priority || 1) % 4 + 1;
+                document.getElementById("task-detail-priority")
+                    .textContent = "P" +
+                        currentDetailTask.priority;
+                saveState("Changed priority");
+                render();
+            };
+
+            window.taskDetailDelete = async function () {
+                if (
+                    !currentDetailTask || !currentDetailColumn
+                ) return;
+
+                const confirmed = await showConfirm(
+                    "Delete this task permanently?",
+                    "Delete Task",
+                    "Delete",
+                );
+                if (!confirmed) return;
+
+                const idx = state.tasks[currentDetailColumn]
+                    .findIndex((t) =>
+                        t.id === currentDetailTask.id
+                    );
+                if (idx > -1) {
+                    state.tasks[currentDetailColumn].splice(
+                        idx,
+                        1,
+                    );
+                }
+
+                saveState("Deleted task");
+                render();
+                closeTaskDetailModal();
+                showToast("Task deleted", "success");
+            };
+        </script>
+
+        <!-- Memory Files Styles -->
+        <link rel="stylesheet" href="css/docs.css?v=4.0.0">
+        <script>
+            // ===== THEME PICKER ENGINE =====
+            class ThemePicker {
+                constructor() {
+                    const M = {
+                        dark: "midnight",
+                        light: "snow",
+                    };
+                    let s = localStorage.getItem(
+                        "solobot-theme",
+                    );
+                    if (s && M[s]) {
+                        s = M[s];
+                        localStorage.setItem(
+                            "solobot-theme",
+                            s,
+                        );
+                    }
+                    this.currentTheme = s || "midnight";
+                    this.applyTheme(this.currentTheme, false);
+                    this.setupThemeCards();
+                    this.observeThemeChanges();
+                }
+                setupThemeCards() {
+                    document.querySelectorAll(".theme-card")
+                        .forEach((card) => {
+                            const t = card.getAttribute(
+                                "data-theme",
+                            );
+                            if (!t) return;
+                            card.classList.toggle(
+                                "active",
+                                t === this.currentTheme,
+                            );
+                            card.onclick = () =>
+                                this.selectTheme(t);
+                        });
+                }
+                selectTheme(t) {
+                    if (t === this.currentTheme) return;
+                    this.currentTheme = t;
+                    this.applyTheme(t, true);
+                    localStorage.setItem("solobot-theme", t);
+                    this.updateActiveCard();
+                    window.dispatchEvent(
+                        new CustomEvent("themeChanged", {
+                            detail: { theme: t },
+                        }),
+                    );
+                }
+                applyTheme(t, animated) {
+                    if (animated) {
+                        document.body.classList.add(
+                            "theme-transitioning",
+                        );
+                        setTimeout(
+                            () =>
+                                document.body.classList.remove(
+                                    "theme-transitioning",
+                                ),
+                            350,
+                        );
+                    }
+                    document.documentElement.setAttribute(
+                        "data-theme",
+                        t,
+                    );
+                }
+                updateActiveCard() {
+                    document.querySelectorAll(".theme-card")
+                        .forEach((c) => {
+                            c.classList.toggle(
+                                "active",
+                                c.getAttribute("data-theme") ===
+                                    this.currentTheme,
+                            );
+                        });
+                }
+                observeThemeChanges() {
+                    new MutationObserver((muts) => {
+                        muts.forEach((m) => {
+                            if (
+                                m.attributeName === "data-theme"
+                            ) {
+                                const nt = document
+                                    .documentElement
+                                    .getAttribute("data-theme");
+                                if (
+                                    nt &&
+                                    nt !== this.currentTheme
+                                ) {
+                                    this.currentTheme = nt;
+                                    this.updateActiveCard();
+                                }
+                            }
+                        });
+                    }).observe(document.documentElement, {
+                        attributes: true,
+                        attributeFilter: ["data-theme"],
+                    });
+                }
+                setTheme(t) {
+                    this.selectTheme(t);
+                }
+                getTheme() {
+                    return this.currentTheme;
+                }
+            }
+            window.themePicker = new ThemePicker();
+        </script>
+    </body>
+</html>

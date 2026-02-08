@@ -1,0 +1,189 @@
+                <div id="memory-file-modal" class="modal-overlay">
+                    <div
+                        class="modal modal-lg"
+                        style="max-width: 1100px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden"
+                    >
+                        <div
+                            class="modal-header"
+                            style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--border-default)"
+                        >
+                            <h3 class="modal-title" id="memory-file-title">
+                                Memory File
+                            </h3>
+                            <button
+                                onclick="closeMemoryModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div
+                            class="modal-body"
+                            style="flex: 1; display: flex; overflow: hidden; padding: 0; min-height: 0"
+                        >
+                            <!-- Editor panel -->
+                            <div
+                                style="flex: 1; display: flex; flex-direction: column; min-width: 0"
+                            >
+                                <textarea
+                                    id="memory-file-content"
+                                    style="flex: 1; width: 100%; min-height: 0; font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.6; padding: var(--space-4) var(--space-6); border: none; resize: none; background: var(--surface-2); color: var(--text-primary); outline: none"
+                                    placeholder="Loading..."
+                                ></textarea>
+                            </div>
+                            <!-- Version history sidebar -->
+                            <div
+                                class="version-history-panel"
+                                style="width: 280px; flex-shrink: 0; border-left: 1px solid var(--border-default); background: var(--surface-1); display: flex; flex-direction: column"
+                            >
+                                <div
+                                    style="padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px"
+                                >
+                                    📜 Version History
+                                </div>
+                                <div
+                                    id="version-history-list"
+                                    style="flex: 1; overflow-y: auto; padding: var(--space-2)"
+                                >
+                                    <div
+                                        style="color: var(--text-muted); font-size: 12px; padding: var(--space-3)"
+                                    >
+                                        No versions yet
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            class="modal-footer"
+                            style="flex-shrink: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default); display: flex; justify-content: space-between"
+                        >
+                            <div
+                                style="font-size: 12px; color: var(--text-muted)"
+                            >
+                                💡 Changes are saved with version history
+                            </div>
+                            <div style="display: flex; gap: var(--space-2)">
+                                <button
+                                    onclick="closeMemoryModal()"
+                                    class="btn btn-ghost"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    id="memory-save-btn"
+                                    onclick="saveMemoryFile()"
+                                    class="btn btn-primary"
+                                >
+                                    💾 Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Diff View Modal -->
+                <!-- IDE-style Diff Viewer -->
+                <div id="diff-modal" class="modal-overlay">
+                    <div
+                        class="modal"
+                        style="max-width: 95vw; width: 1400px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden"
+                    >
+                        <div
+                            class="modal-header"
+                            style="flex-shrink: 0; padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--border-default); display: flex; align-items: center; justify-content: space-between"
+                        >
+                            <div
+                                style="display: flex; align-items: center; gap: var(--space-4)"
+                            >
+                                <h3
+                                    class="modal-title"
+                                    id="diff-modal-title"
+                                    style="margin: 0"
+                                >
+                                    Compare Versions
+                                </h3>
+                                <div
+                                    id="diff-stats"
+                                    style="font-size: 12px; color: var(--text-muted)"
+                                >
+                                </div>
+                            </div>
+                            <button
+                                onclick="closeDiffModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <!-- Side-by-side diff panes -->
+                        <div
+                            style="flex: 1; display: flex; overflow: hidden; min-height: 0"
+                        >
+                            <!-- Current (left) -->
+                            <div
+                                style="flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border-default)"
+                            >
+                                <div
+                                    style="padding: 6px 16px; background: var(--surface-1); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 12px; color: var(--text-secondary)"
+                                >
+                                    📄 Current Version
+                                </div>
+                                <div id="diff-current" class="diff-pane"></div>
+                            </div>
+                            <!-- Historical (right) -->
+                            <div
+                                style="flex: 1; display: flex; flex-direction: column; min-width: 0"
+                            >
+                                <div
+                                    style="padding: 6px 16px; background: var(--surface-1); border-bottom: 1px solid var(--border-default); font-weight: 600; font-size: 12px; color: var(--text-secondary)"
+                                >
+                                    📜 <span id="diff-version-date"
+                                    >Historical Version</span>
+                                </div>
+                                <div id="diff-historical" class="diff-pane">
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            class="modal-footer"
+                            style="flex-shrink: 0; padding: var(--space-3) var(--space-6); border-top: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center"
+                        >
+                            <div
+                                style="display: flex; align-items: center; gap: 12px; font-size: 12px"
+                            >
+                                <span
+                                    style="display: flex; align-items: center; gap: 4px"
+                                ><span
+                                        style="display: inline-block; width: 12px; height: 12px; background: rgba(46, 160, 67, 0.25); border-left: 3px solid #3fb950; border-radius: 2px"
+                                    ></span> Added</span>
+                                <span
+                                    style="display: flex; align-items: center; gap: 4px"
+                                ><span
+                                        style="display: inline-block; width: 12px; height: 12px; background: rgba(248, 81, 73, 0.25); border-left: 3px solid #f85149; border-radius: 2px"
+                                    ></span> Removed</span>
+                                <span
+                                    style="display: flex; align-items: center; gap: 4px"
+                                ><span
+                                        style="display: inline-block; width: 12px; height: 12px; background: rgba(210, 153, 34, 0.15); border-left: 3px solid #d29922; border-radius: 2px"
+                                    ></span> Modified</span>
+                            </div>
+                            <div style="display: flex; gap: var(--space-2)">
+                                <button
+                                    onclick="closeDiffModal()"
+                                    class="btn btn-ghost"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    id="diff-restore-btn"
+                                    onclick="restoreFromDiff()"
+                                    class="btn btn-primary"
+                                >
+                                    ↩️ Restore This Version
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Modal -->

@@ -1,0 +1,401 @@
+                <div id="settings-modal" class="modal-overlay">
+                    <div class="modal modal-lg">
+                        <div class="modal-header">
+                            <h3 class="modal-title">⚙️ Dashboard Settings</h3>
+                            <button
+                                onclick="closeSettingsModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <!-- Theme Picker -->
+                        <!-- Gateway Connection -->
+                        <div class="modal-section">
+                            <h4 class="modal-section-title">
+                                🔌 Gateway Connection
+                            </h4>
+                            <div class="modal-section-content">
+                                <div
+                                    class="flex items-center gap-2"
+                                    style="margin-bottom: var(--space-3)"
+                                >
+                                    <span
+                                        id="settings-gateway-dot"
+                                        class="status-dot idle"
+                                    ></span>
+                                    <span
+                                        id="settings-gateway-status"
+                                        style="font-size: 13px; color: var(--text-muted)"
+                                    >Disconnected</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label"
+                                    >Gateway Host</label>
+                                    <input
+                                        type="text"
+                                        id="gateway-host"
+                                        class="input"
+                                        placeholder="e.g., moltbot.local or 192.168.1.100"
+                                    >
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Port</label>
+                                        <input
+                                            type="number"
+                                            id="gateway-port"
+                                            class="input"
+                                            placeholder="443"
+                                            value="443"
+                                        >
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label"
+                                        >Session Key</label>
+                                        <input
+                                            type="text"
+                                            id="gateway-session"
+                                            class="input"
+                                            placeholder="main"
+                                            value="main"
+                                        >
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label"
+                                    >Token (optional)</label>
+                                    <input
+                                        type="password"
+                                        id="gateway-token"
+                                        class="input"
+                                        placeholder="Gateway auth token"
+                                    >
+                                </div>
+                                <div
+                                    class="form-actions"
+                                    style="margin-top: var(--space-3)"
+                                >
+                                    <button
+                                        id="gateway-connect-btn"
+                                        onclick="connectToGateway()"
+                                        class="btn btn-primary"
+                                        style="background: var(--success)"
+                                    >
+                                        Connect
+                                    </button>
+                                    <button
+                                        id="gateway-disconnect-btn"
+                                        onclick="disconnectFromGateway()"
+                                        class="btn btn-danger hidden"
+                                    >
+                                        Disconnect
+                                    </button>
+                                    <button
+                                        onclick="requestGatewayRestart()"
+                                        class="btn btn-ghost"
+                                        title="Ask bot to restart gateway"
+                                    >
+                                        Restart
+                                    </button>
+                                </div>
+                                <p
+                                    style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2)"
+                                >
+                                    Connect to the same session as
+                                    Telegram/Android for mirrored chat.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- AI Provider & Model -->
+                        <div class="modal-section">
+                            <h4 class="modal-section-title">
+                                🤖 AI Provider & Model
+                            </h4>
+                            <div class="modal-section-content">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Current Provider
+                                        </div>
+                                        <div class="setting-desc">
+                                            AI service currently in use
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="current-provider-display"
+                                        style="font-weight: 600; color: var(--text-primary)"
+                                    >
+                                        --
+                                    </div>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Current Model
+                                        </div>
+                                        <div class="setting-desc">
+                                            Specific model in use
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="current-model-display"
+                                        style="font-weight: 600; color: var(--text-primary)"
+                                    >
+                                        --
+                                    </div>
+                                </div>
+                                <div class="setting-row" style="flex-wrap: wrap; gap: 8px;">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Change Default Model
+                                        </div>
+                                        <div class="setting-desc">
+                                            Change the global default for all
+                                            agents
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                        <select id="setting-provider" class="select" style="min-width: 130px;"
+                                                onchange="onSettingsProviderChange()">
+                                            <!-- Populated dynamically -->
+                                        </select>
+                                        <select id="setting-model" class="select" style="min-width: 180px;">
+                                            <!-- Populated dynamically -->
+                                        </select>
+                                        <button
+                                            onclick="changeGlobalModel()"
+                                            class="btn btn-primary"
+                                            style="padding: 4px 12px; font-size: 12px"
+                                            title="Apply as global default"
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                </div>
+                                <p
+                                    style="font-size: 12px; color: var(--text-muted); margin-top: var(--space-2)"
+                                >
+                                    ⚡ Header dropdown changes the current
+                                    session only<br>
+                                    🌐 This setting changes the global default
+                                    (restarts gateway)
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- SoLoBot Behavior -->
+                        <div class="modal-section">
+                            <h4 class="modal-section-title">
+                                🤖 SoLoBot Behavior
+                            </h4>
+                            <div class="modal-section-content">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Task Pickup Frequency
+                                        </div>
+                                        <div class="setting-desc">
+                                            How often SoLoBot checks for In
+                                            Progress tasks
+                                        </div>
+                                    </div>
+                                    <select
+                                        id="setting-pickup-freq"
+                                        onchange="updateSetting('pickupFreq', this.value)"
+                                        class="select"
+                                    >
+                                        <option value="disabled">
+                                            Disabled
+                                        </option>
+                                        <option value="60000">
+                                            Every 1 min
+                                        </option>
+                                        <option value="300000">
+                                            Every 5 min
+                                        </option>
+                                        <option value="1800000">
+                                            Every 30 min
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Work Priority Order
+                                        </div>
+                                        <div class="setting-desc">
+                                            How tasks are prioritized
+                                        </div>
+                                    </div>
+                                    <select
+                                        id="setting-priority-order"
+                                        onchange="updateSetting('priorityOrder', this.value)"
+                                        class="select"
+                                    >
+                                        <option value="priority">
+                                            P0 → P1 → P2
+                                        </option>
+                                        <option value="fifo">
+                                            First In, First Out
+                                        </option>
+                                        <option value="lifo">
+                                            Last In, First Out
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dashboard Settings -->
+                        <div class="modal-section">
+                            <h4 class="modal-section-title">📊 Dashboard</h4>
+                            <div class="modal-section-content">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Auto-Refresh
+                                        </div>
+                                        <div class="setting-desc">
+                                            How often dashboard reloads data
+                                        </div>
+                                    </div>
+                                    <select
+                                        id="setting-refresh"
+                                        onchange="updateSetting('refreshInterval', this.value)"
+                                        class="select"
+                                    >
+                                        <option value="5000">
+                                            Every 5 sec
+                                        </option>
+                                        <option value="10000">
+                                            Every 10 sec
+                                        </option>
+                                        <option value="30000">
+                                            Every 30 sec
+                                        </option>
+                                        <option value="60000">
+                                            Every 1 min
+                                        </option>
+                                        <option value="0">Disabled</option>
+                                    </select>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Default New Task Priority
+                                        </div>
+                                        <div class="setting-desc">
+                                            Priority for new tasks
+                                        </div>
+                                    </div>
+                                    <select
+                                        id="setting-default-priority"
+                                        onchange="updateSetting('defaultPriority', this.value)"
+                                        class="select"
+                                    >
+                                        <option value="0">P0 (Urgent)</option>
+                                        <option value="1">P1 (Normal)</option>
+                                        <option value="2">P2 (Low)</option>
+                                    </select>
+                                </div>
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <div class="setting-title">
+                                            Compact Mode
+                                        </div>
+                                        <div class="setting-desc">
+                                            Denser task cards
+                                        </div>
+                                    </div>
+                                    <label class="toggle">
+                                        <input
+                                            type="checkbox"
+                                            id="setting-compact"
+                                            onchange="updateSetting('compactMode', this.checked)"
+                                        >
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Visible Panels -->
+                        <div class="modal-section">
+                            <h4 class="modal-section-title">
+                                👁️ Visible Panels
+                            </h4>
+                            <div class="modal-section-content">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <span class="setting-title">🎨 Theme</span>
+                                        <div class="setting-desc">Dashboard color theme</div>
+                                    </div>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <button onclick="scrollToThemePicker()" id="theme-current-label"
+                                                class="btn btn-ghost" style="padding: 4px 10px; font-size: 12px; border: 1px solid var(--border);">
+                                            🎨 Choose Theme
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-title"
+                                    >SoLoBot Live Panel</span>
+                                    <input
+                                        type="checkbox"
+                                        id="setting-show-live"
+                                        onchange="updateSetting('showLive', this.checked)"
+                                        checked
+                                        style="accent-color: var(--brand-red)"
+                                    >
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-title"
+                                    >Activity Log</span>
+                                    <input
+                                        type="checkbox"
+                                        id="setting-show-activity"
+                                        onchange="updateSetting('showActivity', this.checked)"
+                                        checked
+                                        style="accent-color: var(--brand-red)"
+                                    >
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-title"
+                                    >Notes Panel</span>
+                                    <input
+                                        type="checkbox"
+                                        id="setting-show-notes"
+                                        onchange="updateSetting('showNotes', this.checked)"
+                                        checked
+                                        style="accent-color: var(--brand-red)"
+                                    >
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-title"
+                                    >Product Status</span>
+                                    <input
+                                        type="checkbox"
+                                        id="setting-show-products"
+                                        onchange="updateSetting('showProducts', this.checked)"
+                                        checked
+                                        style="accent-color: var(--brand-red)"
+                                    >
+                                </div>
+                                <div class="setting-row">
+                                    <span class="setting-title">Docs Hub</span>
+                                    <input
+                                        type="checkbox"
+                                        id="setting-show-docs"
+                                        onchange="updateSetting('showDocs', this.checked)"
+                                        checked
+                                        style="accent-color: var(--brand-red)"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <div class="modal-section" id="theme-picker-container">

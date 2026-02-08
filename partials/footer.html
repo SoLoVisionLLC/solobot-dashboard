@@ -1,0 +1,44 @@
+                <!-- Footer -->
+                <footer class="footer">
+                    <div class="container footer-inner">
+                        <span>SoLoVision LLC © 2026</span>
+                        <div class="footer-status">
+                            <div class="live-indicator">
+                                <span class="status-dot success pulse"></span>
+                                <span>LIVE</span>
+                            </div>
+                            <span>Last sync: <span id="last-sync"
+                                >--:--</span></span>
+                        </div>
+                    </div>
+                </footer>
+
+                <!-- Bulk Action Bar -->
+                <div id="bulk-action-bar" class="bulk-action-bar">
+                    <span
+                        id="bulk-count"
+                        style="font-size: 13px; font-weight: 500"
+                    >0 selected</span>
+                    <button onclick="bulkMoveTo('todo')" class="btn btn-ghost">
+                        → To-Do
+                    </button>
+                    <button
+                        onclick="bulkMoveTo('progress')"
+                        class="btn btn-ghost"
+                    >
+                        → In Progress
+                    </button>
+                    <button onclick="bulkMoveTo('done')" class="btn btn-ghost">
+                        → Done
+                    </button>
+                    <button
+                        onclick="bulkMoveTo('archive')"
+                        class="btn btn-ghost"
+                    >
+                        📦 Archive
+                    </button>
+                    <button onclick="clearSelection()" class="btn-icon">
+                        ✕
+                    </button>
+                </div>
+

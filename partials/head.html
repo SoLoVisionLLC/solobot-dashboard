@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="midnight">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SoLoVision Command Center</title>
+        <link rel="icon" type="image/png" href="/solobot-avatar.png">
+        <script>
+            // Apply theme immediately before paint to prevent flash
+            (function () {
+                var m = { dark: "midnight", light: "snow" };
+                var t = localStorage.getItem("solobot-theme") ||
+                    localStorage.getItem("theme") || "midnight";
+                if (m[t]) t = m[t];
+                document.documentElement.setAttribute(
+                    "data-theme",
+                    t,
+                );
+            })();
+        </script>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        >
+        <link rel="stylesheet" href="css/themes.css?v=4.0.0">
+        <link rel="stylesheet" href="css/layout.css?v=4.0.0">
+        <link rel="stylesheet" href="css/components.css?v=4.0.0">
+        <link rel="stylesheet" href="css/modals.css?v=4.0.0">
+        <link rel="stylesheet" href="css/chat.css?v=4.0.0">
+        <link rel="stylesheet" href="css/pages.css?v=4.0.0">
+    </head>

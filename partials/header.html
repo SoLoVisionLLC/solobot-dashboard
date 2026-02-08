@@ -1,0 +1,207 @@
+            <div class="app-content">
+                <!-- Header -->
+                <header class="header">
+                    <div class="container header-inner">
+                        <div class="logo">
+                            <span style="font-size: 1.25rem; font-weight: 600"
+                            >SoLoBot</span>
+                        </div>
+
+                        <div class="header-status">
+                            <!-- Focus Timer -->
+                            <div
+                                id="focus-timer"
+                                class="focus-timer"
+                                title="Focus Timer - Click to start a 25-min focus session"
+                            >
+                                <button
+                                    class="focus-timer-btn"
+                                    onclick="toggleFocusTimer()"
+                                    title="Start/Pause"
+                                >
+                                    <svg
+                                        id="focus-play-icon"
+                                        style="width: 16px; height: 16px"
+                                        fill="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    <svg
+                                        id="focus-pause-icon"
+                                        style="width: 16px; height: 16px; display: none"
+                                        fill="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"
+                                        />
+                                    </svg>
+                                </button>
+                                <span
+                                    class="focus-timer-display"
+                                    id="focus-timer-display"
+                                >25:00</span>
+                                <button
+                                    class="focus-timer-btn"
+                                    onclick="resetFocusTimer()"
+                                    title="Reset"
+                                >
+                                    <svg
+                                        style="width: 14px; height: 14px"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                        />
+                                    </svg>
+                                </button>
+                                <span
+                                    class="focus-timer-sessions"
+                                    id="focus-sessions"
+                                >0 🎯</span>
+                            </div>
+
+                            <!-- Notification Bell -->
+                            <div id="notification-bell" class="notification-bell" onclick="toggleNotificationPanel()" title="Notifications">
+                                🔔
+                                <span id="notification-bell-badge" class="notification-bell-badge" style="display:none;">0</span>
+                            </div>
+
+                            <div class="status-chip">
+                                <div
+                                    id="status-indicator"
+                                    class="status-dot success pulse"
+                                >
+                                </div>
+                                <span id="status-text">IDLE</span>
+                            </div>
+
+                            <div class="header-meta">
+                                <div>
+                                    Provider:
+                                    <select
+                                        id="provider-select"
+                                        class="header-select"
+                                        onchange="updateProviderDisplay()"
+                                    >
+                                        <!-- Populated dynamically from /api/models/list -->
+                                    </select>
+                                </div>
+                                <div
+                                    style="display: flex; align-items: center; gap: 6px"
+                                >
+                                    Model:
+                                    <select
+                                        id="model-select"
+                                        class="header-select"
+                                        onchange="changeSessionModel()"
+                                        title="Change model for this session"
+                                    >
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                    <button
+                                        onclick="changeSessionModel()"
+                                        class="btn btn-primary"
+                                        style="padding: 2px 8px; font-size: 11px; min-height: 24px"
+                                        title="Apply selected model to session"
+                                    >
+                                        Apply
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button
+                                class="theme-toggle"
+                                onclick="openSettingsModal()"
+                                title="Settings"
+                            >
+                                <svg
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    style="width: 20px; height: 20px"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                    />
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                </svg>
+                            </button>
+
+                            <button
+                                class="theme-toggle"
+                                onclick="openSettingsModal(); scrollToThemePicker();"
+                                title="Change theme"
+                            >
+                                <svg
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    style="width: 18px; height: 18px"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Sub-agent Banner -->
+                <div
+                    id="subagent-banner"
+                    class="hidden"
+                    style="background: var(--warning-muted); border-bottom: 1px solid var(--border-default); padding: var(--space-2) 0"
+                >
+                    <div
+                        class="container flex items-center gap-2"
+                        style="font-size: 13px"
+                    >
+                        <svg
+                            class="animate-spin"
+                            style="width: 16px; height: 16px; color: var(--warning)"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle
+                                style="opacity: 0.25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                stroke-width="4"
+                            >
+                            </circle>
+                            <path
+                                style="opacity: 0.75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            >
+                            </path>
+                        </svg>
+                        <span style="color: var(--warning); font-weight: 500"
+                        >Sub-agent active:</span>
+                        <span id="subagent-task">Researching...</span>
+                    </div>
+                </div>
+
+                <!-- Main Content -->
+                <main class="main">

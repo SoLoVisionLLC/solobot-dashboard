@@ -1,0 +1,570 @@
+                    <!-- =================== DASHBOARD PAGE (BENTO GRID) =================== -->
+                    <div id="page-dashboard" class="page active">
+                        <div class="bento-grid">
+                            <!-- Task Board Widget -->
+                            <div class="bento-widget bento-task-board">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">
+                                        <svg
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                            >
+                                            </path>
+                                        </svg>
+                                        Task Board
+                                    </div>
+                                    <div class="bento-widget-actions">
+                                        <button
+                                            onclick="openArchiveModal()"
+                                            class="btn btn-ghost"
+                                            style="padding: 4px 8px; font-size: 12px"
+                                        >
+                                            <span>📦</span>
+                                            <span
+                                                id="archive-badge"
+                                                class="badge badge-error hidden"
+                                                style="margin-left: 4px"
+                                            >0</span>
+                                        </button>
+                                        <button
+                                            onclick="syncFromVPS()"
+                                            class="btn btn-ghost"
+                                            title="Pull latest state from VPS"
+                                            style="padding: 4px 8px; font-size: 12px"
+                                        >
+                                            <span>🔄</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content">
+                                    <!-- Task Board Toolbar — compact single row -->
+                                    <div id="task-toolbar" style="display: flex; gap: 6px; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border); overflow-x: auto;">
+                                        <div style="position: relative; min-width: 120px; max-width: 160px; flex-shrink: 0;">
+                                            <input type="text" id="task-search" placeholder="Search..."
+                                                   oninput="applyTaskFilters()"
+                                                   class="input" style="padding: 2px 6px 2px 22px; font-size: 11px; height: 26px; width: 100%; border-radius: 4px;">
+                                            <span style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.4;">🔍</span>
+                                        </div>
+                                        <select id="task-sort" onchange="applyTaskFilters()" class="input" style="padding: 2px 4px; font-size: 11px; height: 26px; border-radius: 4px; min-width: 0; max-width: 100px;">
+                                            <option value="newest">Newest</option>
+                                            <option value="oldest">Oldest</option>
+                                            <option value="priority-high">P ↑</option>
+                                            <option value="priority-low">P ↓</option>
+                                            <option value="alpha-az">A→Z</option>
+                                            <option value="alpha-za">Z→A</option>
+                                        </select>
+                                        <select id="task-filter-priority" onchange="applyTaskFilters()" class="input" style="padding: 2px 4px; font-size: 11px; height: 26px; border-radius: 4px; min-width: 0; max-width: 60px;">
+                                            <option value="all">P*</option>
+                                            <option value="0">🔴</option>
+                                            <option value="1">🟡</option>
+                                            <option value="2">🟢</option>
+                                        </select>
+                                        <select id="task-filter-agent" onchange="applyTaskFilters()" class="input" style="padding: 2px 4px; font-size: 11px; height: 26px; border-radius: 4px; min-width: 0; max-width: 90px;">
+                                            <option value="all">Agent</option>
+                                        </select>
+                                        <div id="task-bulk-actions" style="display: none; gap: 3px; align-items: center; flex-shrink: 0;">
+                                            <span id="task-selected-count" style="font-size: 10px; color: var(--text-muted);">0</span>
+                                            <button onclick="bulkMoveTo('done')" class="btn btn-ghost" style="padding: 1px 4px; font-size: 10px; line-height: 1;" title="Done">✓</button>
+                                            <button onclick="bulkMoveTo('archive')" class="btn btn-ghost" style="padding: 1px 4px; font-size: 10px; line-height: 1;" title="Archive">📦</button>
+                                            <button onclick="bulkDelete()" class="btn btn-ghost" style="padding: 1px 4px; font-size: 10px; line-height: 1; color: var(--error);" title="Delete">🗑</button>
+                                        </div>
+                                        <div id="task-stats" style="font-size: 10px; color: var(--text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;"></div>
+                                    </div>
+                                    
+                                    <div class="grid-3">
+                                        <!-- To-Do Column -->
+                                        <div class="column">
+                                            <div class="column-header">
+                                                <h3 class="column-title">
+                                                    <span
+                                                        class="status-dot idle"
+                                                    ></span>
+                                                    To-Do
+                                                    <span
+                                                        id="todo-count"
+                                                        class="badge badge-default"
+                                                    >0</span>
+                                                </h3>
+                                                <button
+                                                    onclick="openAddTask('todo')"
+                                                    class="btn-icon"
+                                                    title="Add task"
+                                                >
+                                                    <svg
+                                                        style="width: 16px; height: 16px"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M12 4v16m8-8H4"
+                                                        >
+                                                        </path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div
+                                                id="todo-tasks"
+                                                class="drop-zone space-y-2"
+                                                ondragover="handleDragOver(event)"
+                                                ondragenter="handleDragEnter(event, 'todo')"
+                                                ondragleave="handleDragLeave(event, 'todo')"
+                                                ondrop="handleDrop(event, 'todo')"
+                                            >
+                                            </div>
+                                        </div>
+
+                                        <!-- In Progress Column -->
+                                        <div class="column">
+                                            <div class="column-header">
+                                                <h3 class="column-title">
+                                                    <span
+                                                        class="status-dot warning"
+                                                    ></span>
+                                                    In Progress
+                                                    <span
+                                                        id="progress-count"
+                                                        class="badge badge-default"
+                                                    >0</span>
+                                                </h3>
+                                            </div>
+                                            <div
+                                                id="progress-tasks"
+                                                class="drop-zone space-y-2"
+                                                ondragover="handleDragOver(event)"
+                                                ondragenter="handleDragEnter(event, 'progress')"
+                                                ondragleave="handleDragLeave(event, 'progress')"
+                                                ondrop="handleDrop(event, 'progress')"
+                                            >
+                                            </div>
+                                        </div>
+
+                                        <!-- Done Column -->
+                                        <div class="column">
+                                            <div class="column-header">
+                                                <h3 class="column-title">
+                                                    <span
+                                                        class="status-dot success"
+                                                    ></span>
+                                                    Done
+                                                    <span
+                                                        id="done-count"
+                                                        class="badge badge-default"
+                                                    >0</span>
+                                                </h3>
+                                                <button
+                                                    onclick="clearDone()"
+                                                    class="btn-icon"
+                                                    title="Clear done"
+                                                    style="font-size: 11px; color: var(--text-muted)"
+                                                >
+                                                    Clear
+                                                </button>
+                                            </div>
+                                            <div
+                                                id="done-tasks"
+                                                class="drop-zone space-y-2"
+                                                ondragover="handleDragOver(event)"
+                                                ondragenter="handleDragEnter(event, 'done')"
+                                                ondragleave="handleDragLeave(event, 'done')"
+                                                ondrop="handleDrop(event, 'done')"
+                                            >
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Quick Stats Widget -->
+                            <div class="bento-widget bento-quick-stats">
+                                <div
+                                    class="bento-widget-content"
+                                    style="padding: var(--space-3)"
+                                >
+                                    <div class="quick-stats-header">
+                                        <div
+                                            class="bento-widget-title"
+                                            style="margin-bottom: 0"
+                                        >
+                                            <svg
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                                                />
+                                            </svg>
+                                            Quick Stats
+                                        </div>
+                                        <span
+                                            id="stats-last-updated"
+                                            style="font-size: 10px; color: var(--text-muted)"
+                                        >Updated just now</span>
+                                    </div>
+                                    <div class="quick-stats-grid">
+                                        <div class="stat-item">
+                                            <div
+                                                class="stat-value brand"
+                                                id="stat-tasks-done"
+                                            >
+                                                0
+                                            </div>
+                                            <div class="stat-label">
+                                                Tasks Done
+                                            </div>
+                                        </div>
+                                        <div class="stat-item">
+                                            <div
+                                                class="stat-value"
+                                                id="stat-focus-sessions"
+                                            >
+                                                0
+                                            </div>
+                                            <div class="stat-label">Focus</div>
+                                        </div>
+                                        <div class="stat-item">
+                                            <div
+                                                class="stat-value"
+                                                id="stat-messages"
+                                            >
+                                                0
+                                            </div>
+                                            <div class="stat-label">
+                                                Messages
+                                            </div>
+                                        </div>
+                                        <div class="stat-item">
+                                            <div
+                                                class="stat-value"
+                                                id="stat-streak"
+                                            >
+                                                0
+                                            </div>
+                                            <div class="stat-label">
+                                                Streak 🔥
+                                            </div>
+                                        </div>
+                                        <div class="stat-item">
+                                            <div
+                                                class="stat-value"
+                                                id="stat-uptime"
+                                            >
+                                                --
+                                            </div>
+                                            <div class="stat-label">
+                                                Session
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Terminal Widget -->
+                            <div class="bento-widget bento-terminal">
+                                <div
+                                    class="terminal"
+                                    id="console-section"
+                                    style="height: 100%; display: flex; flex-direction: column; border: none; border-radius: 0"
+                                >
+                                    <div class="terminal-header">
+                                        <div class="flex items-center gap-3">
+                                            <div class="terminal-dots">
+                                                <span class="red"></span>
+                                                <span class="yellow"></span>
+                                                <span class="green"></span>
+                                            </div>
+                                            <span class="terminal-title"
+                                            >Terminal</span>
+                                            <span
+                                                id="console-status-badge"
+                                                class="badge badge-success"
+                                            >IDLE</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                onclick="clearConsole()"
+                                                class="btn-icon"
+                                                style="font-size: 11px"
+                                            >
+                                                Clear
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="console-output"
+                                        class="terminal-output"
+                                        style="flex: 1; overflow-y: auto"
+                                    >
+                                        <div class="cmd">$ solobot --init</div>
+                                        <div class="info">
+                                            Ready for commands...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Activity Log Widget -->
+                            <div class="bento-widget bento-activity">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">
+                                        <svg
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            >
+                                            </path>
+                                        </svg>
+                                        Activity
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content">
+                                    <div
+                                        id="activity-log"
+                                        class="activity-list"
+                                    >
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Notes Widget -->
+                            <div class="bento-widget bento-notes">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">
+                                        <svg
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            >
+                                            </path>
+                                        </svg>
+                                        Notes
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content">
+                                    <div
+                                        class="notes-input"
+                                        style="margin-bottom: var(--space-3)"
+                                    >
+                                        <input
+                                            type="text"
+                                            id="note-input"
+                                            class="input flex-1"
+                                            placeholder="Leave a note for SoLoBot..."
+                                            style="font-size: 13px"
+                                        >
+                                        <button
+                                            onclick="addNote()"
+                                            class="btn btn-primary"
+                                            style="padding: 6px 12px; font-size: 13px"
+                                        >
+                                            Add
+                                        </button>
+                                    </div>
+                                    <div id="notes-list" class="notes-list">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Chat Widget -->
+                            <div class="bento-widget bento-chat">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">
+                                        <svg
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                            >
+                                            </path>
+                                        </svg>
+                                        Chat
+                                        <div
+                                            class="flex items-center gap-2"
+                                            style="margin-left: auto"
+                                        >
+                                            <span
+                                                id="current-session-name"
+                                                style="font-size: 11px; color: var(--accent-color); font-weight: 600; background: var(--surface-2); padding: 2px 6px; border-radius: 4px"
+                                            >main</span>
+                                        </div>
+                                    </div>
+                                    <div class="bento-widget-actions">
+                                        <span
+                                            id="gateway-status-dot"
+                                            class="status-dot idle"
+                                        ></span>
+                                        <span
+                                            id="gateway-status"
+                                            style="font-size: 11px; color: var(--text-muted)"
+                                        >Disconnected</span>
+                                    </div>
+                                </div>
+                                <div
+                                    style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden"
+                                >
+                                    <div
+                                        id="chat-messages"
+                                        class="chat-messages"
+                                        style="flex: 1; overflow-y: auto; padding: var(--space-3)"
+                                    >
+                                        <div
+                                            style="color: var(--text-muted); font-size: 12px; text-align: center; padding: var(--space-8) 0"
+                                        >
+                                            🔌 Connect to Gateway in Settings to
+                                            start chatting
+                                        </div>
+                                    </div>
+
+                                    <!-- Image Preview (supports multiple) -->
+                                    <div
+                                        id="image-preview-container"
+                                        class="image-preview-container"
+                                    >
+                                        <!-- Thumbnails rendered dynamically -->
+                                    </div>
+
+                                    <div
+                                        class="chat-input-area"
+                                        style="border-top: 1px solid var(--border-default); padding: var(--space-2)"
+                                    >
+                                        <label
+                                            class="btn-icon"
+                                            style="cursor: pointer"
+                                        >
+                                            <input
+                                                type="file"
+                                                id="image-upload"
+                                                accept="image/*"
+                                                multiple
+                                                class="hidden"
+                                                onchange="handleImageSelect(event)"
+                                            >
+                                            <svg
+                                                style="width: 16px; height: 16px"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                                >
+                                                </path>
+                                            </svg>
+                                        </label>
+                                        <div class="voice-controls">
+                                            <button
+                                                id="voice-input-btn"
+                                                class="voice-btn"
+                                                onclick="toggleVoiceInput()"
+                                                title="Voice input"
+                                            >
+                                                <svg
+                                                    id="voice-icon-mic"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                    style="width: 16px; height: 16px"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                                                    >
+                                                    </path>
+                                                </svg>
+                                                <svg
+                                                    id="voice-icon-stop"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                    style="display: none; width: 16px; height: 16px"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                    >
+                                                    </path>
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
+                                                    >
+                                                    </path>
+                                                </svg>
+                                            </button>
+                                            <button
+                                                class="voice-auto-send-toggle"
+                                                onclick="toggleVoiceAutoSend()"
+                                                title="Auto-send"
+                                            >
+                                                ⚡
+                                            </button>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            id="chat-input"
+                                            class="input flex-1"
+                                            placeholder="Message..."
+                                            name="dashboard_chat_field_"
+                                            onkeypress="if(event.key==='Enter')sendChatMessage()"
+                                            onpaste="handlePaste(event)"
+                                            autocomplete="off"
+                                            autocorrect="off"
+                                            autocapitalize="off"
+                                            spellcheck="false"
+                                            data-lpignore="true"
+                                            data-1p-ignore="true"
+                                            data-form-type="other"
+                                            style="font-size: 13px; padding: 6px 8px"
+                                        >
+                                        <button
+                                            onclick="sendChatMessage()"
+                                            class="btn btn-primary"
+                                            style="padding: 6px 12px; font-size: 13px"
+                                        >
+                                            Send
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- END DASHBOARD PAGE -->

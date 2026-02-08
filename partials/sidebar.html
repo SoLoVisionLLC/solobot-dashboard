@@ -1,0 +1,152 @@
+            <aside class="sidebar" id="sidebar">
+                <button
+                    class="sidebar-toggle"
+                    onclick="toggleSidebarPin()"
+                    title="Pin sidebar"
+                >
+                    <span id="sidebar-pin-icon">🔓</span>
+                </button>
+                <div class="sidebar-logo">
+                    <img
+                        src="/solobot-avatar.png"
+                        alt="SoLoBot"
+                        class="sidebar-logo-img"
+                    >
+                </div>
+
+                <nav class="sidebar-nav">
+                    <a
+                        class="sidebar-item active"
+                        onclick="showPage('dashboard')"
+                        data-page="dashboard"
+                    >
+                        <span class="sidebar-item-icon">🏠</span>
+                        <span class="sidebar-item-text">Dashboard</span>
+                    </a>
+                    <a
+                        class="sidebar-item"
+                        onclick="showPage('memory')"
+                        data-page="memory"
+                    >
+                        <span class="sidebar-item-icon">🧠</span>
+                        <span class="sidebar-item-text">Memory</span>
+                    </a>
+                    <a
+                        class="sidebar-item"
+                        onclick="showPage('chat')"
+                        data-page="chat"
+                    >
+                        <span class="sidebar-item-icon">💬</span>
+                        <span class="sidebar-item-text">Chat</span>
+                    </a>
+                    <a
+                        class="sidebar-item"
+                        onclick="showPage('system')"
+                        data-page="system"
+                    >
+                        <span class="sidebar-item-icon">📟</span>
+                        <span class="sidebar-item-text">System</span>
+                    </a>
+                    <a
+                        class="sidebar-item"
+                        onclick="showPage('products')"
+                        data-page="products"
+                    >
+                        <span class="sidebar-item-icon">📦</span>
+                        <span class="sidebar-item-text">Products</span>
+                    </a>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">Agents</div>
+                        <div class="sidebar-agent" data-agent="main">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/solobot.png"
+                                alt="Main"
+                            >
+                            <span class="sidebar-item-text"
+                            >SoLoBot (Main)</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="exec">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/exec.png"
+                                alt="EXEC"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-EXEC</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="coo">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/coo.png"
+                                alt="COO"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-COO</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="cfo">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/cfo.png"
+                                alt="CFO"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-CFO</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="cmp">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/cmp.png"
+                                alt="CMP"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-CMP</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="dev">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/dev.png"
+                                alt="DEV"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-DEV</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="family">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/family.png"
+                                alt="Family"
+                            >
+                            <span class="sidebar-item-text"
+                            >SoLoBot-Family</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="tax">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/tax.svg"
+                                alt="TAX"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-Tax</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="sec">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/sec.svg"
+                                alt="SEC"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-SEC</span>
+                        </div>
+                        <div class="sidebar-agent" data-agent="smm">
+                            <img
+                                class="agent-avatar"
+                                src="/avatars/smm.svg"
+                                alt="SMM"
+                            >
+                            <span class="sidebar-item-text">SoLoBot-SMM</span>
+                        </div>
+                    </div>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <a class="sidebar-item" onclick="openSettingsModal()">
+                        <span class="sidebar-item-icon">🔧</span>
+                        <span class="sidebar-item-text">Settings</span>
+                    </a>
+                </div>
+            </aside>

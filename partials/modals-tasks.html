@@ -1,0 +1,402 @@
+                <!-- Add Task Modal -->
+                <div id="add-task-modal" class="modal-overlay">
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h3 class="modal-title">Add New Task</h3>
+                            <button
+                                onclick="closeAddTask()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <input
+                            type="text"
+                            id="new-task-title"
+                            class="input"
+                            placeholder="Task title..."
+                            style="margin-bottom: var(--space-4)"
+                        >
+                        <div
+                            class="flex gap-2"
+                            style="margin-bottom: var(--space-4)"
+                        >
+                            <button
+                                onclick="setTaskPriority(0)"
+                                id="priority-btn-0"
+                                class="btn btn-ghost flex-1"
+                                style="border-color: var(--brand-red); color: var(--brand-red)"
+                            >
+                                P0
+                            </button>
+                            <button
+                                onclick="setTaskPriority(1)"
+                                id="priority-btn-1"
+                                class="btn btn-ghost flex-1"
+                                style="border-color: var(--warning); color: var(--warning)"
+                            >
+                                P1
+                            </button>
+                            <button
+                                onclick="setTaskPriority(2)"
+                                id="priority-btn-2"
+                                class="btn btn-ghost flex-1"
+                                style="border-color: #3b82f6; color: #3b82f6"
+                            >
+                                P2
+                            </button>
+                        </div>
+                        <div class="form-actions">
+                            <button
+                                onclick="closeAddTask()"
+                                class="btn btn-ghost"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onclick="submitTask()"
+                                class="btn btn-primary"
+                            >
+                                Add Task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Action Modal -->
+                <div id="task-action-modal" class="modal-overlay">
+                    <div class="modal" style="max-width: 360px">
+                        <div class="modal-header">
+                            <div>
+                                <h3 class="modal-title">Task Actions</h3>
+                                <p
+                                    id="action-modal-task-title"
+                                    style="font-size: 13px; color: var(--text-muted); margin-top: var(--space-1); max-width: 250px"
+                                    class="truncate"
+                                >
+                                </p>
+                            </div>
+                            <button
+                                onclick="closeActionModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div
+                            class="space-y-2"
+                            style="margin-bottom: var(--space-4)"
+                        >
+                            <button
+                                id="action-move-todo"
+                                onclick="modalMoveTask('todo')"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start"
+                            >
+                                <span class="status-dot idle"></span> Move to
+                                To-Do
+                            </button>
+                            <button
+                                id="action-move-progress"
+                                onclick="modalMoveTask('progress')"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start"
+                            >
+                                <span class="status-dot warning"></span> Move to
+                                In Progress
+                            </button>
+                            <button
+                                id="action-move-done"
+                                onclick="modalMoveTask('done')"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start"
+                            >
+                                <span class="status-dot success"></span> Move to
+                                Done
+                            </button>
+                            <button
+                                id="action-move-archive"
+                                onclick="modalMoveTask('archive')"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start"
+                            >
+                                📦 Archive
+                            </button>
+                        </div>
+
+                        <div
+                            style="border-top: 1px solid var(--border-default); padding-top: var(--space-4)"
+                            class="space-y-2"
+                        >
+                            <button
+                                onclick="modalEditTitle()"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start"
+                            >
+                                ✏️ Edit Title
+                            </button>
+                            <button
+                                onclick="modalCyclePriority()"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start"
+                            >
+                                🔄 <span id="action-priority-text"
+                                >Change Priority (P1)</span>
+                            </button>
+                        </div>
+
+                        <div
+                            style="border-top: 1px solid var(--border-default); padding-top: var(--space-4); margin-top: var(--space-4)"
+                        >
+                            <button
+                                onclick="modalDeleteTask()"
+                                class="btn btn-ghost"
+                                style="width: 100%; justify-content: flex-start; color: var(--error)"
+                            >
+                                🗑️ Delete Task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Edit Title Modal -->
+                <div id="edit-title-modal" class="modal-overlay">
+                    <div class="modal" style="max-width: 360px">
+                        <div class="modal-header">
+                            <h3 class="modal-title">Edit Task Title</h3>
+                            <button
+                                onclick="closeEditTitleModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <input
+                            type="text"
+                            id="edit-title-input"
+                            class="input"
+                            placeholder="Task title..."
+                            style="margin-bottom: var(--space-4)"
+                        >
+                        <div class="form-actions">
+                            <button
+                                onclick="closeEditTitleModal()"
+                                class="btn btn-ghost"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onclick="saveEditedTitle()"
+                                class="btn btn-primary"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Confirm Delete Modal -->
+                <div id="confirm-delete-modal" class="modal-overlay">
+                    <div class="modal" style="max-width: 360px">
+                        <div class="modal-header">
+                            <h3 class="modal-title">Delete Task?</h3>
+                            <button
+                                onclick="closeDeleteModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <p
+                            id="delete-modal-task-title"
+                            style="font-size: 13px; color: var(--text-muted); margin-bottom: var(--space-4)"
+                            class="truncate"
+                        >
+                        </p>
+                        <div class="form-actions">
+                            <button
+                                onclick="closeDeleteModal()"
+                                class="btn btn-ghost"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onclick="confirmDeleteTask()"
+                                class="btn btn-danger"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Detail Modal (Trello-like) -->
+                <div id="task-detail-modal" class="modal-overlay">
+                    <div
+                        class="modal"
+                        style="max-width: 600px; max-height: 85vh; display: flex; flex-direction: column"
+                    >
+                        <div
+                            class="modal-header"
+                            style="border-bottom: 1px solid var(--border-default)"
+                        >
+                            <div style="flex: 1">
+                                <input
+                                    type="text"
+                                    id="task-detail-title"
+                                    class="input"
+                                    style="font-size: 18px; font-weight: 600; border: none; background: transparent; padding: 0; width: 100%"
+                                    placeholder="Task title..."
+                                >
+                                <div
+                                    style="display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2)"
+                                >
+                                    <span id="task-detail-status" class="badge"
+                                    >To-Do</span>
+                                    <span
+                                        id="task-detail-priority"
+                                        class="badge badge-primary"
+                                    >P1</span>
+                                    <span
+                                        id="task-detail-date"
+                                        style="font-size: 12px; color: var(--text-muted)"
+                                    ></span>
+                                </div>
+                            </div>
+                            <button
+                                onclick="closeTaskDetailModal()"
+                                class="modal-close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div
+                            class="modal-body"
+                            style="flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-6)"
+                        >
+                            <!-- Description -->
+                            <div style="margin-bottom: var(--space-5)">
+                                <label
+                                    style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: var(--space-2)"
+                                >
+                                    📝 Description
+                                </label>
+                                <textarea
+                                    id="task-detail-description"
+                                    class="input"
+                                    placeholder="Add a more detailed description..."
+                                    style="min-height: 100px; resize: vertical; font-size: 14px; line-height: 1.6"
+                                ></textarea>
+                            </div>
+
+                            <!-- Attachments -->
+                            <div style="margin-bottom: var(--space-5)">
+                                <label
+                                    style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2)"
+                                >
+                                    📎 Attachments
+                                    <button
+                                        onclick="document.getElementById('task-image-upload').click()"
+                                        class="btn btn-ghost"
+                                        style="font-size: 12px; padding: 4px 8px"
+                                    >
+                                        + Add Image
+                                    </button>
+                                </label>
+                                <input
+                                    type="file"
+                                    id="task-image-upload"
+                                    accept="image/*"
+                                    class="hidden"
+                                    onchange="handleTaskImageUpload(event)"
+                                >
+                                <div
+                                    id="task-detail-images"
+                                    style="display: flex; flex-wrap: wrap; gap: var(--space-3)"
+                                >
+                                    <!-- Images rendered here -->
+                                    <div
+                                        style="color: var(--text-muted); font-size: 13px"
+                                    >
+                                        No attachments yet
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Move/Priority Actions -->
+                            <div
+                                style="border-top: 1px solid var(--border-default); padding-top: var(--space-4)"
+                            >
+                                <label
+                                    style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: var(--space-2)"
+                                >
+                                    ⚡ Actions
+                                </label>
+                                <div
+                                    style="display: flex; flex-wrap: wrap; gap: var(--space-2)"
+                                >
+                                    <button
+                                        onclick="taskDetailMove('todo')"
+                                        class="btn btn-ghost"
+                                        style="font-size: 12px"
+                                    >
+                                        <span class="status-dot idle"></span>
+                                        To-Do
+                                    </button>
+                                    <button
+                                        onclick="taskDetailMove('progress')"
+                                        class="btn btn-ghost"
+                                        style="font-size: 12px"
+                                    >
+                                        <span class="status-dot warning"></span>
+                                        In Progress
+                                    </button>
+                                    <button
+                                        onclick="taskDetailMove('done')"
+                                        class="btn btn-ghost"
+                                        style="font-size: 12px"
+                                    >
+                                        <span class="status-dot success"></span>
+                                        Done
+                                    </button>
+                                    <button
+                                        onclick="taskDetailCyclePriority()"
+                                        class="btn btn-ghost"
+                                        style="font-size: 12px"
+                                    >
+                                        🔄 Priority
+                                    </button>
+                                    <button
+                                        onclick="taskDetailDelete()"
+                                        class="btn btn-ghost"
+                                        style="font-size: 12px; color: var(--error)"
+                                    >
+                                        🗑️ Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            class="modal-footer"
+                            style="border-top: 1px solid var(--border-default); padding: var(--space-4) var(--space-6); display: flex; justify-content: flex-end; gap: var(--space-3)"
+                        >
+                            <button
+                                onclick="closeTaskDetailModal()"
+                                class="btn btn-ghost"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onclick="saveTaskDetails()"
+                                class="btn btn-primary"
+                            >
+                                💾 Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Memory File Viewer Modal -->
