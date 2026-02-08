@@ -2854,8 +2854,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             clearSelection();
         }
         if (e.ctrlKey && e.key === 'a' && !e.target.matches('input, textarea')) {
-            e.preventDefault();
-            selectAllTasks();
+            // Only hijack Ctrl+A for task selection when the Tasks page is active
+            const tasksPage = document.getElementById('page-tasks');
+            if (tasksPage && tasksPage.style.display !== 'none' && tasksPage.contains(e.target)) {
+                e.preventDefault();
+                selectAllTasks();
+            }
         }
     });
     
@@ -5268,11 +5272,12 @@ function renderTasks() {
             return `
             <div class="task-card priority-p${task.priority} ${isSelected ? 'selected' : ''} ${task.images?.length ? 'has-attachments' : ''}"
                  data-task-id="${task.id}" data-column="${column}"
-                 draggable="true"
-                 ondragstart="handleDragStart(event, '${task.id}', '${column}')"
-                 ondragend="handleDragEnd(event)"
                  onclick="openTaskDetail('${task.id}', '${column}')">
                 <div style="display: flex; align-items: flex-start; gap: var(--space-3);">
+                    <span class="drag-handle" draggable="true"
+                          ondragstart="handleDragStart(event, '${task.id}', '${column}')"
+                          ondragend="handleDragEnd(event)"
+                          title="Drag to move">⠿</span>
                     <input type="checkbox"
                            style="margin-top: 2px; accent-color: var(--brand-red); cursor: pointer;"
                            ${isSelected ? 'checked' : ''}
@@ -6072,11 +6077,13 @@ function handleDragStart(event, taskId, column) {
     draggedTaskId = taskId;
     draggedFromColumn = column;
     event.dataTransfer.effectAllowed = 'move';
-    event.target.classList.add('opacity-50');
+    const card = event.target.closest('.task-card');
+    if (card) card.classList.add('opacity-50');
 }
 
 function handleDragEnd(event) {
-    event.target.classList.remove('opacity-50');
+    const card = event.target.closest('.task-card');
+    if (card) card.classList.remove('opacity-50');
     draggedTaskId = null;
     draggedFromColumn = null;
 

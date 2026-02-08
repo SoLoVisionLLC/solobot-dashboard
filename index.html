@@ -1083,14 +1083,28 @@
                 border-radius: var(--radius-md);
                 padding: var(--space-3);
                 margin-bottom: var(--space-2);
-                cursor: grab;
+                cursor: pointer;
                 transition: all var(--transition-fast);
                 position: relative;
             }
             .task-card:hover {
                 border-color: var(--border-strong);
             }
-            .task-card:active {
+
+            .drag-handle {
+                cursor: grab;
+                user-select: none;
+                opacity: 0.3;
+                font-size: 14px;
+                line-height: 1;
+                padding: 2px 0;
+                transition: opacity 0.15s;
+                flex-shrink: 0;
+            }
+            .drag-handle:hover {
+                opacity: 0.8;
+            }
+            .drag-handle:active {
                 cursor: grabbing;
             }
 
@@ -7878,6 +7892,10 @@
             let currentDetailColumn = null;
 
             window.openTaskDetail = function (taskId, column) {
+                // Don't open detail if user is selecting text
+                const sel = window.getSelection();
+                if (sel && sel.toString().trim().length > 0) return;
+
                 const task = state.tasks[column]?.find((t) =>
                     t.id === taskId
                 );
