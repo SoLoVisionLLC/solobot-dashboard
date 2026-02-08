@@ -203,6 +203,12 @@ window.refreshModels = async function() {
  * Header dropdown: change model for the CURRENT SESSION only.
  * Uses sessions.patch to set a per-session model override.
  */
+/**
+ * Header dropdown: change model for the CURRENT SESSION and Agent Default.
+ * - Updates the current session immediately.
+ * - Updates the agent's default configuration (via /api/models/set).
+ * - "Global Default" reverts session to valid system default.
+ */
 window.changeSessionModel = async function() {
     const modelSelect = document.getElementById('model-select');
     const selectedModel = modelSelect?.value;
@@ -217,41 +223,72 @@ window.changeSessionModel = async function() {
         return;
     }
     
+    // Track manual change to prevent UI reversion
+    window._lastManualModelChange = Date.now();
+    
     try {
         const sessionKey = GATEWAY_CONFIG.sessionKey || 'main';
-        console.log(`[Dashboard] Setting session model: ${selectedModel} (session: ${sessionKey})`);
-        
-        await gateway.patchSession(sessionKey, { model: selectedModel });
-        
-        // Update local state
-        currentModel = selectedModel;
-        const provider = selectedModel.split('/')[0];
-        currentProvider = provider;
-        localStorage.setItem('selected_model', selectedModel);
-        localStorage.setItem('selected_provider', provider);
-        
-        // Update settings display
-        const currentModelDisplay = document.getElementById('current-model-display');
-        if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
-        const currentProviderDisplay = document.getElementById('current-provider-display');
-        if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
-        
-        // Ensure provider dropdown matches model provider
-        const providerSelectEl = document.getElementById('provider-select');
-        if (providerSelectEl) {
-            const providerOptions = Array.from(providerSelectEl.options);
-            if (!providerOptions.find(o => o.value === provider)) {
-                const opt = document.createElement('option');
-                opt.value = provider;
-                opt.textContent = provider.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                providerSelectEl.appendChild(opt);
+        console.log(`[Dashboard] Changing model to: ${selectedModel} (session: ${sessionKey})`);
+
+        if (selectedModel === 'global/default') {
+            // Revert session to use global default (remove override)
+            await gateway.patchSession(sessionKey, { model: null });
+            
+            // Fetch current global default to update UI
+            const response = await fetch('/api/models/current');
+            const globalModel = await response.json();
+            
+            if (globalModel?.modelId) {
+                currentModel = globalModel.modelId;
+                const provider = globalModel.provider || currentModel.split('/')[0];
+                currentProvider = provider;
+                
+                // Update UI to show the resolved global model
+                syncModelDisplay(currentModel, currentProvider);
+                showToast('Reverted to Global Default', 'success');
             }
-            providerSelectEl.value = provider;
+        } else {
+            // 1. Update Current Session (Immediate)
+            await gateway.patchSession(sessionKey, { model: selectedModel });
+            
+            // 2. Update Agent/Global Default (Persist)
+            // This ensures new sessions or page reloads use this model
+            fetch('/api/models/set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelId: selectedModel })
+            }).catch(e => console.error('Failed to update global default:', e));
+            
+            // Update local state
+            currentModel = selectedModel;
+            const provider = selectedModel.split('/')[0];
+            currentProvider = provider;
+            localStorage.setItem('selected_model', selectedModel);
+            localStorage.setItem('selected_provider', provider);
+            
+            // Update settings display
+            const currentModelDisplay = document.getElementById('current-model-display');
+            if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
+            const currentProviderDisplay = document.getElementById('current-provider-display');
+            if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
+            
+            // Ensure provider dropdown matches
+            const providerSelectEl = document.getElementById('provider-select');
+            if (providerSelectEl) {
+                const providerOptions = Array.from(providerSelectEl.options);
+                if (!providerOptions.find(o => o.value === provider)) {
+                    const opt = document.createElement('option');
+                    opt.value = provider;
+                    opt.textContent = provider.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    providerSelectEl.appendChild(opt);
+                }
+                providerSelectEl.value = provider;
+            }
+            
+            showToast(`Model set to ${selectedModel.split('/').pop()}`, 'success');
         }
-        
-        showToast(`Session model → ${selectedModel.split('/').pop()}`, 'success');
     } catch (error) {
-        console.error('[Dashboard] Failed to set session model:', error);
+        console.error('[Dashboard] Failed to change model:', error);
         showToast(`Failed: ${error.message}`, 'error');
     }
 };
@@ -327,6 +364,20 @@ async function updateModelDropdown(provider) {
     
     for (const select of selects) {
         select.innerHTML = '';
+        
+        // Add "Global Default" option first
+        const globalOption = document.createElement('option');
+        globalOption.value = 'global/default';
+        globalOption.textContent = 'Global Default 🌐';
+        globalOption.style.fontWeight = 'bold';
+        select.appendChild(globalOption);
+        
+        // Add separator
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '──────────';
+        select.appendChild(separator);
+        
         models.forEach(model => {
             const option = document.createElement('option');
             option.value = model.value;
@@ -334,6 +385,9 @@ async function updateModelDropdown(provider) {
             if (model.selected) option.selected = true;
             select.appendChild(option);
         });
+        
+        // If current model matches global default, select it? 
+        // Logic handled by selectModelInDropdowns or syncModelDisplay
     }
 }
 
@@ -414,6 +468,12 @@ let currentModel = 'anthropic/claude-opus-4-5';
  */
 function syncModelDisplay(model, provider) {
     if (!model) return;
+    
+    // Ignore updates if manual change happened recently (prevent reversion flicker)
+    if (window._lastManualModelChange && (Date.now() - window._lastManualModelChange < 3000)) {
+        return;
+    }
+    
     if (model === currentModel && provider === currentProvider) return;
     
     console.log(`[Dashboard] Model sync: ${currentModel} → ${model} (provider: ${provider || currentProvider})`);
