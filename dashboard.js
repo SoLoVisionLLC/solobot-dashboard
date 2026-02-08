@@ -993,35 +993,63 @@ function syncModelDisplay(model, provider) {
 // Apply per-session model override from availableSessions (if present)
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
+    
+    let sessionModel = null;
+    
+    // 1. Check local availableSessions cache (model = last used model from sessions.list)
     const session = availableSessions.find(s => s.key === sessionKey);
-    const model = session?.model && session.model !== 'unknown' ? session.model : null;
-    if (model) {
-        const provider = model.includes('/') ? model.split('/')[0] : currentProvider;
-        syncModelDisplay(model, provider);
-        return;
+    const cachedModel = session?.model && session.model !== 'unknown' ? session.model : null;
+    if (cachedModel) {
+        sessionModel = cachedModel;
     }
-    // If not found locally, refresh sessions list and retry once
-    try {
-        const result = await gateway?.listSessions?.({});
-        if (result?.sessions?.length) {
-            availableSessions = result.sessions.map(s => ({
-                key: s.key,
-                name: getFriendlySessionName(s.key),
-                displayName: getFriendlySessionName(s.key),
-                updatedAt: s.updatedAt,
-                totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
-                model: s.model || 'unknown',
-                sessionId: s.sessionId
-            }));
-            const updated = availableSessions.find(s => s.key === sessionKey);
-            const updatedModel = updated?.model && updated.model !== 'unknown' ? updated.model : null;
-            if (updatedModel) {
-                const provider = updatedModel.includes('/') ? updatedModel.split('/')[0] : currentProvider;
-                syncModelDisplay(updatedModel, provider);
+    
+    // 2. If not cached, refresh sessions list from gateway
+    if (!sessionModel) {
+        try {
+            const result = await gateway?.listSessions?.({});
+            if (result?.sessions?.length) {
+                availableSessions = result.sessions.map(s => ({
+                    key: s.key,
+                    name: getFriendlySessionName(s.key),
+                    displayName: getFriendlySessionName(s.key),
+                    updatedAt: s.updatedAt,
+                    totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                    model: s.model || 'unknown',
+                    sessionId: s.sessionId
+                }));
+                const updated = availableSessions.find(s => s.key === sessionKey);
+                const updatedModel = updated?.model && updated.model !== 'unknown' ? updated.model : null;
+                if (updatedModel) sessionModel = updatedModel;
             }
+        } catch (e) {
+            console.warn('[Dashboard] Failed to refresh sessions for model override:', e.message);
         }
-    } catch (e) {
-        console.warn('[Dashboard] Failed to refresh sessions for model override:', e.message);
+    }
+    
+    // 3. Fallback: use global default from openclaw.json via config.get
+    if (!sessionModel) {
+        try {
+            if (gateway && gateway.isConnected()) {
+                const config = await gateway.getConfig();
+                let configData = config;
+                if (typeof config === 'string') configData = JSON.parse(config);
+                if (configData?.raw) configData = JSON.parse(configData.raw);
+                const primary = configData?.agents?.defaults?.model?.primary;
+                if (primary) {
+                    sessionModel = primary;
+                    console.log(`[Dashboard] Session ${sessionKey} using global default: ${sessionModel}`);
+                }
+            }
+        } catch (e) {
+            console.warn('[Dashboard] Failed to fetch global default model:', e.message);
+        }
+    }
+    
+    if (sessionModel) {
+        const provider = sessionModel.includes('/') ? sessionModel.split('/')[0] : currentProvider;
+        syncModelDisplay(sessionModel, provider);
+    } else {
+        console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
     }
 }
 
