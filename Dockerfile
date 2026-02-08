@@ -11,6 +11,7 @@ COPY docs-hub-memory-files.js ./
 COPY solobot-avatar.png ./
 COPY favicon.svg ./
 COPY avatars ./avatars/
+COPY js ./js/
 
 # Create data directory (will be mounted as volume in production)
 RUN mkdir -p data
