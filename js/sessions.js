@@ -583,10 +583,8 @@ async function loadArchivedChat(sessionKey) {
     }
 }
 
-// Fetch sessions on page load
-document.addEventListener('DOMContentLoaded', () => {
-    fetchSessions();
-});
+// Sessions are fetched when gateway connects (see initGateway onConnected)
+// No need to fetch on DOMContentLoaded — gateway isn't connected yet
 
 function initGateway() {
     gateway = new GatewayClient({

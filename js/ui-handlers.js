@@ -397,6 +397,8 @@ function addTerminalLog(text, type = 'info', timestamp = null) {
 let lastActivitySync = 0;
 async function syncActivitiesFromFile() {
     try {
+        // Check if memory files are available first (avoid 404 noise in console)
+        if (!gateway || !gateway.isConnected()) return;
         const response = await fetch('/api/memory/recent-activity.json');
         if (!response.ok) return;
         
