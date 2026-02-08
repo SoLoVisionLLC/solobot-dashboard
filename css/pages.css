@@ -1,0 +1,469 @@
+/* =================== SYSTEM PAGE STYLES =================== */
+            .system-message {
+                display: flex;
+                margin-bottom: var(--space-3);
+                max-width: 900px;
+                margin-left: auto;
+                margin-right: auto;
+                justify-content: flex-start;
+            }
+
+            .system-bubble {
+                max-width: 90%;
+                padding: var(--space-3) var(--space-4);
+                border-radius: var(--radius-lg);
+                background: rgba(
+                    27,
+                    34,
+                    50,
+                    0.3
+                ); /* Dark Navy Blue #1B2232 with opacity */
+                border: 1px solid
+                    rgba(
+                        188,
+                        32,
+                        38,
+                        0.3
+                    ); /* Deep Red #BC2026 with opacity */
+            }
+
+            .system-bubble-header {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-bottom: var(--space-2);
+                font-size: 12px;
+            }
+
+            .system-sender {
+                color: #bc2026; /* Deep Red brand color */
+                font-weight: 500;
+            }
+
+            .system-bubble-time {
+                color: #a9b2bc; /* Cool Light Grey brand color */
+                font-size: 11px;
+            }
+
+            .system-bubble-content {
+                font-size: 13px;
+                line-height: 1.5;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                color: #a9b2bc; /* Cool Light Grey brand color */
+                font-family: "SF Mono", "Monaco", "Consolas", monospace;
+            }
+
+            /* =================== FOCUS TIMER STYLES =================== */
+            .focus-timer {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-1) var(--space-3);
+                background: var(--surface-2);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-full);
+                font-size: 13px;
+                font-weight: 500;
+                margin-right: var(--space-4);
+            }
+            .focus-timer.active {
+                background: var(--success-muted);
+                border-color: var(--success);
+                color: var(--success);
+            }
+            .focus-timer.break {
+                background: var(--warning-muted);
+                border-color: var(--warning);
+                color: var(--warning);
+            }
+            .focus-timer-display {
+                font-family: "SF Mono", "Monaco", monospace;
+                font-size: 14px;
+                min-width: 50px;
+                text-align: center;
+            }
+            .focus-timer-btn {
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 2px;
+                color: inherit;
+                display: flex;
+                align-items: center;
+                opacity: 0.8;
+            }
+            .focus-timer-btn:hover {
+                opacity: 1;
+            }
+            .focus-timer-sessions {
+                font-size: 11px;
+                color: var(--text-muted);
+                margin-left: var(--space-1);
+            }
+
+            /* =================== NOTIFICATION BELL =================== */
+            .notification-bell {
+                position: relative;
+                cursor: pointer;
+                font-size: 18px;
+                padding: 4px 8px;
+                border-radius: 6px;
+                transition: background 0.2s;
+                user-select: none;
+            }
+            .notification-bell:hover {
+                background: var(--bg-card-hover, rgba(255,255,255,0.08));
+            }
+            .notification-bell-badge {
+                position: absolute;
+                top: -2px;
+                right: 0px;
+                background: var(--brand-red, #BC2026);
+                color: white;
+                border-radius: 50%;
+                min-width: 16px;
+                height: 16px;
+                font-size: 10px;
+                font-weight: 700;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 3px;
+                pointer-events: none;
+                animation: bellPulse 1s ease-in-out;
+            }
+            @keyframes bellPulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.3); }
+            }
+
+            /* =================== BENTO GRID DASHBOARD STYLES =================== */
+            /* Dashboard page uses a fixed viewport bento grid layout */
+            #page-dashboard {
+                position: fixed;
+                top: 60px; /* header height */
+                left: 64px; /* sidebar collapsed width */
+                right: 0;
+                bottom: 0;
+                overflow-y: auto;
+                overflow-x: hidden;
+                z-index: 50;
+                padding: var(--space-4);
+                background: var(--surface-base);
+            }
+
+            /* Adjust for pinned/hovered sidebar */
+            .sidebar.pinned ~ .app-content #page-dashboard,
+            .sidebar:hover ~ .app-content #page-dashboard {
+                left: 200px;
+            }
+
+            /* Bento grid container — scrollable layout showing all widgets */
+            .bento-grid {
+                display: grid;
+                grid-template-columns: 3fr 1fr;
+                grid-template-rows: auto;
+                gap: var(--space-4);
+                width: 100%;
+            }
+
+            /* Row 1: Quick Stats (full width, always one row) */
+            .bento-quick-stats {
+                grid-column: 1 / -1;
+                grid-row: 1;
+            }
+
+            /* Row 2: Task Board (left) + Activity (right, spans 2 rows) */
+            .bento-task-board {
+                grid-column: 1;
+                grid-row: 2;
+                min-height: 500px;
+            }
+
+            .bento-activity {
+                grid-column: 2;
+                grid-row: 2 / 4; /* span 2 rows */
+            }
+
+            /* Row 3: Terminal (left) */
+            .bento-terminal {
+                grid-column: 1;
+                grid-row: 3;
+            }
+
+            /* Row 4: Notes (left) + Chat (right) */
+            .bento-notes {
+                grid-column: 1;
+                grid-row: 4;
+            }
+
+            .bento-chat {
+                grid-column: 2;
+                grid-row: 4;
+            }
+
+            /* Tablet layout (2 columns) */
+            @media (max-width: 1200px) {
+                .bento-grid {
+                    grid-template-columns: 1fr 1fr;
+                }
+
+                .bento-task-board {
+                    grid-column: 1 / -1;
+                    grid-row: auto;
+                    min-height: 400px;
+                }
+
+                .bento-quick-stats {
+                    grid-column: 1 / -1;
+                    grid-row: auto;
+                }
+                .bento-activity {
+                    grid-column: 1;
+                    grid-row: auto;
+                }
+                .bento-notes {
+                    grid-column: 2;
+                    grid-row: auto;
+                }
+                .bento-terminal {
+                    grid-column: 1 / -1;
+                    grid-row: auto;
+                }
+                .bento-chat {
+                    grid-column: 1 / -1;
+                    grid-row: auto;
+                }
+            }
+
+            /* Mobile layout (1 column) */
+            @media (max-width: 768px) {
+                .bento-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .bento-task-board,
+                .bento-quick-stats,
+                .bento-terminal,
+                .bento-activity,
+                .bento-notes,
+                .bento-chat {
+                    grid-column: 1;
+                    grid-row: auto;
+                }
+            }
+
+            /* Bento widget card */
+            .bento-widget {
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                min-height: 0; /* Important for flex child scrolling */
+            }
+
+            /* Widget header */
+            .bento-widget-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--border-default);
+                background: var(--surface-1);
+                flex-shrink: 0;
+            }
+
+            .bento-widget-title {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .bento-widget-title svg {
+                width: 18px;
+                height: 18px;
+                color: var(--brand-red);
+            }
+
+            .bento-widget-actions {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+
+            /* Widget content - scrollable */
+            .bento-widget-content {
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: var(--space-4);
+                min-height: 0; /* Important for flex child scrolling */
+            }
+
+            .bento-widget-content::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .bento-widget-content::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            .bento-widget-content::-webkit-scrollbar-thumb {
+                background: var(--border-default);
+                border-radius: 3px;
+            }
+
+            .bento-widget-content::-webkit-scrollbar-thumb:hover {
+                background: var(--text-muted);
+            }
+
+            /* =================== QUICK STATS STYLES (Bento Version) =================== */
+            .quick-stats-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: var(--space-3);
+            }
+
+            .quick-stats-grid {
+                display: flex;
+                gap: var(--space-3);
+            }
+
+            .quick-stats-grid .stat-item {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .stat-item {
+                text-align: center;
+                padding: var(--space-3);
+                background: var(--surface-2);
+                border-radius: var(--radius-md);
+            }
+
+            .stat-value {
+                font-size: 20px;
+                font-weight: 700;
+                color: var(--text-primary);
+                line-height: 1.2;
+            }
+
+            .stat-value.brand {
+                color: var(--brand-red);
+            }
+
+            .stat-label {
+                font-size: 11px;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-top: var(--space-1);
+            }
+
+            /* Task board inside bento widget */
+            .bento-widget.bento-task-board .grid-3 {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: var(--space-3);
+                height: 100%;
+            }
+
+            .bento-widget.bento-task-board .column {
+                background: var(--surface-2);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                padding: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+
+            .bento-widget.bento-task-board .drop-zone {
+                flex: 1;
+                overflow-y: auto;
+                min-height: 0;
+            }
+
+            /* =================== KEYBOARD SHORTCUTS MODAL =================== */
+            .shortcuts-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: var(--space-4);
+            }
+            @media (max-width: 600px) {
+                .shortcuts-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .shortcut-group {
+                margin-bottom: var(--space-4);
+            }
+            .shortcut-group-title {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--brand-red);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: var(--space-2);
+            }
+            .shortcut-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: var(--space-2) 0;
+                border-bottom: 1px solid var(--border-subtle);
+            }
+            .shortcut-item:last-child {
+                border-bottom: none;
+            }
+            .shortcut-keys {
+                display: flex;
+                gap: 4px;
+            }
+            .shortcut-key {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 24px;
+                height: 24px;
+                padding: 0 6px;
+                background: var(--surface-3);
+                border: 1px solid var(--border-default);
+                border-radius: 4px;
+                font-family: "SF Mono", "Monaco", monospace;
+                font-size: 11px;
+                font-weight: 500;
+                color: var(--text-secondary);
+            }
+            .shortcut-desc {
+                font-size: 13px;
+                color: var(--text-secondary);
+            }
+            .shortcuts-hint {
+                position: fixed;
+                bottom: var(--space-4);
+                right: var(--space-4);
+                background: var(--surface-2);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                padding: var(--space-2) var(--space-3);
+                font-size: 12px;
+                color: var(--text-muted);
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                z-index: 100;
+                opacity: 0.7;
+                transition: opacity var(--transition-fast);
+            }
+            .shortcuts-hint:hover {
+                opacity: 1;
+                cursor: pointer;
+            }

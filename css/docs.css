@@ -1,0 +1,212 @@
+.docs-category {
+                margin-bottom: var(--space-6);
+            }
+
+            .category-title {
+                color: var(--text-secondary);
+                font-size: 14px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: var(--space-4);
+                padding-bottom: var(--space-2);
+                border-bottom: 1px solid var(--border-subtle);
+            }
+
+            .docs-category-grid {
+                display: grid;
+                grid-template-columns:
+                    repeat(auto-fill, minmax(300px, 1fr));
+                gap: var(--space-4);
+            }
+
+            .memory-file {
+                cursor: pointer;
+                transition: all var(--transition-normal);
+            }
+
+            .memory-file:hover {
+                background: var(--surface-2);
+                border-color: var(--brand-red);
+                transform: translateY(-1px);
+            }
+
+            .doc-description {
+                font-size: 13px;
+                color: var(--text-muted);
+                line-height: 1.4;
+                margin-top: var(--space-1);
+            }
+
+            .docs-separator {
+                grid-column: 1 / -1;
+                margin-top: var(--space-6);
+                margin-bottom: var(--space-4);
+            }
+
+            .empty-state {
+                text-align: center;
+                color: var(--text-muted);
+                padding: var(--space-10);
+            }
+
+            .loading-state {
+                text-align: center;
+                color: var(--text-muted);
+                padding: var(--space-10);
+                font-style: italic;
+            }
+
+            .doc-meta {
+                font-size: 11px;
+                color: var(--text-faint);
+                margin-top: var(--space-1);
+            }
+
+            /* Bot-updated file styling */
+            .memory-file.bot-updated {
+                border-color: var(--brand-red);
+                background: rgba(188, 32, 38, 0.05);
+            }
+
+            .memory-file.bot-updated:hover {
+                border-color: var(--brand-red);
+                background: rgba(188, 32, 38, 0.1);
+            }
+
+            .bot-updated-badge {
+                animation: pulse-badge 2s ease-in-out infinite;
+            }
+
+            @keyframes pulse-badge {
+                0%, 100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.7;
+                }
+            }
+
+            /* IDE-style diff viewer */
+            .diff-pane {
+                flex: 1;
+                overflow: auto;
+                background: var(--surface-2);
+                font-family:
+                    "SF Mono", "Monaco", "Consolas", "Courier New",
+                    monospace;
+                font-size: 12px;
+                line-height: 20px;
+                white-space: pre;
+                tab-size: 4;
+            }
+            .diff-line {
+                display: flex;
+                min-height: 20px;
+            }
+            .diff-line-num {
+                width: 50px;
+                flex-shrink: 0;
+                text-align: right;
+                padding: 0 8px 0 4px;
+                color: var(--text-faint);
+                user-select: none;
+                border-right: 1px solid var(--border-subtle);
+                background: var(--surface-1);
+                font-size: 11px;
+            }
+            .diff-line-content {
+                flex: 1;
+                padding: 0 8px;
+                min-width: 0;
+                overflow: hidden;
+                white-space: pre-wrap;
+                word-break: break-all;
+            }
+            /* Diff line types */
+            .diff-line.added {
+                background: rgba(46, 160, 67, 0.15);
+            }
+            .diff-line.added .diff-line-num {
+                background: rgba(46, 160, 67, 0.2);
+                color: #3fb950;
+            }
+            .diff-line.added .diff-line-content {
+                border-left: 3px solid #3fb950;
+            }
+            .diff-line.removed {
+                background: rgba(248, 81, 73, 0.15);
+            }
+            .diff-line.removed .diff-line-num {
+                background: rgba(248, 81, 73, 0.2);
+                color: #f85149;
+            }
+            .diff-line.removed .diff-line-content {
+                border-left: 3px solid #f85149;
+            }
+            .diff-line.modified {
+                background: rgba(210, 153, 34, 0.1);
+            }
+            .diff-line.modified .diff-line-num {
+                background: rgba(210, 153, 34, 0.15);
+                color: #d29922;
+            }
+            .diff-line.modified .diff-line-content {
+                border-left: 3px solid #d29922;
+            }
+            .diff-line.empty {
+                opacity: 0.4;
+            }
+            .diff-line.empty .diff-line-content {
+                background: repeating-linear-gradient(
+                    -45deg,
+                    transparent,
+                    transparent 4px,
+                    var(--border-subtle) 4px,
+                    var(--border-subtle) 5px
+                );
+            }
+            /* Chunk separator */
+            .diff-chunk-sep {
+                display: flex;
+                align-items: center;
+                padding: 4px 8px;
+                background: var(--surface-3);
+                color: var(--text-muted);
+                font-size: 11px;
+                border-top: 1px solid var(--border-default);
+                border-bottom: 1px solid var(--border-default);
+                user-select: none;
+            }
+
+            /* Version history panel */
+            .version-item:hover {
+                background: var(--surface-2);
+            }
+
+            .version-item:last-child {
+                border-bottom: none;
+            }
+
+            /* Drag and drop highlight for chat */
+            .chat-page-wrapper.drag-over {
+                outline: 3px dashed var(--brand-red);
+                outline-offset: -3px;
+                background: rgba(188, 32, 38, 0.05);
+            }
+
+            .chat-page-wrapper.drag-over::after {
+                content: "📷 Drop image here";
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: var(--surface-overlay);
+                padding: var(--space-4) var(--space-6);
+                border-radius: var(--radius-lg);
+                font-size: 16px;
+                font-weight: 500;
+                color: var(--brand-red);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                z-index: 100;
+            }

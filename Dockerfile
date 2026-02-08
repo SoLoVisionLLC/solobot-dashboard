@@ -12,6 +12,7 @@ COPY solobot-avatar.png ./
 COPY favicon.svg ./
 COPY avatars ./avatars/
 COPY js ./js/
+COPY css ./css/
 
 # Create data directory (will be mounted as volume in production)
 RUN mkdir -p data
