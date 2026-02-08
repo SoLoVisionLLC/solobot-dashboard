@@ -977,6 +977,41 @@ function syncModelDisplay(model, provider) {
     }
 }
 
+// Apply per-session model override from availableSessions (if present)
+async function applySessionModelOverride(sessionKey) {
+    if (!sessionKey) return;
+    const session = availableSessions.find(s => s.key === sessionKey);
+    const model = session?.model && session.model !== 'unknown' ? session.model : null;
+    if (model) {
+        const provider = model.includes('/') ? model.split('/')[0] : currentProvider;
+        syncModelDisplay(model, provider);
+        return;
+    }
+    // If not found locally, refresh sessions list and retry once
+    try {
+        const result = await gateway?.listSessions?.({});
+        if (result?.sessions?.length) {
+            availableSessions = result.sessions.map(s => ({
+                key: s.key,
+                name: getFriendlySessionName(s.key),
+                displayName: getFriendlySessionName(s.key),
+                updatedAt: s.updatedAt,
+                totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                model: s.model || 'unknown',
+                sessionId: s.sessionId
+            }));
+            const updated = availableSessions.find(s => s.key === sessionKey);
+            const updatedModel = updated?.model && updated.model !== 'unknown' ? updated.model : null;
+            if (updatedModel) {
+                const provider = updatedModel.includes('/') ? updatedModel.split('/')[0] : currentProvider;
+                syncModelDisplay(updatedModel, provider);
+            }
+        }
+    } catch (e) {
+        console.warn('[Dashboard] Failed to refresh sessions for model override:', e.message);
+    }
+}
+
 /**
  * Fetch model configuration directly from the gateway via WebSocket RPC.
  * This is the most reliable source — it reads the live openclaw.json from the running gateway.
@@ -1619,6 +1654,8 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
 
         // 6. Load new session's history
         await loadSessionHistory(sessionKey);
+        // Apply per-session model override (if any)
+        await applySessionModelOverride(sessionKey);
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
             const session = availableSessions.find(s => s.key === sessionKey);
@@ -1779,6 +1816,8 @@ function initGateway() {
             
             // Fetch model config directly from gateway (most reliable source)
             fetchModelsFromGateway();
+            // Apply per-session model override (if any)
+            applySessionModelOverride(sessionKey);
             
             // Update session name displays (use friendly name without agent prefix)
             currentSessionName = sessionKey;
