@@ -7336,7 +7336,24 @@
 
         <script src="gateway-client.js?v=3.7.1"></script>
         <script src="docs-hub-memory-files.js?v=3.0.0"></script>
-        <script src="dashboard.js?v=3.53.1"></script>
+        <!-- Modular dashboard scripts (load order matters) -->
+        <script src="js/state.js?v=4.0.0"></script>
+        <script src="js/utils.js?v=4.0.0"></script>
+        <script src="js/ui.js?v=4.0.0"></script>
+        <script src="js/focus-timer.js?v=4.0.0"></script>
+        <script src="js/quick-stats.js?v=4.0.0"></script>
+        <script src="js/keyboard.js?v=4.0.0"></script>
+        <script src="js/models.js?v=4.0.0"></script>
+        <script src="js/sessions.js?v=4.0.0"></script>
+        <script src="js/notifications.js?v=4.0.0"></script>
+        <script src="js/chat.js?v=4.0.0"></script>
+        <script src="js/system.js?v=4.0.0"></script>
+        <script src="js/tasks.js?v=4.0.0"></script>
+        <script src="js/ui-handlers.js?v=4.0.0"></script>
+        <script src="js/memory.js?v=4.0.0"></script>
+        <script src="js/health.js?v=4.0.0"></script>
+        <!-- Main init (must be last) -->
+        <script src="dashboard.js?v=4.0.0"></script>
         <script>
             // Valid page names
             const VALID_PAGES = [
