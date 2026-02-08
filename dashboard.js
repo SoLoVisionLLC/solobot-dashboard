@@ -297,8 +297,7 @@ function loadPersistedMessages() {
         if (savedChat) {
             const parsed = JSON.parse(savedChat);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                const cutoff = Date.now() - (24 * 60 * 60 * 1000);
-                state.chat.messages = parsed.filter(m => m.time > cutoff);
+                state.chat.messages = parsed;
                 // console.log(`[Dashboard] Restored ${state.chat.messages.length} chat messages from localStorage`);
                 return; // Have local messages, no need to fetch from server
             }
@@ -345,7 +344,7 @@ function persistSystemMessages() {
 function persistChatMessages() {
     try {
         // Limit to 50 messages to prevent localStorage quota exceeded
-        const chatToSave = state.chat.messages.slice(-50);
+        const chatToSave = state.chat.messages.slice(-200);
         localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
         
         // Also sync to server for persistence across deploys
@@ -381,7 +380,7 @@ const GATEWAY_CONFIG = {
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
     token: localStorage.getItem('gateway_token') || '',
     sessionKey: localStorage.getItem('gateway_session') || 'main',
-    maxMessages: 100
+    maxMessages: 500
 };
 
 // Function to save gateway settings to both localStorage AND server state
@@ -2497,7 +2496,7 @@ function loadHistoryMessages(messages) {
         };
 
         // Classify and route
-        if (isSystemMessage(textContent, message.from)) {
+        if (isSystemMessage(content.text, message.from)) {
             systemMessages.push(message);
         } else {
             chatMessages.push(message);
@@ -2685,8 +2684,9 @@ function mergeHistoryMessages(messages) {
             state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
         }
 
-        // Persist system messages (chat comes from Gateway)
+        // Persist both system and chat messages
         persistSystemMessages();
+        persistChatMessages();
 
         // Don't re-render if user has text selected (would destroy their selection)
         const selection = window.getSelection();
@@ -3028,7 +3028,7 @@ async function saveState(changeDescription = null) {
         const stateForStorage = JSON.parse(JSON.stringify(state));
         // Limit chat messages to last 50 to save space
         if (stateForStorage.chat && stateForStorage.chat.messages) {
-            stateForStorage.chat.messages = stateForStorage.chat.messages.slice(-50);
+            stateForStorage.chat.messages = stateForStorage.chat.messages.slice(-200);
         }
         // Keep more console logs for review (last 500)
         if (stateForStorage.console && stateForStorage.console.logs) {

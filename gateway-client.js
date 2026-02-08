@@ -437,7 +437,7 @@ class GatewayClient {
         gwLog(`[Gateway] Loading history for session: ${this.sessionKey}`);
         return this._request('chat.history', {
             sessionKey: this.sessionKey,
-            limit: 50
+            limit: 200
         }).then(result => {
             gwLog(`[Gateway] History returned ${result?.messages?.length || 0} messages`);
             return result;
