@@ -59,6 +59,8 @@
                 cursor: pointer;
                 transition: all var(--transition-fast);
                 position: relative;
+                overflow: hidden;
+                word-break: break-word;
             }
             .task-card:hover {
                 border-color: var(--border-strong);
