@@ -676,7 +676,7 @@ function readPage(name) {
   }
 }
 
-const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products'];
+const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products', 'cron', 'security', 'skills'];
 
 function assemblePage(activePage) {
   // Build all pages, marking the active one

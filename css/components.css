@@ -450,3 +450,77 @@
             }
 
             /* ========================================
+
+/* ========================================
+   NEW DASHBOARD WIDGETS
+   ======================================== */
+
+/* Agent Status Row */
+.agent-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-md);
+    transition: background 0.15s;
+}
+.agent-status-row:hover {
+    background: var(--surface-2);
+}
+
+/* Channel Status Row */
+.channel-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-md);
+}
+
+/* Memory Tree */
+.memory-tree-dir {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 4px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: 500;
+}
+.memory-tree-dir:hover {
+    background: var(--surface-2);
+}
+.tree-chevron {
+    font-size: 9px;
+    width: 12px;
+    text-align: center;
+    color: var(--text-muted);
+}
+.memory-tree-children {
+    padding-left: 16px;
+}
+.memory-tree-file {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+.memory-tree-file:hover {
+    background: var(--surface-2);
+}
+
+/* Bento grid additions */
+.bento-agents { grid-column: span 1; }
+.bento-channels { grid-column: span 1; }
+.bento-costs { grid-column: span 1; }
+.bento-analytics { grid-column: span 1; }
+
+/* Empty state */
+.empty-state {
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px;
+}

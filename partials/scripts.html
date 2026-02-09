@@ -16,6 +16,14 @@
         <script src="js/ui-handlers.js?v=4.2.0"></script>
         <script src="js/memory.js?v=4.2.0"></script>
         <script src="js/health.js?v=4.2.0"></script>
+        <script src="js/agents.js?v=4.2.0"></script>
+        <script src="js/channels.js?v=4.2.0"></script>
+        <script src="js/cron.js?v=4.2.0"></script>
+        <script src="js/costs.js?v=4.2.0"></script>
+        <script src="js/analytics.js?v=4.2.0"></script>
+        <script src="js/memory-browser.js?v=4.2.0"></script>
+        <script src="js/security.js?v=4.2.0"></script>
+        <script src="js/skills-mgr.js?v=4.2.0"></script>
         <!-- Main init (must be last) -->
         <script src="dashboard.js?v=4.2.0"></script>
         <script>
@@ -34,6 +42,9 @@
                 "chat",
                 "system",
                 "products",
+                "cron",
+                "security",
+                "skills",
             ];
 
             // Get page from URL path
@@ -166,6 +177,11 @@
                 ) {
                     renderSystemPage();
                 }
+
+                // Init new pages
+                if (pageName === "cron" && typeof initCronPage === "function") initCronPage();
+                if (pageName === "security" && typeof initSecurityPage === "function") initSecurityPage();
+                if (pageName === "skills" && typeof initSkillsPage === "function") initSkillsPage();
             }
 
             // Handle browser back/forward buttons

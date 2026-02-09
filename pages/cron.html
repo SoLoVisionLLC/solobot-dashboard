@@ -1,0 +1,44 @@
+                    <!-- =================== CRON PAGE =================== -->
+                    <div id="page-cron" class="page">
+                        <div class="cron-page" style="max-width: 900px; margin: 0 auto; padding: 24px;">
+                            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <div>
+                                    <h1 class="page-title">⏰ Cron Jobs</h1>
+                                    <p class="page-subtitle">Manage scheduled tasks and automation</p>
+                                </div>
+                                <button onclick="openAddCronModal()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Job</button>
+                            </div>
+                            <div id="cron-jobs-list">
+                                <div class="empty-state">Loading cron jobs...</div>
+                            </div>
+                        </div>
+
+                        <!-- Add Cron Modal -->
+                        <div id="add-cron-modal" class="modal-overlay">
+                            <div class="modal" style="max-width: 480px;">
+                                <div class="modal-header">
+                                    <h2>Add Cron Job</h2>
+                                    <button onclick="closeAddCronModal()" class="btn-icon">✕</button>
+                                </div>
+                                <div class="modal-body" style="padding: 16px;">
+                                    <div style="margin-bottom: 12px;">
+                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Name</label>
+                                        <input type="text" id="cron-new-name" class="input" placeholder="My cron job" style="width: 100%;">
+                                    </div>
+                                    <div style="margin-bottom: 12px;">
+                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Schedule (cron expression)</label>
+                                        <input type="text" id="cron-new-schedule" class="input" placeholder="0 9 * * *" style="width: 100%;">
+                                    </div>
+                                    <div style="margin-bottom: 16px;">
+                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Command / Action</label>
+                                        <textarea id="cron-new-command" class="input" placeholder="What should this job do?" rows="3" style="width: 100%; resize: vertical;"></textarea>
+                                    </div>
+                                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                                        <button onclick="closeAddCronModal()" class="btn btn-ghost">Cancel</button>
+                                        <button onclick="submitNewCronJob()" class="btn btn-primary">Add Job</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- END CRON PAGE -->

@@ -1,0 +1,111 @@
+// js/agents.js — Agent Status Panel widget
+
+let agentStatusInterval = null;
+
+function initAgentStatusPanel() {
+    loadAgentStatuses();
+    if (agentStatusInterval) clearInterval(agentStatusInterval);
+    agentStatusInterval = setInterval(loadAgentStatuses, 15000);
+}
+
+async function loadAgentStatuses() {
+    const container = document.getElementById('agent-status-list');
+    if (!container) return;
+
+    if (!gateway || !gateway.isConnected()) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 16px;">Connect to gateway to see agents</div>';
+        return;
+    }
+
+    try {
+        const result = await gateway._request('sessions.list', { includeGlobal: true });
+        const sessions = result?.sessions || [];
+        renderAgentStatuses(sessions);
+    } catch (e) {
+        console.warn('[Agents] Failed to fetch sessions:', e.message);
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center;">Failed to load</div>';
+    }
+}
+
+function renderAgentStatuses(sessions) {
+    const container = document.getElementById('agent-status-list');
+    if (!container) return;
+
+    // Group sessions by agent
+    const agents = {};
+    const knownAgents = ['main', 'exec', 'coo', 'cfo', 'cmp', 'dev', 'family', 'tax', 'sec', 'smm'];
+
+    for (const s of sessions) {
+        const match = s.key?.match(/^agent:([^:]+):/);
+        const agentId = match ? match[1] : 'main';
+        if (!agents[agentId]) {
+            agents[agentId] = { sessions: [], lastActivity: 0, lastPreview: '' };
+        }
+        agents[agentId].sessions.push(s);
+        const ts = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
+        if (ts > agents[agentId].lastActivity) {
+            agents[agentId].lastActivity = ts;
+            agents[agentId].lastPreview = s.displayName || s.key || '';
+        }
+    }
+
+    // Ensure all known agents appear
+    for (const id of knownAgents) {
+        if (!agents[id]) agents[id] = { sessions: [], lastActivity: 0, lastPreview: '' };
+    }
+
+    // Sort by most recent activity
+    const sorted = Object.entries(agents).sort((a, b) => b[1].lastActivity - a[1].lastActivity);
+
+    const agentLabels = {
+        main: 'SoLoBot', exec: 'EXEC', coo: 'COO', cfo: 'CFO',
+        cmp: 'CMP', dev: 'DEV', family: 'Family', tax: 'Tax', sec: 'SEC', smm: 'SMM'
+    };
+
+    container.innerHTML = sorted.map(([id, data]) => {
+        const label = agentLabels[id] || id.toUpperCase();
+        const sessionCount = data.sessions.length;
+        const timeSince = data.lastActivity ? timeAgo(data.lastActivity) : 'No activity';
+        const isActive = data.lastActivity && (Date.now() - data.lastActivity < 300000); // 5min
+        const isRecent = data.lastActivity && (Date.now() - data.lastActivity < 3600000); // 1hr
+        const statusClass = isActive ? 'success' : isRecent ? 'warning' : 'idle';
+        const statusText = isActive ? 'Active' : isRecent ? 'Recent' : 'Idle';
+        const color = AGENT_COLORS[id] || '#888';
+
+        return `
+        <div class="agent-status-row" onclick="switchToAgent('${id}')" style="cursor: pointer;">
+            <span class="status-dot ${statusClass}"></span>
+            <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-weight: 600; font-size: 13px; color: ${color};">${label}</span>
+                    <span style="font-size: 10px; color: var(--text-muted);">${sessionCount} session${sessionCount !== 1 ? 's' : ''}</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${timeSince}${data.lastPreview ? ' · ' + escapeHtml(data.lastPreview) : ''}
+                </div>
+            </div>
+            <span style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: var(--surface-2); color: var(--text-muted);">${statusText}</span>
+        </div>`;
+    }).join('');
+}
+
+function timeAgo(timestamp) {
+    const diff = Date.now() - timestamp;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+    return Math.floor(diff / 86400000) + 'd ago';
+}
+
+function switchToAgent(agentId) {
+    // Navigate to chat page with this agent
+    if (typeof showPage === 'function') showPage('chat');
+    if (typeof setActiveSidebarAgent === 'function') setActiveSidebarAgent(agentId);
+    currentAgentId = agentId;
+    if (typeof fetchSessions === 'function') fetchSessions();
+}
+
+// Auto-init when gateway connects
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initAgentStatusPanel, 2000);
+});
