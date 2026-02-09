@@ -85,8 +85,11 @@ function renderSkills() {
 }
 
 window.toggleSkill = async function(name, enable) {
+    // Gateway RPC uses skills.update (not skills.toggle).
+    // Config keys default to skill name unless metadata.openclaw.skillKey overrides it.
+    // For now we treat the displayed name as the skillKey.
     try {
-        await gateway._request('skills.toggle', { name, enabled: enable });
+        await gateway._request('skills.update', { skillKey: name, enabled: enable });
         showToast(`Skill ${enable ? 'enabled' : 'disabled'}`, 'success');
         loadSkills();
     } catch (e) {
