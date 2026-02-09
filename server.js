@@ -1083,6 +1083,46 @@ const server = http.createServer((req, res) => {
   }
 
   // Get a specific memory file
+  // Special-case: recent-activity.json lives under workspace/memory/ but the dashboard fetches it from /api/memory/recent-activity.json
+  if (url.pathname === '/api/memory/recent-activity.json' && req.method === 'GET') {
+    const primaryPath = path.resolve(MEMORY_DIR, 'recent-activity.json');
+    const legacyPath = path.resolve(MEMORY_DIR, 'memory', 'recent-activity.json');
+
+    let filePath = fs.existsSync(primaryPath) ? primaryPath : (fs.existsSync(legacyPath) ? legacyPath : null);
+
+    res.setHeader('Content-Type', 'application/json');
+
+    // If it doesn't exist yet, return an empty payload (avoid noisy 404 spam in console)
+    if (!filePath) {
+      return res.end(JSON.stringify({
+        name: 'recent-activity.json',
+        content: JSON.stringify({ updatedMs: 0, activities: [] }),
+        modified: new Date(0).toISOString(),
+        size: 0,
+        botUpdated: false,
+        botUpdatedAt: null,
+        acknowledged: true
+      }));
+    }
+
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const stat = fs.statSync(filePath);
+      return res.end(JSON.stringify({
+        name: 'recent-activity.json',
+        content,
+        modified: stat.mtime.toISOString(),
+        size: stat.size,
+        botUpdated: false,
+        botUpdatedAt: null,
+        acknowledged: true
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
   if (url.pathname.startsWith('/api/memory/') && req.method === 'GET') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
     const filePath = path.resolve(MEMORY_DIR, filename);
