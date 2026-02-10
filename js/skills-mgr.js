@@ -106,11 +106,9 @@ function renderMissingBadges(skill) {
     return blocks.join('');
 }
 
-function skillIsInstalled(skill) {
-    // Heuristic: if the primary required bins are present, treat as installed.
-    // (Missing env/config can mean “needs setup”, not “not installed”.)
-    if (skill?.installed === true) return true;
-
+function skillIsReady(skill) {
+    // “Ready” means prerequisites/binaries are present.
+    // This is NOT the same thing as “installed” (many skills are bundled).
     const missing = skill?.missing || {};
     const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
     return missingBins === 0;
@@ -123,10 +121,13 @@ function renderInstallButtons(skill) {
     const name = skill?.name;
     if (!name) return '';
 
-    const installed = skillIsInstalled(skill);
+    // Only show "Reinstall" if the gateway explicitly reports installed=true.
+    // Otherwise we keep the installer’s label (often these buttons install prerequisites like `uv`).
+    const installed = skill?.installed === true;
+    const ready = skillIsReady(skill);
 
-    const installedBadge = installed
-        ? `<span class="badge" style="background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.25); color: var(--success); padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;">Installed</span>`
+    const readyBadge = ready
+        ? `<span class="badge" style="background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.25); color: var(--success); padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;">Ready</span>`
         : '';
 
     const buttons = options.map(opt => {
@@ -134,13 +135,13 @@ function renderInstallButtons(skill) {
         const installId = opt?.id;
         if (!installId) return '';
 
-        const label = installed ? `Reinstall` : baseLabel;
+        const label = installed ? 'Reinstall' : baseLabel;
         const klass = installed ? 'btn btn-ghost' : 'btn btn-primary';
 
         return `<button class="${klass}" style="padding: 4px 10px; font-size: 11px;" onclick="installSkill('${escapeHtml(name)}','${escapeHtml(installId)}')">${escapeHtml(label)}</button>`;
     }).join('');
 
-    return [installedBadge, buttons].filter(Boolean).join('');
+    return [readyBadge, buttons].filter(Boolean).join('');
 }
 
 function renderSkills() {
