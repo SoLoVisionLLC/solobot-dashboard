@@ -347,7 +347,11 @@ window.editSessionName = function(sessionKey, currentName) {
                 populateSessionDropdown();
                 if (sessionKey === currentSessionName) {
                     const nameEl = document.getElementById('chat-page-session-name');
-                    if (nameEl) nameEl.textContent = newName;
+                    // Even if displayName changes, keep the visible label as the session key
+                    if (nameEl) {
+                        nameEl.textContent = sessionKey;
+                        nameEl.title = sessionKey;
+                    }
                 }
             }
         } else {
@@ -451,8 +455,9 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         await applySessionModelOverride(sessionKey);
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
-            const session = availableSessions.find(s => s.key === sessionKey);
-            nameEl.textContent = session ? (session.displayName || session.name) : getFriendlySessionName(sessionKey);
+            // Hard clarity: always show the full session key (e.g. agent:dev:main)
+            nameEl.textContent = sessionKey;
+            nameEl.title = sessionKey;
         }
         // Refresh dropdown to show new selection (filtered by agent)
         populateSessionDropdown();
@@ -610,13 +615,18 @@ function initGateway() {
             // Apply per-session model override (if any)
             applySessionModelOverride(sessionKey);
             
-            // Update session name displays (use friendly name without agent prefix)
+            // Update session name displays (hard clarity: show full session key)
             currentSessionName = sessionKey;
-            const friendlyName = getFriendlySessionName(sessionKey);
             const nameEl = document.getElementById('current-session-name');
-            if (nameEl) nameEl.textContent = friendlyName;
+            if (nameEl) {
+                nameEl.textContent = sessionKey;
+                nameEl.title = sessionKey;
+            }
             const chatPageNameEl = document.getElementById('chat-page-session-name');
-            if (chatPageNameEl) chatPageNameEl.textContent = friendlyName;
+            if (chatPageNameEl) {
+                chatPageNameEl.textContent = sessionKey;
+                chatPageNameEl.title = sessionKey;
+            }
             
             // Remember this session for the agent
             const agentMatch = sessionKey.match(/^agent:([^:]+):/);
