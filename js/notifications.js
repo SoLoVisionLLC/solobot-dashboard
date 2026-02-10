@@ -27,6 +27,35 @@ function subscribeToAllSessions() {
 
 function handleCrossSessionNotification(msg) {
     const { sessionKey, content } = msg;
+
+    // Never count read-ack sync events as notifications.
+    // These are internal signals used to clear unreads across clients.
+    if (typeof content === 'string' && content.startsWith(READ_ACK_PREFIX)) {
+        notifLog(`[Notifications] Ignoring read-ack cross-session event for ${sessionKey}`);
+        // Best-effort: clear unread for that session (handles race where unread was set elsewhere)
+        if (sessionKey) clearUnreadForSession(sessionKey);
+        return;
+    }
+
+    // Never count "silent reply" placeholders as notifications.
+    // These are used by cron/background jobs to indicate "no user-visible output".
+    if (typeof content === 'string') {
+        const t = content.trim();
+        if (t === 'NO_REPLY' || t === 'NO') {
+            notifLog(`[Notifications] Ignoring silent placeholder notification for ${sessionKey}: ${t}`);
+            return;
+        }
+    }
+
+    // If the message is for the currently active session and the tab is visible,
+    // don't increment unread (user can already see it or will on next render).
+    if (sessionKey && typeof currentSessionName !== 'undefined' && sessionKey === currentSessionName) {
+        if (document.visibilityState === 'visible') {
+            notifLog(`[Notifications] Ignoring notification for active session ${sessionKey}`);
+            return;
+        }
+    }
+
     const friendlyName = getFriendlySessionName(sessionKey);
     const preview = content.length > 120 ? content.slice(0, 120) + '…' : content;
     
