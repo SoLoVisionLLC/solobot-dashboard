@@ -1,12 +1,39 @@
                     <!-- =================== SKILLS PAGE =================== -->
                     <div id="page-skills" class="page">
-                        <div class="skills-page" style="max-width: 900px; margin: 0 auto; padding: 24px;">
-                            <div class="page-header" style="margin-bottom: 20px;">
+                        <div class="skills-page" style="max-width: 1000px; margin: 0 auto; padding: 24px;">
+                            <div class="page-header" style="margin-bottom: 16px;">
                                 <h1 class="page-title">🧩 Skills Manager</h1>
-                                <p class="page-subtitle">Manage installed skills and integrations</p>
+                                <p class="page-subtitle">Install, configure, and troubleshoot skills</p>
                             </div>
+
+                            <div style="display:flex; align-items:center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+                                <input id="skills-search" class="input" placeholder="Search skills…" style="flex: 1; min-width: 220px;" />
+                                <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
+                                    <input id="skills-only-issues" type="checkbox" />
+                                    Only issues
+                                </label>
+                                <button id="skills-refresh" class="btn btn-ghost" style="font-size: 12px;">Refresh</button>
+                            </div>
+
                             <div id="skills-list">
                                 <div class="empty-state">Loading skills...</div>
+                            </div>
+                        </div>
+
+                        <!-- Install/Debug modal -->
+                        <div id="skills-install-modal" class="modal-overlay" onclick="if(event.target.id==='skills-install-modal') hideModal('skills-install-modal')">
+                            <div class="modal modal-lg" onclick="event.stopPropagation()">
+                                <div class="modal-header">
+                                    <div>
+                                        <div id="skills-install-modal-title" class="modal-title">Skill installer</div>
+                                        <div id="skills-install-modal-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 2px;"></div>
+                                    </div>
+                                    <button class="modal-close" onclick="hideModal('skills-install-modal')">✕</button>
+                                </div>
+                                <div class="modal-section">
+                                    <div class="modal-section-title">Result</div>
+                                    <div class="modal-section-content" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; white-space: pre-wrap; font-size: 12px;" id="skills-install-modal-body"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
