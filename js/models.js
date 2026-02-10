@@ -60,6 +60,8 @@ function isSystemMessage(text, from) {
     // === INTERNAL CONTROL MESSAGES ===
     // OpenClaw internal signals that should never appear in chat
     if (trimmed === 'NO_REPLY') return true;
+    // Some surfaces truncate/simplify NO_REPLY to "NO"; treat as internal noise as well
+    if (trimmed === 'NO') return true;
     if (trimmed === 'REPLY_SKIP') return true;
     if (trimmed === 'ANNOUNCE_SKIP') return true;
     if (trimmed.startsWith('Agent-to-agent announce')) return true;
