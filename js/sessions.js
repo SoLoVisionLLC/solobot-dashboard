@@ -192,6 +192,9 @@ async function fetchSessions() {
             handleSubagentSessionAgent();
             
             populateSessionDropdown();
+            if (typeof updateSidebarAgentsFromSessions === 'function') {
+                try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
+            }
             // Subscribe to all sessions for cross-session notifications
             subscribeToAllSessions();
             return availableSessions;
@@ -232,6 +235,9 @@ async function fetchSessions() {
         handleSubagentSessionAgent();
         
         populateSessionDropdown();
+        if (typeof updateSidebarAgentsFromSessions === 'function') {
+            try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
+        }
         return availableSessions;
     } catch (e) {
         console.error('[Dashboard] Failed to fetch sessions:', e);

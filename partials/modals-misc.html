@@ -124,6 +124,39 @@
             </div>
         </div>
 
+        <!-- Sidebar Agents Modal -->
+        <div id="sidebar-agents-modal" class="modal-overlay" onclick="if(event.target===this) closeSidebarAgentsModal()">
+            <div class="modal" style="max-width: 520px">
+                <div class="modal-header">
+                    <h3 class="modal-title">Agents</h3>
+                    <div class="flex items-center gap-2">
+                        <button class="btn btn-ghost" style="font-size: 12px" onclick="resetSidebarAgentsOrder()" title="Reset sidebar agent order">
+                            Reset order
+                        </button>
+                        <button onclick="closeSidebarAgentsModal()" class="modal-close">✕</button>
+                    </div>
+                </div>
+                <div class="modal-body" style="padding: var(--space-4) var(--space-6)">
+                    <div class="space-y-3">
+                        <label style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" id="sidebar-hide-inactive" />
+                            <span>Auto-hide inactive agents</span>
+                            <select id="sidebar-inactivity-threshold" class="input" style="margin-left:auto; width:auto; padding: 6px 10px;">
+                                <option value="300000">5 min</option>
+                                <option value="900000">15 min</option>
+                                <option value="3600000">1 hour</option>
+                                <option value="21600000">6 hours</option>
+                            </select>
+                        </label>
+                        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;">
+                            Tip: Drag agents in the sidebar to reorder. Use the checkboxes below to hide/show agents.
+                        </div>
+                        <div id="sidebar-agents-modal-list" class="sidebar-agents-modal-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast Notifications Container -->
         <!-- Keyboard Shortcuts Modal -->
         <div id="shortcuts-modal" class="modal-overlay">

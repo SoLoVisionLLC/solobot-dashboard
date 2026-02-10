@@ -615,6 +615,30 @@
                 transition: opacity var(--transition-normal);
             }
 
+            .sidebar-section-title-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+
+            .sidebar-section-action {
+                border: none;
+                background: transparent;
+                color: var(--text-muted);
+                cursor: pointer;
+                padding: 2px 6px;
+                border-radius: 6px;
+                opacity: 0.85;
+                font-size: 12px;
+                line-height: 1;
+            }
+
+            .sidebar-section-action:hover {
+                background: var(--surface-2);
+                opacity: 1;
+            }
+
             .sidebar:hover .sidebar-section-title,
             .sidebar.pinned .sidebar-section-title {
                 opacity: 1;
@@ -648,6 +672,62 @@
             .sidebar-agent.active {
                 background: rgba(188, 32, 38, 0.12);
                 border: 1px solid rgba(188, 32, 38, 0.45);
+            }
+
+            .sidebar-agent.is-hidden,
+            .sidebar-agent.auto-hidden {
+                display: none;
+            }
+
+            .sidebar-agent.is-inactive:not(.active) {
+                opacity: 0.6;
+            }
+
+            .sidebar-agent.draggable.dragging {
+                opacity: 0.4;
+            }
+
+            .agent-drag-handle {
+                display: none;
+                color: var(--text-muted);
+                font-size: 14px;
+                line-height: 1;
+                margin-right: 2px;
+                cursor: grab;
+                user-select: none;
+            }
+
+            .sidebar:hover .agent-drag-handle,
+            .sidebar.pinned .agent-drag-handle {
+                display: inline-block;
+            }
+
+            .sidebar-agents-modal-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 10px;
+            }
+
+            .sidebar-agent-pref-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 10px;
+                border: 1px solid var(--border-default);
+                border-radius: 10px;
+                background: var(--surface-1);
+            }
+
+            .sidebar-agent-pref-label {
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .sidebar-agent-pref-meta {
+                margin-left: auto;
+                font-size: 12px;
+                color: var(--text-muted);
             }
 
             .agent-avatar {
