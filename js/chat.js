@@ -1447,6 +1447,10 @@ function setupSidebarAgents() {
     if (!agentEls.length) return;
 
     agentEls.forEach(el => {
+        // If text gets truncated in the UI, give a native tooltip with the full name.
+        const label = el.querySelector('.sidebar-item-text');
+        if (label && !label.title) label.title = (label.textContent || '').trim();
+
         el.addEventListener('click', async () => {
             const agentId = el.getAttribute('data-agent');
             if (!agentId) return;

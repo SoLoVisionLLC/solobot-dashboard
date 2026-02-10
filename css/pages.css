@@ -156,7 +156,7 @@
             /* Adjust for pinned/hovered sidebar */
             .sidebar.pinned ~ .app-content #page-dashboard,
             .sidebar:hover ~ .app-content #page-dashboard {
-                left: 200px;
+                left: 240px;
             }
 
             /* Bento grid container — scrollable layout showing all widgets */

@@ -24,7 +24,7 @@
             .sidebar.pinned ~ .app-content #page-system,
             .sidebar:hover ~ .app-content #page-chat,
             .sidebar:hover ~ .app-content #page-system {
-                left: 200px;
+                left: 240px;
             }
 
             .chat-page-wrapper {

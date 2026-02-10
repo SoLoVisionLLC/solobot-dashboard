@@ -456,7 +456,7 @@
 
             .sidebar:hover,
             .sidebar.pinned {
-                width: 200px;
+                width: 240px;
             }
 
             .sidebar-toggle {
@@ -659,6 +659,13 @@
                 cursor: pointer;
             }
 
+            /* Allow agent label to use remaining row space cleanly */
+            .sidebar-agent .sidebar-item-text {
+                flex: 1;
+                min-width: 0;
+                text-overflow: ellipsis;
+            }
+
             .sidebar:hover .sidebar-agent,
             .sidebar.pinned .sidebar-agent {
                 justify-content: flex-start;
@@ -809,8 +816,8 @@
             /* Adjust content when sidebar is expanded (pinned or hovered) */
             .sidebar.pinned ~ .app-content,
             .sidebar:hover ~ .app-content {
-                margin-left: 200px;
-                max-width: calc(100vw - 200px);
+                margin-left: 240px;
+                max-width: calc(100vw - 240px);
             }
 
             /* Page containers */
