@@ -262,7 +262,7 @@ window.installSkill = async function(name, installId) {
     showInstallModal(`Installing ${name}`, `Installer: ${installId}`, 'Running…');
 
     try {
-        const result = await gateway._request('skills.install', { name, installId, timeoutMs: 600000 });
+        const result = await gateway._request('skills.install', { name, installId }, 600000);
 
         const warnings = Array.isArray(result?.warnings) && result.warnings.length > 0
             ? `\n\nWARNINGS:\n- ${result.warnings.join('\n- ')}`
