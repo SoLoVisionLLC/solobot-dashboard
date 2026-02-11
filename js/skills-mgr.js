@@ -221,6 +221,12 @@ function renderSkills() {
 
                 <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end;">
                     ${installButtons}
+                    <button onclick="viewSkillFiles('${escapeHtml(skillKey)}', '${escapeHtml(skill?.path || '')}')" 
+                            class="btn btn-ghost" 
+                            style="padding: 4px 10px; font-size: 11px;"
+                            title="View and edit skill files">
+                        📂 Files
+                    </button>
                     <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})" 
                             class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}" 
                             style="padding: 4px 10px; font-size: 11px;">
@@ -338,5 +344,231 @@ window.promptSetEnv = async function(skillKey) {
         loadSkills();
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
+    }
+};
+
+// ========== Skill File Viewer/Editor ==========
+
+let currentSkillFiles = [];
+let currentSkillPath = '';
+let currentSkillName = '';
+let currentEditingFile = null;
+
+window.viewSkillFiles = async function(skillKey, skillPath) {
+    currentSkillPath = skillPath || '';
+    currentSkillName = skillKey;
+    
+    const titleEl = document.getElementById('skill-files-modal-title');
+    const treeEl = document.getElementById('skill-files-tree');
+    const previewEl = document.getElementById('skill-file-preview');
+
+    if (titleEl) titleEl.textContent = `📂 ${skillKey}`;
+    if (treeEl) treeEl.innerHTML = '<div style="color: var(--text-muted); padding: 8px;">Loading...</div>';
+    if (previewEl) previewEl.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">Select a file to view</div>';
+
+    showModal('skill-files-modal');
+
+    try {
+        // Use dashboard API for file listing
+        const resp = await fetch(`/api/skills/${encodeURIComponent(skillKey)}/files`);
+        if (!resp.ok) {
+            throw new Error(await resp.text() || 'Failed to load files');
+        }
+        const result = await resp.json();
+        currentSkillFiles = result?.files || [];
+        currentSkillPath = result?.path || skillPath || '';
+
+        if (currentSkillFiles.length === 0) {
+            if (treeEl) treeEl.innerHTML = '<div style="color: var(--text-muted); padding: 8px;">No files found</div>';
+            return;
+        }
+
+        renderSkillFilesTree(currentSkillFiles);
+
+        // Auto-open SKILL.md if present
+        const skillMd = currentSkillFiles.find(f => f.name === 'SKILL.md' || f.relativePath === 'SKILL.md');
+        if (skillMd) {
+            previewSkillFile(skillMd.relativePath || 'SKILL.md');
+        }
+    } catch (e) {
+        console.warn('[Skills] Failed to load files:', e.message);
+        if (treeEl) treeEl.innerHTML = `<div style="color: var(--error); padding: 8px;">Error: ${escapeHtml(e.message)}</div>`;
+    }
+};
+
+function renderSkillFilesTree(files) {
+    const container = document.getElementById('skill-files-tree');
+    if (!container) return;
+
+    // Build tree structure from relativePath
+    const tree = {};
+    for (const f of files) {
+        const relPath = f.relativePath || f.name || '';
+        const parts = relPath.split('/').filter(Boolean);
+        
+        let node = tree;
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (i === parts.length - 1) {
+                if (!node._files) node._files = [];
+                node._files.push({ ...f, fileName: part, relPath: relPath });
+            } else {
+                if (!node[part]) node[part] = {};
+                node = node[part];
+            }
+        }
+    }
+
+    container.innerHTML = renderSkillTreeNode(tree, '');
+}
+
+function renderSkillTreeNode(node, prefix) {
+    let html = '';
+
+    // Render subdirectories first
+    const dirs = Object.keys(node).filter(k => k !== '_files').sort();
+    for (const dir of dirs) {
+        html += `
+        <div class="skill-tree-dir" onclick="toggleSkillTreeDir(this)" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; cursor: pointer; border-radius: 4px;">
+            <span class="tree-chevron" style="font-size: 10px; color: var(--text-muted);">▶</span>
+            <span style="font-size: 12px;">📁 ${escapeHtml(dir)}</span>
+        </div>
+        <div class="skill-tree-children hidden" style="padding-left: 16px;">
+            ${renderSkillTreeNode(node[dir], prefix ? `${prefix}/${dir}` : dir)}
+        </div>`;
+    }
+
+    // Render files
+    const files = node._files || [];
+    for (const f of files.sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''))) {
+        const icon = getFileIcon(f.fileName);
+        html += `
+        <div class="skill-tree-file" onclick="previewSkillFile('${escapeHtml(f.relPath)}')" 
+             style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 12px;"
+             onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+            <span>${icon}</span>
+            <span>${escapeHtml(f.fileName)}</span>
+        </div>`;
+    }
+
+    return html;
+}
+
+function getFileIcon(fileName) {
+    if (!fileName) return '📄';
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    const icons = {
+        'md': '📝',
+        'py': '🐍',
+        'sh': '🔧',
+        'js': '📜',
+        'json': '📋',
+        'yaml': '📋',
+        'yml': '📋',
+        'txt': '📄',
+    };
+    return icons[ext] || '📄';
+}
+
+window.toggleSkillTreeDir = function(el) {
+    const children = el.nextElementSibling;
+    if (!children) return;
+    const chevron = el.querySelector('.tree-chevron');
+    if (children.classList.contains('hidden')) {
+        children.classList.remove('hidden');
+        if (chevron) chevron.textContent = '▼';
+    } else {
+        children.classList.add('hidden');
+        if (chevron) chevron.textContent = '▶';
+    }
+};
+
+window.previewSkillFile = async function(relPath) {
+    const preview = document.getElementById('skill-file-preview');
+    if (!preview) return;
+
+    preview.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">Loading...</div>';
+    currentEditingFile = relPath;
+
+    try {
+        const resp = await fetch(`/api/skills/${encodeURIComponent(currentSkillName)}/files/${encodeURIComponent(relPath)}`);
+        if (!resp.ok) {
+            throw new Error(await resp.text() || 'Failed to load file');
+        }
+        const result = await resp.json();
+        const content = result?.content || '';
+        const fileName = relPath.split('/').pop();
+        const isEditable = /\.(md|txt|py|sh|js|json|yaml|yml)$/i.test(fileName);
+        const isBundled = !currentSkillPath.includes('/workspace/skills');
+
+        preview.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-default); background: var(--surface-1);">
+                <span style="font-weight: 600; font-size: 12px; font-family: ui-monospace, monospace;">${escapeHtml(fileName)}</span>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    ${isBundled ? '<span style="font-size: 10px; color: var(--warning);">Read-only (bundled)</span>' : ''}
+                    ${isEditable && !isBundled ? `<button onclick="editSkillFile('${escapeHtml(relPath)}')" class="btn btn-primary" style="font-size: 11px; padding: 4px 10px;">Edit</button>` : ''}
+                </div>
+            </div>
+            <pre id="skill-file-content" style="padding: 12px; margin: 0; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow-y: auto; flex: 1; background: var(--surface-0); color: var(--text-primary);">${escapeHtml(content)}</pre>
+        `;
+    } catch (e) {
+        preview.innerHTML = `<div style="color: var(--error); padding: 20px;">Error: ${escapeHtml(e.message)}</div>`;
+    }
+};
+
+window.editSkillFile = async function(relPath) {
+    const preview = document.getElementById('skill-file-preview');
+    if (!preview) return;
+
+    try {
+        const resp = await fetch(`/api/skills/${encodeURIComponent(currentSkillName)}/files/${encodeURIComponent(relPath)}`);
+        if (!resp.ok) {
+            throw new Error(await resp.text() || 'Failed to load file');
+        }
+        const result = await resp.json();
+        const content = result?.content || '';
+        const fileName = relPath.split('/').pop();
+
+        preview.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-default); background: var(--surface-1);">
+                <span style="font-weight: 600; font-size: 12px; font-family: ui-monospace, monospace;">✏️ Editing: ${escapeHtml(fileName)}</span>
+                <div style="display: flex; gap: 6px;">
+                    <button onclick="previewSkillFile('${escapeHtml(relPath)}')" class="btn btn-ghost" style="font-size: 11px; padding: 4px 10px;">Cancel</button>
+                    <button onclick="saveSkillFile('${escapeHtml(relPath)}')" class="btn btn-primary" style="font-size: 11px; padding: 4px 10px;">💾 Save</button>
+                </div>
+            </div>
+            <textarea id="skill-file-editor" style="width: 100%; flex: 1; padding: 12px; margin: 0; font-size: 11px; line-height: 1.5; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; border: none; resize: none; background: var(--surface-0); color: var(--text-primary);">${escapeHtml(content)}</textarea>
+        `;
+
+        // Focus the textarea
+        const textarea = document.getElementById('skill-file-editor');
+        if (textarea) textarea.focus();
+    } catch (e) {
+        showToast('Failed to load file: ' + e.message, 'error');
+    }
+};
+
+window.saveSkillFile = async function(relPath) {
+    const textarea = document.getElementById('skill-file-editor');
+    if (!textarea) return;
+
+    const content = textarea.value;
+
+    try {
+        const resp = await fetch(`/api/skills/${encodeURIComponent(currentSkillName)}/files/${encodeURIComponent(relPath)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to save file');
+        }
+        
+        showToast('File saved', 'success');
+        previewSkillFile(relPath);
+    } catch (e) {
+        showToast('Failed to save: ' + e.message, 'error');
     }
 };

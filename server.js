@@ -1001,6 +1001,146 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: 'File not found' }));
     }
   }
+
+  // ========== Skills Files API ==========
+  // Skills directories (in priority order)
+  const SKILLS_DIRS = [
+    path.join(OPENCLAW_DATA, 'workspace/skills'),     // workspace skills
+    path.join(OPENCLAW_DATA, 'skills'),               // user skills
+    '/app/skills'                                      // bundled skills
+  ];
+
+  // Find skill path by name
+  function findSkillPath(skillName) {
+    for (const dir of SKILLS_DIRS) {
+      const skillPath = path.join(dir, skillName);
+      if (fs.existsSync(skillPath) && fs.existsSync(path.join(skillPath, 'SKILL.md'))) {
+        return skillPath;
+      }
+    }
+    return null;
+  }
+
+  // List files in a skill directory recursively
+  function listSkillFiles(skillPath, basePath = '') {
+    const files = [];
+    const items = fs.readdirSync(skillPath);
+    for (const item of items) {
+      const itemPath = path.join(skillPath, item);
+      const relPath = basePath ? `${basePath}/${item}` : item;
+      const stat = fs.statSync(itemPath);
+      if (stat.isDirectory()) {
+        files.push(...listSkillFiles(itemPath, relPath));
+      } else {
+        files.push({
+          name: item,
+          path: path.join(skillPath, relPath),
+          relativePath: relPath,
+          size: stat.size,
+          mtime: stat.mtime.toISOString()
+        });
+      }
+    }
+    return files;
+  }
+
+  // GET /api/skills/:name/files - list files in a skill
+  if (url.pathname.match(/^\/api\/skills\/([^/]+)\/files$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/skills\/([^/]+)\/files$/);
+    const skillName = decodeURIComponent(match[1]);
+    const skillPath = findSkillPath(skillName);
+
+    res.setHeader('Content-Type', 'application/json');
+    if (!skillPath) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ error: 'Skill not found' }));
+    }
+
+    try {
+      const files = listSkillFiles(skillPath);
+      return res.end(JSON.stringify({ path: skillPath, files }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // GET /api/skills/:name/files/:path - read a skill file
+  if (url.pathname.match(/^\/api\/skills\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/skills\/([^/]+)\/files\/(.+)$/);
+    const skillName = decodeURIComponent(match[1]);
+    const filePath = decodeURIComponent(match[2]);
+    const skillPath = findSkillPath(skillName);
+
+    res.setHeader('Content-Type', 'application/json');
+    if (!skillPath) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ error: 'Skill not found' }));
+    }
+
+    const fullPath = path.resolve(skillPath, filePath);
+    // Security: ensure path is within skill directory
+    if (!fullPath.startsWith(skillPath)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    try {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      return res.end(JSON.stringify({ path: fullPath, content }));
+    } catch (e) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ error: 'File not found' }));
+    }
+  }
+
+  // PUT /api/skills/:name/files/:path - write a skill file
+  if (url.pathname.match(/^\/api\/skills\/([^/]+)\/files\/(.+)$/) && req.method === 'PUT') {
+    const match = url.pathname.match(/^\/api\/skills\/([^/]+)\/files\/(.+)$/);
+    const skillName = decodeURIComponent(match[1]);
+    const filePath = decodeURIComponent(match[2]);
+    const skillPath = findSkillPath(skillName);
+
+    res.setHeader('Content-Type', 'application/json');
+    if (!skillPath) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ error: 'Skill not found' }));
+    }
+
+    // Only allow writing to workspace/skills (not bundled)
+    const workspaceSkillsDir = path.join(OPENCLAW_DATA, 'workspace/skills');
+    if (!skillPath.startsWith(workspaceSkillsDir)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Cannot edit bundled skills. Copy to workspace/skills first.' }));
+    }
+
+    const fullPath = path.resolve(skillPath, filePath);
+    // Security: ensure path is within skill directory
+    if (!fullPath.startsWith(skillPath)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { content } = JSON.parse(body);
+        // Ensure parent directory exists
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(fullPath, content, 'utf8');
+        return res.end(JSON.stringify({ ok: true, path: fullPath }));
+      } catch (e) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+  // ========== End Skills Files API ==========
   
   // Acknowledge bot update (clear badge)
   if (url.pathname === '/api/memory-meta/acknowledge' && req.method === 'POST') {
