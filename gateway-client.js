@@ -1,5 +1,5 @@
-const GATEWAY_DEBUG = false;
-const GATEWAY_DEBUG_EVENTS = false;
+const GATEWAY_DEBUG = true;
+const GATEWAY_DEBUG_EVENTS = true;
 function gwLog(...args){ if (GATEWAY_DEBUG) console.log(...args); }
 function gwEventLog(...args){ if (GATEWAY_DEBUG_EVENTS) console.log(...args); }
 function gwWarn(...args){ if (GATEWAY_DEBUG) console.warn(...args); }
@@ -212,9 +212,12 @@ class GatewayClient {
         const payload = frame.payload || (frame.payloadJSON ? JSON.parse(frame.payloadJSON) : null);
 
         if (event === 'chat') {
+            gwLog(`[Gateway] 📨 Chat event received: session=${payload?.sessionKey}, state=${payload?.state}, role=${payload?.message?.role}, currentSession=${this.sessionKey}`);
             this._handleChatEvent(payload);
         } else if (event === 'agent') {
             this._handleAgentEvent(payload);
+        } else {
+            gwLog(`[Gateway] Event: ${event}`);
         }
     }
 

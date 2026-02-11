@@ -27,6 +27,7 @@ function subscribeToAllSessions() {
 
 function handleCrossSessionNotification(msg) {
     const { sessionKey, content } = msg;
+    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content||'').slice(0,80)}...`);
 
     // Never count read-ack sync events as notifications.
     // These are internal signals used to clear unreads across clients.
