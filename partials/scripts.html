@@ -612,8 +612,71 @@
                     agentEl.value = currentAgent;
                 }
 
+                // Highlight current priority button
+                updatePriorityButtonHighlight(task.priority || 1);
+
+                // Show delete button (existing task)
+                const deleteBtn = document.getElementById("task-detail-delete-btn");
+                if (deleteBtn) deleteBtn.style.display = "";
+
                 // Render images
                 renderTaskImages();
+
+                showModal("task-detail-modal");
+            };
+
+            // Open task detail modal for creating a NEW task
+            window.openNewTaskDetail = function (column = 'todo') {
+                // Create a temporary task object
+                const now = Date.now();
+                currentDetailTask = {
+                    id: 't' + now,
+                    title: '',
+                    description: '',
+                    priority: 1,
+                    created: now,
+                    agent: 'main',
+                    images: [],
+                    _isNew: true
+                };
+                currentDetailColumn = column;
+                taskModalOpen = true;
+
+                // Clear/populate modal fields
+                document.getElementById("task-detail-title").value = '';
+                document.getElementById("task-detail-description").value = '';
+                
+                // Status badge
+                const statusEl = document.getElementById("task-detail-status");
+                const statusMap = { todo: "To-Do", progress: "In Progress", done: "Done" };
+                statusEl.textContent = statusMap[column] || "To-Do";
+                statusEl.className = "badge";
+
+                // Priority badge
+                const priorityEl = document.getElementById("task-detail-priority");
+                priorityEl.textContent = "P1";
+                priorityEl.className = "badge badge-primary";
+
+                // Highlight P1 by default
+                updatePriorityButtonHighlight(1);
+
+                // Date (new task)
+                const dateEl = document.getElementById("task-detail-date");
+                dateEl.textContent = "New task";
+
+                // Agent dropdown (default to main, can be changed)
+                const agentEl = document.getElementById("task-detail-agent");
+                if (agentEl) agentEl.value = "main";
+
+                // Hide delete button (can't delete a new task)
+                const deleteBtn = document.getElementById("task-detail-delete-btn");
+                if (deleteBtn) deleteBtn.style.display = "none";
+
+                // Clear images
+                const imagesContainer = document.getElementById("task-detail-images");
+                if (imagesContainer) {
+                    imagesContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">No attachments yet</div>';
+                }
 
                 showModal("task-detail-modal");
             };
@@ -631,6 +694,46 @@
                 }
             };
 
+            // Set priority from detail modal buttons
+            window.taskDetailSetPriority = function (priority) {
+                if (!currentDetailTask) return;
+                currentDetailTask.priority = priority;
+                
+                // Update priority badge in header
+                const priorityEl = document.getElementById("task-detail-priority");
+                if (priorityEl) {
+                    priorityEl.textContent = "P" + priority;
+                }
+                
+                // Update button highlighting
+                updatePriorityButtonHighlight(priority);
+                
+                saveState("Changed priority to P" + priority);
+                renderTasks();
+                showToast("Priority set to P" + priority, "success");
+            };
+
+            // Highlight the selected priority button
+            function updatePriorityButtonHighlight(priority) {
+                const buttons = [
+                    { el: document.getElementById("task-detail-p0"), p: 0, color: "var(--brand-red)" },
+                    { el: document.getElementById("task-detail-p1"), p: 1, color: "var(--warning)" },
+                    { el: document.getElementById("task-detail-p2"), p: 2, color: "#3b82f6" }
+                ];
+                buttons.forEach(btn => {
+                    if (!btn.el) return;
+                    if (btn.p === priority) {
+                        btn.el.style.background = btn.color;
+                        btn.el.style.color = "white";
+                        btn.el.style.borderColor = btn.color;
+                    } else {
+                        btn.el.style.background = "transparent";
+                        btn.el.style.color = btn.color;
+                        btn.el.style.borderColor = btn.color;
+                    }
+                });
+            }
+
             window.closeTaskDetailModal = async function () {
                 // Auto-save changes before closing
                 if (currentDetailTask && currentDetailColumn) {
@@ -642,7 +745,19 @@
                         document.getElementById(
                             "task-detail-description",
                         ).value;
-                    await saveState("Updated task");
+                    
+                    // If this is a new task and has a title, add it
+                    if (currentDetailTask._isNew && currentDetailTask.title.trim()) {
+                        delete currentDetailTask._isNew;
+                        if (!state.tasks[currentDetailColumn]) {
+                            state.tasks[currentDetailColumn] = [];
+                        }
+                        state.tasks[currentDetailColumn].unshift(currentDetailTask);
+                        addActivity("Task added: " + currentDetailTask.title, "info");
+                        await saveState("Added new task");
+                    } else if (!currentDetailTask._isNew) {
+                        await saveState("Updated task");
+                    }
                     render();
                 }
                 hideModal("task-detail-modal");
