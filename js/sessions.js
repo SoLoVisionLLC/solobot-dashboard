@@ -605,15 +605,8 @@ function initGateway() {
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
             
-            // Sync model display from server info
-            const serverModel = localStorage.getItem('server_model');
-            const serverProvider = localStorage.getItem('server_provider');
-            if (serverModel) syncModelDisplay(serverModel, serverProvider);
-            
-            // Fetch model config directly from gateway (most reliable source)
-            fetchModelsFromGateway();
-            // Apply per-session model override (if any)
-            applySessionModelOverride(sessionKey);
+            // Fetch model config from gateway (populates dropdowns), then apply session-specific model
+            fetchModelsFromGateway().then(() => applySessionModelOverride(sessionKey));
             
             // Update session name displays (hard clarity: show full session key)
             currentSessionName = sessionKey;

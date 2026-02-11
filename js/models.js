@@ -666,8 +666,11 @@ async function fetchModelsFromGateway() {
         // Store for getModelsForProvider to use
         window._gatewayModels = modelsByProvider;
         
-        // Sync current model from primary
-        if (primary) {
+        // Sync current model — prefer session-specific model over global primary
+        const sessionModel = availableSessions?.find(s => s.key === currentSessionName)?.model;
+        if (sessionModel && sessionModel !== 'unknown') {
+            syncModelDisplay(sessionModel, sessionModel.split('/')[0]);
+        } else if (primary) {
             syncModelDisplay(primary, primary.split('/')[0]);
         }
         
