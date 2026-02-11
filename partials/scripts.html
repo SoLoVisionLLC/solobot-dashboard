@@ -603,10 +603,32 @@
                         .toLocaleDateString()
                     : "";
 
+                // Agent dropdown
+                const agentEl = document.getElementById(
+                    "task-detail-agent",
+                );
+                if (agentEl) {
+                    const currentAgent = task.agent || getTaskAgent(task);
+                    agentEl.value = currentAgent;
+                }
+
                 // Render images
                 renderTaskImages();
 
                 showModal("task-detail-modal");
+            };
+
+            // Handle agent change from dropdown
+            window.taskDetailAgentChanged = function () {
+                if (!currentDetailTask) return;
+                const agentEl = document.getElementById("task-detail-agent");
+                if (agentEl) {
+                    currentDetailTask.agent = agentEl.value;
+                    saveState("Changed task agent to " + agentEl.value.toUpperCase());
+                    addActivity("Reassigned task to " + agentEl.value.toUpperCase(), "info");
+                    renderTasks();
+                    showToast("Agent updated!", "success");
+                }
             };
 
             window.closeTaskDetailModal = async function () {
