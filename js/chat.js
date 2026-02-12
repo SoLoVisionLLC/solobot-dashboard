@@ -933,6 +933,16 @@ let chatPagePendingImages = [];
 let chatPageScrollPosition = null;
 let chatPageUserScrolled = false;
 let chatPageNewMessageCount = 0;
+let chatPageLastRenderKey = null;
+let suppressChatRenderUntil = 0;
+
+// Suppress chat re-renders briefly on right-click to preserve text selection
+document.addEventListener('contextmenu', (e) => {
+    const container = document.getElementById('chat-page-messages');
+    if (container && container.contains(e.target)) {
+        suppressChatRenderUntil = Date.now() + 1500;
+    }
+});
 
 // Save scroll position to sessionStorage
 function saveChatScrollPosition() {
@@ -1067,6 +1077,37 @@ function renderChatPage() {
     }
 
     const messages = state.chat?.messages || [];
+
+    // Avoid clearing selection: if user is selecting text in chat, skip re-render
+    const selection = window.getSelection();
+    const hasSelection = selection && selection.toString().trim().length > 0;
+    const selectionInChat = hasSelection && (
+        (selection.anchorNode && container.contains(selection.anchorNode)) ||
+        (selection.focusNode && container.contains(selection.focusNode))
+    );
+    if (selectionInChat) {
+        return;
+    }
+
+    // Suppress render briefly after right-click
+    if (Date.now() < suppressChatRenderUntil) {
+        return;
+    }
+
+    // Skip re-render if nothing changed (prevents text selection from collapsing)
+    const lastMsg = messages[messages.length - 1];
+    const renderKey = [
+        messages.length,
+        lastMsg?.id || '',
+        lastMsg?.time || '',
+        streamingText || '',
+        isProcessing ? 1 : 0
+    ].join('|');
+
+    if (renderKey === chatPageLastRenderKey) {
+        return;
+    }
+    chatPageLastRenderKey = renderKey;
     
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
