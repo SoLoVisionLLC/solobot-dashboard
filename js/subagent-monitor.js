@@ -1,7 +1,7 @@
 // js/subagent-monitor.js — Sub-agent activity monitor widget
 
 function renderSubagentMonitor() {
-  const container = document.getElementById('subagent-monitor-content');
+  const container = document.getElementById('subagent-monitor-list');
   if (!container) return;
 
   // Filter subagent sessions from available sessions
@@ -28,9 +28,9 @@ function renderSubagentMonitor() {
 
     return `<div class="subagent-row">
       <span class="status-dot ${dot}"></span>
-      <span class="subagent-agent">${agent}</span>
+      <span class="subagent-agent-badge">${agent}</span>
       <span class="subagent-label" title="${escapeHtml(label)}">${truncate(label, 40)}</span>
-      <span class="subagent-time">${age}</span>
+      <span class="subagent-meta">${age}</span>
     </div>`;
   }).join('');
 
@@ -74,12 +74,8 @@ function escapeHtml(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Auto-refresh with existing session polling
-const _origRenderSessions = window.renderSessionList;
-window.renderSessionList = function() {
-  if (typeof _origRenderSessions === 'function') _origRenderSessions();
-  renderSubagentMonitor();
-};
-
-// Also hook into periodic refresh
-setInterval(renderSubagentMonitor, 15000);
+// Auto-init and periodic refresh
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(renderSubagentMonitor, 3000);
+  setInterval(renderSubagentMonitor, 15000);
+});

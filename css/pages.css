@@ -510,6 +510,19 @@
                 flex-shrink: 0;
             }
 
+            .subagent-summary {
+                display: flex;
+                justify-content: space-between;
+                font-size: 11px;
+                padding: 4px 8px 8px;
+                border-bottom: 1px solid var(--border-default);
+                margin-bottom: 4px;
+            }
+            .subagent-list {
+                max-height: 240px;
+                overflow-y: auto;
+            }
+
             /* ========== Activity Heatmap ========== */
             .bento-heatmap {
                 grid-column: 1 / -1;
