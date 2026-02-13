@@ -615,11 +615,15 @@ async function fetchModelsFromGateway() {
         const fallbacks = modelConfig.fallbacks || [];
         const picker = modelConfig.picker || [];
         
+        // Also include configured models (agents.defaults.models keys)
+        const configuredModels = Object.keys(configData?.agents?.defaults?.models || {});
+        
         // Combine all model IDs
         const allModelIds = [...new Set([
             ...(primary ? [primary] : []),
             ...picker,
-            ...fallbacks
+            ...fallbacks,
+            ...configuredModels
         ])];
         
         if (allModelIds.length === 0) return;
