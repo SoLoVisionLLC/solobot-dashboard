@@ -5,7 +5,7 @@
 // ===================
 const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
-const NOTIFICATION_DEBUG = true;
+const NOTIFICATION_DEBUG = false;
 function notifLog(...args){ if (NOTIFICATION_DEBUG) console.log(...args); }
 
 function requestNotificationPermission() {

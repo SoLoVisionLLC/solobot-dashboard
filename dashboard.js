@@ -1,13 +1,9 @@
-// SoLoVision Command Center Dashboard v4.0.0
+// SoLoVision Command Center Dashboard v4.2.0
 // Modular architecture — see js/*.js for module files
-
-// SoLoVision Command Center Dashboard
-// Version: 3.21.0 - FIXED: renderChatPage() not being called (showPage bug)
 //
 // Message Architecture:
 // - Chat messages: Synced via Gateway (single source of truth across all devices)
 // - System messages: Local UI noise (heartbeats, errors) - persisted to localStorage only
-// - DEBUG: DISABLE_SYSTEM_FILTER = true (all messages go to Chat tab for debugging)
 
 // ===================
 // STATE MANAGEMENT

@@ -1,5 +1,8 @@
 // js/chat.js — Chat event handling, message rendering, voice input, image handling, chat page
 
+const CHAT_DEBUG = false;
+function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
+
 // ===================
 // CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
@@ -37,7 +40,7 @@ function initVoiceInput() {
                 btn.innerHTML = '<span class="voice-unsupported">🎤✗</span>';
             }
         }
-        console.log('[Voice] Web Speech API not supported');
+        chatLog('[Voice] Web Speech API not supported');
         return;
     }
     
@@ -50,7 +53,7 @@ function initVoiceInput() {
     voiceRecognition.maxAlternatives = 1;
 
     voiceRecognition.onstart = () => {
-        console.log('[Voice] Started listening, target input:', activeVoiceTarget);
+        chatLog('[Voice] Started listening, target input:', activeVoiceTarget);
         lastVoiceTranscript = ''; // Reset transcript
         setVoiceState('listening');
         
@@ -66,15 +69,15 @@ function initVoiceInput() {
     };
     
     voiceRecognition.onaudiostart = () => {
-        console.log('[Voice] Audio capture started - microphone is working');
+        chatLog('[Voice] Audio capture started - microphone is working');
     };
     
     voiceRecognition.onsoundstart = () => {
-        console.log('[Voice] Sound detected');
+        chatLog('[Voice] Sound detected');
     };
     
     voiceRecognition.onspeechstart = () => {
-        console.log('[Voice] Speech detected - processing...');
+        chatLog('[Voice] Speech detected - processing...');
         const input = document.getElementById(activeVoiceTarget);
         if (input) {
             input.placeholder = 'Hearing you...';
@@ -82,7 +85,7 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onresult = (event) => {
-        console.log('[Voice] onresult fired, resultIndex:', event.resultIndex, 'results.length:', event.results.length, 'target:', activeVoiceTarget);
+        chatLog('[Voice] onresult fired, resultIndex:', event.resultIndex, 'results.length:', event.results.length, 'target:', activeVoiceTarget);
         const input = document.getElementById(activeVoiceTarget);
         if (!input) {
             console.error('[Voice] Input not found:', activeVoiceTarget, '- trying fallback');
@@ -92,10 +95,10 @@ function initVoiceInput() {
                 console.error('[Voice] No input found at all!');
                 return;
             }
-            console.log('[Voice] Using fallback input:', fallback.id);
+            chatLog('[Voice] Using fallback input:', fallback.id);
         }
         const targetInput = input || document.getElementById('chat-page-input') || document.getElementById('chat-input');
-        console.log('[Voice] Updating input element:', targetInput?.id, targetInput?.tagName);
+        chatLog('[Voice] Updating input element:', targetInput?.id, targetInput?.tagName);
 
         let interimTranscript = '';
         let finalTranscript = '';
@@ -105,7 +108,7 @@ function initVoiceInput() {
             const result = event.results[i];
             const transcript = result[0].transcript;
             const confidence = result[0].confidence;
-            console.log(`[Voice] Result[${i}]: isFinal=${result.isFinal}, confidence=${confidence?.toFixed(2) || 'n/a'}, text="${transcript}"`);
+            chatLog(`[Voice] Result[${i}]: isFinal=${result.isFinal}, confidence=${confidence?.toFixed(2) || 'n/a'}, text="${transcript}"`);
             if (result.isFinal) {
                 finalTranscript += transcript;
             } else {
@@ -115,13 +118,13 @@ function initVoiceInput() {
 
         // Combine: show final + interim (interim in progress)
         const displayText = finalTranscript + interimTranscript;
-        console.log('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
+        chatLog('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
 
         // Update live transcript indicator (banner)
         updateLiveTranscriptIndicator(displayText, !!interimTranscript);
 
         // Always update the input with current text (even if empty during pauses)
-        console.log('[Voice] Setting targetInput.value to:', displayText);
+        chatLog('[Voice] Setting targetInput.value to:', displayText);
         targetInput.value = displayText;
         
         // Style based on whether we have final or interim
@@ -147,7 +150,7 @@ function initVoiceInput() {
         // Store final transcript for auto-send
         if (finalTranscript) {
             lastVoiceTranscript = finalTranscript;
-            console.log('[Voice] Final transcript stored:', finalTranscript);
+            chatLog('[Voice] Final transcript stored:', finalTranscript);
         }
     };
 
@@ -159,7 +162,7 @@ function initVoiceInput() {
             showToast('Microphone access denied. Click the lock icon in your browser address bar to allow.', 'error');
         } else if (event.error === 'no-speech') {
             // Don't stop on no-speech if continuous mode - just keep listening
-            console.log('[Voice] No speech detected yet, still listening...');
+            chatLog('[Voice] No speech detected yet, still listening...');
             // Only show toast if we're ending
             if (!voiceRecognition || voiceInputState !== 'listening') {
                 showToast('No speech detected. Make sure your microphone is working.', 'info');
@@ -177,7 +180,7 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onend = () => {
-        console.log('[Voice] Ended, last transcript:', lastVoiceTranscript);
+        chatLog('[Voice] Ended, last transcript:', lastVoiceTranscript);
         // Note: hideLiveTranscriptIndicator is called by setVoiceState('idle') below
         
         // Reset styling on both inputs
@@ -197,7 +200,7 @@ function initVoiceInput() {
         
         // Auto-send if enabled and we have a transcript
         if (voiceAutoSend && lastVoiceTranscript.trim()) {
-            console.log('[Voice] Auto-sending:', lastVoiceTranscript);
+            chatLog('[Voice] Auto-sending:', lastVoiceTranscript);
             // Determine which send function to use based on target
             if (activeVoiceTarget === 'chat-page-input') {
                 sendChatPageMessage();
@@ -212,7 +215,7 @@ function initVoiceInput() {
         activeVoiceTarget = 'chat-input'; // Reset target
     };
 
-    console.log('[Voice] Initialized successfully');
+    chatLog('[Voice] Initialized successfully');
 }
 
 function toggleVoiceInput() {
@@ -233,7 +236,7 @@ function startVoiceInput() {
     
     try {
         voiceRecognition.start();
-        console.log('[Voice] Starting...');
+        chatLog('[Voice] Starting...');
     } catch (e) {
         console.error('[Voice] Start error:', e);
         // May already be running
@@ -248,7 +251,7 @@ function stopVoiceInput() {
     
     try {
         voiceRecognition.stop();
-        console.log('[Voice] Stopping...');
+        chatLog('[Voice] Stopping...');
     } catch (e) {
         console.error('[Voice] Stop error:', e);
     }
@@ -352,7 +355,7 @@ function initPushToTalk() {
             const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
             activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
             
-            console.log('[Voice] Push-to-talk started (Alt+Space), target:', activeVoiceTarget);
+            chatLog('[Voice] Push-to-talk started (Alt+Space), target:', activeVoiceTarget);
             startVoiceInput();
         }
     });
@@ -361,13 +364,13 @@ function initPushToTalk() {
         // Stop on releasing Space OR releasing Alt while push-to-talk is active
         if ((e.code === 'Space' || e.key === 'Alt') && voicePushToTalk) {
             e.preventDefault();
-            console.log('[Voice] Push-to-talk released');
+            chatLog('[Voice] Push-to-talk released');
             voicePushToTalk = false;
             stopVoiceInput();
         }
     });
     
-    console.log('[Voice] Push-to-talk initialized (hold Alt+Space to speak)');
+    chatLog('[Voice] Push-to-talk initialized (hold Alt+Space to speak)');
 }
 
 // Check if user is typing in an input field
@@ -592,7 +595,7 @@ async function sendChatMessage() {
 
     // Send via Gateway WebSocket
     try {
-        console.log(`[Chat] Sending message with model: ${currentModel}`);
+        chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
             // Send with image attachments (send all images)
             const imageDataArray = imagesToSend.map(img => img.data);
@@ -634,7 +637,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
         }
     }
     
-    console.log(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
+    chatLog(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
         id: 'm' + Date.now(),
@@ -1554,7 +1557,7 @@ async function sendChatPageMessage() {
     
     // Send via Gateway
     try {
-        console.log(`[Chat] Sending message with model: ${currentModel}`);
+        chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
             const imageDataArray = imagesToSend.map(img => img.data);
             await gateway.sendMessageWithImages(text || 'Image', imageDataArray);

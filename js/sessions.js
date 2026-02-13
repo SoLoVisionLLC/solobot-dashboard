@@ -1,5 +1,8 @@
 // js/sessions.js — Session management, switching, agent selection
 
+const SESSION_DEBUG = false;
+function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
+
 // ===================
 // SESSION MANAGEMENT
 // ===================
@@ -108,7 +111,7 @@ function checkUrlSessionParam() {
     const params = new URLSearchParams(window.location.search);
     const sessionParam = params.get('session');
     if (sessionParam) {
-        console.log(`[Dashboard] URL session param detected: ${sessionParam}`);
+        sessLog(`[Dashboard] URL session param detected: ${sessionParam}`);
         return sessionParam;
     }
     return null;
@@ -124,18 +127,18 @@ function handleSubagentSessionAgent() {
     // Find the session in availableSessions
     const session = availableSessions.find(s => s.key === currentSessionName);
     if (!session) {
-        console.log(`[Dashboard] Subagent session not found in available sessions: ${currentSessionName}`);
+        sessLog(`[Dashboard] Subagent session not found in available sessions: ${currentSessionName}`);
         return;
     }
     
     const label = session.displayName || session.name || '';
-    console.log(`[Dashboard] Subagent session label: ${label}`);
+    sessLog(`[Dashboard] Subagent session label: ${label}`);
     
     // Extract agent ID from label pattern: {agentId}-{taskname}
     const labelMatch = label.match(/^([a-z]+)-/i);
     if (labelMatch) {
         const agentFromLabel = labelMatch[1].toLowerCase();
-        console.log(`[Dashboard] Determined agent from label: ${agentFromLabel}`);
+        sessLog(`[Dashboard] Determined agent from label: ${agentFromLabel}`);
         
         // Update current agent ID
         currentAgentId = agentFromLabel;
@@ -186,7 +189,7 @@ async function fetchSessions() {
             const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
             availableSessions = [...gatewaySessions, ...mergedLocalSessions];
 
-            console.log(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
+            sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
             
             // If current session is a subagent, determine the correct agent from its label
             handleSubagentSessionAgent();
@@ -229,7 +232,7 @@ async function fetchSessions() {
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
         availableSessions = [...serverSessions, ...mergedLocalSessions];
         
-        console.log(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
+        sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
         
         // If current session is a subagent, determine the correct agent from its label
         handleSubagentSessionAgent();
@@ -252,8 +255,8 @@ function populateSessionDropdown() {
     // Filter sessions for current agent only
     const agentSessions = filterSessionsForAgent(availableSessions, currentAgentId);
     
-    console.log(`[Dashboard] populateSessionDropdown: agent=${currentAgentId}, total=${availableSessions.length}, filtered=${agentSessions.length}`);
-    console.log(`[Dashboard] Available sessions:`, availableSessions.map(s => s.key));
+    sessLog(`[Dashboard] populateSessionDropdown: agent=${currentAgentId}, total=${availableSessions.length}, filtered=${agentSessions.length}`);
+    sessLog(`[Dashboard] Available sessions:`, availableSessions.map(s => s.key));
     
     // Build the dropdown HTML
     let html = '';
@@ -416,7 +419,7 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
 
         // 2. Increment session version to invalidate any in-flight history loads
         sessionVersion++;
-        console.log(`[Dashboard] Session version now ${sessionVersion}`);
+        sessLog(`[Dashboard] Session version now ${sessionVersion}`);
 
         // 3. Update session config and input field
         currentSessionName = sessionKey;
@@ -439,7 +442,7 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         if (cached && cached.length > 0) {
             state.chat.messages = cached.slice();
             if (typeof renderChatPage === 'function') renderChatPage();
-            console.log(`[Dashboard] Restored ${cached.length} cached messages for ${sessionKey}`);
+            sessLog(`[Dashboard] Restored ${cached.length} cached messages for ${sessionKey}`);
         }
 
         // 5. Reconnect gateway with new session key
@@ -485,7 +488,7 @@ window.goToSession = async function(sessionKey) {
         return;
     }
     
-    console.log(`[Dashboard] goToSession called with: ${sessionKey}`);
+    sessLog(`[Dashboard] goToSession called with: ${sessionKey}`);
     
     // Wait for gateway to be connected
     if (!gateway || !gateway.isConnected()) {
@@ -558,7 +561,7 @@ async function loadSessionHistory(sessionKey) {
             
             renderChat();
             renderChatPage();
-            console.log(`[Dashboard] Loaded ${session.messages.length} messages from ${sessionKey}`);
+            sessLog(`[Dashboard] Loaded ${session.messages.length} messages from ${sessionKey}`);
         } else {
             console.warn('[Dashboard] No messages in session:', sessionKey);
             // Try loading from archived chats as fallback
@@ -601,7 +604,7 @@ function initGateway() {
     gateway = new GatewayClient({
         sessionKey: GATEWAY_CONFIG.sessionKey,
         onConnected: (serverName, sessionKey) => {
-            console.log(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
+            sessLog(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
             
@@ -635,7 +638,7 @@ function initGateway() {
             gateway.loadHistory().then(result => {
                 _historyRefreshInFlight = false;
                 if (loadVersion !== sessionVersion) {
-                    console.log(`[Dashboard] Ignoring stale history (version ${loadVersion} != ${sessionVersion})`);
+                    sessLog(`[Dashboard] Ignoring stale history (version ${loadVersion} != ${sessionVersion})`);
                     return;
                 }
                 if (result?.messages) {
@@ -776,7 +779,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Increment session version to invalidate any in-flight history loads
     sessionVersion++;
-    console.log(`[Dashboard] Session version now ${sessionVersion} (new agent session)`);
+    sessLog(`[Dashboard] Session version now ${sessionVersion} (new agent session)`);
 
     // Clear local chat and cache
     state.chat.messages = [];
