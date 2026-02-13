@@ -73,11 +73,15 @@ function parseOpenClawConfig(config) {
   const primaryModel = config?.agents?.defaults?.model?.primary;
   const fallbackModels = config?.agents?.defaults?.model?.fallbacks || [];
   
+  // Also include configured models list (agents.defaults.models keys)
+  const configuredModels = Object.keys(config?.agents?.defaults?.models || {});
+
   // Combine all configured models
   const allModelIds = [...new Set([
     ...(primaryModel ? [primaryModel] : []),
     ...pickerModels,
-    ...fallbackModels
+    ...fallbackModels,
+    ...configuredModels
   ])];
   
   // Parse each model ID
