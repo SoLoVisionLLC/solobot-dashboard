@@ -10,13 +10,13 @@ services:
       # CRITICAL: Persist dashboard state between deployments
       - dashboard-data:/app/data
       # Mount memory files from OpenClaw workspace
-      - /home/node/.openclaw/workspace/memory:/app/memory:ro
+      - /home/solo/.openclaw/workspace/memory:/app/memory:ro
       # Mount scripts directory for functionality
-      - /home/node/.openclaw/workspace/scripts:/app/scripts:ro
+      - /home/solo/.openclaw/workspace/scripts:/app/scripts:ro
       # Mount OpenClaw directory for reading AND WRITING config (models, etc.)
-      - /home/node/.openclaw:/app/openclaw
+      - /home/solo/.openclaw:/app/openclaw
       # Mount sessions directory for reading chat history
-      - /home/node/.openclaw/sessions:/app/sessions:ro
+      - /home/solo/.openclaw/sessions:/app/sessions:ro
 
 volumes:
   dashboard-data:
