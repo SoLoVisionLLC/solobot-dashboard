@@ -581,6 +581,15 @@ async function fetchModelsFromGateway() {
         }
         
         console.log(`[Dashboard] Gateway models: ${allModelIds.length} models from ${Object.keys(modelsByProvider).length} providers`);
+        
+        // Sync to server so /api/models/list works even without config file volume mount
+        try {
+            fetch('/api/models/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(modelsByProvider)
+            });
+        } catch (_) {}
     } catch (e) {
         console.warn('[Dashboard] Failed to fetch models from gateway:', e.message);
     }

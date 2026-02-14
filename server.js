@@ -60,7 +60,15 @@ function fetchModelsFromConfig() {
       }
     }
 
-    console.warn('[Models] No OpenClaw config found, using fallback');
+    // Fallback: use gateway-synced models cache (pushed by frontend via /api/models/sync)
+    if (global._gatewayModelsCache && Object.keys(global._gatewayModelsCache).length > 0) {
+      cachedModels = global._gatewayModelsCache;
+      modelsLastFetched = Date.now();
+      console.log(`[Models] Using gateway-synced models cache (${Object.values(cachedModels).flat().length} models)`);
+      return resolve(cachedModels);
+    }
+
+    console.warn('[Models] No OpenClaw config found (file or gateway cache), using fallback');
     resolve(null);
   });
 }
@@ -1484,6 +1492,33 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Sync models from gateway (called by frontend after WebSocket config fetch)
+  // This allows the server to serve models even without a config file volume mount.
+  if (url.pathname === '/api/models/sync' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const models = JSON.parse(body);
+        if (models && typeof models === 'object' && Object.keys(models).length > 0) {
+          global._gatewayModelsCache = models;
+          cachedModels = models;
+          modelsLastFetched = Date.now();
+          console.log(`[Models] Synced ${Object.values(models).flat().length} models from gateway WebSocket`);
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ ok: true }));
+        } else {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Invalid models data' }));
+        }
+      } catch (e) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Refresh models cache (force re-fetch from config)
   if (url.pathname === '/api/models/refresh' && req.method === 'POST') {
     // Clear cache to force refresh
@@ -1750,7 +1785,22 @@ const server = http.createServer((req, res) => {
         } catch (e) { /* try next path */ }
       }
       
-      // 2. Fallback only: check state.json
+      // 2. Fallback: check gateway-synced models cache for the primary (starred) model
+      if (!modelInfo && global._gatewayModelsCache) {
+        for (const [provider, models] of Object.entries(global._gatewayModelsCache)) {
+          const primary = models.find(m => m.tier === 'default' || m.name?.includes('⭐'));
+          if (primary) {
+            modelInfo = {
+              modelId: primary.id,
+              provider: primary.id.split('/')[0],
+              name: primary.id.split('/').pop()
+            };
+            break;
+          }
+        }
+      }
+      
+      // 3. Fallback: check state.json
       if (!modelInfo) {
         try {
           const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -1760,7 +1810,7 @@ const server = http.createServer((req, res) => {
         } catch (e) { /* continue */ }
       }
       
-      // 3. Hardcoded fallback
+      // 4. Hardcoded fallback
       if (!modelInfo) {
         modelInfo = { 
           modelId: 'anthropic/claude-opus-4-5',
