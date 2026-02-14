@@ -183,10 +183,10 @@
 
             .bento-activity {
                 grid-column: 4;
-                grid-row: 2 / 4;
+                grid-row: 2;
             }
 
-            /* Row 3: Agents (col 1) | Costs (col 2) | Analytics (col 3) */
+            /* Row 3: Agents (col 1) | Costs (col 2) | Analytics (col 3) | Notes (col 4) */
             .bento-agents {
                 grid-column: 1;
                 grid-row: 3;
@@ -202,19 +202,19 @@
                 grid-row: 3;
             }
 
-            /* Row 4: Terminal (cols 1-2) | Heatmap (col 3) | Notes (col 4) */
+            .bento-notes {
+                grid-column: 4;
+                grid-row: 3;
+            }
+
+            /* Row 4: Terminal (cols 1-2) | Heatmap (cols 3-4) */
             .bento-terminal {
                 grid-column: 1 / 3;
                 grid-row: 4;
             }
 
             .bento-heatmap {
-                grid-column: 3;
-                grid-row: 4;
-            }
-
-            .bento-notes {
-                grid-column: 4;
+                grid-column: 3 / 5;
                 grid-row: 4;
             }
 
