@@ -6,7 +6,8 @@ let skillsPageBound = false;
 
 const skillsUi = {
     search: '',
-    onlyIssues: false
+    onlyIssues: false,
+    onlyInstalled: true
 };
 
 function initSkillsPage() {
@@ -35,6 +36,15 @@ function bindSkillsPageControls() {
     if (onlyIssues) {
         onlyIssues.addEventListener('change', () => {
             skillsUi.onlyIssues = Boolean(onlyIssues.checked);
+            renderSkills();
+        });
+    }
+
+    const onlyInstalled = document.getElementById('skills-only-installed');
+    if (onlyInstalled) {
+        onlyInstalled.checked = skillsUi.onlyInstalled;
+        onlyInstalled.addEventListener('change', () => {
+            skillsUi.onlyInstalled = Boolean(onlyInstalled.checked);
             renderSkills();
         });
     }
@@ -170,6 +180,15 @@ function renderSkills() {
             const key = (skill?.skillKey || '').toString();
             if (!query) return true;
             return name.toLowerCase().includes(query) || desc.toLowerCase().includes(query) || key.toLowerCase().includes(query);
+        })
+        .filter(skill => {
+            if (!skillsUi.onlyInstalled) return true;
+            // "Installed" means actually usable: ready (no missing bins) AND eligible for this OS
+            const missing = skill?.missing || {};
+            const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
+            const missingOs = (missing.os || []).length > 0;
+            if (missingOs || missingBins > 0) return false;
+            return skill?.installed === true || skill?.bundled === true || skill?.enabled !== false;
         })
         .filter(skill => skillsUi.onlyIssues ? skillHasIssues(skill) : true)
         .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
