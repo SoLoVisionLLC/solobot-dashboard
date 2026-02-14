@@ -1,0 +1,636 @@
+/* css/phase16-business.css — Phase 16: Business Features */
+
+/* ==========================================
+   Section Layout
+   ========================================== */
+
+.biz-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3, 12px);
+}
+
+.biz-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+    letter-spacing: -0.01em;
+}
+
+.biz-empty {
+    color: var(--text-muted, #888);
+    font-size: 13px;
+    text-align: center;
+    padding: var(--space-4, 16px) 0;
+    opacity: 0.7;
+}
+
+/* ==========================================
+   Buttons
+   ========================================== */
+
+.biz-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-default, #333);
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-secondary, rgba(255,255,255,0.06));
+    color: var(--text-primary, #fff);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.biz-btn:hover {
+    background: var(--surface-hover, rgba(255,255,255,0.1));
+    border-color: var(--brand-red, #ef4444);
+}
+
+.biz-btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.biz-btn-success {
+    border-color: var(--success, #22c55e);
+    color: var(--success, #22c55e);
+}
+.biz-btn-success:hover {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: var(--success, #22c55e);
+}
+
+.biz-btn-danger {
+    border-color: var(--brand-red, #ef4444);
+    color: var(--brand-red, #ef4444);
+}
+.biz-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.biz-btn-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm, 4px);
+    opacity: 0.5;
+    transition: opacity 0.15s, transform 0.15s;
+}
+.biz-btn-icon:hover {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+/* ==========================================
+   Badges
+   ========================================== */
+
+.biz-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+    letter-spacing: 0.02em;
+}
+
+.biz-badge-success {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success, #22c55e);
+}
+.biz-badge-warning {
+    background: rgba(250, 204, 21, 0.15);
+    color: var(--warning, #facc15);
+}
+.biz-badge-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--brand-red, #ef4444);
+}
+
+/* ==========================================
+   Table
+   ========================================== */
+
+.biz-table-wrap {
+    overflow-x: auto;
+    margin-bottom: var(--space-3, 12px);
+}
+
+.biz-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.biz-table th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #888);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-default, #333);
+    white-space: nowrap;
+}
+
+.biz-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.05));
+    color: var(--text-primary, #fff);
+    vertical-align: middle;
+}
+
+.biz-table tr:hover td {
+    background: var(--surface-hover, rgba(255,255,255,0.04));
+}
+
+.biz-actions {
+    display: flex;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.biz-mono {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+}
+
+/* ==========================================
+   Summary Row
+   ========================================== */
+
+.biz-summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3, 12px);
+    padding: var(--space-2, 8px) 0;
+    font-size: 13px;
+    color: var(--text-secondary, #aaa);
+    border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.05));
+    margin-top: var(--space-2, 8px);
+}
+
+/* ==========================================
+   Text Colors
+   ========================================== */
+
+.biz-text-success { color: var(--success, #22c55e); }
+.biz-text-warning { color: var(--warning, #facc15); }
+.biz-text-danger  { color: var(--brand-red, #ef4444); }
+.biz-text-muted   { color: var(--text-muted, #888); }
+
+/* ==========================================
+   Time Tracker
+   ========================================== */
+
+.biz-timer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.biz-timer-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-secondary, rgba(255,255,255,0.04));
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.biz-timer-active {
+    border-color: var(--success, #22c55e);
+    background: rgba(34, 197, 94, 0.06);
+    animation: biz-pulse 2s ease-in-out infinite;
+}
+
+@keyframes biz-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+    50% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12); }
+}
+
+.biz-timer-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.biz-timer-project {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary, #fff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.biz-timer-total {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    color: var(--text-muted, #888);
+}
+
+.biz-timer-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* ==========================================
+   Revenue Chart
+   ========================================== */
+
+.biz-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 120px;
+    padding: 8px 0;
+}
+
+.biz-chart-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.biz-chart-bar {
+    width: 100%;
+    max-width: 40px;
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(180deg, var(--brand-red, #ef4444), rgba(239, 68, 68, 0.4));
+    transition: height 0.4s ease;
+    min-height: 4px;
+}
+
+.biz-chart-label {
+    font-size: 10px;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+}
+
+.biz-chart-value {
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-secondary, #aaa);
+}
+
+/* ==========================================
+   Expense Categories
+   ========================================== */
+
+.biz-cat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: var(--space-3, 12px);
+}
+
+.biz-cat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.biz-cat-name {
+    font-size: 12px;
+    color: var(--text-secondary, #aaa);
+    min-width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.biz-cat-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--surface-secondary, rgba(255,255,255,0.06));
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.biz-cat-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--brand-red, #ef4444), #f97316);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.biz-recent-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #888);
+    margin-bottom: 6px;
+}
+
+.biz-expense-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: var(--space-2, 8px);
+}
+
+.biz-expense-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm, 4px);
+    font-size: 13px;
+}
+
+.biz-expense-item:hover {
+    background: var(--surface-hover, rgba(255,255,255,0.04));
+}
+
+/* ==========================================
+   Tax Deadlines
+   ========================================== */
+
+.biz-deadline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.biz-deadline-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-secondary, rgba(255,255,255,0.04));
+    border-left: 3px solid var(--text-muted, #888);
+    transition: all 0.2s;
+}
+
+.biz-deadline-ok {
+    border-left-color: var(--success, #22c55e);
+}
+
+.biz-deadline-soon {
+    border-left-color: var(--warning, #facc15);
+    background: rgba(250, 204, 21, 0.04);
+}
+
+.biz-deadline-urgent {
+    border-left-color: var(--brand-red, #ef4444);
+    background: rgba(239, 68, 68, 0.06);
+    animation: biz-urgent-flash 1.5s ease-in-out infinite;
+}
+
+.biz-deadline-overdue {
+    border-left-color: var(--brand-red, #ef4444);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+@keyframes biz-urgent-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.biz-deadline-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.biz-deadline-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+
+.biz-deadline-date {
+    font-size: 11px;
+    color: var(--text-muted, #888);
+}
+
+.biz-deadline-countdown {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.biz-deadline-urgent .biz-deadline-countdown {
+    color: var(--brand-red, #ef4444);
+}
+
+.biz-deadline-overdue .biz-deadline-countdown {
+    color: var(--brand-red, #ef4444);
+}
+
+/* ==========================================
+   Contracts
+   ========================================== */
+
+.biz-contract-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.biz-contract-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm, 4px);
+    transition: background 0.15s;
+}
+
+.biz-contract-item:hover {
+    background: var(--surface-hover, rgba(255,255,255,0.04));
+}
+
+.biz-contract-link {
+    color: var(--text-primary, #fff);
+    text-decoration: none;
+    font-size: 13px;
+    transition: color 0.15s;
+}
+
+.biz-contract-link:hover {
+    color: var(--brand-red, #ef4444);
+    text-decoration: underline;
+}
+
+/* ==========================================
+   Meetings
+   ========================================== */
+
+.biz-meeting-section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #888);
+    margin-bottom: 6px;
+    margin-top: 4px;
+}
+
+.biz-meeting-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: var(--space-3, 12px);
+}
+
+.biz-meeting-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-secondary, rgba(255,255,255,0.04));
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+    transition: all 0.2s;
+}
+
+.biz-meeting-imminent {
+    border-color: var(--warning, #facc15);
+    background: rgba(250, 204, 21, 0.06);
+}
+
+.biz-meeting-done {
+    opacity: 0.5;
+}
+
+.biz-meeting-past .biz-meeting-item {
+    background: transparent;
+    border-color: transparent;
+}
+
+.biz-meeting-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.biz-meeting-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+
+.biz-meeting-datetime {
+    font-size: 11px;
+    color: var(--text-muted, #888);
+}
+
+.biz-meeting-countdown {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-secondary, #aaa);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.biz-meeting-imminent .biz-meeting-countdown {
+    color: var(--warning, #facc15);
+}
+
+/* ==========================================
+   Weekly Summary
+   ========================================== */
+
+.biz-summary-card {
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-secondary, rgba(255,255,255,0.04));
+    border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+    padding: var(--space-3, 12px);
+}
+
+.biz-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3, 12px);
+    margin-bottom: var(--space-3, 12px);
+}
+
+.biz-summary-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.biz-summary-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-primary, #fff);
+}
+
+.biz-summary-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #888);
+}
+
+.biz-summary-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary, #aaa);
+    border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.05));
+    padding-top: var(--space-2, 8px);
+}
+
+.biz-summary-text p {
+    margin: 0 0 4px 0;
+}
+
+.biz-summary-text strong {
+    color: var(--text-primary, #fff);
+}
+
+/* ==========================================
+   Responsive
+   ========================================== */
+
+@media (max-width: 600px) {
+    .biz-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .biz-chart {
+        height: 80px;
+    }
+
+    .biz-summary-value {
+        font-size: 14px;
+    }
+
+    .biz-table {
+        font-size: 12px;
+    }
+
+    .biz-table th,
+    .biz-table td {
+        padding: 4px 6px;
+    }
+}

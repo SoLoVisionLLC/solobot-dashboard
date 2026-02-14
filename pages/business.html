@@ -1,0 +1,121 @@
+                    <!-- =================== BUSINESS PAGE =================== -->
+                    <div id="page-business" class="page">
+                        <div class="business-page-header">
+                            <h1>💼 Business Hub</h1>
+                            <div class="business-header-actions">
+                                <button class="btn btn-ghost" onclick="BusinessFeatures.exportData()" title="Export Business Data">📥 Export</button>
+                                <button class="btn btn-ghost" onclick="BusinessFeatures.resetDemo()" title="Reset to demo data">🔄 Reset Demo</button>
+                            </div>
+                        </div>
+                        <div class="bento-grid">
+                            <!-- 1. Invoice/Receipt Tracker -->
+                            <div class="bento-widget" id="biz-invoices-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">🧾 Invoices &amp; Receipts</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.showAddInvoice()" style="padding:4px 8px;font-size:12px">+ Add</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-invoices-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 2. Client Project Time Tracker -->
+                            <div class="bento-widget" id="biz-timetracker-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">⏱️ Time Tracker</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.showAddTimeEntry()" style="padding:4px 8px;font-size:12px">+ Log</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-timetracker-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 3. Revenue Dashboard -->
+                            <div class="bento-widget" id="biz-revenue-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">📈 Revenue</div>
+                                    <div class="bento-widget-actions">
+                                        <select id="biz-revenue-period" onchange="BusinessFeatures.renderRevenue()" style="font-size:11px;padding:2px 6px;background:transparent;color:var(--text-secondary);border:1px solid var(--border);border-radius:4px">
+                                            <option value="week">This Week</option>
+                                            <option value="month" selected>This Month</option>
+                                            <option value="quarter">Quarter</option>
+                                            <option value="year">Year</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-revenue-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 4. Expense Categorization -->
+                            <div class="bento-widget" id="biz-expenses-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">💰 Expenses</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.showAddExpense()" style="padding:4px 8px;font-size:12px">+ Add</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-expenses-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 5. Tax Deadline Reminders -->
+                            <div class="bento-widget" id="biz-tax-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">🏛️ Tax Deadlines</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.showAddTaxDeadline()" style="padding:4px 8px;font-size:12px">+ Add</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-tax-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 6. Contract/Document Links -->
+                            <div class="bento-widget" id="biz-contracts-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">📄 Contracts &amp; Docs</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.showAddContract()" style="padding:4px 8px;font-size:12px">+ Add</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-contracts-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 7. Meeting Scheduler -->
+                            <div class="bento-widget" id="biz-meetings-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">📅 Meetings</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.showAddMeeting()" style="padding:4px 8px;font-size:12px">+ New</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-meetings-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- 8. Weekly Business Summary -->
+                            <div class="bento-widget" id="biz-summary-widget">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">📊 Weekly Summary</div>
+                                    <div class="bento-widget-actions">
+                                        <button class="btn btn-ghost" onclick="BusinessFeatures.generateSummary()" style="padding:4px 8px;font-size:12px">🔄 Refresh</button>
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content" id="biz-summary-content">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- END BUSINESS PAGE -->
