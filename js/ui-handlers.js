@@ -29,6 +29,10 @@ function hideModal(id) {
 async function openSettingsModal() {
     showModal('settings-modal');
 
+    // Init memory layout setting
+    const layoutSel = document.getElementById('setting-memory-layout');
+    if (layoutSel && window._memoryCards) layoutSel.value = window._memoryCards.getLayout();
+
     try {
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');

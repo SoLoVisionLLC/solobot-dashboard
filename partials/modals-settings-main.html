@@ -398,4 +398,21 @@
                         </div>
 
 
+                        <!-- Display -->
+                        <div class="modal-section">
+                            <h4 class="modal-section-title">🎨 Display</h4>
+                            <div class="modal-section-content">
+                                <div class="setting-row">
+                                    <div class="setting-info">
+                                        <span class="setting-title">Memory Page Layout</span>
+                                        <div class="setting-desc">Choose between Agent Cards grid or Classic category view</div>
+                                    </div>
+                                    <select id="setting-memory-layout" class="input" style="width: auto; min-width: 120px;" onchange="window._memoryCards && window._memoryCards.setLayout(this.value)">
+                                        <option value="cards">Agent Cards</option>
+                                        <option value="classic">Classic</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="modal-section" id="theme-picker-container">

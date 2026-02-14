@@ -1,7 +1,7 @@
                     <!-- =================== MEMORY PAGE =================== -->
                     <div id="page-memory" class="page">
                         <div class="memory-page">
-                            <div class="page-header">
+                            <div class="page-header" style="display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-3);">
                                 <h1 class="page-title">
                                     🧠 Memory Files
                                 </h1>
@@ -10,6 +10,10 @@
                                     them here and they'll sync back to the
                                     workspace.
                                 </p>
+                                <div class="memory-layout-toggle" style="margin-left: auto;">
+                                    <button id="memory-toggle-grid" title="Agent Cards" onclick="window._memoryCards && window._memoryCards.setLayout('cards')">⊞</button>
+                                    <button id="memory-toggle-list" title="Classic View" onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
+                                </div>
                             </div>
 
                             <div class="memory-search-bar">
@@ -18,7 +22,7 @@
                                     id="memory-search"
                                     class="input"
                                     placeholder="Search memory files..."
-                                    oninput="renderMemoryFiles(this.value)"
+                                    oninput="if(window._memoryCards && window._memoryCards.getLayout()==='cards'){window._memoryCards.renderAgentCardsView(this.value)}else{renderMemoryFiles(this.value)}"
                                 >
                                 <button
                                     class="btn btn-secondary"
@@ -33,6 +37,11 @@
                                 </div>
                             </div>
 
+                            <!-- Agent Cards View -->
+                            <div id="memory-cards-view" style="display: none;"></div>
+
+                            <!-- Classic View -->
+                            <div id="memory-classic-view">
                             <div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-bottom: 16px;">
                                 <!-- File Tree Browser -->
                                 <div style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 12px; max-height: 600px; overflow-y: auto;">
@@ -51,6 +60,7 @@
                             <div id="memory-files-grid" class="docs-grid">
                                 <!-- Memory files will be rendered here -->
                             </div>
+                            </div><!-- end classic view -->
                         </div>
                     </div>
                     <!-- END MEMORY PAGE -->

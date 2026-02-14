@@ -189,6 +189,271 @@
             }
 
             /* Drag and drop highlight for chat */
+            /* ===== Agent Cards Grid Layout ===== */
+            .agent-stats-bar {
+                display: flex;
+                gap: var(--space-4);
+                margin-bottom: var(--space-6);
+            }
+            .agent-stat {
+                flex: 1;
+                background: var(--surface-1);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                padding: var(--space-4);
+                text-align: center;
+                backdrop-filter: blur(12px);
+            }
+            .agent-stat-value {
+                display: block;
+                font-size: 24px;
+                font-weight: 700;
+                color: var(--text-primary);
+            }
+            .agent-stat-label {
+                font-size: 11px;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            .agent-cards-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: var(--space-4);
+            }
+            .agent-card {
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                padding: var(--space-5);
+                cursor: pointer;
+                transition: all var(--transition-normal);
+                backdrop-filter: blur(12px);
+            }
+            .agent-card:hover {
+                background: var(--surface-2);
+                border-color: var(--brand-red);
+                transform: translateY(-2px);
+                box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            }
+            .agent-card-header {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+            }
+            .agent-card-avatar {
+                font-size: 28px;
+                width: 44px;
+                height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--surface-3);
+                border-radius: var(--radius-md);
+                flex-shrink: 0;
+            }
+            .agent-card-info {
+                flex: 1;
+                min-width: 0;
+            }
+            .agent-card-name {
+                font-weight: 600;
+                color: var(--text-primary);
+                font-size: 15px;
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+            }
+            .agent-card-badge {
+                font-size: 9px;
+                padding: 1px 6px;
+                background: var(--brand-red);
+                color: #fff;
+                border-radius: 9999px;
+                font-weight: 600;
+                letter-spacing: 0.05em;
+            }
+            .agent-card-meta {
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-top: 2px;
+            }
+            .agent-card-status {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .agent-card-status.status-active {
+                background: var(--success, #3fb950);
+                box-shadow: 0 0 8px rgba(63,185,80,0.4);
+            }
+            .agent-card-status.status-idle {
+                background: var(--text-faint, #555);
+            }
+            .agent-card-pills {
+                display: flex;
+                gap: var(--space-2);
+                margin-top: var(--space-3);
+                flex-wrap: wrap;
+            }
+            .agent-file-pill {
+                font-size: 10px;
+                padding: 2px 8px;
+                background: var(--surface-3);
+                border: 1px solid var(--border-subtle);
+                border-radius: 9999px;
+                color: var(--text-secondary);
+            }
+
+            /* Layout toggle buttons */
+            .memory-layout-toggle {
+                display: inline-flex;
+                background: var(--surface-2);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+            }
+            .memory-layout-toggle button {
+                background: none;
+                border: none;
+                padding: 6px 10px;
+                cursor: pointer;
+                color: var(--text-muted);
+                font-size: 14px;
+                transition: all 0.15s;
+            }
+            .memory-layout-toggle button.active {
+                background: var(--brand-red);
+                color: #fff;
+            }
+            .memory-layout-toggle button:hover:not(.active) {
+                background: var(--surface-3);
+            }
+
+            /* Drilled view */
+            .agent-drill-header {
+                display: flex;
+                align-items: center;
+                gap: var(--space-4);
+                margin-bottom: var(--space-4);
+            }
+            .agent-drill-title {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+            .agent-drill-layout {
+                display: grid;
+                grid-template-columns: 300px 1fr;
+                gap: var(--space-4);
+                min-height: 400px;
+            }
+            .agent-drill-files {
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                overflow-y: auto;
+                max-height: 600px;
+            }
+            .agent-drill-files-header {
+                padding: var(--space-3) var(--space-4);
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                border-bottom: 1px solid var(--border-subtle);
+                position: sticky;
+                top: 0;
+                background: var(--surface-1);
+            }
+            .agent-file-group-title {
+                padding: var(--space-2) var(--space-4);
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: var(--text-faint);
+                margin-top: var(--space-2);
+            }
+            .agent-file-item {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-4);
+                cursor: pointer;
+                transition: background 0.1s;
+                font-size: 13px;
+            }
+            .agent-file-item:hover {
+                background: var(--surface-2);
+            }
+            .agent-file-item.active {
+                background: var(--surface-3);
+                border-left: 3px solid var(--brand-red);
+            }
+            .agent-file-icon { font-size: 12px; flex-shrink: 0; }
+            .agent-file-name {
+                flex: 1;
+                color: var(--text-primary);
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .agent-file-date {
+                font-size: 10px;
+                color: var(--text-faint);
+                flex-shrink: 0;
+            }
+            .agent-drill-preview {
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                min-height: 200px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+            .agent-preview-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: var(--space-3) var(--space-4);
+                border-bottom: 1px solid var(--border-subtle);
+                background: var(--surface-1);
+            }
+            .agent-preview-filename {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+            .agent-preview-content {
+                padding: var(--space-4);
+                overflow: auto;
+                flex: 1;
+            }
+            .agent-preview-content pre {
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-size: 12px;
+                line-height: 1.6;
+                color: var(--text-secondary);
+                margin: 0;
+                font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            }
+
+            @media (max-width: 768px) {
+                .agent-stats-bar { flex-wrap: wrap; }
+                .agent-stat { min-width: 45%; }
+                .agent-cards-grid { grid-template-columns: 1fr; }
+                .agent-drill-layout { grid-template-columns: 1fr; }
+            }
+
             .chat-page-wrapper.drag-over {
                 outline: 3px dashed var(--brand-red);
                 outline-offset: -3px;
