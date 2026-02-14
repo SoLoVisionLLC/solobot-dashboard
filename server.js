@@ -995,33 +995,41 @@ const server = http.createServer((req, res) => {
   }
   
   // Sub-agent workspaces API
-  // Scans /app/openclaw/workspace-{agent} directories (read-only mount of .openclaw)
+  // Reads openclaw.json to discover agents and their workspace paths dynamically
   if (url.pathname === '/api/agents' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
       const agents = [];
       
-      if (!fs.existsSync(OPENCLAW_DATA)) {
-        return res.end(JSON.stringify({ agents: [], error: 'OpenClaw data not mounted' }));
+      // Read agent list from openclaw.json
+      let agentList = [];
+      const configPath = path.join(OPENCLAW_HOME, 'openclaw.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        agentList = config.agents?.list || [];
       }
       
-      const items = fs.readdirSync(OPENCLAW_DATA);
-      for (const item of items) {
-        if (!item.startsWith('workspace-')) continue;
-        const agentDir = path.join(OPENCLAW_DATA, item);
-        const stat = fs.statSync(agentDir);
-        if (!stat.isDirectory()) continue;
+      const defaultWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+      
+      for (const agent of agentList) {
+        if (agent.id === 'main') continue; // main workspace is shown separately
         
-        const agentId = item.replace('workspace-', '');
+        const agentDir = agent.workspace || defaultWorkspace;
+        if (!fs.existsSync(agentDir)) continue;
+        
         const mdFiles = [];
         
         try {
-          // List .md files in agent root
+          // List .md files in agent workspace root
           const agentFiles = fs.readdirSync(agentDir);
           for (const f of agentFiles) {
             if (!f.endsWith('.md')) continue;
-            const fstat = fs.statSync(path.join(agentDir, f));
-            mdFiles.push({ name: f, size: fstat.size, modified: fstat.mtime.toISOString() });
+            try {
+              const fstat = fs.statSync(path.join(agentDir, f));
+              if (fstat.isFile()) {
+                mdFiles.push({ name: f, size: fstat.size, modified: fstat.mtime.toISOString() });
+              }
+            } catch (e) { /* skip */ }
           }
           // Also check memory/ subdirectory
           const memDir = path.join(agentDir, 'memory');
@@ -1029,13 +1037,17 @@ const server = http.createServer((req, res) => {
             const memFiles = fs.readdirSync(memDir);
             for (const f of memFiles) {
               if (!f.endsWith('.md')) continue;
-              const fstat = fs.statSync(path.join(memDir, f));
-              mdFiles.push({ name: `memory/${f}`, size: fstat.size, modified: fstat.mtime.toISOString() });
+              try {
+                const fstat = fs.statSync(path.join(memDir, f));
+                if (fstat.isFile()) {
+                  mdFiles.push({ name: `memory/${f}`, size: fstat.size, modified: fstat.mtime.toISOString() });
+                }
+              } catch (e) { /* skip */ }
             }
           }
         } catch (e) { /* skip unreadable dirs */ }
         
-        agents.push({ id: agentId, workspace: item, files: mdFiles });
+        agents.push({ id: agent.id, workspace: agentDir, files: mdFiles });
       }
       
       // Sort agents alphabetically
@@ -1052,11 +1064,22 @@ const server = http.createServer((req, res) => {
     const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
     const agentId = decodeURIComponent(match[1]);
     const filename = decodeURIComponent(match[2]);
-    const filePath = path.resolve(OPENCLAW_DATA, `workspace-${agentId}`, filename);
+    
+    // Resolve workspace path from config
+    let agentWorkspace = null;
+    try {
+      const configPath = path.join(OPENCLAW_HOME, 'openclaw.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const agentConfig = (config.agents?.list || []).find(a => a.id === agentId);
+      agentWorkspace = agentConfig?.workspace || path.join(OPENCLAW_HOME, 'workspace');
+    } catch (e) {
+      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+    }
+    const filePath = path.resolve(agentWorkspace, filename);
     
     // Security: ensure path is within workspace
-    const agentDir = path.resolve(OPENCLAW_DATA, `workspace-${agentId}`);
-    if (!filePath.startsWith(agentDir)) {
+    const resolvedWorkspace = path.resolve(agentWorkspace);
+    if (!filePath.startsWith(resolvedWorkspace)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
