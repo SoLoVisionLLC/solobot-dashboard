@@ -1642,12 +1642,12 @@ const server = http.createServer((req, res) => {
           changedAt: Date.now()
         };
 
-        // Update OpenClaw config file directly — try mounted path first, then fallback
-        const openclawConfigPath = fs.existsSync(OPENCLAW_CONFIG_PATH) ? OPENCLAW_CONFIG_PATH : OPENCLAW_CONFIG_FALLBACK;
+        // Update OpenClaw config file directly — try all known paths
+        const openclawConfigPath = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK, OPENCLAW_CONFIG_FALLBACK2].find(p => fs.existsSync(p));
         let configUpdated = false;
 
         try {
-          if (fs.existsSync(openclawConfigPath)) {
+          if (openclawConfigPath) {
             const ocConfig = JSON.parse(fs.readFileSync(openclawConfigPath, 'utf8'));
 
             // Update the primary model in config
@@ -1661,7 +1661,7 @@ const server = http.createServer((req, res) => {
             console.log(`[Server] Updated OpenClaw config with model: ${modelId}`);
             configUpdated = true;
           } else {
-            console.warn('[Server] OpenClaw config not found at:', openclawConfigPath);
+            console.warn('[Server] OpenClaw config not found at any known path');
           }
         } catch (ocErr) {
           console.error('[Server] Failed to update OpenClaw config:', ocErr.message);
