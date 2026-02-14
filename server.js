@@ -20,7 +20,7 @@ process.env.TZ = process.env.TZ || 'America/New_York';
 // This ensures model changes are reflected immediately without redeploying.
 const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG || '/app/openclaw/openclaw.json';
 // Fallback paths (legacy mount or direct access)
-const OPENCLAW_CONFIG_FALLBACK = '/app/openclaw-data/openclaw.json';
+const OPENCLAW_CONFIG_FALLBACK = '/app/openclaw/openclaw.json';
 const OPENCLAW_CONFIG_FALLBACK2 = '/home/node/.openclaw/openclaw.json';
 
 // Cache for models list (short TTL since config is live-mounted from host)
@@ -191,9 +191,9 @@ function parseModelsOutput(output) {
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-// All OpenClaw data mounted at /app/openclaw-data (single bind mount of /home/node/.openclaw)
+// All OpenClaw data mounted at /app/openclaw (bind mount of /home/solo/.openclaw)
 // Falls back to ./memory for local dev or legacy mount
-const OPENCLAW_DATA = '/app/openclaw-data';
+const OPENCLAW_DATA = '/app/openclaw';
 const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace')) 
     ? path.join(OPENCLAW_DATA, 'workspace') 
     : './memory';
@@ -936,7 +936,7 @@ const server = http.createServer((req, res) => {
   }
   
   // Sub-agent workspaces API
-  // Scans /app/openclaw-data/workspace-{agent} directories (read-only mount of .openclaw)
+  // Scans /app/openclaw/workspace-{agent} directories (read-only mount of .openclaw)
   if (url.pathname === '/api/agents' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
