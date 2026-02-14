@@ -1012,7 +1012,7 @@ const server = http.createServer((req, res) => {
       const defaultWorkspace = path.join(OPENCLAW_HOME, 'workspace');
       
       for (const agent of agentList) {
-        if (agent.id === 'main') continue; // main workspace is shown separately
+        // Include all agents — main uses default workspace
         
         const agentDir = agent.workspace || defaultWorkspace;
         if (!fs.existsSync(agentDir)) continue;
@@ -1047,11 +1047,25 @@ const server = http.createServer((req, res) => {
           }
         } catch (e) { /* skip unreadable dirs */ }
         
-        agents.push({ id: agent.id, workspace: agentDir, files: mdFiles });
+        // Include identity metadata for sidebar rendering
+        const identity = agent.identity || {};
+        agents.push({
+          id: agent.id,
+          name: identity.name || agent.name || agent.id,
+          emoji: identity.emoji || '',
+          theme: identity.theme || '',
+          isDefault: agent.default || false,
+          workspace: agentDir,
+          files: mdFiles
+        });
       }
       
-      // Sort agents alphabetically
-      agents.sort((a, b) => a.id.localeCompare(b.id));
+      // Sort: default agent first, then alphabetically
+      agents.sort((a, b) => {
+        if (a.isDefault) return -1;
+        if (b.isDefault) return 1;
+        return a.id.localeCompare(b.id);
+      });
       
       return res.end(JSON.stringify({ agents }));
     } catch (e) {

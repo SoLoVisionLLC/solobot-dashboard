@@ -309,21 +309,91 @@ function setupSidebarAgentsManageButton() {
     });
 }
 
-function initSidebarAgentsUI() {
-    // Order -> hidden -> drag
-    applySidebarAgentsOrder();
-    applySidebarAgentsHidden();
-    setupSidebarAgentsDragAndDrop();
-    setupSidebarAgentsManageButton();
+// Avatar resolution: check for .png first, fall back to .svg, then emoji/initial
+const AVATAR_EXTENSIONS = ['png', 'svg'];
 
-    // Initial activity state if availableSessions already loaded
-    if (window.availableSessions) {
-        updateSidebarAgentActivityIndicators(window.availableSessions);
+function resolveAvatarUrl(agentId) {
+    // Main agent has a special avatar
+    if (agentId === 'main') return '/avatars/solobot.png';
+    // Others: try {id}.png, {id}.svg
+    return `/avatars/${agentId}.png`;
+}
+
+function agentDisplayName(agent) {
+    if (agent.isDefault) return `SoLoBot (Main)`;
+    // For named agents, use "SoLoBot-{NAME}"
+    const name = agent.name || agent.id;
+    return `SoLoBot-${name.charAt(0).toUpperCase() + name.slice(1)}`;
+}
+
+async function loadSidebarAgents() {
+    const container = document.getElementById('sidebar-agents-list');
+    if (!container) return;
+
+    try {
+        const response = await fetch('/api/agents');
+        const data = await response.json();
+        const agents = data.agents || [];
+
+        // Include main agent (it's excluded from /api/agents since it uses the shared workspace)
+        // Add it at the front if not present
+        const hasMain = agents.some(a => a.isDefault || a.id === 'main');
+        const allAgents = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+
+        // Sort: default first, then by id
+        allAgents.sort((a, b) => {
+            if (a.isDefault) return -1;
+            if (b.isDefault) return 1;
+            return a.id.localeCompare(b.id);
+        });
+
+        container.innerHTML = allAgents.map(agent => {
+            const avatarUrl = resolveAvatarUrl(agent.id);
+            const displayName = agentDisplayName(agent);
+            const emoji = agent.emoji || '';
+            const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+
+            return `
+                <div class="sidebar-agent" data-agent="${agent.id}">
+                    <img class="agent-avatar"
+                         src="${avatarUrl}"
+                         alt="${agent.id}"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
+                        ${emoji || fallbackInitial}
+                    </span>
+                    <span class="sidebar-item-text">${displayName}</span>
+                </div>
+            `;
+        }).join('');
+
+        // Re-init after dynamic load
+        applySidebarAgentsOrder();
+        applySidebarAgentsHidden();
+        setupSidebarAgentsDragAndDrop();
+
+        // Re-attach click handlers (setupSidebarAgents from chat.js)
+        if (typeof setupSidebarAgents === 'function') {
+            setupSidebarAgents();
+        }
+
+        if (window.availableSessions) {
+            updateSidebarAgentActivityIndicators(window.availableSessions);
+        }
+
+        console.log(`[Sidebar] Loaded ${allAgents.length} agents dynamically`);
+    } catch (e) {
+        console.warn('[Sidebar] Failed to load agents:', e.message);
     }
 }
 
+function initSidebarAgentsUI() {
+    setupSidebarAgentsManageButton();
+    // Load agents dynamically from API
+    loadSidebarAgents();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Sidebar HTML loads immediately; give other scripts a tick
     setTimeout(initSidebarAgentsUI, 50);
 });
 
