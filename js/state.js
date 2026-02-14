@@ -36,6 +36,19 @@ let state = {
 };
 
 
+// Global agent color map — reads from CSS variables (--agent-*) defined in themes.css
+// Used by phase10-taskboard.js, phase11-agents.js, phase12-analytics.js
+const AGENT_COLORS = new Proxy({}, {
+    get(target, prop) {
+        if (typeof prop !== 'string') return undefined;
+        const cached = target[prop];
+        if (cached) return cached;
+        const val = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${prop}`).trim();
+        if (val) target[prop] = val;
+        return val || '';
+    }
+});
+
 function chatStorageKey(sessionKey) {
     const key = sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'main';
     return 'solobot-chat-' + key;

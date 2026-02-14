@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 const { exec } = require('child_process');
 
@@ -11,14 +12,14 @@ process.env.TZ = process.env.TZ || 'America/New_York';
 // Dynamic Model Fetching from OpenClaw Config
 // ============================================
 
-// Path to mounted OpenClaw config (from Coolify volume mount)
-// Set OPENCLAW_CONFIG env var in Coolify to override the default path.
-// Volume-mount the host's ~/.openclaw directory to /app/openclaw/ so the
-// container always reads the LIVE config (not a stale copy).
-//
-// Coolify volume mount:  /home/solo/.openclaw → /app/openclaw
-// This ensures model changes are reflected immediately without redeploying.
-const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG || '/app/openclaw/openclaw.json';
+// Path to OpenClaw data directory
+// Set OPENCLAW_HOME env var to override (defaults to ~/.openclaw, then /app/openclaw for Docker)
+const OPENCLAW_HOME = process.env.OPENCLAW_HOME
+  || (fs.existsSync(path.join(os.homedir(), '.openclaw', 'openclaw.json')) ? path.join(os.homedir(), '.openclaw') : null)
+  || (fs.existsSync('/app/openclaw/openclaw.json') ? '/app/openclaw' : null)
+  || path.join(os.homedir(), '.openclaw');
+
+const OPENCLAW_CONFIG_PATH = process.env.OPENCLAW_CONFIG || path.join(OPENCLAW_HOME, 'openclaw.json');
 // Fallback paths (legacy mount or direct access)
 const OPENCLAW_CONFIG_FALLBACK = '/app/openclaw/openclaw.json';
 const OPENCLAW_CONFIG_FALLBACK2 = '/home/node/.openclaw/openclaw.json';
@@ -199,9 +200,9 @@ function parseModelsOutput(output) {
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-// All OpenClaw data mounted at /app/openclaw (bind mount of /home/solo/.openclaw)
-// Falls back to ./memory for local dev or legacy mount
-const OPENCLAW_DATA = '/app/openclaw';
+// OpenClaw data — uses OPENCLAW_HOME (auto-detected or env var)
+// Falls back to ./memory for local dev without OpenClaw
+const OPENCLAW_DATA = OPENCLAW_HOME;
 const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace')) 
     ? path.join(OPENCLAW_DATA, 'workspace') 
     : './memory';

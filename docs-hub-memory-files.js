@@ -154,6 +154,33 @@ async function fetchMemoryFiles() {
         return memoryFilesCache;
     }
     
+    // Try gateway RPC first (works for remote Coolify deployments)
+    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
+        try {
+            console.log('[Memory] Fetching files via gateway RPC...');
+            const result = await window.gateway._request('memory.list', { recursive: true });
+            
+            if (result && Array.isArray(result)) {
+                // Map gateway response to expected format
+                memoryFilesCache = result.map(file => ({
+                    name: file.name || file.path.split('/').pop(),
+                    path: file.path,
+                    size: file.size,
+                    modified: file.modified || file.mtime,
+                    type: 'file',
+                    category: categorizeFile(file.name || file.path),
+                    description: getFileDescription(file.name || file.path)
+                }));
+                lastFetchTime = now;
+                console.log(`[Memory] ✓ Loaded ${memoryFilesCache.length} files via gateway RPC`);
+                return memoryFilesCache;
+            }
+        } catch (e) {
+            console.warn('[Memory] Gateway RPC failed, falling back to REST API:', e.message);
+        }
+    }
+    
+    // Fallback to REST API
     try {
         const response = await fetch('/api/memory');
         const data = await response.json();
@@ -301,56 +328,80 @@ async function viewMemoryFile(filepath) {
     console.log('[Memory] Showing modal...');
     showModal('memory-file-modal');
     
-    try {
-        // Fetch file content
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`);
-        const data = await response.json();
-        
-        if (data.error) {
-            contentEl.value = `Error: ${data.error}`;
+    let data = null;
+    
+    // Try gateway RPC first
+    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
+        try {
+            console.log('[Memory] Reading file via gateway RPC...');
+            const result = await window.gateway._request('memory.read', { path: filepath });
+            
+            if (result && result.content !== undefined) {
+                data = {
+                    name: filepath.split('/').pop(),
+                    content: result.content,
+                    botUpdated: result.botUpdated
+                };
+                console.log('[Memory] ✓ Loaded file via gateway RPC');
+            }
+        } catch (e) {
+            console.warn('[Memory] Gateway RPC read failed, falling back to REST API:', e.message);
+        }
+    }
+    
+    // Fallback to REST API
+    if (!data) {
+        try {
+            const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`);
+            data = await response.json();
+            
+            if (data.error) {
+                contentEl.value = `Error: ${data.error}`;
+                return;
+            }
+        } catch (e) {
+            contentEl.value = `Failed to load file: ${e.message}`;
             return;
         }
-        
-        if (titleEl) titleEl.textContent = data.name;
-        
-        // Fix single-line markdown files (newlines stripped by some agents)
-        let content = data.content || '';
-        const lineCount = content.split('\n').length;
-        if (content.length > 200 && lineCount <= 3) {
-            content = fixSingleLineMarkdown(content);
-        }
-        
-        if (contentEl) contentEl.value = content;
-        
-        // Store current file for editing (with fixed content)
-        window.currentMemoryFile = {
-            path: filepath,
-            content: content,
-            botUpdated: data.botUpdated
-        };
-        
-        // Load version history
-        loadVersionHistory(filepath);
-        
-        // Show bot-update status in title
-        const file = memoryFilesCache.find(f => f.path === filepath);
-        if (file && file.botUpdated && !file.acknowledged) {
-            titleEl.innerHTML = `
-                ${escapeHtmlLocal(data.name)}
-                <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
-                <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" 
-                        class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
-                    ✓ Mark as Read
-                </button>
-            `;
-        } else if (file && file.acknowledged) {
-            titleEl.innerHTML = `
-                ${escapeHtmlLocal(data.name)}
-                <span class="badge badge-success" style="margin-left: 8px;">✓ Read</span>
-            `;
-        }
-    } catch (e) {
-        contentEl.value = `Failed to load file: ${e.message}`;
+    }
+    
+    if (titleEl) titleEl.textContent = data.name;
+    
+    // Fix single-line markdown files (newlines stripped by some agents)
+    let content = data.content || '';
+    const lineCount = content.split('\n').length;
+    if (content.length > 200 && lineCount <= 3) {
+        content = fixSingleLineMarkdown(content);
+    }
+    
+    if (contentEl) contentEl.value = content;
+    
+    // Store current file for editing (with fixed content)
+    window.currentMemoryFile = {
+        path: filepath,
+        content: content,
+        botUpdated: data.botUpdated
+    };
+    
+    // Load version history
+    loadVersionHistory(filepath);
+    
+    // Show bot-update status in title
+    const file = memoryFilesCache.find(f => f.path === filepath);
+    if (file && file.botUpdated && !file.acknowledged) {
+        titleEl.innerHTML = `
+            ${escapeHtmlLocal(data.name)}
+            <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
+            <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" 
+                    class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
+                ✓ Mark as Read
+            </button>
+        `;
+    } else if (file && file.acknowledged) {
+        titleEl.innerHTML = `
+            ${escapeHtmlLocal(data.name)}
+            <span class="badge badge-success" style="margin-left: 8px;">✓ Read</span>
+        `;
     }
 }
 
@@ -738,24 +789,51 @@ async function saveMemoryFile() {
     
     if (saveBtn) saveBtn.textContent = '⏳ Saving...';
     
-    try {
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                content: newContent,
-                updatedBy: 'user'  // Track that user made this edit
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            showToast(`Failed to save: ${data.error}`, 'error');
+    let success = false;
+    
+    // Try gateway RPC first
+    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
+        try {
+            console.log('[Memory] Saving file via gateway RPC...');
+            await window.gateway._request('memory.write', { 
+                path: filepath, 
+                content: newContent 
+            });
+            success = true;
+            console.log('[Memory] ✓ Saved file via gateway RPC');
+        } catch (e) {
+            console.warn('[Memory] Gateway RPC write failed, falling back to REST API:', e.message);
+        }
+    }
+    
+    // Fallback to REST API
+    if (!success) {
+        try {
+            const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    content: newContent,
+                    updatedBy: 'user'  // Track that user made this edit
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                showToast(`Failed to save: ${data.error}`, 'error');
+                if (saveBtn) saveBtn.textContent = '💾 Save';
+                return;
+            }
+            success = true;
+        } catch (e) {
+            showToast(`Failed to save: ${e.message}`, 'error');
             if (saveBtn) saveBtn.textContent = '💾 Save';
             return;
         }
-        
+    }
+    
+    if (success) {
         if (saveBtn) saveBtn.textContent = '✓ Saved!';
         setTimeout(() => {
             if (saveBtn) saveBtn.textContent = '💾 Save';
@@ -773,9 +851,6 @@ async function saveMemoryFile() {
         
         // Refresh file list in background
         renderMemoryFiles(document.getElementById('memory-search')?.value || '');
-    } catch (e) {
-        showToast(`Failed to save: ${e.message}`, 'error');
-        if (saveBtn) saveBtn.textContent = '💾 Save';
     }
 }
 
