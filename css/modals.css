@@ -526,13 +526,34 @@
 
             .sidebar-nav {
                 flex: 1;
+                min-height: 0; /* Allow flex child to shrink below content size */
                 padding: var(--space-2)
                     6px; /* Slightly more horizontal padding to center items */
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-1);
                 transition: padding var(--transition-normal);
-                /* Nav items stack at top, empty space goes below them */
+                overflow-y: auto;
+                overflow-x: hidden;
+                scrollbar-width: thin;
+                scrollbar-color: var(--surface-3) transparent;
+            }
+
+            .sidebar-nav::-webkit-scrollbar {
+                width: 4px;
+            }
+
+            .sidebar-nav::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            .sidebar-nav::-webkit-scrollbar-thumb {
+                background: var(--surface-3);
+                border-radius: 2px;
+            }
+
+            .sidebar-nav::-webkit-scrollbar-thumb:hover {
+                background: var(--text-muted);
             }
 
             .sidebar:hover .sidebar-nav,
