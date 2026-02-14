@@ -233,8 +233,16 @@ window.changeSessionModel = async function() {
         console.log(`[Dashboard] Changing model to: ${selectedModel} (session: ${sessionKey})`);
 
         if (selectedModel === 'global/default') {
-            // Revert session to use global default (remove override)
-            await gateway.patchSession(sessionKey, { model: null });
+            // Remove per-agent model override — revert to global default
+            const agentId = currentAgentId || 'main';
+            await fetch('/api/models/set-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId, modelId: 'global/default' })
+            });
+            
+            // Also clear session override
+            try { await gateway.patchSession(sessionKey, { model: null }); } catch (_) {}
             
             // Fetch current global default to update UI
             const response = await fetch('/api/models/current');
@@ -245,13 +253,28 @@ window.changeSessionModel = async function() {
                 const provider = globalModel.provider || currentModel.split('/')[0];
                 currentProvider = provider;
                 
-                // Update UI to show the resolved global model
                 syncModelDisplay(currentModel, currentProvider);
                 showToast('Reverted to Global Default', 'success');
             }
         } else {
-            // Update current session only (NOT the global default)
-            await gateway.patchSession(sessionKey, { model: selectedModel });
+            // Update per-agent model in openclaw.json
+            const agentId = currentAgentId || 'main';
+            const setResult = await fetch('/api/models/set-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId, modelId: selectedModel })
+            });
+            const setData = await setResult.json();
+            if (!setResult.ok) {
+                throw new Error(setData.error || 'Failed to set agent model');
+            }
+            
+            // Also patch current session so it takes effect immediately
+            try {
+                await gateway.patchSession(sessionKey, { model: selectedModel });
+            } catch (e) {
+                console.warn('[Dashboard] sessions.patch model failed (may need gateway restart):', e.message);
+            }
             
             // Update local state
             currentModel = selectedModel;
@@ -550,7 +573,7 @@ async function applySessionModelOverride(sessionKey) {
         }
     }
     
-    // 3. Fallback: use global default from openclaw.json via config.get
+    // 3. Check per-agent model override in openclaw.json
     if (!sessionModel) {
         try {
             if (gateway && gateway.isConnected()) {
@@ -558,14 +581,26 @@ async function applySessionModelOverride(sessionKey) {
                 let configData = config;
                 if (typeof config === 'string') configData = JSON.parse(config);
                 if (configData?.raw) configData = JSON.parse(configData.raw);
-                const primary = configData?.agents?.defaults?.model?.primary;
-                if (primary) {
-                    sessionModel = primary;
-                    console.log(`[Dashboard] Session ${sessionKey} using global default: ${sessionModel}`);
+                
+                // Check per-agent model first
+                const agentId = getAgentIdFromSession(sessionKey);
+                const agentEntry = (configData?.agents?.list || []).find(a => a.id === agentId);
+                if (agentEntry?.model) {
+                    sessionModel = typeof agentEntry.model === 'string' ? agentEntry.model : agentEntry.model.primary;
+                    console.log(`[Dashboard] Session ${sessionKey} using agent model: ${sessionModel}`);
+                }
+                
+                // Fallback to global default
+                if (!sessionModel) {
+                    const primary = configData?.agents?.defaults?.model?.primary;
+                    if (primary) {
+                        sessionModel = primary;
+                        console.log(`[Dashboard] Session ${sessionKey} using global default: ${sessionModel}`);
+                    }
                 }
             }
         } catch (e) {
-            console.warn('[Dashboard] Failed to fetch global default model:', e.message);
+            console.warn('[Dashboard] Failed to fetch model config:', e.message);
         }
     }
     

@@ -1661,6 +1661,61 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Set per-agent model override
+  if (url.pathname === '/api/models/set-agent' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { agentId, modelId } = JSON.parse(body);
+        if (!agentId || !modelId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'agentId and modelId are required' }));
+          return;
+        }
+
+        const configPath = fs.existsSync(OPENCLAW_CONFIG_PATH) ? OPENCLAW_CONFIG_PATH : OPENCLAW_CONFIG_FALLBACK;
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+        // Find agent in agents.list
+        if (!config.agents?.list) {
+          res.writeHead(404);
+          res.end(JSON.stringify({ error: 'No agents.list in config' }));
+          return;
+        }
+
+        const agent = config.agents.list.find(a => a.id === agentId);
+        if (!agent) {
+          res.writeHead(404);
+          res.end(JSON.stringify({ error: `Agent '${agentId}' not found` }));
+          return;
+        }
+
+        // Set or clear model — 'global/default' means remove override
+        if (modelId === 'global/default') {
+          delete agent.model;
+          console.log(`[Server] Cleared model override for agent ${agentId}`);
+        } else {
+          agent.model = modelId;
+          console.log(`[Server] Set model for agent ${agentId}: ${modelId}`);
+        }
+
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+        // Clear model cache so next fetch picks up changes
+        cachedModels = null;
+
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, agentId, modelId, message: 'Agent model updated. Restart gateway to apply.' }));
+      } catch (e) {
+        console.error('[Server] Failed to set agent model:', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Get current model endpoint
   if (url.pathname === '/api/models/current' && req.method === 'GET') {
     // Get current model — OpenClaw config is the source of truth
