@@ -11,6 +11,18 @@
                 --brand-white: #ffffff;
                 --accent: #bc2026;
 
+                /* Agent Colors */
+                --agent-main: #BC2026;
+                --agent-dev: #6366F1;
+                --agent-exec: #F59E0B;
+                --agent-coo: #10B981;
+                --agent-cfo: #EAB308;
+                --agent-cmp: #EC4899;
+                --agent-family: #14B8A6;
+                --agent-tax: #78716C;
+                --agent-sec: #3B82F6;
+                --agent-smm: #8B5CF6;
+
                 /* Fallback theme values (midnight) — ensures UI isn't transparent
                    if themes.css loads late or fails */
                 --surface-base: #0c0d10;

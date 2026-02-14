@@ -13,7 +13,15 @@ async function loadAgentStatuses() {
     if (!container) return;
 
     if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 16px;">Connect to gateway to see agents</div>';
+        container.innerHTML = `
+            <div class="empty-state">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <div class="empty-state-title">No Agent Data</div>
+                <div class="empty-state-desc">Connect to gateway to see agent status</div>
+            </div>
+        `;
         return;
     }
 
@@ -70,7 +78,7 @@ function renderAgentStatuses(sessions) {
         const isRecent = data.lastActivity && (Date.now() - data.lastActivity < 3600000); // 1hr
         const statusClass = isActive ? 'success' : isRecent ? 'warning' : 'idle';
         const statusText = isActive ? 'Active' : isRecent ? 'Recent' : 'Idle';
-        const color = AGENT_COLORS[id] || '#888';
+        const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
 
         return `
         <div class="agent-status-row" onclick="switchToAgent('${id}')" style="cursor: pointer;">

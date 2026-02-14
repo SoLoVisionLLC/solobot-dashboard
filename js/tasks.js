@@ -28,11 +28,10 @@ function getTaskAgent(task) {
     return 'main'; // default
 }
 
-const AGENT_COLORS = {
-    main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981',
-    cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C',
-    sec: '#3B82F6', smm: '#8B5CF6'
-};
+// Agent colors are now defined in CSS variables (see css/themes.css)
+function getAgentColor(agentId) {
+    return getComputedStyle(document.documentElement).getPropertyValue(`--agent-${agentId}`).trim() || '#888';
+}
 
 function getFilteredSortedTasks(column) {
     let tasks = [...(state.tasks[column] || [])];
@@ -104,7 +103,7 @@ function populateAgentFilter() {
     select.innerHTML = '<option value="all">All agents</option>';
     const sortedAgents = [...agents].sort();
     for (const agent of sortedAgents) {
-        const color = AGENT_COLORS[agent] || '#888';
+        const color = getAgentColor(agent);
         const opt = document.createElement('option');
         opt.value = agent;
         opt.textContent = agent.toUpperCase();
@@ -175,7 +174,7 @@ function renderTasks() {
             const isSelected = selectedTasks.has(task.id);
             const doneStyle = column === 'done' ? 'text-decoration: line-through; color: var(--text-muted);' : '';
             const agent = getTaskAgent(task);
-            const agentColor = AGENT_COLORS[agent] || '#888';
+            const agentColor = getAgentColor(agent);
             const ageDays = Math.floor((Date.now() - (task.created || 0)) / 86400000);
             const ageLabel = ageDays === 0 ? 'today' : ageDays === 1 ? '1d ago' : `${ageDays}d ago`;
             
@@ -235,11 +234,53 @@ function renderTasks() {
     
     updateTaskStats();
     updateBulkActionsUI();
+    updateDoneColumnCollapse();
     
     // Update quick stats when tasks change
     if (typeof updateQuickStats === 'function') {
         updateQuickStats();
     }
+}
+
+// Done column collapse/expand — NO auto-archive, SoLo reviews manually
+let doneColumnCollapsed = localStorage.getItem('doneColumnCollapsed') !== 'false'; // Default: collapsed
+
+function updateDoneColumnCollapse() {
+    const doneContainer = document.getElementById('done-tasks');
+    const summaryEl = document.getElementById('done-collapsed-summary');
+    const btnEl = document.getElementById('done-toggle-btn');
+    const textEl = document.getElementById('done-collapsed-text');
+    
+    if (!doneContainer) return;
+    
+    const doneCount = (state.tasks.done || []).length;
+    
+    // Update summary text
+    if (textEl) textEl.textContent = `${doneCount} completed task${doneCount !== 1 ? 's' : ''}`;
+    
+    if (doneCount === 0) {
+        // No done tasks — show drop zone, hide summary
+        doneContainer.classList.remove('done-hidden');
+        if (summaryEl) summaryEl.style.display = 'none';
+        if (btnEl) btnEl.textContent = 'Show';
+        return;
+    }
+    
+    if (doneColumnCollapsed) {
+        doneContainer.classList.add('done-hidden');
+        if (summaryEl) summaryEl.style.display = '';
+        if (btnEl) btnEl.textContent = 'Show';
+    } else {
+        doneContainer.classList.remove('done-hidden');
+        if (summaryEl) summaryEl.style.display = 'none';
+        if (btnEl) btnEl.textContent = 'Hide';
+    }
+}
+
+function toggleDoneColumn() {
+    doneColumnCollapsed = !doneColumnCollapsed;
+    localStorage.setItem('doneColumnCollapsed', doneColumnCollapsed.toString());
+    updateDoneColumnCollapse();
 }
 
 function renderNotes() {
@@ -259,21 +300,131 @@ function renderNotes() {
 
 function renderActivity() {
     const container = document.getElementById('activity-log');
-    const entries = state.activity.slice().reverse().slice(0, 20);
+    if (!container) return;
+    
+    const entries = state.activity.slice().reverse().slice(0, 50);
 
     if (entries.length === 0) {
         container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: var(--space-4);">No activity yet</div>';
         return;
     }
 
-    container.innerHTML = entries.map(entry => {
+    // Group entries by time period
+    const now = Date.now();
+    const today = new Date().toDateString();
+    const yesterday = new Date(now - 86400000).toDateString();
+    const weekAgo = now - 7 * 86400000;
+    
+    const grouped = { today: [], yesterday: [], thisWeek: [], older: [] };
+    const systemEntries = [];
+    
+    entries.forEach(entry => {
+        const entryDate = new Date(entry.time).toDateString();
+        const isSystem = /system|heartbeat|audit|auto/i.test(entry.action);
+        
+        if (isSystem) {
+            systemEntries.push(entry);
+            return;
+        }
+        
+        if (entryDate === today) {
+            grouped.today.push(entry);
+        } else if (entryDate === yesterday) {
+            grouped.yesterday.push(entry);
+        } else if (entry.time > weekAgo) {
+            grouped.thisWeek.push(entry);
+        } else {
+            grouped.older.push(entry);
+        }
+    });
+    
+    // Helper to format activity item with icon + verb + object
+    const formatActivity = (entry) => {
+        const timeStr = formatTime(entry.time);
+        let icon = '📋';
+        let text = escapeHtml(entry.action);
+        
+        // Parse action to extract icon + verb + object
+        const action = entry.action.toLowerCase();
+        if (action.includes('completed') || action.includes('done')) {
+            icon = '✅';
+        } else if (action.includes('started') || action.includes('began')) {
+            icon = '▶️';
+        } else if (action.includes('created') || action.includes('added')) {
+            icon = '➕';
+        } else if (action.includes('deleted') || action.includes('removed')) {
+            icon = '🗑️';
+        } else if (action.includes('updated') || action.includes('edited')) {
+            icon = '✏️';
+        } else if (action.includes('error') || action.includes('failed')) {
+            icon = '❌';
+        }
+        
         const typeClass = entry.type === 'success' ? 'success' : entry.type === 'error' ? 'warning' : '';
+        
         return `
-        <div class="activity-item">
-            <span class="activity-time">${formatTime(entry.time)}</span>
-            <span class="activity-text ${typeClass}">${escapeHtml(entry.action)}</span>
-        </div>
-    `}).join('');
+            <div class="activity-item">
+                <span style="font-size: 14px; margin-right: 6px;">${icon}</span>
+                <div style="flex: 1; min-width: 0;">
+                    <span class="activity-text ${typeClass}">${text}</span>
+                    <span class="activity-time" style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${timeStr}</span>
+                </div>
+            </div>
+        `;
+    };
+    
+    let html = '';
+    
+    // Today
+    if (grouped.today.length > 0) {
+        html += '<div class="activity-group-header">Today</div>';
+        html += grouped.today.map(formatActivity).join('');
+    }
+    
+    // Yesterday
+    if (grouped.yesterday.length > 0) {
+        html += '<div class="activity-group-header">Yesterday</div>';
+        html += grouped.yesterday.map(formatActivity).join('');
+    }
+    
+    // This Week
+    if (grouped.thisWeek.length > 0) {
+        html += '<div class="activity-group-header">This Week</div>';
+        html += grouped.thisWeek.map(formatActivity).join('');
+    }
+    
+    // Older
+    if (grouped.older.length > 0) {
+        html += '<div class="activity-group-header">Older</div>';
+        html += grouped.older.map(formatActivity).join('');
+    }
+    
+    // System entries (collapsed by default)
+    if (systemEntries.length > 0) {
+        html += `
+            <div class="activity-system-toggle" onclick="toggleSystemActivity()" style="cursor: pointer; padding: var(--space-2); margin-top: var(--space-2); background: var(--surface-2); border-radius: var(--radius-md); text-align: center; font-size: 11px; color: var(--text-muted);">
+                <span id="system-activity-toggle-text">Show ${systemEntries.length} system entries ▼</span>
+            </div>
+            <div id="system-activity-list" style="display: none;">
+                <div class="activity-group-header">System</div>
+                ${systemEntries.map(formatActivity).join('')}
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+// Toggle system activity visibility
+function toggleSystemActivity() {
+    const list = document.getElementById('system-activity-list');
+    const toggleText = document.getElementById('system-activity-toggle-text');
+    if (!list || !toggleText) return;
+    
+    const isHidden = list.style.display === 'none';
+    list.style.display = isHidden ? 'block' : 'none';
+    const count = (state.activity || []).filter(e => /system|heartbeat|audit|auto/i.test(e.action)).length;
+    toggleText.textContent = isHidden ? `Hide system entries ▲` : `Show ${count} system entries ▼`;
 }
 
 function renderDocs(filter = '') {
@@ -333,5 +484,7 @@ function getDocIconSymbol(type, url) {
     if (type === 'pdf' || url?.includes('.pdf')) return '📕';
     return '📁';
 }
+
+// Done column collapse helpers already defined above
 
 

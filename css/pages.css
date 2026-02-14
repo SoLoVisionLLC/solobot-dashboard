@@ -159,82 +159,93 @@
                 left: 240px;
             }
 
-            /* Bento grid container — scrollable layout showing all widgets */
+            /* Bento grid — 4-column layout, all 10 widgets explicitly placed */
             .bento-grid {
                 display: grid;
-                grid-template-columns: 3fr 1fr;
-                grid-template-rows: auto;
-                gap: var(--space-4);
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+                grid-template-rows: auto auto auto auto auto;
+                gap: var(--space-3);
                 width: 100%;
             }
 
-            /* Row 1: Quick Stats (full width, always one row) */
+            /* Row 1: Stats Bar (full width, compact ~50px) */
             .bento-quick-stats {
                 grid-column: 1 / -1;
                 grid-row: 1;
             }
 
-            /* Row 2: Task Board (left) + Activity (right, spans 2 rows) */
+            /* Row 2: Task Board (cols 1-3) + Activity Timeline (col 4, spans rows 2-3) */
             .bento-task-board {
-                grid-column: 1;
+                grid-column: 1 / 4;
                 grid-row: 2;
-                min-height: 500px;
+                min-height: 340px;
             }
 
             .bento-activity {
-                grid-column: 2;
-                grid-row: 2 / 4; /* span 2 rows */
+                grid-column: 4;
+                grid-row: 2 / 4;
             }
 
-            /* Row 3: Terminal (left) */
-            .bento-terminal {
+            /* Row 3: Agents (col 1) | Costs (col 2) | Analytics (col 3) */
+            .bento-agents {
                 grid-column: 1;
                 grid-row: 3;
             }
 
-            /* Row 4: Notes (left) + Chat (right) */
-            .bento-notes {
-                grid-column: 1;
+            .bento-costs {
+                grid-column: 2;
+                grid-row: 3;
+            }
+
+            .bento-analytics {
+                grid-column: 3;
+                grid-row: 3;
+            }
+
+            /* Row 4: Terminal (cols 1-2) | Heatmap (col 3) | Notes (col 4) */
+            .bento-terminal {
+                grid-column: 1 / 3;
                 grid-row: 4;
             }
 
-            .bento-chat {
-                grid-column: 2;
+            .bento-heatmap {
+                grid-column: 3;
                 grid-row: 4;
+            }
+
+            .bento-notes {
+                grid-column: 4;
+                grid-row: 4;
+            }
+
+            /* Row 5: Channels (full width, compact) */
+            .bento-channels {
+                grid-column: 1 / -1;
+                grid-row: 5;
+            }
+
+            .bento-chat {
+                grid-column: 1 / -1;
+                grid-row: 6;
             }
 
             /* Tablet layout (2 columns) */
             @media (max-width: 1200px) {
                 .bento-grid {
                     grid-template-columns: 1fr 1fr;
+                    grid-template-rows: auto;
                 }
-
-                .bento-task-board {
-                    grid-column: 1 / -1;
-                    grid-row: auto;
-                    min-height: 400px;
-                }
-
-                .bento-quick-stats {
-                    grid-column: 1 / -1;
-                    grid-row: auto;
-                }
-                .bento-activity {
-                    grid-column: 1;
-                    grid-row: auto;
-                }
-                .bento-notes {
-                    grid-column: 2;
-                    grid-row: auto;
-                }
-                .bento-terminal {
-                    grid-column: 1 / -1;
-                    grid-row: auto;
-                }
-                .bento-chat {
-                    grid-column: 1 / -1;
-                    grid-row: auto;
-                }
+                .bento-quick-stats,
+                .bento-task-board,
+                .bento-terminal,
+                .bento-channels,
+                .bento-chat    { grid-column: 1 / -1; grid-row: auto; }
+                .bento-activity,
+                .bento-agents,
+                .bento-costs,
+                .bento-analytics,
+                .bento-heatmap,
+                .bento-notes   { grid-column: auto; grid-row: auto; }
             }
 
             /* Mobile layout (1 column) */
@@ -242,13 +253,17 @@
                 .bento-grid {
                     grid-template-columns: 1fr;
                 }
-
                 .bento-task-board,
                 .bento-quick-stats,
                 .bento-terminal,
                 .bento-activity,
                 .bento-notes,
-                .bento-chat {
+                .bento-chat,
+                .bento-agents,
+                .bento-costs,
+                .bento-analytics,
+                .bento-channels,
+                .bento-heatmap {
                     grid-column: 1;
                     grid-row: auto;
                 }
@@ -391,6 +406,18 @@
                 flex: 1;
                 overflow-y: auto;
                 min-height: 0;
+            }
+
+            /* Done column collapse */
+            .done-toggle {
+                transition: background 0.2s;
+            }
+            .done-toggle:hover {
+                background: var(--surface-2) !important;
+                color: var(--text-primary) !important;
+            }
+            #done-tasks.done-collapsed {
+                display: none;
             }
 
             /* =================== KEYBOARD SHORTCUTS MODAL =================== */

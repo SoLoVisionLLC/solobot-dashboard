@@ -13,7 +13,15 @@ async function loadAnalyticsData() {
     if (!container) return;
 
     if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 12px;">Connect to gateway</div>';
+        container.innerHTML = `
+            <div class="empty-state">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                <div class="empty-state-title">No Analytics Data</div>
+                <div class="empty-state-desc">Connect to gateway to view session analytics</div>
+            </div>
+        `;
         return;
     }
 
@@ -67,7 +75,7 @@ function renderAnalytics(sessions) {
         <div style="margin-bottom: 12px;">
             <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Sessions by Agent</div>
             ${Object.entries(agentMessages).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, count]) => {
-                const color = AGENT_COLORS[id] || '#888';
+                const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
                 const pct = (count / maxAgent * 100);
                 return `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
                     <span style="width: 40px; font-size: 10px; color: ${color}; font-weight: 600; text-align: right;">${id.toUpperCase()}</span>

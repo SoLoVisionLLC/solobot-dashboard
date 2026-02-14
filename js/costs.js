@@ -13,7 +13,15 @@ async function loadCostData() {
     if (!container) return;
 
     if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 12px;">Connect to gateway</div>';
+        container.innerHTML = `
+            <div class="empty-state">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="empty-state-title">No Cost Data</div>
+                <div class="empty-state-desc">Connect to gateway to view usage & costs</div>
+            </div>
+        `;
         return;
     }
 
@@ -84,7 +92,7 @@ function renderCostData(sessions, statusInfo) {
         </div>
         <div style="space-y: 4px;">
             ${sorted.slice(0, 6).map(([id, data]) => {
-                const color = AGENT_COLORS[id] || '#888';
+                const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
                 const pct = maxTokens > 0 ? (data.total / maxTokens * 100) : 0;
                 const label = (typeof getAgentLabel === 'function') ? getAgentLabel(id) : id.toUpperCase();
                 return `
