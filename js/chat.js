@@ -14,8 +14,8 @@ function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
 let voiceRecognition = null;
 let voiceInputState = 'idle'; // idle, listening, processing
 let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-send after speech
-let voicePushToTalk = false; // Track if currently in push-to-talk mode
 let lastVoiceTranscript = ''; // Store last transcript for auto-send
+let accumulatedTranscript = ''; // Store accumulated text across pause/resume cycles
 
 // Live transcript indicator functions (disabled - transcript shows directly in input field)
 function showLiveTranscriptIndicator() { }
@@ -54,7 +54,7 @@ function initVoiceInput() {
 
     voiceRecognition.onstart = () => {
         chatLog('[Voice] Started listening, target input:', activeVoiceTarget);
-        lastVoiceTranscript = ''; // Reset transcript
+        // Don't reset transcript - keep accumulated text for pause/resume
         setVoiceState('listening');
         
         // Show live transcript indicator
@@ -65,6 +65,10 @@ function initVoiceInput() {
         if (input) {
             input.focus();
             input.placeholder = 'Listening... (speak now)';
+            // Keep existing accumulated text in the field
+            if (accumulatedTranscript) {
+                input.value = accumulatedTranscript;
+            }
         }
     };
     
@@ -116,9 +120,18 @@ function initVoiceInput() {
             }
         }
 
-        // Combine: show final + interim (interim in progress)
-        const displayText = finalTranscript + interimTranscript;
-        chatLog('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
+        // Append new transcripts to accumulated text
+        if (finalTranscript) {
+            // Add space before appending if there's already accumulated text
+            if (accumulatedTranscript && !accumulatedTranscript.endsWith(' ')) {
+                accumulatedTranscript += ' ';
+            }
+            accumulatedTranscript += finalTranscript;
+        }
+        
+        // Display accumulated + interim
+        const displayText = accumulatedTranscript + interimTranscript;
+        chatLog('[Voice] Display text:', displayText, '(accumulated:', accumulatedTranscript.length, 'interim:', interimTranscript.length, ')');
 
         // Update live transcript indicator (banner)
         updateLiveTranscriptIndicator(displayText, !!interimTranscript);
@@ -180,7 +193,7 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onend = () => {
-        chatLog('[Voice] Ended, last transcript:', lastVoiceTranscript);
+        chatLog('[Voice] Ended, accumulated transcript:', accumulatedTranscript);
         // Note: hideLiveTranscriptIndicator is called by setVoiceState('idle') below
         
         // Reset styling on both inputs
@@ -199,19 +212,21 @@ function initVoiceInput() {
         }
         
         // Auto-send if enabled and we have a transcript
-        if (voiceAutoSend && lastVoiceTranscript.trim()) {
-            chatLog('[Voice] Auto-sending:', lastVoiceTranscript);
+        if (voiceAutoSend && accumulatedTranscript.trim()) {
+            chatLog('[Voice] Auto-sending:', accumulatedTranscript);
             // Determine which send function to use based on target
             if (activeVoiceTarget === 'chat-page-input') {
                 sendChatPageMessage();
             } else {
                 sendChatMessage();
             }
-            lastVoiceTranscript = '';
+            // Clear accumulated text after auto-send
+            accumulatedTranscript = '';
+            const input = document.getElementById(activeVoiceTarget);
+            if (input) input.value = '';
         }
         
         setVoiceState('idle');
-        voicePushToTalk = false;
         activeVoiceTarget = 'chat-input'; // Reset target
     };
 
@@ -343,34 +358,30 @@ function updateVoiceAutoSendUI() {
     });
 }
 
-// Push-to-talk: Hold Alt+Space to speak
+// Alt+Space toggle: Press once to start, press again to stop
 function initPushToTalk() {
     document.addEventListener('keydown', (e) => {
-        // Trigger on Alt+Space (works even in input fields)
-        if (e.code === 'Space' && e.altKey && !voicePushToTalk && voiceInputState !== 'listening') {
+        // Toggle on Alt+Space (works even in input fields)
+        if (e.code === 'Space' && e.altKey) {
             e.preventDefault();
-            voicePushToTalk = true;
             
-            // Determine which input to target based on current page
-            const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
-            activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
-            
-            chatLog('[Voice] Push-to-talk started (Alt+Space), target:', activeVoiceTarget);
-            startVoiceInput();
+            if (voiceInputState === 'listening') {
+                // Already listening - stop
+                chatLog('[Voice] Alt+Space toggle: stopping');
+                stopVoiceInput();
+            } else {
+                // Not listening - start
+                // Determine which input to target based on current page
+                const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
+                activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
+                
+                chatLog('[Voice] Alt+Space toggle: starting, target:', activeVoiceTarget);
+                startVoiceInput();
+            }
         }
     });
     
-    document.addEventListener('keyup', (e) => {
-        // Stop on releasing Space OR releasing Alt while push-to-talk is active
-        if ((e.code === 'Space' || e.key === 'Alt') && voicePushToTalk) {
-            e.preventDefault();
-            chatLog('[Voice] Push-to-talk released');
-            voicePushToTalk = false;
-            stopVoiceInput();
-        }
-    });
-    
-    chatLog('[Voice] Push-to-talk initialized (hold Alt+Space to speak)');
+    chatLog('[Voice] Alt+Space toggle initialized (press to start/stop recording)');
 }
 
 // Check if user is typing in an input field
@@ -559,6 +570,12 @@ function clearImagePreviews() {
 }
 
 async function sendChatMessage() {
+    // Stop voice recording if active
+    if (voiceInputState === 'listening') {
+        chatLog('[Voice] Stopping recording before send');
+        stopVoiceInput();
+    }
+    
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text && pendingImages.length === 0) return;
@@ -584,6 +601,7 @@ async function sendChatMessage() {
     }
     
     input.value = '';
+    accumulatedTranscript = ''; // Clear voice accumulated text
     clearImagePreviews();
     adjustChatInputHeight(input);
     chatInputSelection = { start: 0, end: 0 };
@@ -1519,6 +1537,12 @@ function setupSidebarAgents() {
 }
 
 async function sendChatPageMessage() {
+    // Stop voice recording if active
+    if (voiceInputState === 'listening') {
+        chatLog('[Voice] Stopping recording before send');
+        stopVoiceInput();
+    }
+    
     const input = document.getElementById('chat-page-input');
     const text = input.value.trim();
     if (!text && chatPagePendingImages.length === 0) return;
@@ -1541,6 +1565,7 @@ async function sendChatPageMessage() {
     }
     
     input.value = '';
+    accumulatedTranscript = ''; // Clear voice accumulated text
     resizeChatPageInput();
     input.focus();
     clearChatPageImagePreviews();
