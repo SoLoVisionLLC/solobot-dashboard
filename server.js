@@ -461,7 +461,7 @@ async function fetchBackupFromDrive(accessToken) {
 function countTasks(stateObj) {
   if (!stateObj || !stateObj.tasks) return 0;
   const t = stateObj.tasks;
-  return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0);
+  return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0) + (t.archive?.length || 0);
 }
 
 async function checkAndRestoreFromBackup(localState) {
