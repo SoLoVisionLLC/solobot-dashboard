@@ -702,9 +702,12 @@
                 border: 1px solid rgba(188, 32, 38, 0.45);
             }
 
-            .sidebar-agent.is-hidden,
-            .sidebar-agent.auto-hidden {
+            .sidebar-agent.is-hidden {
                 display: none;
+            }
+
+            .sidebar-agent.auto-hidden {
+                opacity: 0.35;
             }
 
             .sidebar-agent.is-inactive:not(.active) {
