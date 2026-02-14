@@ -533,14 +533,18 @@
                 flex-direction: column;
                 gap: var(--space-1);
                 transition: padding var(--transition-normal);
-                overflow-y: auto;
+                overflow-y: scroll;
                 overflow-x: hidden;
                 scrollbar-width: thin;
+                scrollbar-color: transparent transparent;
+            }
+
+            .sidebar-nav:hover {
                 scrollbar-color: var(--surface-3) transparent;
             }
 
             .sidebar-nav::-webkit-scrollbar {
-                width: 4px;
+                width: 6px;
             }
 
             .sidebar-nav::-webkit-scrollbar-track {
@@ -548,8 +552,12 @@
             }
 
             .sidebar-nav::-webkit-scrollbar-thumb {
+                background: transparent;
+                border-radius: 3px;
+            }
+
+            .sidebar-nav:hover::-webkit-scrollbar-thumb {
                 background: var(--surface-3);
-                border-radius: 2px;
             }
 
             .sidebar-nav::-webkit-scrollbar-thumb:hover {
