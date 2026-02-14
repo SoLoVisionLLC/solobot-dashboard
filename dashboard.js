@@ -16,6 +16,9 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
+    
+    // Initialize dashboard improvement tasks
+    initDashboardTasks();
 
     // Log summary after state is loaded
     const provider = localStorage.getItem('selected_provider') || 'anthropic';
@@ -98,6 +101,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         try {
             await loadState();
+    
+    // Initialize dashboard improvement tasks
+    initDashboardTasks();
             // Don't overwrite chat - that comes from Gateway now
             render();
             updateLastSync();

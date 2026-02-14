@@ -185,7 +185,7 @@
                                 </div>
                             </div>
 
-                            <!-- Quick Stats Widget -->
+                            <!-- Quick Stats Widget with Sparklines -->
                             <div class="bento-widget bento-quick-stats">
                                 <div
                                     class="bento-widget-content"
@@ -215,59 +215,70 @@
                                             style="font-size: 10px; color: var(--text-muted)"
                                         >Updated just now</span>
                                     </div>
-                                    <div class="quick-stats-grid">
-                                        <div class="stat-item">
-                                            <div
-                                                class="stat-value brand"
-                                                id="stat-tasks-done"
-                                            >
-                                                0
-                                            </div>
-                                            <div class="stat-label">
-                                                Tasks Done
-                                            </div>
-                                        </div>
-                                        <div class="stat-item">
-                                            <div
-                                                class="stat-value"
-                                                id="stat-focus-sessions"
-                                            >
-                                                0
-                                            </div>
-                                            <div class="stat-label">Focus</div>
-                                        </div>
-                                        <div class="stat-item">
-                                            <div
-                                                class="stat-value"
-                                                id="stat-messages"
-                                            >
-                                                0
-                                            </div>
-                                            <div class="stat-label">
-                                                Messages
+                                    
+                                    <!-- Enhanced Stats with Sparklines -->
+                                    <div class="quick-stats-enhanced" style="margin-top: var(--space-3);">
+                                        <!-- Tasks Stat with Sparkline -->
+                                        <div class="quick-stat-card">
+                                            <div class="stat-with-sparkline">
+                                                <div class="stat-info">
+                                                    <div style="display: flex; align-items: center;">
+                                                        <span class="stat-value brand" id="stat-tasks-done">0</span>
+                                                        <span id="trend-tasks" class="stat-change"></span>
+                                                    </div>
+                                                    <div class="stat-label">Tasks Done</div>
+                                                </div>
+                                                <div id="sparkline-tasks"></div>
                                             </div>
                                         </div>
-                                        <div class="stat-item">
-                                            <div
-                                                class="stat-value"
-                                                id="stat-streak"
-                                            >
-                                                0
-                                            </div>
-                                            <div class="stat-label">
-                                                Streak 🔥
+                                        
+                                        <!-- Messages Stat with Sparkline -->
+                                        <div class="quick-stat-card">
+                                            <div class="stat-with-sparkline">
+                                                <div class="stat-info">
+                                                    <span class="stat-value" id="stat-messages">0</span>
+                                                    <div class="stat-label">Messages Today</div>
+                                                </div>
+                                                <div id="sparkline-messages"></div>
                                             </div>
                                         </div>
-                                        <div class="stat-item">
-                                            <div
-                                                class="stat-value"
-                                                id="stat-uptime"
-                                            >
-                                                --
+                                        
+                                        <!-- Focus Sessions Stat -->
+                                        <div class="quick-stat-card">
+                                            <div class="stat-with-sparkline">
+                                                <div class="stat-info">
+                                                    <span class="stat-value" id="stat-focus-sessions">0</span>
+                                                    <div class="stat-label">Focus Sessions</div>
+                                                </div>
+                                                <div id="sparkline-focus"></div>
                                             </div>
-                                            <div class="stat-label">
-                                                Session
+                                        </div>
+                                        
+                                        <!-- Streak & Session -->
+                                        <div class="quick-stat-card">
+                                            <div class="stat-with-sparkline">
+                                                <div class="stat-info">
+                                                    <span class="stat-value" id="stat-streak">0</span>
+                                                    <span style="font-size: 12px;">🔥</span>
+                                                    <div class="stat-label">Day Streak</div>
+                                                </div>
+                                                <div style="text-align: right;">
+                                                    <div class="stat-value" style="font-size: 14px;" id="stat-uptime">--</div>
+                                                    <div class="stat-label">Session</div>
+                                                </div>
                                             </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Progress Rings Row -->
+                                    <div style="display: flex; justify-content: center; gap: var(--space-4); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);">
+                                        <div style="text-align: center;">
+                                            <div id="progress-ring-tasks"></div>
+                                            <div class="progress-ring-label">Completion</div>
+                                        </div>
+                                        <div style="text-align: center;">
+                                            <div id="progress-ring-daily"></div>
+                                            <div class="progress-ring-label">Daily Goal</div>
                                         </div>
                                     </div>
                                 </div>
@@ -440,6 +451,24 @@
                                 </div>
                                 <div class="bento-widget-content">
                                     <div id="analytics-content"></div>
+                                </div>
+                            </div>
+
+                            <!-- Activity Heatmap Widget -->
+                            <div class="bento-widget bento-heatmap">
+                                <div class="bento-widget-header">
+                                    <div class="bento-widget-title">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                        Activity Heatmap
+                                    </div>
+                                </div>
+                                <div class="bento-widget-content">
+                                    <div id="activity-heatmap-container" style="margin-bottom: var(--space-3);"></div>
+                                    <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-bottom: var(--space-2);">Last 28 days</div>
+                                    <div id="hourly-heatmap-container"></div>
+                                    <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: var(--space-2);">Activity by hour (24h)</div>
                                 </div>
                             </div>
 

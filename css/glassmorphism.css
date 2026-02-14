@@ -1,0 +1,317 @@
+/* ========================================
+   PHASE 1: GLASSMORPHISM & VISUAL EFFECTS
+   ======================================== */
+
+/* Glassmorphism Card Base */
+.glass-card {
+    background: rgba(var(--surface-1-rgb, 20, 22, 26), 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    box-shadow: 
+        0 4px 24px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+    background: rgba(var(--surface-1-rgb, 20, 22, 26), 0.85);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+}
+
+/* Apply glassmorphism to bento widgets */
+.bento-widget {
+    background: rgba(var(--surface-1-rgb, 20, 22, 26), 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-lg);
+    box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bento-widget:hover {
+    background: rgba(var(--surface-1-rgb, 20, 22, 26), 0.9);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transform: translateY(-3px);
+}
+
+/* Light theme adjustments for glassmorphism */
+[data-theme="light"] .bento-widget,
+[data-theme="snow"] .bento-widget,
+[data-theme="latte"] .bento-widget {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .bento-widget:hover,
+[data-theme="snow"] .bento-widget:hover,
+[data-theme="latte"] .bento-widget:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--surface-2) 25%,
+        var(--surface-3) 50%,
+        var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* Circular Progress Ring */
+.progress-ring {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-ring svg {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-circle {
+    transition: stroke-dashoffset 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-ring-bg {
+    stroke: var(--surface-3);
+}
+
+.progress-ring-value {
+    position: absolute;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.progress-ring-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 4px;
+}
+
+/* Sparkline Container */
+.sparkline-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.sparkline {
+    width: 60px;
+    height: 24px;
+}
+
+.sparkline-path {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.sparkline-area {
+    opacity: 0.2;
+}
+
+.sparkline-positive {
+    stroke: var(--success);
+}
+.sparkline-positive .sparkline-area {
+    fill: var(--success);
+}
+
+.sparkline-negative {
+    stroke: var(--error);
+}
+.sparkline-negative .sparkline-area {
+    fill: var(--error);
+}
+
+.sparkline-neutral {
+    stroke: var(--brand-red);
+}
+.sparkline-neutral .sparkline-area {
+    fill: var(--brand-red);
+}
+
+/* Stat item with sparkline */
+.stat-with-sparkline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) 0;
+}
+
+.stat-with-sparkline .stat-info {
+    flex: 1;
+}
+
+.stat-with-sparkline .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-with-sparkline .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.stat-with-sparkline .stat-change {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    margin-left: var(--space-2);
+}
+
+.stat-change.positive {
+    background: var(--success-muted);
+    color: var(--success);
+}
+
+.stat-change.negative {
+    background: var(--error-muted);
+    color: var(--error);
+}
+
+/* Mini Heatmap */
+.mini-heatmap {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    padding: var(--space-2);
+}
+
+.heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    transition: transform 0.15s;
+    cursor: pointer;
+}
+
+.heatmap-cell:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.heatmap-cell.level-0 { background: var(--surface-3); opacity: 0.3; }
+.heatmap-cell.level-1 { background: var(--brand-red); opacity: 0.25; }
+.heatmap-cell.level-2 { background: var(--brand-red); opacity: 0.45; }
+.heatmap-cell.level-3 { background: var(--brand-red); opacity: 0.65; }
+.heatmap-cell.level-4 { background: var(--brand-red); opacity: 0.85; }
+.heatmap-cell.level-5 { background: var(--brand-red); opacity: 1; }
+
+/* Heatmap tooltip */
+.heatmap-tooltip {
+    position: absolute;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    font-size: 11px;
+    color: var(--text-secondary);
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Activity Heatmap specific */
+.activity-heatmap {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 1px;
+    height: 60px;
+}
+
+.activity-heatmap-cell {
+    background: var(--surface-3);
+    border-radius: 1px;
+    transition: background 0.2s;
+}
+
+.activity-heatmap-cell.active {
+    background: var(--brand-red);
+}
+
+/* Enhanced Quick Stats */
+.quick-stats-enhanced {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+}
+
+.quick-stat-card {
+    background: rgba(var(--surface-2-rgb, 28, 30, 35), 0.5);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    transition: all 0.2s;
+}
+
+.quick-stat-card:hover {
+    background: rgba(var(--surface-2-rgb, 28, 30, 35), 0.7);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Fade-in animation for widgets */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.widget-fade-in {
+    animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Stagger children animations */
+.stagger-children > * {
+    opacity: 0;
+    animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger-children > *:nth-child(8) { animation-delay: 0.4s; }
