@@ -787,6 +787,21 @@ const server = http.createServer((req, res) => {
             delete update.tasks;
             protections.tasks = true;
           }
+          // PROTECT ARCHIVE: if server has archived tasks but client sends none/fewer, preserve server archive
+          // This prevents browser tabs with stale state from un-archiving tasks
+          if (update.tasks && !protections.tasks) {
+            const serverArchive = state.tasks?.archive?.length || 0;
+            const clientArchive = update.tasks?.archive?.length || 0;
+            if (serverArchive > 0 && clientArchive < serverArchive) {
+              console.log(`[Sync] PROTECTING archive - server has ${serverArchive}, client has ${clientArchive}. Merging.`);
+              update.tasks.archive = state.tasks.archive;
+              // Also prevent client from putting archived tasks back in done
+              if (update.tasks.done && state.tasks?.done) {
+                const archivedIds = new Set((state.tasks.archive || []).map(t => t.id));
+                update.tasks.done = update.tasks.done.filter(t => !archivedIds.has(t.id));
+              }
+            }
+          }
         }
         
         // PROTECT ACTIVITY: never allow fewer entries to replace more entries
