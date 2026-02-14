@@ -278,7 +278,7 @@ function renderProgressRings() {
     if (taskProgressEl) {
         const total = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0);
         const done = state.tasks?.done?.length || 0;
-        taskProgressEl.innerHTML = generateProgressRing(done, total || 1, 60, 5, 'var(--success)');
+        taskProgressEl.innerHTML = generateProgressRing(done, total || 1, 36, 3, 'var(--success)');
     }
     
     // Daily goal progress (example: 10 tasks/day goal)
@@ -289,7 +289,7 @@ function renderProgressRings() {
             const completedDate = t.completedAt ? new Date(t.completedAt).toDateString() : null;
             return completedDate === today;
         }).length;
-        dailyGoalEl.innerHTML = generateProgressRing(doneToday, 10, 50, 4, 'var(--brand-red)');
+        dailyGoalEl.innerHTML = generateProgressRing(doneToday, 10, 36, 3, 'var(--brand-red)');
     }
 }
 

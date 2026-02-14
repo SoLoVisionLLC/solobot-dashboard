@@ -171,7 +171,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-2) 0;
+    padding: 0;
 }
 
 .stat-with-sparkline .stat-info {
@@ -179,7 +179,7 @@
 }
 
 .stat-with-sparkline .stat-value {
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--text-primary);
 }
@@ -267,15 +267,17 @@
 
 /* Enhanced Quick Stats */
 .quick-stats-enhanced {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-3);
+    display: flex;
+    gap: var(--space-2);
+    align-items: stretch;
 }
 
 .quick-stat-card {
+    flex: 1;
+    min-width: 0;
     background: rgba(var(--surface-2-rgb, 28, 30, 35), 0.5);
     border-radius: var(--radius-md);
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3);
     border: 1px solid rgba(255, 255, 255, 0.04);
     transition: all 0.2s;
 }

@@ -189,7 +189,7 @@
                             <div class="bento-widget bento-quick-stats">
                                 <div
                                     class="bento-widget-content"
-                                    style="padding: var(--space-3)"
+                                    style="padding: var(--space-2) var(--space-3)"
                                 >
                                     <div class="quick-stats-header">
                                         <div
@@ -217,7 +217,7 @@
                                     </div>
                                     
                                     <!-- Enhanced Stats with Sparklines -->
-                                    <div class="quick-stats-enhanced" style="margin-top: var(--space-3);">
+                                    <div class="quick-stats-enhanced" style="margin-top: var(--space-2);">
                                         <!-- Tasks Stat with Sparkline -->
                                         <div class="quick-stat-card">
                                             <div class="stat-with-sparkline">
@@ -270,15 +270,15 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Progress Rings Row -->
-                                    <div style="display: flex; justify-content: center; gap: var(--space-4); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);">
-                                        <div style="text-align: center;">
+                                    <!-- Progress Rings (inline with stats) -->
+                                    <div style="display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);">
+                                        <div style="display: flex; align-items: center; gap: var(--space-2);">
                                             <div id="progress-ring-tasks"></div>
-                                            <div class="progress-ring-label">Completion</div>
+                                            <div class="progress-ring-label" style="margin-top: 0;">Completion</div>
                                         </div>
-                                        <div style="text-align: center;">
+                                        <div style="display: flex; align-items: center; gap: var(--space-2);">
                                             <div id="progress-ring-daily"></div>
-                                            <div class="progress-ring-label">Daily Goal</div>
+                                            <div class="progress-ring-label" style="margin-top: 0;">Daily Goal</div>
                                         </div>
                                     </div>
                                 </div>
