@@ -240,7 +240,7 @@ async function loadState() {
     const countTasks = (s) => {
         if (!s || !s.tasks) return 0;
         const t = s.tasks;
-        return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0);
+        return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0) + (t.archive?.length || 0);
     };
 
     // Load localStorage tasks as a safety net (in case server state is empty)
@@ -277,8 +277,20 @@ async function loadState() {
             const serverActivityCount = Array.isArray(vpsState.activity) ? vpsState.activity.length : 0;
             const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
 
-            // Use whichever has more tasks
-            const tasksToUse = (localTaskCount > serverTaskCount && localTasks) ? localTasks : vpsState.tasks;
+            // Use whichever has more tasks — but always merge archive from server
+            let tasksToUse;
+            if (localTaskCount > serverTaskCount && localTasks) {
+                tasksToUse = localTasks;
+                // Even when keeping local tasks, merge server archive (server is authoritative for archive)
+                if ((vpsState.tasks.archive?.length || 0) > (localTasks.archive?.length || 0)) {
+                    tasksToUse.archive = vpsState.tasks.archive;
+                    // Remove any archived tasks that local still has in done
+                    const archivedIds = new Set(tasksToUse.archive.map(t => t.id));
+                    tasksToUse.done = (tasksToUse.done || []).filter(t => !archivedIds.has(t.id));
+                }
+            } else {
+                tasksToUse = vpsState.tasks;
+            }
             // Use whichever has more activity
             const activityToUse = (localActivityCount > serverActivityCount) ? state.activity : vpsState.activity;
 
