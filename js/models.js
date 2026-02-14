@@ -465,7 +465,17 @@ async function updateModelDropdown(provider) {
 }
 
 async function getModelsForProvider(provider) {
-    // Fetch from server API
+    // Prefer live gateway models (most up-to-date — reads running config)
+    if (window._gatewayModels && window._gatewayModels[provider]) {
+        const providerModels = window._gatewayModels[provider];
+        return providerModels.map(m => ({
+            value: m.id,
+            name: m.name,
+            selected: (m.id === currentModel)
+        }));
+    }
+
+    // Fallback: fetch from server API (Docker config may be stale)
     try {
         const response = await fetch('/api/models/list');
         if (!response.ok) {
@@ -488,6 +498,91 @@ async function getModelsForProvider(provider) {
     } catch (e) {
         console.error('[Dashboard] Failed to get models from API:', e);
         return [];
+    }
+}
+
+/**
+ * Fetch model configuration directly from the gateway via WebSocket RPC.
+ * The live gateway config is the source of truth — the Docker-mounted config
+ * may be stale if openclaw.json was updated after the container started.
+ */
+async function fetchModelsFromGateway() {
+    if (!gateway || !gateway.isConnected()) return;
+    
+    try {
+        const config = await gateway.getConfig();
+        
+        let configData = config;
+        if (typeof config === 'string') configData = JSON.parse(config);
+        if (configData?.raw) configData = JSON.parse(configData.raw);
+        
+        const modelConfig = configData?.agents?.defaults?.model;
+        if (!modelConfig) return;
+        
+        const primary = modelConfig.primary;
+        const fallbacks = modelConfig.fallbacks || [];
+        const picker = modelConfig.picker || [];
+        const configuredModels = Object.keys(configData?.agents?.defaults?.models || {});
+        
+        const allModelIds = [...new Set([
+            ...(primary ? [primary] : []),
+            ...picker,
+            ...fallbacks,
+            ...configuredModels
+        ])];
+        
+        if (allModelIds.length === 0) return;
+        
+        // Group by provider
+        const modelsByProvider = {};
+        for (const modelId of allModelIds) {
+            const slashIdx = modelId.indexOf('/');
+            if (slashIdx === -1) continue;
+            
+            const provider = modelId.substring(0, slashIdx);
+            const modelName = modelId.substring(slashIdx + 1);
+            
+            if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
+            
+            const isPrimary = modelId === primary;
+            const displayName = modelName + (isPrimary ? ' ⭐' : '');
+            
+            if (!modelsByProvider[provider].some(m => m.id === modelId)) {
+                modelsByProvider[provider].push({
+                    id: modelId,
+                    name: displayName,
+                    tier: isPrimary ? 'default' : 'fallback'
+                });
+            }
+        }
+        
+        // Update the provider dropdown with gateway-sourced providers
+        const providerSelect = document.getElementById('provider-select');
+        if (providerSelect) {
+            const providers = Object.keys(modelsByProvider);
+            providerSelect.innerHTML = '';
+            providers.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                if (p === currentProvider) opt.selected = true;
+                providerSelect.appendChild(opt);
+            });
+        }
+        
+        // Store for getModelsForProvider to prefer
+        window._gatewayModels = modelsByProvider;
+        
+        // Refresh model dropdown for the active provider
+        const activeProvider = providerSelect?.value || currentProvider;
+        if (activeProvider) {
+            await updateModelDropdown(activeProvider);
+            if (currentModel) selectModelInDropdowns(currentModel);
+        }
+        
+        console.log(`[Dashboard] Gateway models: ${allModelIds.length} models from ${Object.keys(modelsByProvider).length} providers`);
+    } catch (e) {
+        console.warn('[Dashboard] Failed to fetch models from gateway:', e.message);
     }
 }
 

@@ -608,8 +608,9 @@ function initGateway() {
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
             
-            // Apply per-session override (authoritative model display)
-            applySessionModelOverride(sessionKey);
+            // Fetch live model config from gateway (populates dropdowns),
+            // then apply per-session override (authoritative model display).
+            fetchModelsFromGateway().then(() => applySessionModelOverride(sessionKey));
             
             // Update session name displays (hard clarity: show full session key)
             currentSessionName = sessionKey;
