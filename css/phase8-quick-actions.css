@@ -1,0 +1,391 @@
+/* css/phase8-quick-actions.css — Phase 8: Quick Actions Styles */
+
+/* ===================
+   INLINE TASK CREATION
+   =================== */
+
+.inline-task-input {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    margin-top: var(--space-2);
+    background: var(--surface-2);
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.inline-task-input:hover,
+.inline-task-input.active {
+    border-style: solid;
+    border-color: var(--border-strong);
+    background: var(--surface-1);
+}
+
+.inline-task-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    padding: 4px;
+}
+
+.inline-task-field::placeholder {
+    color: var(--text-muted);
+}
+
+.inline-task-actions {
+    display: none;
+    gap: var(--space-1);
+}
+
+.inline-task-input.active .inline-task-actions {
+    display: flex;
+}
+
+.inline-task-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--surface-3);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.inline-task-btn:hover {
+    background: var(--brand-primary);
+    color: white;
+}
+
+.inline-task-btn.inline-task-cancel:hover {
+    background: var(--error);
+}
+
+/* ===================
+   QUICK NOTE INPUT
+   =================== */
+
+.quick-note-expanded {
+    margin-top: var(--space-2);
+    animation: expand-note 0.2s ease;
+}
+
+@keyframes expand-note {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.quick-note-textarea {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    padding: var(--space-3);
+    resize: vertical;
+    outline: none;
+    min-height: 80px;
+}
+
+.quick-note-textarea:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px var(--control-focus);
+}
+
+.quick-note-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--space-2);
+}
+
+.quick-note-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.quick-note-save {
+    padding: 6px 16px;
+    background: var(--brand-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.quick-note-save:hover {
+    background: var(--brand-primary-hover);
+}
+
+/* ===================
+   AGENT SWITCHER
+   =================== */
+
+.quick-agent-switcher {
+    display: flex;
+    gap: 2px;
+    background: var(--surface-2);
+    padding: 2px;
+    border-radius: var(--radius-md);
+    margin-right: var(--space-3);
+}
+
+.quick-agent-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.quick-agent-btn:hover {
+    background: var(--surface-3);
+    color: var(--text-primary);
+}
+
+.quick-agent-btn.active {
+    background: var(--surface-1);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.agent-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+/* ===================
+   POMODORO TIMER
+   =================== */
+
+.bento-pomodoro {
+    grid-column: span 1;
+}
+
+.pomodoro-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.pomodoro-timer {
+    position: relative;
+    width: 120px;
+    height: 120px;
+}
+
+.pomodoro-ring {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.pomodoro-ring-bg {
+    fill: none;
+    stroke: var(--surface-3);
+    stroke-width: 6;
+}
+
+.pomodoro-ring-progress {
+    fill: none;
+    stroke: var(--brand-primary);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    transition: stroke-dashoffset 1s linear;
+}
+
+.pomodoro-time {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+
+.pomodoro-label {
+    position: absolute;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--brand-primary);
+}
+
+.pomodoro-label.break {
+    color: #22c55e;
+}
+
+.pomodoro-controls {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.pomodoro-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--surface-3);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pomodoro-btn:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+    transform: scale(1.05);
+}
+
+.pomodoro-btn.primary {
+    background: var(--brand-primary);
+    color: white;
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
+}
+
+.pomodoro-btn.primary:hover {
+    background: var(--brand-primary-hover);
+}
+
+.pomodoro-stats {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.pomodoro-presets {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.preset-btn {
+    padding: 4px 10px;
+    background: var(--surface-3);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.preset-btn:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+}
+
+.preset-btn.active {
+    background: var(--brand-primary);
+    color: white;
+}
+
+/* ===================
+   ANIMATIONS
+   =================== */
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.1);
+        opacity: 0;
+    }
+}
+
+.pomodoro-timer.running .pomodoro-ring-progress {
+    animation: pulse-ring 2s ease-out infinite;
+}
+
+/* ===================
+   RESPONSIVE
+   =================== */
+
+@media (max-width: 1024px) {
+    .quick-agent-switcher {
+        display: none; /* Hide on smaller screens, use sidebar instead */
+    }
+    
+    .inline-task-input {
+        padding: var(--space-1);
+    }
+    
+    .inline-task-field {
+        font-size: 12px;
+    }
+    
+    .pomodoro-timer {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .pomodoro-time {
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .pomodoro-container {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .pomodoro-timer {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .pomodoro-time {
+        font-size: 16px;
+    }
+    
+    .pomodoro-label {
+        bottom: 15px;
+        font-size: 9px;
+    }
+}

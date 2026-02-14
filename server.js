@@ -848,6 +848,23 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Archive all done tasks (atomic, server-side — can't be raced by frontend sync)
+  if (url.pathname === '/api/tasks/archive-done' && req.method === 'POST') {
+    if (!state.tasks) state.tasks = {};
+    const doneCount = (state.tasks.done || []).length;
+    if (doneCount === 0) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ ok: true, archived: 0, message: 'No done tasks to archive' }));
+    }
+    if (!state.tasks.archive) state.tasks.archive = [];
+    state.tasks.archive.push(...state.tasks.done);
+    state.tasks.done = [];
+    saveState();
+    console.log(`[Server] Archived ${doneCount} done tasks (total archive: ${state.tasks.archive.length})`);
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ ok: true, archived: doneCount, totalArchive: state.tasks.archive.length }));
+  }
+
   // Append activity logs
   if (url.pathname === '/api/activity' && req.method === 'POST') {
     let body = '';

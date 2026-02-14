@@ -1,0 +1,373 @@
+/* css/phase7-activity-viz.css — Phase 7: Activity Visualization Styles */
+
+/* ===================
+   ACTIVITY TIMELINE
+   =================== */
+
+.activity-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-height: 350px;
+    overflow-y: auto;
+    padding-left: var(--space-2);
+}
+
+.activity-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-6);
+    color: var(--text-muted);
+    gap: var(--space-2);
+}
+
+.activity-empty span {
+    font-size: 24px;
+    opacity: 0.5;
+}
+
+/* Date Separator */
+.activity-date-separator {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    padding: var(--space-2) 0;
+    margin-left: 28px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-2);
+}
+
+/* Timeline Item */
+.activity-timeline-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    position: relative;
+    min-height: 50px;
+}
+
+.activity-timeline-item.recent {
+    animation: timeline-item-fade-in 0.5s ease;
+}
+
+@keyframes timeline-item-fade-in {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Timeline Line */
+.activity-timeline-line {
+    position: absolute;
+    left: 15px;
+    top: 35px;
+    bottom: -10px;
+    width: 2px;
+    background: var(--border-default);
+}
+
+.activity-timeline-item:last-child .activity-timeline-line {
+    display: none;
+}
+
+/* Timeline Dot */
+.activity-timeline-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 0 0 3px var(--surface-1);
+}
+
+.activity-timeline-dot span {
+    font-size: 12px;
+}
+
+/* Timeline Content */
+.activity-timeline-content {
+    flex: 1;
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.activity-timeline-text {
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.activity-timeline-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: 2px;
+}
+
+.activity-time {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.activity-source {
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+/* ===================
+   VIEW TOGGLE
+   =================== */
+
+.activity-view-toggle {
+    display: flex;
+    gap: 2px;
+    background: var(--surface-2);
+    padding: 2px;
+    border-radius: var(--radius-md);
+}
+
+.activity-view-toggle button {
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.6;
+}
+
+.activity-view-toggle button:hover {
+    opacity: 1;
+    background: var(--surface-3);
+}
+
+.activity-view-toggle button.active {
+    background: var(--surface-1);
+    opacity: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ===================
+   ACTIVITY VIEWS
+   =================== */
+
+.activity-view {
+    display: none;
+}
+
+.activity-view.active {
+    display: block;
+}
+
+/* ===================
+   HOURLY HEATMAP
+   =================== */
+
+.daily-heatmap {
+    padding: var(--space-2);
+}
+
+.hourly-heatmap {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 60px;
+    padding-bottom: 20px;
+    position: relative;
+}
+
+.heatmap-hour {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    position: relative;
+    cursor: pointer;
+}
+
+.heat-bar {
+    width: 100%;
+    background: var(--brand-primary);
+    opacity: var(--heat-opacity, 0.1);
+    border-radius: 2px 2px 0 0;
+    transition: opacity 0.2s ease;
+    min-height: 2px;
+}
+
+.heatmap-hour:hover .heat-bar {
+    opacity: 1;
+}
+
+.hour-label {
+    position: absolute;
+    bottom: -18px;
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+.heatmap-legend {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: var(--space-4);
+}
+
+/* ===================
+   MESSAGE SPARKLINE
+   =================== */
+
+.message-sparkline {
+    width: 100%;
+    height: 30px;
+}
+
+/* ===================
+   AGENT PRESENCE
+   =================== */
+
+.bento-agent-presence {
+    grid-column: span 1;
+}
+
+.agent-presence-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.agent-presence-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.agent-presence-item:hover {
+    background: var(--surface-3);
+}
+
+.agent-presence-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--agent-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.agent-presence-status {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #6b7280;
+    border: 2px solid var(--surface-1);
+}
+
+.agent-presence-status.online {
+    background: #22c55e;
+}
+
+.agent-presence-status.away {
+    background: #f59e0b;
+}
+
+.agent-presence-status.pulse {
+    animation: status-pulse 2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
+    }
+}
+
+.agent-presence-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.agent-presence-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.agent-presence-status-text {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.agent-presence-sparkline {
+    width: 24px;
+    height: 12px;
+    opacity: 0.7;
+}
+
+/* ===================
+   RESPONSIVE
+   =================== */
+
+@media (max-width: 1024px) {
+    .activity-timeline {
+        max-height: 250px;
+    }
+    
+    .hourly-heatmap {
+        height: 50px;
+    }
+    
+    .hour-label {
+        font-size: 8px;
+    }
+}
+
+@media (max-width: 768px) {
+    .activity-timeline-dot {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .activity-timeline-dot span {
+        font-size: 10px;
+    }
+    
+    .activity-timeline-text {
+        font-size: 12px;
+    }
+    
+    .heatmap-hour:nth-child(odd) .hour-label {
+        display: none;
+    }
+}

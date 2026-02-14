@@ -1,0 +1,724 @@
+/* ==========================================
+   PHASES 9-13: WIDGETS & ENHANCEMENTS
+   ========================================== */
+
+/* ==========================================
+   PHASE 9: VOICE INTEGRATION
+   ========================================== */
+
+.voice-indicator {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.voice-indicator.active {
+    animation: voice-pulse 1.5s infinite;
+    color: #22c55e;
+}
+
+.voice-indicator.enabled {
+    color: #6366f1;
+}
+
+@keyframes voice-pulse {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+        transform: scale(1);
+    }
+    50% { 
+        box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+        transform: scale(1.05);
+    }
+}
+
+.voice-recording-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #ef4444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.voice-recording-indicator.recording {
+    opacity: 1;
+    animation: recording-pulse 1s infinite;
+}
+
+@keyframes recording-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.voice-memos-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.voice-memo-item {
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 8px;
+}
+
+.voice-memo-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.voice-memo-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.voice-memo-transcription {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 8px;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    font-style: italic;
+}
+
+.transcribing-indicator {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ==========================================
+   PHASE 10: TASK BOARD ENHANCEMENTS
+   ========================================== */
+
+/* Swimlane View */
+.swimlane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border-default);
+}
+
+.swimlane-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    max-height: 500px;
+}
+
+.swimlane-row {
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+}
+
+.swimlane-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 4px 0;
+    border-left: 3px solid transparent;
+    padding-left: 8px;
+}
+
+.swimlane-name {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.swimlane-count {
+    background: var(--surface-2);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.swimlane-tasks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.swimlane-task-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px;
+    min-width: 180px;
+    max-width: 250px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.swimlane-task-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.swimlane-task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.swimlane-task-column {
+    font-size: 12px;
+}
+
+.swimlane-task-agent {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.swimlane-task-title {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.swimlane-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+    padding: 16px;
+}
+
+/* Bulk Selection */
+.bulk-selection-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--brand-red);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bulk-count {
+    font-weight: 600;
+    color: var(--brand-red);
+    font-size: 13px;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.task-card.bulk-selected {
+    border-color: var(--brand-red);
+    background: rgba(188, 32, 38, 0.05);
+}
+
+/* Due Date Badges */
+.due-date-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.due-overdue {
+    background: #ef4444;
+    color: white;
+    animation: overdue-pulse 2s infinite;
+}
+
+@keyframes overdue-pulse {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    50% { 
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+}
+
+.due-today {
+    background: #f59e0b;
+    color: white;
+}
+
+.due-soon {
+    background: #3b82f6;
+    color: white;
+}
+
+.due-future {
+    background: var(--surface-3);
+    color: var(--text-muted);
+}
+
+.task-card.overdue {
+    border-left-width: 4px;
+}
+
+/* Dependency Indicators */
+.dependency-indicator {
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--surface-3);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+/* ==========================================
+   PHASE 11: AGENT STATUS PANEL
+   ========================================== */
+
+.traffic-light {
+    transition: all 0.3s ease;
+}
+
+.agent-status-row.enhanced {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+
+.agent-status-row.enhanced:hover {
+    background: var(--surface-2);
+    border-color: var(--border-subtle);
+}
+
+.agent-status-header {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.agent-status-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.agent-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.agent-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.agent-name {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.agent-sessions {
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+.agent-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.agent-sparkline-row {
+    margin-top: 6px;
+}
+
+.agent-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.agent-status-row.enhanced:hover .agent-actions {
+    opacity: 1;
+}
+
+.handoff-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.agent-resources {
+    display: flex;
+    padding-left: 24px;
+    margin-top: 4px;
+}
+
+.resource-usage {
+    display: flex;
+    gap: 16px;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.resource-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Handoff Modal */
+.handoff-modal .agent-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    background: var(--surface-1);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.handoff-modal .agent-btn:hover {
+    background: var(--surface-2);
+    transform: translateY(-1px);
+}
+
+/* ==========================================
+   PHASE 12: ANALYTICS WIDGET
+   ========================================== */
+
+.token-chart-container,
+.cost-chart-container,
+.session-heatmap,
+.agent-performance {
+    margin-top: 16px;
+}
+
+.chart-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.token-usage-chart {
+    width: 100%;
+}
+
+.cost-donut-chart {
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.cost-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+}
+
+.session-heatmap {
+    overflow-x: auto;
+}
+
+.heatmap-cell {
+    transition: all 0.2s;
+}
+
+.heatmap-cell:hover {
+    transform: scale(1.2);
+    z-index: 10;
+}
+
+/* Agent Performance Bars */
+.agent-performance-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.agent-performance-track {
+    flex: 1;
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.agent-performance-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+/* ==========================================
+   PHASE 13: TERMINAL IMPROVEMENTS
+   ========================================== */
+
+.terminal-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-default);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.terminal-search-box {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    min-width: 150px;
+}
+
+.terminal-search-input {
+    flex: 1;
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-family: "Fira Code", "Monaco", "Consolas", monospace;
+}
+
+.terminal-search-input:focus {
+    outline: none;
+    border-color: var(--brand-red);
+}
+
+.terminal-level-select {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+}
+
+.terminal-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.terminal-btn:hover {
+    background: var(--surface-3);
+}
+
+.terminal-line {
+    padding: 2px 0;
+    font-family: "Fira Code", "Monaco", "Consolas", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    border-left: 2px solid transparent;
+    padding-left: 4px;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-5px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.terminal-line.error {
+    border-left-color: #e06c75;
+    background: rgba(224, 108, 117, 0.05);
+}
+
+.terminal-line.warning {
+    border-left-color: #e5c07b;
+    background: rgba(229, 192, 123, 0.05);
+}
+
+.terminal-line.success {
+    border-left-color: #98c379;
+    background: rgba(152, 195, 121, 0.05);
+}
+
+.terminal-line.info {
+    border-left-color: #61afef;
+}
+
+.terminal-timestamp {
+    color: var(--text-muted);
+    font-size: 10px;
+    margin-right: 8px;
+    opacity: 0.7;
+}
+
+.terminal-icon {
+    margin-right: 6px;
+    font-size: 10px;
+}
+
+.terminal-text {
+    color: var(--text-primary);
+}
+
+/* Syntax Highlighting in Terminal */
+.syntax-keyword { 
+    color: #c678dd; 
+    font-weight: 600; 
+}
+
+.syntax-string { 
+    color: #98c379; 
+    font-style: italic; 
+}
+
+.syntax-number { 
+    color: #d19a66; 
+    font-weight: 500; 
+}
+
+.syntax-url { 
+    color: #61afef; 
+    text-decoration: underline; 
+    cursor: pointer; 
+}
+
+.syntax-timestamp { 
+    color: #56b6c2; 
+}
+
+.syntax-uuid { 
+    color: #e5c07b; 
+}
+
+.syntax-ip { 
+    color: #61afef; 
+}
+
+.syntax-filepath { 
+    color: #98c379; 
+}
+
+.syntax-error { 
+    color: #e06c75; 
+    font-weight: 600; 
+}
+
+.syntax-success { 
+    color: #98c379; 
+    font-weight: 500; 
+}
+
+.syntax-warning { 
+    color: #e5c07b; 
+}
+
+/* Scroll Indicator */
+.scroll-indicator {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: var(--brand-red);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    animation: pulse-indicator 2s infinite;
+    z-index: 100;
+}
+
+@keyframes pulse-indicator {
+    0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.8;
+        transform: scale(1.02);
+    }
+}
+
+.scroll-indicator:hover {
+    background: #a91d23;
+}
+
+.terminal-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 40px;
+    font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .terminal-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .terminal-search-box {
+        width: 100%;
+    }
+    
+    .swimlane-tasks {
+        flex-direction: column;
+    }
+    
+    .swimlane-task-card {
+        max-width: none;
+    }
+    
+    .bulk-selection-panel {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
