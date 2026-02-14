@@ -445,104 +445,38 @@ function initSampleData() {
 // DASHBOARD TASKS INITIALIZATION
 // ===================
 
-const DASHBOARD_TASKS = [
-    // Phase 1: Visual Design Foundation (P0 - critical)
-    { phase: 1, num: 1, title: "Implement glassmorphism cards with blur effect", priority: 0 },
-    { phase: 1, num: 2, title: "Add sparklines for Quick Stats widget (mini trend graphs)", priority: 0 },
-    { phase: 1, num: 3, title: "Replace progress bars with circular progress rings", priority: 0 },
-    { phase: 1, num: 4, title: "Add mini heatmaps for activity patterns", priority: 0 },
+// REMOVED: 70 hardcoded DASHBOARD_TASKS array — tasks are now managed server-side via agents
+const DASHBOARD_TASKS = []; // kept empty for compatibility
     
     // Phase 2: Motion & Microinteractions (P0 - critical)
-    { phase: 2, num: 1, title: "Widget fade-in animations when data updates", priority: 0 },
-    { phase: 2, num: 2, title: "Hover state lift effects on cards", priority: 0 },
-    { phase: 2, num: 3, title: "Drag-and-drop snap animations", priority: 0 },
-    { phase: 2, num: 4, title: "Loading shimmer effect (replace spinners)", priority: 0 },
     
     // Phase 3: Widget System (P1 - important)
-    { phase: 3, num: 1, title: "Make widgets resizable/minimizable", priority: 1 },
-    { phase: 3, num: 2, title: "Save layout preferences per user", priority: 1 },
-    { phase: 3, num: 3, title: "Drag-to-rearrange bento grid", priority: 1 },
-    { phase: 3, num: 4, title: "Focus mode that hides all except active tasks", priority: 1 },
     
     // Phase 4: Context Awareness (P1 - important)
-    { phase: 4, num: 1, title: "Time-of-day layout switching (morning/deep work)", priority: 1 },
-    { phase: 4, num: 2, title: "Agent-aware layouts (DEV shows terminal, COO shows tasks)", priority: 1 },
-    { phase: 4, num: 3, title: "Workflow-aware widget expansion", priority: 1 },
     
     // Phase 5: Command Palette (P1 - important)
-    { phase: 5, num: 1, title: "Universal search to jump pages/widgets", priority: 1 },
-    { phase: 5, num: 2, title: "Quick actions: create task, switch agent", priority: 1 },
-    { phase: 5, num: 3, title: "Search chat history, notes, memory", priority: 1 },
     
     // Phase 6: AI Insights Widget (P1 - important)
-    { phase: 6, num: 1, title: "Weekly task completion summary", priority: 1 },
-    { phase: 6, num: 2, title: "Agent idle time alerts", priority: 1 },
-    { phase: 6, num: 3, title: "Pattern-based suggestions", priority: 1 },
-    { phase: 6, num: 4, title: "Natural language summaries", priority: 1 },
     
     // Phase 7: Activity Visualization (P1 - important)
-    { phase: 7, num: 1, title: "Live timeline with icons (replace text log)", priority: 1 },
-    { phase: 7, num: 2, title: "Hour/day heatmap", priority: 1 },
-    { phase: 7, num: 3, title: "Message volume sparkline", priority: 1 },
-    { phase: 7, num: 4, title: "Agent presence indicators", priority: 1 },
     
     // Phase 8: Quick Actions (P1 - important)
-    { phase: 8, num: 1, title: "Inline task creation in kanban", priority: 1 },
-    { phase: 8, num: 2, title: "Quick note input without modal", priority: 1 },
-    { phase: 8, num: 3, title: "One-click agent switch", priority: 1 },
-    { phase: 8, num: 4, title: "Built-in Pomodoro timer", priority: 1 },
     
     // Phase 9: Voice Integration (P2 - nice to have)
-    { phase: 9, num: 1, title: "Voice commands for dashboard actions", priority: 2 },
-    { phase: 9, num: 2, title: "Audio notifications for events", priority: 2 },
-    { phase: 9, num: 3, title: "Voice memos with transcription", priority: 2 },
     
     // Phase 10: Task Board Enhancements (P2 - nice to have)
-    { phase: 10, num: 1, title: "Swimlane view (group by agent/priority)", priority: 2 },
-    { phase: 10, num: 2, title: "Bulk selection improvements", priority: 2 },
-    { phase: 10, num: 3, title: "Due date visual indicators (red pulse for overdue)", priority: 2 },
-    { phase: 10, num: 4, title: "Task dependency connecting lines", priority: 2 },
     
     // Phase 11: Agent Status Panel (P2 - nice to have)
-    { phase: 11, num: 1, title: "Traffic light indicators (green/yellow/red)", priority: 2 },
-    { phase: 11, num: 2, title: "Mini sparklines per agent activity", priority: 2 },
-    { phase: 11, num: 3, title: "Handoff button between agents", priority: 2 },
-    { phase: 11, num: 4, title: "Resource usage display (tokens, runtime)", priority: 2 },
     
     // Phase 12: Analytics Widget (P2 - nice to have)
-    { phase: 12, num: 1, title: "Token usage over time (line chart)", priority: 2 },
-    { phase: 12, num: 2, title: "Cost breakdown by agent (donut chart)", priority: 2 },
-    { phase: 12, num: 3, title: "Session duration heatmap", priority: 2 },
-    { phase: 12, num: 4, title: "Week-over-week comparison", priority: 2 },
     
     // Phase 13: Terminal Improvements (P2 - nice to have)
-    { phase: 13, num: 1, title: "Resizable/dockable terminal", priority: 2 },
-    { phase: 13, num: 2, title: "Syntax highlighting for output", priority: 2 },
-    { phase: 13, num: 3, title: "Command history with up-arrow", priority: 2 },
-    { phase: 13, num: 4, title: "Clear on new session toggle", priority: 2 },
     
     // Phase 14: UX Polish (P2 - nice to have)
-    { phase: 14, num: 1, title: "Zero-state designs with CTAs", priority: 2 },
-    { phase: 14, num: 2, title: "Empty state illustrations", priority: 2 },
-    { phase: 14, num: 3, title: "Mobile-responsive bento (1/2/3 columns)", priority: 2 },
-    { phase: 14, num: 4, title: "Touch-friendly drag handles", priority: 2 },
     
     // Phase 15: Keyboard Shortcuts (P2 - nice to have)
-    { phase: 15, num: 1, title: "1-9: switch to agent N", priority: 2 },
-    { phase: 15, num: 2, title: "T: new task", priority: 2 },
-    { phase: 15, num: 3, title: "N: new note", priority: 2 },
-    { phase: 15, num: 4, title: "C: focus chat", priority: 2 },
-    { phase: 15, num: 5, title: "Esc: clear selection", priority: 2 },
     
     // Phase 16: Business Features (P2 - nice to have)
-    { phase: 16, num: 1, title: "Goals/OKR tracking widget", priority: 2 },
-    { phase: 16, num: 2, title: "Weekly/monthly goal progress", priority: 2 },
-    { phase: 16, num: 3, title: "Business metrics health check", priority: 2 },
-    { phase: 16, num: 4, title: "Time tracking integration", priority: 2 },
-    { phase: 16, num: 5, title: "Auto-log time per agent/task", priority: 2 },
-    { phase: 16, num: 6, title: "Weekly productivity report", priority: 2 },
-    { phase: 16, num: 7, title: "Decision log with context", priority: 2 },
-    { phase: 16, num: 8, title: "Link decisions to tasks/outcomes", priority: 2 }
 ];
 
 function createDashboardTasks() {
@@ -566,19 +500,9 @@ function createDashboardTasks() {
 }
 
 function initDashboardTasks() {
-    // Check if we already have dashboard tasks
-    const allTasks = [...(state.tasks.todo || []), ...(state.tasks.progress || []), ...(state.tasks.done || [])];
-    const hasDashboardTasks = allTasks.some(t => t.id && t.id.startsWith('dash-'));
-    
-    if (!hasDashboardTasks) {
-        console.log('[Dashboard] Initializing 70 dashboard improvement tasks...');
-        const tasks = createDashboardTasks();
-        state.tasks.todo = [...state.tasks.todo, ...tasks];
-        saveState('Added 70 dashboard improvement tasks');
-        console.log('[Dashboard] ✓ Added 70 tasks to todo column');
-    } else {
-        console.log('[Dashboard] Dashboard tasks already initialized');
-    }
+    // DISABLED: Tasks are managed by agents via dashboard-sync API, not auto-generated.
+    // The old code created 70 hardcoded improvement tasks on every page load when none had 'dash-' prefix IDs.
+    console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
 
 
