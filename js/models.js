@@ -250,16 +250,8 @@ window.changeSessionModel = async function() {
                 showToast('Reverted to Global Default', 'success');
             }
         } else {
-            // 1. Update Current Session (Immediate)
+            // Update current session only (NOT the global default)
             await gateway.patchSession(sessionKey, { model: selectedModel });
-            
-            // 2. Update Agent/Global Default (Persist)
-            // This ensures new sessions or page reloads use this model
-            fetch('/api/models/set', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modelId: selectedModel })
-            }).catch(e => console.error('Failed to update global default:', e));
             
             // Update local state
             currentModel = selectedModel;
