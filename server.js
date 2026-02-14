@@ -1403,6 +1403,13 @@ const server = http.createServer((req, res) => {
         // Write new content
         fs.writeFileSync(filePath, content, 'utf8');
         
+        // Update mod time tracker so external change detector doesn't re-flag this write
+        try {
+          const newStat = fs.statSync(filePath);
+          fileModTimes[filename] = newStat.mtime.getTime();
+          saveModTimes();
+        } catch (e) { /* best effort */ }
+        
         // Track if bot made the update
         if (updatedBy === 'bot') {
           fileMeta[filename] = {
