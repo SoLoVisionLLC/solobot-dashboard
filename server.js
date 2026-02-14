@@ -1714,39 +1714,37 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const configPath = fs.existsSync(OPENCLAW_CONFIG_PATH) ? OPENCLAW_CONFIG_PATH : OPENCLAW_CONFIG_FALLBACK;
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        // Try to update config file if available
+        const configPath = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK, OPENCLAW_CONFIG_FALLBACK2]
+          .find(p => fs.existsSync(p));
 
-        // Find agent in agents.list
-        if (!config.agents?.list) {
-          res.writeHead(404);
-          res.end(JSON.stringify({ error: 'No agents.list in config' }));
-          return;
-        }
+        if (configPath) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-        const agent = config.agents.list.find(a => a.id === agentId);
-        if (!agent) {
-          res.writeHead(404);
-          res.end(JSON.stringify({ error: `Agent '${agentId}' not found` }));
-          return;
-        }
-
-        // Set or clear model — 'global/default' means remove override
-        if (modelId === 'global/default') {
-          delete agent.model;
-          console.log(`[Server] Cleared model override for agent ${agentId}`);
+          if (config.agents?.list) {
+            const agent = config.agents.list.find(a => a.id === agentId);
+            if (agent) {
+              if (modelId === 'global/default') {
+                delete agent.model;
+                console.log(`[Server] Cleared model override for agent ${agentId}`);
+              } else {
+                agent.model = modelId;
+                console.log(`[Server] Set model for agent ${agentId}: ${modelId}`);
+              }
+              fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+            }
+          }
         } else {
-          agent.model = modelId;
-          console.log(`[Server] Set model for agent ${agentId}: ${modelId}`);
+          // No config file available (Docker without volume mount)
+          // The frontend handles this via gateway WebSocket (sessions.patch)
+          console.log(`[Server] No config file available — model change for ${agentId} handled by gateway WebSocket`);
         }
-
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
         // Clear model cache so next fetch picks up changes
         cachedModels = null;
 
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, agentId, modelId, message: 'Agent model updated. Restart gateway to apply.' }));
+        res.end(JSON.stringify({ ok: true, agentId, modelId, message: 'Agent model updated.' }));
       } catch (e) {
         console.error('[Server] Failed to set agent model:', e.message);
         res.writeHead(500);
