@@ -146,9 +146,6 @@ async function populateProviderDropdown() {
         const allModels = await response.json();
         const providers = Object.keys(allModels);
         
-        console.log(`[Dashboard] Available providers: ${providers.join(', ')}`);
-        console.log(`[Dashboard] Current provider: ${currentProvider}`);
-        
         for (const select of selects) {
             select.innerHTML = '';
             providers.forEach(provider => {
@@ -159,13 +156,9 @@ async function populateProviderDropdown() {
                 ).join(' ');
                 if (provider === currentProvider) {
                     option.selected = true;
-                    console.log(`[Dashboard] Selected provider "${provider}" in dropdown`);
                 }
                 select.appendChild(option);
             });
-            
-            // Log what was actually selected after population
-            console.log(`[Dashboard] Dropdown "${select.id}" value: "${select.value}"`);
         }
 
         return providers;
@@ -461,17 +454,7 @@ async function updateModelDropdown(provider) {
 }
 
 async function getModelsForProvider(provider) {
-    // Prefer gateway-sourced models (fetched via WebSocket — most reliable)
-    if (window._gatewayModels && window._gatewayModels[provider]) {
-        const providerModels = window._gatewayModels[provider];
-        return providerModels.map(m => ({
-            value: m.id,
-            name: m.name,
-            selected: (m.id === currentModel)
-        }));
-    }
-    
-    // Fallback: fetch from server API
+    // Fetch from server API
     try {
         const response = await fetch('/api/models/list');
         if (!response.ok) {
@@ -533,25 +516,14 @@ let currentModel = 'anthropic/claude-opus-4-5';
 /**
  * Resolve a bare model name (e.g. "claude-opus-4-6") to its full "provider/model" ID.
  * The gateway sessions.list often returns model names without the provider prefix.
- * Uses _gatewayModels cache and known config models to find the match.
+ * Uses known prefixes to resolve the model.
  */
 function resolveFullModelId(modelStr) {
     if (!modelStr) return modelStr;
     // Already has a provider prefix
     if (modelStr.includes('/')) return modelStr;
     
-    // Search in _gatewayModels cache
-    if (window._gatewayModels) {
-        for (const [provider, models] of Object.entries(window._gatewayModels)) {
-            for (const m of models) {
-                // m.id is "provider/model" — check if the model part matches
-                const modelPart = m.id.includes('/') ? m.id.split('/').slice(1).join('/') : m.id;
-                if (modelPart === modelStr) return m.id;
-            }
-        }
-    }
-    
-    // Well-known provider prefixes as fallback
+    // Well-known provider prefixes
     const knownPrefixes = {
         'claude': 'anthropic',
         'gpt': 'openai-codex',
@@ -718,99 +690,6 @@ async function applySessionModelOverride(sessionKey) {
     }
 }
 
-/**
- * Fetch model configuration directly from the gateway via WebSocket RPC.
- * This is the most reliable source — it reads the live openclaw.json from the running gateway.
- */
-async function fetchModelsFromGateway() {
-    if (!gateway || !gateway.isConnected()) return;
-    
-    try {
-        const config = await gateway.getConfig();
-        
-        // Parse the config to find model info
-        let configData = config;
-        if (typeof config === 'string') {
-            configData = JSON.parse(config);
-        }
-        // config.get might return { raw: "...", hash: "..." }
-        if (configData?.raw) {
-            configData = JSON.parse(configData.raw);
-        }
-        
-        const modelConfig = configData?.agents?.defaults?.model;
-        if (!modelConfig) {
-            console.warn('[Dashboard] No model config in gateway response');
-            return;
-        }
-        
-        const primary = modelConfig.primary;
-        const fallbacks = modelConfig.fallbacks || [];
-        const picker = modelConfig.picker || [];
-        
-        // Also include configured models (agents.defaults.models keys)
-        const configuredModels = Object.keys(configData?.agents?.defaults?.models || {});
-        
-        // Combine all model IDs
-        const allModelIds = [...new Set([
-            ...(primary ? [primary] : []),
-            ...picker,
-            ...fallbacks,
-            ...configuredModels
-        ])];
-        
-        if (allModelIds.length === 0) return;
-        
-        console.log(`[Dashboard] Got ${allModelIds.length} models from gateway config`);
-        
-        // Group by provider
-        const modelsByProvider = {};
-        for (const modelId of allModelIds) {
-            const slashIdx = modelId.indexOf('/');
-            if (slashIdx === -1) continue;
-            
-            const provider = modelId.substring(0, slashIdx);
-            const modelName = modelId.substring(slashIdx + 1);
-            
-            if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
-            
-            // Create a clean display name
-            const isPrimary = modelId === primary;
-            const displayName = modelName + (isPrimary ? ' ⭐' : '');
-            
-            if (!modelsByProvider[provider].some(m => m.id === modelId)) {
-                modelsByProvider[provider].push({
-                    id: modelId,
-                    name: displayName,
-                    tier: isPrimary ? 'default' : 'fallback'
-                });
-            }
-        }
-        
-        // Update the provider dropdown
-        const providerSelect = document.getElementById('provider-select');
-        if (providerSelect) {
-            const providers = Object.keys(modelsByProvider);
-            providerSelect.innerHTML = '';
-            providers.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p;
-                opt.textContent = p.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                providerSelect.appendChild(opt);
-            });
-        }
-        
-        // Store for getModelsForProvider to use
-        window._gatewayModels = modelsByProvider;
-        
-        // Do NOT call syncModelDisplay here — applySessionModelOverride is the
-        // authoritative source for the *active* model.  This function only
-        // populates the dropdown options.
-        
-    } catch (e) {
-        console.warn('[Dashboard] Failed to fetch models from gateway:', e.message);
-    }
-}
 
 /**
  * Select a model in both header and settings dropdowns.
