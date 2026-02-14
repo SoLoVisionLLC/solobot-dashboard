@@ -121,6 +121,8 @@
             return colors[type] || colors.info;
         },
         
+        _lastActivityHash: '',
+        
         renderTimeline() {
             const container = document.getElementById('activity-log');
             if (!container) return;
@@ -128,6 +130,8 @@
             const activities = window.state?.activity?.slice(-this.maxTimelineItems) || [];
             
             if (activities.length === 0) {
+                if (!this._lastActivityHash) return; // Already empty
+                this._lastActivityHash = '';
                 container.innerHTML = `
                     <div class="activity-empty">
                         <span>📊</span>
@@ -136,6 +140,11 @@
                 `;
                 return;
             }
+            
+            // Skip re-render if data hasn't changed
+            const hash = activities.length + '_' + (activities[activities.length - 1]?.time || '');
+            if (hash === this._lastActivityHash) return;
+            this._lastActivityHash = hash;
             
             let html = '';
             let lastDate = null;
