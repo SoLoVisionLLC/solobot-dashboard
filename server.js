@@ -1001,20 +1001,22 @@ const server = http.createServer((req, res) => {
     try {
       const agents = [];
       
-      // Read agent list from openclaw.json
-      let agentList = [];
-      const configPath = path.join(OPENCLAW_HOME, 'openclaw.json');
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        agentList = config.agents?.list || [];
+      // Scan agents directory directly (config.agents.list was removed in recent OpenClaw versions)
+      const agentsBaseDir = path.join(OPENCLAW_HOME, 'agents');
+      let agentIds = [];
+      if (fs.existsSync(agentsBaseDir)) {
+        agentIds = fs.readdirSync(agentsBaseDir).filter(d => {
+          try { return fs.statSync(path.join(agentsBaseDir, d)).isDirectory(); }
+          catch { return false; }
+        });
       }
       
-      const defaultWorkspace = path.join(OPENCLAW_HOME, 'workspace');
-      
-      for (const agent of agentList) {
-        // Include all agents — main uses default workspace
-        
-        const agentDir = agent.workspace || defaultWorkspace;
+      for (const agentId of agentIds) {
+        // Each agent's workspace is at agents/{id}/workspace
+        // Main agent's primary workspace is at OPENCLAW_HOME/workspace
+        const agentDir = agentId === 'main'
+          ? path.join(OPENCLAW_HOME, 'workspace')
+          : path.join(agentsBaseDir, agentId, 'workspace');
         if (!fs.existsSync(agentDir)) continue;
         
         const mdFiles = [];
@@ -1047,14 +1049,25 @@ const server = http.createServer((req, res) => {
           }
         } catch (e) { /* skip unreadable dirs */ }
         
-        // Include identity metadata for sidebar rendering
-        const identity = agent.identity || {};
+        // Parse identity from IDENTITY.md if it exists
+        let name = agentId;
+        let emoji = '';
+        try {
+          const identityPath = path.join(agentDir, 'IDENTITY.md');
+          if (fs.existsSync(identityPath)) {
+            const identityContent = fs.readFileSync(identityPath, 'utf8');
+            const nameMatch = identityContent.match(/\*\*Name:\*\*\s*(.+)/);
+            const emojiMatch = identityContent.match(/\*\*Emoji:\*\*\s*(.+)/);
+            if (nameMatch) name = nameMatch[1].trim();
+            if (emojiMatch) emoji = emojiMatch[1].trim();
+          }
+        } catch (e) { /* skip */ }
+        
         agents.push({
-          id: agent.id,
-          name: identity.name || agent.name || agent.id,
-          emoji: identity.emoji || '',
-          theme: identity.theme || '',
-          isDefault: agent.default || false,
+          id: agentId,
+          name,
+          emoji,
+          isDefault: agentId === 'main',
           workspace: agentDir,
           files: mdFiles
         });
@@ -1079,16 +1092,10 @@ const server = http.createServer((req, res) => {
     const agentId = decodeURIComponent(match[1]);
     const filename = decodeURIComponent(match[2]);
     
-    // Resolve workspace path from config
-    let agentWorkspace = null;
-    try {
-      const configPath = path.join(OPENCLAW_HOME, 'openclaw.json');
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const agentConfig = (config.agents?.list || []).find(a => a.id === agentId);
-      agentWorkspace = agentConfig?.workspace || path.join(OPENCLAW_HOME, 'workspace');
-    } catch (e) {
-      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
-    }
+    // Resolve workspace path from agents directory
+    const agentWorkspace = agentId === 'main'
+      ? path.join(OPENCLAW_HOME, 'workspace')
+      : path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
     const filePath = path.resolve(agentWorkspace, filename);
     
     // Security: ensure path is within workspace
