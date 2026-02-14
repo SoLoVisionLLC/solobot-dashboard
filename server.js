@@ -794,20 +794,16 @@ const server = http.createServer((req, res) => {
           const serverVersion = state._taskVersion || 0;
           const clientVersion = update._taskVersion || 0;
           
-          // If server has a higher task version, client is stale — reject task update entirely
-          if (serverVersion > clientVersion && serverTaskCount > 0) {
-            console.log(`[Sync] REJECTING stale tasks - server v${serverVersion} > client v${clientVersion}`);
-            // Send back current server tasks so client can update
+          // If server has a higher OR EQUAL task version, client is stale — reject task update
+          // Server is source of truth. Only accept tasks from clients with a STRICTLY higher version.
+          if (serverVersion >= clientVersion && serverTaskCount > 0) {
+            console.log(`[Sync] REJECTING tasks - server v${serverVersion} >= client v${clientVersion} (server has ${serverTaskCount}, client has ${clientTaskCount})`);
             protections.tasks = true;
             protections.serverTasks = state.tasks;
             protections.taskVersion = serverVersion;
             delete update.tasks;
-          }
-          // Count-based protection as fallback
-          else if (serverTaskCount > 0 && clientTaskCount < serverTaskCount) {
-            console.log(`[Sync] PROTECTING tasks - server has ${serverTaskCount}, client has ${clientTaskCount}`);
-            delete update.tasks;
-            protections.tasks = true;
+            // Also strip _taskVersion so client doesn't overwrite it
+            delete update._taskVersion;
           }
           // PROTECT ARCHIVE: preserve server archive from stale clients
           if (update.tasks && !protections.tasks) {
