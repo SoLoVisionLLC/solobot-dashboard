@@ -482,6 +482,14 @@ async function checkAndRestoreFromBackup(localState) {
   const localChatCount = (localState?.chat?.messages?.length || 0);
   const localLooksEmpty = localTaskCount === 0 && localNotesCount === 0 && localChatCount === 0;
   const localLooksFresh = localLastSync > Date.now() - 24 * 60 * 60 * 1000;
+  const localFileExists = fs.existsSync(STATE_FILE);
+
+  // Never restore if local state file physically exists with any content
+  // This prevents stale Google Drive backups from overwriting curated local state
+  if (localFileExists && localTaskCount > 0) {
+    console.log(`[Auto-Restore] Local state file exists with ${localTaskCount} tasks, skipping restore`);
+    return localState;
+  }
 
   // Only restore if local is truly empty or missing
   if (!localLooksEmpty || localLooksFresh) {
