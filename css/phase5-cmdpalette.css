@@ -1,0 +1,348 @@
+/* css/phase5-cmdpalette.css — Phase 5: Command Palette Styles */
+
+/* ===================
+   COMMAND PALETTE OVERLAY
+   =================== */
+
+.cmdpalette-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 9998;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.cmdpalette-backdrop.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* ===================
+   COMMAND PALETTE CONTAINER
+   =================== */
+
+.enhanced-command-palette {
+    position: fixed;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%) scale(0.95);
+    width: 90%;
+    max-width: 640px;
+    max-height: 60vh;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.enhanced-command-palette.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) scale(1);
+}
+
+/* ===================
+   SEARCH INPUT
+   =================== */
+
+.cmdpalette-search-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-2);
+}
+
+.cmdpalette-search-icon {
+    font-size: 18px;
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+.cmdpalette-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-family: inherit;
+    outline: none;
+}
+
+.cmdpalette-input::placeholder {
+    color: var(--text-muted);
+}
+
+.cmdpalette-shortcut-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--surface-3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+/* ===================
+   TABS
+   =================== */
+
+.cmdpalette-tabs {
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-1);
+    overflow-x: auto;
+}
+
+.cmdpalette-tab {
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.cmdpalette-tab:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+}
+
+.cmdpalette-tab.active {
+    background: var(--brand-primary);
+    color: white;
+}
+
+/* ===================
+   RESULTS LIST
+   =================== */
+
+.cmdpalette-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2);
+    max-height: 400px;
+}
+
+/* Category Headers */
+.cmdpalette-category {
+    padding: var(--space-2) var(--space-3);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-top: var(--space-2);
+}
+
+.cmdpalette-category:first-child {
+    margin-top: 0;
+}
+
+/* Result Items */
+.cmdpalette-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-bottom: 2px;
+}
+
+.cmdpalette-item:hover,
+.cmdpalette-item.selected {
+    background: var(--surface-2);
+}
+
+.cmdpalette-item.selected {
+    background: var(--brand-primary);
+}
+
+.cmdpalette-item-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-3);
+    border-radius: var(--radius-md);
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.cmdpalette-item.selected .cmdpalette-item-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.cmdpalette-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.cmdpalette-item-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cmdpalette-item.selected .cmdpalette-item-title {
+    color: white;
+}
+
+.cmdpalette-item-title mark {
+    background: rgba(239, 68, 68, 0.3);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+.cmdpalette-item.selected .cmdpalette-item-title mark {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.cmdpalette-item-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.cmdpalette-item.selected .cmdpalette-item-desc {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.cmdpalette-item-shortcut {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--surface-3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.cmdpalette-item.selected .cmdpalette-item-shortcut {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* Empty State */
+.cmdpalette-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8);
+    color: var(--text-muted);
+    gap: var(--space-3);
+}
+
+.cmdpalette-empty-icon {
+    font-size: 32px;
+    opacity: 0.5;
+}
+
+/* ===================
+   FOOTER
+   =================== */
+
+.cmdpalette-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border-default);
+    background: var(--surface-2);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.cmdpalette-footer-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+/* ===================
+   TYPE-SPECIFIC STYLES
+   =================== */
+
+/* Task items */
+.cmdpalette-item[data-type="task"] .cmdpalette-item-icon {
+    font-size: 12px;
+}
+
+/* History items */
+.cmdpalette-item[data-type="history"] .cmdpalette-item-title {
+    font-style: italic;
+}
+
+/* ===================
+   ANIMATIONS
+   =================== */
+
+@keyframes cmdpalette-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+.enhanced-command-palette.visible {
+    animation: cmdpalette-slide-in 0.2s ease;
+}
+
+/* ===================
+   RESPONSIVE
+   =================== */
+
+@media (max-width: 640px) {
+    .enhanced-command-palette {
+        top: 10%;
+        width: 95%;
+        max-height: 70vh;
+    }
+    
+    .cmdpalette-tabs {
+        padding: var(--space-2);
+    }
+    
+    .cmdpalette-tab {
+        padding: 4px 10px;
+        font-size: 11px;
+    }
+    
+    .cmdpalette-shortcut-hint {
+        display: none;
+    }
+    
+    .cmdpalette-footer {
+        font-size: 10px;
+    }
+}
