@@ -445,63 +445,8 @@ function initSampleData() {
 // DASHBOARD TASKS INITIALIZATION
 // ===================
 
-// REMOVED: 70 hardcoded DASHBOARD_TASKS array — tasks are now managed server-side via agents
-const DASHBOARD_TASKS = []; // kept empty for compatibility
-    
-    // Phase 2: Motion & Microinteractions (P0 - critical)
-    
-    // Phase 3: Widget System (P1 - important)
-    
-    // Phase 4: Context Awareness (P1 - important)
-    
-    // Phase 5: Command Palette (P1 - important)
-    
-    // Phase 6: AI Insights Widget (P1 - important)
-    
-    // Phase 7: Activity Visualization (P1 - important)
-    
-    // Phase 8: Quick Actions (P1 - important)
-    
-    // Phase 9: Voice Integration (P2 - nice to have)
-    
-    // Phase 10: Task Board Enhancements (P2 - nice to have)
-    
-    // Phase 11: Agent Status Panel (P2 - nice to have)
-    
-    // Phase 12: Analytics Widget (P2 - nice to have)
-    
-    // Phase 13: Terminal Improvements (P2 - nice to have)
-    
-    // Phase 14: UX Polish (P2 - nice to have)
-    
-    // Phase 15: Keyboard Shortcuts (P2 - nice to have)
-    
-    // Phase 16: Business Features (P2 - nice to have)
-];
-
-function createDashboardTasks() {
-    const now = Date.now();
-    const tasks = [];
-    
-    DASHBOARD_TASKS.forEach((taskDef, index) => {
-        const id = `dash-${taskDef.phase}-${taskDef.num}-${now + index}`;
-        const title = `P${taskDef.phase}.${String(taskDef.num).padStart(3, '0')} ${taskDef.title}`;
-        tasks.push({
-            id,
-            title,
-            priority: taskDef.priority,
-            created: now + index,
-            description: `Dashboard Phase ${taskDef.phase} improvement task`,
-            agent: 'dev'
-        });
-    });
-    
-    return tasks;
-}
-
+// Tasks are managed server-side via dashboard-sync API — no client-side task generation
 function initDashboardTasks() {
-    // DISABLED: Tasks are managed by agents via dashboard-sync API, not auto-generated.
-    // The old code created 70 hardcoded improvement tasks on every page load when none had 'dash-' prefix IDs.
     console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
 
