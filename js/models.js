@@ -203,6 +203,17 @@ window.refreshModels = async function() {
             const providerSelect = document.getElementById('provider-select');
             const provider = providerSelect?.value || currentProvider || 'anthropic';
             await updateModelDropdown(provider);
+            
+            // Also refresh current model info from server
+            try {
+                const modelResponse = await fetch('/api/models/current');
+                const modelInfo = await modelResponse.json();
+                if (modelInfo?.modelId && modelInfo?.provider) {
+                    syncModelDisplay(modelInfo.modelId, modelInfo.provider);
+                }
+            } catch (e) {
+                console.warn('[Dashboard] Failed to refresh current model info:', e.message);
+            }
         } else {
             showToast(result.message || 'Failed to refresh models', 'warning');
         }
@@ -650,34 +661,20 @@ async function applySessionModelOverride(sessionKey) {
         }
     }
     
-    // 3. Check per-agent model override in openclaw.json
+    // 3. Check per-agent model override via server API
     if (!sessionModel) {
         try {
-            if (gateway && gateway.isConnected()) {
-                const config = await gateway.getConfig();
-                let configData = config;
-                if (typeof config === 'string') configData = JSON.parse(config);
-                if (configData?.raw) configData = JSON.parse(configData.raw);
-                
-                // Check per-agent model first
-                const agentId = getAgentIdFromSession(sessionKey);
-                const agentEntry = (configData?.agents?.list || []).find(a => a.id === agentId);
-                if (agentEntry?.model) {
-                    sessionModel = typeof agentEntry.model === 'string' ? agentEntry.model : agentEntry.model.primary;
-                    console.log(`[Dashboard] Session ${sessionKey} using agent model: ${sessionModel}`);
-                }
-                
-                // Fallback to global default
-                if (!sessionModel) {
-                    const primary = configData?.agents?.defaults?.model?.primary;
-                    if (primary) {
-                        sessionModel = primary;
-                        console.log(`[Dashboard] Session ${sessionKey} using global default: ${sessionModel}`);
-                    }
+            // Use server API to get current model configuration
+            const response = await fetch('/api/models/current');
+            if (response.ok) {
+                const modelInfo = await response.json();
+                if (modelInfo?.modelId) {
+                    sessionModel = modelInfo.modelId;
+                    console.log(`[Dashboard] Session ${sessionKey} using server model: ${sessionModel}`);
                 }
             }
         } catch (e) {
-            console.warn('[Dashboard] Failed to fetch model config:', e.message);
+            console.warn('[Dashboard] Failed to fetch model config from server:', e.message);
         }
     }
     
@@ -765,6 +762,23 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (settingProviderEl) settingProviderEl.value = currentProvider;
         
         // Populate model dropdown for current provider and select current model
+        
+        // Set up periodic model sync (every 5 minutes)
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/models/current');
+                const modelInfo = await response.json();
+                if (modelInfo?.modelId && modelInfo?.provider) {
+                    // Only update if different from current
+                    if (modelInfo.modelId !== currentModel || modelInfo.provider !== currentProvider) {
+                        console.log(`[Dashboard] Model changed on server: ${currentModel} → ${modelInfo.modelId}`);
+                        syncModelDisplay(modelInfo.modelId, modelInfo.provider);
+                    }
+                }
+            } catch (e) {
+                // Silent fail for periodic sync
+            }
+        }, 5 * 60 * 1000); // 5 minutes
         await updateModelDropdown(currentProvider);
         selectModelInDropdowns(currentModel);
         
