@@ -780,27 +780,40 @@ const server = http.createServer((req, res) => {
         const serverNoteCount = state.notes?.length || 0;
         const clientNoteCount = update.notes?.length || 0;
         
-        // PROTECT TASKS: never allow fewer tasks to replace more tasks
+        // PROTECT TASKS with versioning — reject stale task syncs
         if (update.tasks !== undefined) {
-          if (serverTaskCount > 0 && clientTaskCount < serverTaskCount) {
+          const serverVersion = state._taskVersion || 0;
+          const clientVersion = update._taskVersion || 0;
+          
+          // If server has a higher task version, client is stale — reject task update entirely
+          if (serverVersion > clientVersion && serverTaskCount > 0) {
+            console.log(`[Sync] REJECTING stale tasks - server v${serverVersion} > client v${clientVersion}`);
+            // Send back current server tasks so client can update
+            protections.tasks = true;
+            protections.serverTasks = state.tasks;
+            protections.taskVersion = serverVersion;
+            delete update.tasks;
+          }
+          // Count-based protection as fallback
+          else if (serverTaskCount > 0 && clientTaskCount < serverTaskCount) {
             console.log(`[Sync] PROTECTING tasks - server has ${serverTaskCount}, client has ${clientTaskCount}`);
             delete update.tasks;
             protections.tasks = true;
           }
-          // PROTECT ARCHIVE: if server has archived tasks but client sends none/fewer, preserve server archive
-          // This prevents browser tabs with stale state from un-archiving tasks
+          // PROTECT ARCHIVE: preserve server archive from stale clients
           if (update.tasks && !protections.tasks) {
             const serverArchive = state.tasks?.archive?.length || 0;
             const clientArchive = update.tasks?.archive?.length || 0;
             if (serverArchive > 0 && clientArchive < serverArchive) {
               console.log(`[Sync] PROTECTING archive - server has ${serverArchive}, client has ${clientArchive}. Merging.`);
               update.tasks.archive = state.tasks.archive;
-              // Also prevent client from putting archived tasks back in done
               if (update.tasks.done && state.tasks?.done) {
                 const archivedIds = new Set((state.tasks.archive || []).map(t => t.id));
                 update.tasks.done = update.tasks.done.filter(t => !archivedIds.has(t.id));
               }
             }
+            // Bump version when tasks change via sync
+            state._taskVersion = (state._taskVersion || 0) + 1;
           }
         }
         
@@ -874,6 +887,7 @@ const server = http.createServer((req, res) => {
     if (!state.tasks.archive) state.tasks.archive = [];
     state.tasks.archive.push(...state.tasks.done);
     state.tasks.done = [];
+    state._taskVersion = (state._taskVersion || 0) + 1;
     saveState();
     console.log(`[Server] Archived ${doneCount} done tasks (total archive: ${state.tasks.archive.length})`);
     res.setHeader('Content-Type', 'application/json');

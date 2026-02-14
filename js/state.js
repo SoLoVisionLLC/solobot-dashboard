@@ -277,19 +277,30 @@ async function loadState() {
             const serverActivityCount = Array.isArray(vpsState.activity) ? vpsState.activity.length : 0;
             const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
 
-            // Use whichever has more tasks — but always merge archive from server
+            // Server is authoritative for tasks — always use server tasks and version
+            // This prevents stale localStorage from overwriting API-driven task moves
+            const serverVersion = vpsState._taskVersion || 0;
+            const localVersion = state._taskVersion || 0;
             let tasksToUse;
-            if (localTaskCount > serverTaskCount && localTasks) {
+            
+            if (serverVersion >= localVersion) {
+                // Server is same or newer — use server tasks
+                tasksToUse = vpsState.tasks;
+                state._taskVersion = serverVersion;
+            } else if (localTaskCount > serverTaskCount && localTasks) {
+                // Local has genuinely more tasks (new tasks added locally)
                 tasksToUse = localTasks;
-                // Even when keeping local tasks, merge server archive (server is authoritative for archive)
-                if ((vpsState.tasks.archive?.length || 0) > (localTasks.archive?.length || 0)) {
-                    tasksToUse.archive = vpsState.tasks.archive;
-                    // Remove any archived tasks that local still has in done
-                    const archivedIds = new Set(tasksToUse.archive.map(t => t.id));
-                    tasksToUse.done = (tasksToUse.done || []).filter(t => !archivedIds.has(t.id));
-                }
+                state._taskVersion = localVersion;
             } else {
                 tasksToUse = vpsState.tasks;
+                state._taskVersion = serverVersion;
+            }
+            
+            // Always merge server archive (server is authoritative for archive)
+            if ((vpsState.tasks.archive?.length || 0) > (tasksToUse.archive?.length || 0)) {
+                tasksToUse.archive = vpsState.tasks.archive;
+                const archivedIds = new Set(tasksToUse.archive.map(t => t.id));
+                tasksToUse.done = (tasksToUse.done || []).filter(t => !archivedIds.has(t.id));
             }
             // Use whichever has more activity
             const activityToUse = (localActivityCount > serverActivityCount) ? state.activity : vpsState.activity;
@@ -311,10 +322,13 @@ async function loadState() {
                 console: currentConsole
             };
 
-            // If local had more data, push it back to server
-            if (localTaskCount > serverTaskCount || localActivityCount > serverActivityCount) {
+            // If local had more data, push it back to server (only if local version is newer)
+            if ((localTaskCount > serverTaskCount && localVersion > serverVersion) || localActivityCount > serverActivityCount) {
                 const pushData = {};
-                if (localTaskCount > serverTaskCount) pushData.tasks = tasksToUse;
+                if (localTaskCount > serverTaskCount && localVersion > serverVersion) {
+                    pushData.tasks = tasksToUse;
+                    pushData._taskVersion = state._taskVersion;
+                }
                 if (localActivityCount > serverActivityCount) pushData.activity = activityToUse;
                 fetch('/api/sync', {
                     method: 'POST',
@@ -386,27 +400,44 @@ async function saveState(changeDescription = null) {
 
 async function syncToServer() {
     try {
-        // PROTECTION: Fetch server state first and never send fewer tasks/activity
+        // PROTECTION: Fetch server state first — check version and counts
         let serverTaskCount = 0;
         let serverActivityCount = 0;
+        let serverTaskVersion = 0;
         try {
             const checkResp = await fetch('/api/state', { cache: 'no-store' });
             if (checkResp.ok) {
                 const serverState = await checkResp.json();
                 const st = serverState.tasks || {};
-                serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0);
+                serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0) + (st.archive?.length || 0);
                 serverActivityCount = Array.isArray(serverState.activity) ? serverState.activity.length : 0;
+                serverTaskVersion = serverState._taskVersion || 0;
+                
+                // If server has newer task version, pull server tasks into local state
+                if (serverTaskVersion > (state._taskVersion || 0)) {
+                    console.log(`[Sync] Server tasks are newer (v${serverTaskVersion} > v${state._taskVersion || 0}) — adopting server tasks`);
+                    state.tasks = serverState.tasks;
+                    state._taskVersion = serverTaskVersion;
+                    // Update localStorage with server tasks
+                    try { localStorage.setItem('solovision-dashboard', JSON.stringify(state)); } catch(e) {}
+                    renderTasks();
+                }
             }
         } catch (e) { /* continue with sync */ }
 
-        // Build sync payload — exclude tasks/activity if we'd wipe server data
+        // Build sync payload — include task version
         const syncPayload = JSON.parse(JSON.stringify(state));
+        if (syncPayload.tasks) syncPayload._taskVersion = state._taskVersion || 0;
 
-        const localTaskCount = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0);
+        const localTaskCount = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0) + (state.tasks?.archive?.length || 0);
         const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
 
         if (serverTaskCount > 0 && localTaskCount < serverTaskCount) {
             console.warn(`[Sync] Skipping tasks — server has ${serverTaskCount}, local has ${localTaskCount}`);
+            delete syncPayload.tasks;
+        }
+        // Also skip if server has newer version
+        if (serverTaskVersion > (state._taskVersion || 0)) {
             delete syncPayload.tasks;
         }
         if (serverActivityCount > 0 && localActivityCount < serverActivityCount) {
