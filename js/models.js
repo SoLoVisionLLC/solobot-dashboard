@@ -98,10 +98,19 @@ function isSystemMessage(text, from) {
     return false;
 }
 
-// Provider and Model selection functions (currently just for display)
+// Provider and Model selection functions
 window.changeProvider = function() {
-    console.warn('[Dashboard] Provider selection not implemented - providers are configured at OpenClaw gateway level');
-    showToast('Providers must be configured at the OpenClaw gateway level', 'warning');
+    const providerSelect = document.getElementById('provider-select');
+    if (!providerSelect) return;
+    
+    const selectedProvider = providerSelect.value;
+    
+    // Update display
+    const providerNameEl = document.getElementById('provider-name');
+    if (providerNameEl) providerNameEl.textContent = selectedProvider;
+    
+    // Update model dropdown for this provider
+    updateModelDropdown(selectedProvider);
 };
 
 window.updateProviderDisplay = function() {
@@ -220,6 +229,14 @@ window.changeSessionModel = async function() {
         return;
     }
     
+    if (selectedModel === 'global/default') {
+        // This is valid - user wants to revert to global default
+        console.log('[Dashboard] User selected Global Default - will revert to system default');
+    } else if (!selectedModel.includes('/')) {
+        showToast('Invalid model format. Please select a valid model.', 'warning');
+        return;
+    }
+    
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to gateway', 'warning');
         return;
@@ -325,8 +342,18 @@ window.changeGlobalModel = async function() {
         return;
     }
     
+    if (!selectedModel.includes('/')) {
+        showToast('Invalid model format. Please select a valid model.', 'warning');
+        return;
+    }
+    
     if (selectedModel.includes('ERROR')) {
         showToast('Cannot change model - configuration error', 'error');
+        return;
+    }
+    
+    if (!selectedProvider) {
+        showToast('Please select a provider', 'warning');
         return;
     }
     
@@ -370,42 +397,58 @@ window.changeGlobalModel = async function() {
 // Legacy alias — keep for any old references
 window.changeModel = window.changeSessionModel;
 
-async function updateModelDropdown(provider) {
+async function updateHeaderModelDropdown(provider) {
     const models = await getModelsForProvider(provider);
+    const select = document.getElementById('model-select');
+    if (!select) return;
     
-    // Populate both dropdowns independently
-    const selects = [
-        document.getElementById('model-select'),
-        document.getElementById('setting-model')
-    ].filter(Boolean);
+    select.innerHTML = '';
     
-    for (const select of selects) {
-        select.innerHTML = '';
-        
-        // Add "Global Default" option first
-        const globalOption = document.createElement('option');
-        globalOption.value = 'global/default';
-        globalOption.textContent = 'Global Default 🌐';
-        globalOption.style.fontWeight = 'bold';
-        select.appendChild(globalOption);
-        
-        // Add separator
-        const separator = document.createElement('option');
-        separator.disabled = true;
-        separator.textContent = '──────────';
-        select.appendChild(separator);
-        
-        models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model.value;
-            option.textContent = model.name;
-            if (model.selected) option.selected = true;
-            select.appendChild(option);
-        });
-        
-        // If current model matches global default, select it? 
-        // Logic handled by selectModelInDropdowns or syncModelDisplay
-    }
+    // Add "Global Default" option first (header can revert to global default)
+    const globalOption = document.createElement('option');
+    globalOption.value = 'global/default';
+    globalOption.textContent = 'Global Default 🌐';
+    globalOption.style.fontWeight = 'bold';
+    select.appendChild(globalOption);
+    
+    // Add separator
+    const separator = document.createElement('option');
+    separator.disabled = true;
+    separator.textContent = '──────────';
+    select.appendChild(separator);
+    
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.name;
+        if (model.selected) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+async function updateSettingsModelDropdown(provider) {
+    const models = await getModelsForProvider(provider);
+    const select = document.getElementById('setting-model');
+    if (!select) return;
+    
+    select.innerHTML = '';
+    
+    // Settings dropdown should NOT have "Global Default" option since it's for setting the global default
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.name;
+        if (model.selected) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+// Legacy function for backward compatibility - calls both functions
+async function updateModelDropdown(provider) {
+    await Promise.all([
+        updateHeaderModelDropdown(provider),
+        updateSettingsModelDropdown(provider)
+    ]);
 }
 
 async function getModelsForProvider(provider) {
@@ -524,7 +567,10 @@ function syncModelDisplay(model, provider) {
     if (!model) return;
     
     // Ignore updates if manual change happened recently (prevent reversion flicker)
-    if (window._lastManualModelChange && (Date.now() - window._lastManualModelChange < 3000)) {
+    // Use a shorter timeout and more precise tracking
+    const now = Date.now();
+    if (window._lastManualModelChange && (now - window._lastManualModelChange < 2000)) {
+        console.log('[Dashboard] Skipping model sync due to recent manual change');
         return;
     }
     
@@ -568,8 +614,18 @@ function syncModelDisplay(model, provider) {
             providerSelectEl.value = provider;
         }
         
-        // Refresh model dropdown for this provider, then select the right model
+        // Also update settings provider dropdown
+        const settingProviderEl = document.getElementById('setting-provider');
+        if (settingProviderEl) {
+            settingProviderEl.value = provider;
+        }
+        
+        // Refresh model dropdowns for this provider, then select the right model
         updateModelDropdown(provider).then(() => {
+            selectModelInDropdowns(model);
+        }).catch(e => {
+            console.warn('[Dashboard] Failed to update model dropdowns:', e);
+            // Fallback: try to select model directly
             selectModelInDropdowns(model);
         });
     } else {

@@ -41,8 +41,14 @@ async function openSettingsModal() {
         // Set provider select to current
         document.getElementById('setting-provider').value = modelInfo.provider;
         
-        // Populate model dropdown for current provider
+        // Populate model dropdown for current provider FIRST
         await updateModelDropdown(modelInfo.provider);
+        
+        // Then set the correct model value after dropdown is populated
+        const settingModelSelect = document.getElementById('setting-model');
+        if (settingModelSelect && modelInfo.modelId) {
+            settingModelSelect.value = modelInfo.modelId;
+        }
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
@@ -51,6 +57,12 @@ async function openSettingsModal() {
         document.getElementById('current-model-display').textContent = 'anthropic/claude-opus-4-5';
         document.getElementById('setting-provider').value = 'anthropic';
         await updateModelDropdown('anthropic');
+        
+        // Set fallback model after dropdown is populated
+        const settingModelSelect = document.getElementById('setting-model');
+        if (settingModelSelect) {
+            settingModelSelect.value = 'anthropic/claude-opus-4-5';
+        }
     }
 
     // Populate gateway settings
