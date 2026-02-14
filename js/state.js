@@ -284,73 +284,20 @@ async function loadState() {
             delete vpsState.pendingChat;
             delete vpsState.chat;
 
-            // BULLETPROOF PROTECTION: Always keep whichever has MORE data
-            const serverTaskCount = countTasks(vpsState);
-            const localTaskCount = localTasks ? countTasks({ tasks: localTasks }) : 0;
-            const serverActivityCount = Array.isArray(vpsState.activity) ? vpsState.activity.length : 0;
-            const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
-
-            // Server is authoritative for tasks — always use server tasks and version
-            // This prevents stale localStorage from overwriting API-driven task moves
-            const serverVersion = vpsState._taskVersion || 0;
-            const localVersion = state._taskVersion || 0;
-            let tasksToUse;
-            
-            if (serverVersion >= localVersion) {
-                // Server is same or newer — use server tasks
-                tasksToUse = vpsState.tasks;
-                state._taskVersion = serverVersion;
-            } else if (localTaskCount > serverTaskCount && localTasks) {
-                // Local has genuinely more tasks (new tasks added locally)
-                tasksToUse = localTasks;
-                state._taskVersion = localVersion;
-            } else {
-                tasksToUse = vpsState.tasks;
-                state._taskVersion = serverVersion;
-            }
-            
-            // Always merge server archive (server is authoritative for archive)
-            if ((vpsState.tasks.archive?.length || 0) > (tasksToUse.archive?.length || 0)) {
-                tasksToUse.archive = vpsState.tasks.archive;
-                const archivedIds = new Set(tasksToUse.archive.map(t => t.id));
-                tasksToUse.done = (tasksToUse.done || []).filter(t => !archivedIds.has(t.id));
-            }
-            // Use whichever has more activity
-            const activityToUse = (localActivityCount > serverActivityCount) ? state.activity : vpsState.activity;
-
-            if (localTaskCount > serverTaskCount && localTasks) {
-                console.warn(`[loadState] Preserving local tasks (${localTaskCount}) over server (${serverTaskCount})`);
-            }
-            if (localActivityCount > serverActivityCount) {
-                console.warn(`[loadState] Preserving local activity (${localActivityCount}) over server (${serverActivityCount})`);
-            }
-
+            // SERVER IS ALWAYS AUTHORITATIVE for tasks and activity.
+            // Never let stale localStorage overwrite server state.
             state = {
                 ...state,
                 ...vpsState,
-                tasks: tasksToUse,
-                activity: activityToUse || [],
+                tasks: vpsState.tasks,
+                activity: vpsState.activity || [],
+                _taskVersion: vpsState._taskVersion || 0,
                 chat: currentChat,
                 system: currentSystem,
                 console: currentConsole
             };
 
-            // If local had more data, push it back to server (only if local version is newer)
-            if ((localTaskCount > serverTaskCount && localVersion > serverVersion) || localActivityCount > serverActivityCount) {
-                const pushData = {};
-                if (localTaskCount > serverTaskCount && localVersion > serverVersion) {
-                    pushData.tasks = tasksToUse;
-                    pushData._taskVersion = state._taskVersion;
-                }
-                if (localActivityCount > serverActivityCount) pushData.activity = activityToUse;
-                fetch('/api/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(pushData)
-                }).then(() => console.log('[loadState] Pushed preserved data back to server'))
-                  .catch(() => {});
-            }
-            delete state.localModified;
+            console.log(`[loadState] Loaded from server: ${countTasks(vpsState)} tasks, ${(vpsState.activity || []).length} activity, v${vpsState._taskVersion || 0}`);
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
             return;
         }
@@ -438,25 +385,13 @@ async function syncToServer() {
             }
         } catch (e) { /* continue with sync */ }
 
-        // Build sync payload — include task version
+        // Build sync payload — NEVER push tasks or activity from browser.
+        // Server is source of truth for tasks (managed by dashboard-sync script)
+        // and activity (managed by agents). Browser is read-only for these.
         const syncPayload = JSON.parse(JSON.stringify(state));
-        if (syncPayload.tasks) syncPayload._taskVersion = state._taskVersion || 0;
-
-        const localTaskCount = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0) + (state.tasks?.archive?.length || 0);
-        const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
-
-        if (serverTaskCount > 0 && localTaskCount < serverTaskCount) {
-            console.warn(`[Sync] Skipping tasks — server has ${serverTaskCount}, local has ${localTaskCount}`);
-            delete syncPayload.tasks;
-        }
-        // Also skip if server has newer version
-        if (serverTaskVersion > (state._taskVersion || 0)) {
-            delete syncPayload.tasks;
-        }
-        if (serverActivityCount > 0 && localActivityCount < serverActivityCount) {
-            console.warn(`[Sync] Skipping activity — server has ${serverActivityCount}, local has ${localActivityCount}`);
-            delete syncPayload.activity;
-        }
+        delete syncPayload.tasks;
+        delete syncPayload._taskVersion;
+        delete syncPayload.activity;
 
         // Don't sync transient local-only data
         delete syncPayload.chat;
