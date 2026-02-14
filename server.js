@@ -694,7 +694,7 @@ function readPage(name) {
   }
 }
 
-const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products', 'cron', 'security', 'skills'];
+const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products', 'business', 'cron', 'security', 'skills'];
 
 function assemblePage(activePage) {
   // Build all pages, marking the active one
@@ -2141,6 +2141,10 @@ const server = http.createServer((req, res) => {
     '/chat': 'chat',
     '/system': 'system',
     '/products': 'products',
+    '/business': 'business',
+    '/cron': 'cron',
+    '/security': 'security',
+    '/skills': 'skills',
   };
 
   const pageName = pageRoutes[url.pathname];

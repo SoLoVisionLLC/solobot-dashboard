@@ -73,6 +73,7 @@
                 "chat",
                 "system",
                 "products",
+                "business",
                 "cron",
                 "security",
                 "skills",
@@ -213,6 +214,7 @@
                 if (pageName === "cron" && typeof initCronPage === "function") initCronPage();
                 if (pageName === "security" && typeof initSecurityPage === "function") initSecurityPage();
                 if (pageName === "skills" && typeof initSkillsPage === "function") initSkillsPage();
+                if (pageName === "business" && typeof BusinessFeatures !== "undefined") BusinessFeatures.renderAll();
             }
 
             // Handle browser back/forward buttons
