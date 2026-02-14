@@ -125,7 +125,7 @@ const WidgetSystem = {
                 
                 // Apply custom dimensions
                 if (savedConfig.width) widget.style.width = savedConfig.width;
-                if (savedConfig.height) savedConfig.height;
+                if (savedConfig.height) widget.style.height = savedConfig.height;
                 if (savedConfig.gridColumn) widget.style.gridColumn = savedConfig.gridColumn;
                 if (savedConfig.gridRow) widget.style.gridRow = savedConfig.gridRow;
                 if (savedConfig.order) widget.style.order = savedConfig.order;
