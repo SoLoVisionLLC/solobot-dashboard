@@ -146,6 +146,9 @@ async function populateProviderDropdown() {
         const allModels = await response.json();
         const providers = Object.keys(allModels);
         
+        console.log(`[Dashboard] Available providers: ${providers.join(', ')}`);
+        console.log(`[Dashboard] Current provider: ${currentProvider}`);
+        
         for (const select of selects) {
             select.innerHTML = '';
             providers.forEach(provider => {
@@ -154,9 +157,15 @@ async function populateProviderDropdown() {
                 option.textContent = provider.split('-').map(w => 
                     w.charAt(0).toUpperCase() + w.slice(1)
                 ).join(' ');
-                if (provider === currentProvider) option.selected = true;
+                if (provider === currentProvider) {
+                    option.selected = true;
+                    console.log(`[Dashboard] Selected provider "${provider}" in dropdown`);
+                }
                 select.appendChild(option);
             });
+            
+            // Log what was actually selected after population
+            console.log(`[Dashboard] Dropdown "${select.id}" value: "${select.value}"`);
         }
 
         return providers;
@@ -199,7 +208,7 @@ window.refreshModels = async function() {
             await populateProviderDropdown();
             // Update model dropdown for current provider (use currentProvider variable as fallback)
             const providerSelect = document.getElementById('provider-select');
-            const provider = providerSelect?.value || currentProvider || 'openrouter';
+            const provider = providerSelect?.value || currentProvider || 'anthropic';
             await updateModelDropdown(provider);
         } else {
             showToast(result.message || 'Failed to refresh models', 'warning');
@@ -833,10 +842,7 @@ function selectModelInDropdowns(model) {
 // Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', async function() {
     try {
-        // First populate the provider dropdown dynamically
-        await populateProviderDropdown();
-        
-        // Always fetch current model from server API (reads openclaw.json — source of truth)
+        // First fetch current model from server API (reads openclaw.json — source of truth)
         // Don't trust localStorage as it can get stale across sessions/deploys
         let modelId = null;
         let provider = null;
@@ -862,6 +868,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         currentModel = modelId;
 
         console.log(`[Dashboard] Init model: ${currentModel} (provider: ${currentProvider})`);
+        
+        // NOW populate the provider dropdown with currentProvider set
+        await populateProviderDropdown();
         
         // Update displays
         const currentProviderDisplay = document.getElementById('current-provider-display');
