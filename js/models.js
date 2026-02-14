@@ -479,6 +479,43 @@ let currentProvider = 'anthropic';
 let currentModel = 'anthropic/claude-opus-4-5';
 
 /**
+ * Resolve a bare model name (e.g. "claude-opus-4-6") to its full "provider/model" ID.
+ * The gateway sessions.list often returns model names without the provider prefix.
+ * Uses _gatewayModels cache and known config models to find the match.
+ */
+function resolveFullModelId(modelStr) {
+    if (!modelStr) return modelStr;
+    // Already has a provider prefix
+    if (modelStr.includes('/')) return modelStr;
+    
+    // Search in _gatewayModels cache
+    if (window._gatewayModels) {
+        for (const [provider, models] of Object.entries(window._gatewayModels)) {
+            for (const m of models) {
+                // m.id is "provider/model" — check if the model part matches
+                const modelPart = m.id.includes('/') ? m.id.split('/').slice(1).join('/') : m.id;
+                if (modelPart === modelStr) return m.id;
+            }
+        }
+    }
+    
+    // Well-known provider prefixes as fallback
+    const knownPrefixes = {
+        'claude': 'anthropic',
+        'gpt': 'openai-codex',
+        'o1': 'openai',
+        'o3': 'openai',
+        'gemini': 'google',
+        'kimi': 'moonshot',
+    };
+    for (const [prefix, provider] of Object.entries(knownPrefixes)) {
+        if (modelStr.startsWith(prefix)) return `${provider}/${modelStr}`;
+    }
+    
+    return modelStr;
+}
+
+/**
  * Sync the model dropdown and display elements with the actual model in use.
  * Called when we get model info from gateway connect or chat responses.
  * This is the source of truth — gateway tells us what model is actually running.
@@ -490,6 +527,9 @@ function syncModelDisplay(model, provider) {
     if (window._lastManualModelChange && (Date.now() - window._lastManualModelChange < 3000)) {
         return;
     }
+    
+    // Resolve bare model names to full provider/model IDs
+    model = resolveFullModelId(model);
     
     if (model === currentModel && provider === currentProvider) return;
     
@@ -605,6 +645,7 @@ async function applySessionModelOverride(sessionKey) {
     }
     
     if (sessionModel) {
+        sessionModel = resolveFullModelId(sessionModel);
         const provider = sessionModel.includes('/') ? sessionModel.split('/')[0] : currentProvider;
         syncModelDisplay(sessionModel, provider);
     } else {
