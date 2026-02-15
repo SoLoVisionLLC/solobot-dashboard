@@ -179,13 +179,13 @@
                 grid-column: 1 / 4;
                 grid-row: 2;
                 min-height: 0;
-                max-height: 780px;
+                max-height: 740px;
             }
 
             .bento-activity {
                 grid-column: 4;
                 grid-row: 2;
-                max-height: 780px;
+                max-height: 740px;
             }
 
             /* Row 3: Agents (col 1) | Costs (col 2) | Analytics (col 3) | Notes (col 4) */
