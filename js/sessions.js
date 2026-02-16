@@ -7,15 +7,38 @@ function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 // SESSION MANAGEMENT
 // ===================
 
+// Agent persona names and role labels
+const AGENT_PERSONAS = {
+    'main':   { name: 'Halo',     role: 'Orchestrator' },
+    'exec':   { name: 'Elon',     role: 'Chief of Staff' },
+    'cto':    { name: 'Orion',    role: 'CTO' },
+    'coo':    { name: 'Atlas',    role: 'COO' },
+    'cfo':    { name: 'Sterling', role: 'CFO' },
+    'cmp':    { name: 'Vector',   role: 'Marketing & Product' },
+    'dev':    { name: 'Dev',      role: 'Head of Engineering' },
+    'sec':    { name: 'Knox',     role: 'Security' },
+    'smm':    { name: 'Nova',     role: 'Social Media' },
+    'family': { name: 'Haven',    role: 'Family & Household' },
+    'tax':    { name: 'Ledger',   role: 'Tax Compliance' }
+};
+
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function getFriendlySessionName(key) {
-    if (!key) return 'main';
-    // Strip agent:main: or agent:xxx: prefix
-    const match = key.match(/^agent:[^:]+:(.+)$/);
-    return match ? match[1] : key;
+    if (!key) return 'Halo (Main)';
+    // For agent sessions, show persona name + session suffix
+    const match = key.match(/^agent:([^:]+):(.+)$/);
+    if (match) {
+        const agentId = match[1];
+        const sessionSuffix = match[2];
+        const persona = AGENT_PERSONAS[agentId];
+        const name = persona ? persona.name : agentId.toUpperCase();
+        return sessionSuffix === 'main' ? name : `${name} (${sessionSuffix})`;
+    }
+    return key;
 }
 
 let currentSessionName = 'main';
+let _switchingSession = false;  // Flag to drop chat events during session switch
 
 window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');
@@ -311,29 +334,22 @@ function populateSessionDropdown() {
     menu.innerHTML = html;
 }
 
-// Get human-readable label for an agent ID
+// Get human-readable label for an agent ID (persona name)
 function getAgentLabel(agentId) {
-    const labels = {
-        'main': 'SoLoBot',
-        'exec': 'EXEC',
-        'coo': 'COO',
-        'cfo': 'CFO',
-        'cmp': 'CMP',
-        'dev': 'DEV',
-        'family': 'Family',
-        'tax': 'Tax',
-        'smm': 'SMM'
-    };
-    return labels[agentId] || agentId.toUpperCase();
+    const persona = AGENT_PERSONAS[agentId];
+    return persona ? persona.name : agentId.toUpperCase();
 }
 
-// Get display name for message bubbles (e.g., "SoLoBot-DEV")
+// Get display name for message bubbles (e.g., "SoLoBot-CTO" or persona name)
 function getAgentDisplayName(agentId) {
     if (!agentId || agentId === 'main') {
-        return 'SoLoBot';
+        return 'Halo (Main)';
     }
-    const label = getAgentLabel(agentId);
-    return `SoLoBot-${label}`;
+    const persona = AGENT_PERSONAS[agentId];
+    if (persona) {
+        return `${persona.name} (${persona.role})`;
+    }
+    return `SoLoBot-${agentId.toUpperCase()}`;
 }
 
 function escapeHtml(text) {
@@ -427,6 +443,9 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     
     showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
     
+    // Set switching flag — handleChatEvent will drop all events while this is true
+    _switchingSession = true;
+    
     try {
         // 1. Save current chat and cache it for fast switching back
         await saveCurrentChat();
@@ -484,6 +503,9 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         await historyPromise;
         await modelPromise;
 
+        // Switch complete — resume accepting chat events
+        _switchingSession = false;
+
         if (agentMatch) {
             setActiveSidebarAgent(agentMatch[1]);
             saveLastAgentSession(agentMatch[1], sessionKey);
@@ -493,6 +515,7 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
 
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
+        _switchingSession = false;  // Always reset on failure
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
     }

@@ -442,6 +442,11 @@ function updateConnectionUI(status, message) {
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
 
+    // Guard: drop ALL events while a session switch is in progress
+    if (_switchingSession) {
+        return;
+    }
+
     // Guard: ignore events that don't belong to the currently active session
     // This prevents cross-session bleed when events arrive during/after session switches
     const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || 'main').toLowerCase();
