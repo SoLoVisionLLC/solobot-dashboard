@@ -159,16 +159,16 @@
                 left: 240px;
             }
 
-            /* Bento grid — 4-column layout, all 10 widgets explicitly placed */
+            /* Bento grid — 4-column dense layout, all widgets explicitly placed */
             .bento-grid {
                 display: grid;
                 grid-template-columns: 1fr 1fr 1fr 1fr;
-                grid-template-rows: auto auto auto auto auto;
+                grid-auto-rows: min-content;
                 gap: var(--space-3);
                 width: 100%;
             }
 
-            /* Row 1: Stats Bar (full width, compact ~50px) */
+            /* Row 1: Stats Bar (full width, compact) */
             .bento-quick-stats {
                 grid-column: 1 / -1;
                 grid-row: 1;
@@ -180,6 +180,7 @@
                 grid-row: 2;
                 min-height: 0;
                 max-height: 740px;
+                overflow: hidden;
             }
 
             .bento-activity {
@@ -192,43 +193,88 @@
             .bento-agents {
                 grid-column: 1;
                 grid-row: 3;
+                max-height: 300px;
             }
 
             .bento-costs {
                 grid-column: 2;
                 grid-row: 3;
+                max-height: 300px;
             }
 
             .bento-analytics {
                 grid-column: 3;
                 grid-row: 3;
+                max-height: 300px;
             }
 
             .bento-notes {
                 grid-column: 4;
                 grid-row: 3;
+                max-height: 300px;
             }
 
             /* Row 4: Terminal (cols 1-2) | Heatmap (cols 3-4) */
-            .bento-terminal {
-                grid-column: 1 / 3;
-                grid-row: 4;
+            .bento-terminal,
+            .bento-widget.bento-terminal.expanded {
+                grid-column: 1 / 3 !important;
+                grid-row: 4 !important;
+                max-height: 280px;
             }
 
             .bento-heatmap {
                 grid-column: 3 / 5;
                 grid-row: 4;
+                max-height: 280px;
             }
 
-            /* Row 5: Channels (full width, compact) */
-            .bento-channels {
+            /* Second heatmap instance (30-day) — must override .bento-heatmap */
+            .bento-heatmap.bento-heatmap-30d {
                 grid-column: 1 / -1;
+                grid-row: 7;
+                max-height: 200px;
+            }
+
+            /* Row 5: Pomodoro (col 1) | Agent Presence (col 2) | AI Insights (cols 3-4) */
+            .bento-pomodoro {
+                grid-column: 1;
                 grid-row: 5;
+                max-height: 300px;
+            }
+
+            .bento-agent-presence {
+                grid-column: 2;
+                grid-row: 5;
+                max-height: 300px;
+            }
+
+            .bento-ai-insights {
+                grid-column: 3 / 5;
+                grid-row: 5;
+                max-height: 300px;
+            }
+
+            /* Row 6: Subagents (col 1-2) | Channels (col 3-4) */
+            .bento-subagents {
+                grid-column: 1 / 3;
+                grid-row: 6;
+                max-height: 250px;
+            }
+
+            .bento-channels {
+                grid-column: 3 / 5;
+                grid-row: 6;
+                max-height: 250px;
             }
 
             .bento-chat {
                 grid-column: 1 / -1;
-                grid-row: 6;
+                grid-row: 8;
+            }
+
+            /* Hide 0-height empty widgets from causing grid gaps */
+            .bento-widget:empty {
+                display: none;
             }
 
             /* Tablet layout (2 columns) */
@@ -247,7 +293,11 @@
                 .bento-costs,
                 .bento-analytics,
                 .bento-heatmap,
-                .bento-notes   { grid-column: auto; grid-row: auto; }
+                .bento-notes,
+                .bento-pomodoro,
+                .bento-agent-presence,
+                .bento-ai-insights,
+                .bento-subagents { grid-column: auto; grid-row: auto; }
             }
 
             /* Mobile layout (1 column) */
@@ -265,9 +315,14 @@
                 .bento-costs,
                 .bento-analytics,
                 .bento-channels,
-                .bento-heatmap {
+                .bento-heatmap,
+                .bento-pomodoro,
+                .bento-agent-presence,
+                .bento-ai-insights,
+                .bento-subagents {
                     grid-column: 1;
                     grid-row: auto;
+                    max-height: none;
                 }
             }
 
@@ -384,7 +439,17 @@
                 margin-top: var(--space-1);
             }
 
-            /* Task board inside bento widget */
+            /* Task board: toolbar stays fixed, columns scroll internally */
+            .bento-task-board > .bento-widget-content {
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            #task-toolbar {
+                flex-shrink: 0;
+            }
+
             .bento-widget.bento-task-board .grid-3 {
                 display: grid;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -500,9 +565,6 @@
             }
 
             /* ========== Sub-Agent Monitor ========== */
-            .bento-subagents {
-                grid-column: 2;
-            }
 
             .subagent-row {
                 display: flex;
@@ -553,9 +615,7 @@
             }
 
             /* ========== Activity Heatmap ========== */
-            .bento-heatmap {
-                grid-column: 1 / -1;
-            }
+            /* Grid placement is in the bento grid section above */
 
             .heatmap-grid {
                 display: flex;

@@ -31,6 +31,15 @@ class GatewayClient {
     }
 
     connect(host, port, token, password = null) {
+        // Close existing socket if already connecting/connected
+        if (this.socket) {
+            try {
+                this.desiredConnection = null; // prevent reconnect from onclose
+                this.socket.close();
+            } catch {}
+            this.socket = null;
+            this.connected = false;
+        }
         this.desiredConnection = { host, port, token, password };
         this._doConnect();
     }
@@ -212,12 +221,18 @@ class GatewayClient {
         const payload = frame.payload || (frame.payloadJSON ? JSON.parse(frame.payloadJSON) : null);
 
         if (event === 'chat') {
-            gwLog(`[Gateway] 📨 Chat event received: session=${payload?.sessionKey}, state=${payload?.state}, role=${payload?.message?.role}, currentSession=${this.sessionKey}`);
+            // Only log non-delta chat events (deltas are too noisy — hundreds per response)
+            if (payload?.state !== 'delta') {
+                gwLog(`[Gateway] 📨 Chat event: session=${payload?.sessionKey}, state=${payload?.state}, role=${payload?.message?.role}`);
+            }
             this._handleChatEvent(payload);
         } else if (event === 'agent') {
             this._handleAgentEvent(payload);
         } else {
-            gwLog(`[Gateway] Event: ${event}`);
+            // Suppress noisy events (tick, health, cron, heartbeat)
+            if (!['tick', 'health', 'cron', 'heartbeat'].includes(event)) {
+                gwLog(`[Gateway] Event: ${event}`);
+            }
         }
     }
 
@@ -276,7 +291,7 @@ class GatewayClient {
             const message = payload.message;
             const role = message?.role || '';
             
-            gwLog(`[Gateway] Cross-session event: session=${eventSessionKey}, state=${state}, role=${role}`);
+            // Only log cross-session notifications, not every delta/tick (too noisy)
             
             if (state === 'final' && role === 'assistant') {
                 let contentText = '';
@@ -437,13 +452,9 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        gwLog(`[Gateway] Loading history for session: ${this.sessionKey}`);
         return this._request('chat.history', {
             sessionKey: this.sessionKey,
             limit: 200
-        }).then(result => {
-            gwLog(`[Gateway] History returned ${result?.messages?.length || 0} messages`);
-            return result;
         }).catch(() => ({ messages: [] }));
     }
 

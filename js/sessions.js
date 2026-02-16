@@ -154,7 +154,13 @@ function handleSubagentSessionAgent() {
     }
 }
 
+let _fetchSessionsInFlight = false;
+let _fetchSessionsQueued = false;
 async function fetchSessions() {
+    // Debounce: if already fetching, queue one follow-up call
+    if (_fetchSessionsInFlight) { _fetchSessionsQueued = true; return availableSessions; }
+    _fetchSessionsInFlight = true;
+
     // Preserve locally-added sessions that might not be in gateway yet
     const localSessions = availableSessions.filter(s => s.sessionId === null);
     
@@ -241,9 +247,13 @@ async function fetchSessions() {
         if (typeof updateSidebarAgentsFromSessions === 'function') {
             try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
         }
+        _fetchSessionsInFlight = false;
+        if (_fetchSessionsQueued) { _fetchSessionsQueued = false; setTimeout(fetchSessions, 100); }
         return availableSessions;
     } catch (e) {
         console.error('[Dashboard] Failed to fetch sessions:', e);
+        _fetchSessionsInFlight = false;
+        if (_fetchSessionsQueued) { _fetchSessionsQueued = false; setTimeout(fetchSessions, 100); }
         return [];
     }
 }
@@ -405,9 +415,14 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     // Clear unread notifications for this session
     clearUnreadForSession(sessionKey);
     
-    if (sessionKey === currentSessionName) {
+    if (sessionKey === currentSessionName && state.chat?.messages?.length > 0) {
         showToast('Already on this session', 'info');
         return;
+    }
+    
+    // If session matches but chat is empty, allow re-switch to reload content
+    if (sessionKey === currentSessionName) {
+        sessLog(`[Dashboard] Re-switching to ${sessionKey} (chat was empty, reloading)`);
     }
     
     showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
@@ -445,25 +460,29 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
             sessLog(`[Dashboard] Restored ${cached.length} cached messages for ${sessionKey}`);
         }
 
-        // 5. Reconnect gateway with new session key
+        // 5. Switch gateway session key (no disconnect/reconnect needed)
         if (gateway && gateway.isConnected()) {
-            gateway.disconnect();
-            await new Promise(resolve => setTimeout(resolve, 150));
-            connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
+            gateway.setSessionKey(sessionKey);
+        } else if (gateway) {
+            // Not connected — do a full connect
+            connectToGateway();
         }
 
-        // 6. Load new session's history (will merge with cached if any)
-        await loadSessionHistory(sessionKey);
-        // Apply per-session model override (if any)
-        await applySessionModelOverride(sessionKey);
+        // 6. Load history + model override in parallel (not sequential)
+        const historyPromise = loadSessionHistory(sessionKey);
+        const modelPromise = applySessionModelOverride(sessionKey).catch(() => {});
+        
+        // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
-            // Hard clarity: always show the full session key (e.g. agent:dev:main)
             nameEl.textContent = sessionKey;
             nameEl.title = sessionKey;
         }
-        // Refresh dropdown to show new selection (filtered by agent)
         populateSessionDropdown();
+
+        // Wait for history (the critical path)
+        await historyPromise;
+        await modelPromise;
 
         if (agentMatch) {
             setActiveSidebarAgent(agentMatch[1]);
@@ -546,55 +565,65 @@ async function saveCurrentChat() {
 }
 
 async function loadSessionHistory(sessionKey) {
-    try {
-        // Find session in available sessions (which now includes messages)
-        const session = availableSessions.find(s => s.key === sessionKey);
-        
-        if (session?.messages && session.messages.length > 0) {
-            // Convert to chat format
-            chatHistory = session.messages.map(msg => ({
-                role: msg.role === 'assistant' ? 'model' : msg.role,
-                content: msg.content || '',
-                timestamp: msg.timestamp || Date.now(),
-                name: msg.name
-            }));
-            
-            renderChat();
-            renderChatPage();
-            sessLog(`[Dashboard] Loaded ${session.messages.length} messages from ${sessionKey}`);
-        } else {
-            console.warn('[Dashboard] No messages in session:', sessionKey);
-            // Try loading from archived chats as fallback
-            await loadArchivedChat(sessionKey);
+    const loadVersion = sessionVersion;
+    
+    // Helper: attempt to load from gateway
+    async function tryGatewayLoad() {
+        if (!gateway || !gateway.isConnected()) return false;
+        try {
+            const result = await gateway.loadHistory();
+            if (loadVersion !== sessionVersion) {
+                sessLog(`[Dashboard] Ignoring stale history load for ${sessionKey}`);
+                return true; // Stale but don't retry
+            }
+            if (result?.messages && result.messages.length > 0) {
+                if (state.chat?.messages?.length > 0) {
+                    mergeHistoryMessages(result.messages);
+                } else {
+                    loadHistoryMessages(result.messages);
+                }
+                sessLog(`[Dashboard] Loaded ${result.messages.length} messages from gateway for ${sessionKey}`);
+                return true;
+            }
+        } catch (e) {
+            console.warn('[Dashboard] Gateway history failed:', e.message);
         }
-    } catch (e) {
-        console.error('[Dashboard] Failed to load session history:', e);
-        // Fallback to archived chat
-        await loadArchivedChat(sessionKey);
+        return false;
     }
+    
+    // Try gateway first
+    if (await tryGatewayLoad()) return;
+    
+    // If gateway wasn't connected, wait briefly for reconnect and retry
+    if (gateway && !gateway.isConnected()) {
+        sessLog(`[Dashboard] Gateway disconnected during switch to ${sessionKey}, waiting for reconnect...`);
+        await new Promise(r => setTimeout(r, 2000));
+        if (loadVersion !== sessionVersion) return; // Session changed again
+        if (await tryGatewayLoad()) return;
+    }
+
+    // Fallback: check in-memory cache
+    const cached = getCachedSessionMessages(sessionKey);
+    if (cached && cached.length > 0) {
+        state.chat.messages = cached.slice();
+        renderChat();
+        renderChatPage();
+        sessLog(`[Dashboard] Loaded ${cached.length} cached messages for ${sessionKey}`);
+        return;
+    }
+
+    // Last resort: render empty (gateway is source of truth)
+    sessLog(`[Dashboard] No history available for ${sessionKey} — rendering empty`);
+    renderChat();
+    renderChatPage();
 }
 
 async function loadArchivedChat(sessionKey) {
-    try {
-        const response = await fetch('/api/state');
-        const state = await response.json();
-        
-        const archived = state.archivedChats?.[sessionKey];
-        if (archived?.messages) {
-            chatHistory = archived.messages;
-            renderChat();
-            renderChatPage();
-        } else {
-            chatHistory = [];
-            renderChat();
-            renderChatPage();
-        }
-    } catch (e) {
-        console.warn('[Dashboard] Failed to load archived chat:', e);
-        chatHistory = [];
-        renderChat();
-        renderChatPage();
-    }
+    // Just render empty — gateway.loadHistory() is the primary source now
+    // Previously this fetched entire /api/state which was very expensive
+    chatHistory = [];
+    renderChat();
+    renderChatPage();
 }
 
 // Sessions are fetched when gateway connects (see initGateway onConnected)
@@ -606,28 +635,36 @@ function initGateway() {
         onConnected: (serverName, sessionKey) => {
             sessLog(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
-            GATEWAY_CONFIG.sessionKey = sessionKey;
+            
+            // On reconnect, the gateway client reports whatever sessionKey it has.
+            // If the user switched sessions while disconnected, currentSessionName
+            // is authoritative — re-sync the gateway client to match.
+            const intendedSession = currentSessionName || sessionKey;
+            if (sessionKey !== intendedSession) {
+                sessLog(`[Dashboard] Reconnect mismatch: gateway=${sessionKey}, intended=${intendedSession}. Re-syncing gateway.`);
+                if (gateway) gateway.setSessionKey(intendedSession);
+            }
+            GATEWAY_CONFIG.sessionKey = intendedSession;
             
             // Fetch live model config from gateway (populates dropdowns),
             // then apply per-session override (authoritative model display).
-            fetchModelsFromGateway().then(() => applySessionModelOverride(sessionKey));
+            fetchModelsFromGateway().then(() => applySessionModelOverride(intendedSession));
             
-            // Update session name displays (hard clarity: show full session key)
-            currentSessionName = sessionKey;
+            // Update session name displays
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) {
-                nameEl.textContent = sessionKey;
-                nameEl.title = sessionKey;
+                nameEl.textContent = intendedSession;
+                nameEl.title = intendedSession;
             }
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) {
-                chatPageNameEl.textContent = sessionKey;
-                chatPageNameEl.title = sessionKey;
+                chatPageNameEl.textContent = intendedSession;
+                chatPageNameEl.title = intendedSession;
             }
             
             // Remember this session for the agent
-            const agentMatch = sessionKey.match(/^agent:([^:]+):/);
-            if (agentMatch) saveLastAgentSession(agentMatch[1], sessionKey);
+            const agentMatch = intendedSession.match(/^agent:([^:]+):/);
+            if (agentMatch) saveLastAgentSession(agentMatch[1], intendedSession);
             
             checkRestartToast();
 
@@ -642,11 +679,23 @@ function initGateway() {
                     return;
                 }
                 if (result?.messages) {
+                    // ALWAYS merge on reconnect — never replace.
+                    // loadHistoryMessages wipes local messages which causes data loss.
+                    // If chat is empty, try restoring from localStorage first.
                     if (!state.chat?.messages?.length) {
-                        loadHistoryMessages(result.messages);
-                    } else {
-                        mergeHistoryMessages(result.messages);
+                        try {
+                            const key = chatStorageKey();
+                            const saved = localStorage.getItem(key);
+                            if (saved) {
+                                const parsed = JSON.parse(saved);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    state.chat.messages = parsed;
+                                    sessLog(`[Dashboard] Restored ${parsed.length} messages from localStorage before merge`);
+                                }
+                            }
+                        } catch (e) { /* ignore */ }
                     }
+                    mergeHistoryMessages(result.messages);
                 }
             }).catch(() => { _historyRefreshInFlight = false; });
 
@@ -809,10 +858,10 @@ window.startNewAgentSession = async function(agentId) {
     const nameEl = document.getElementById('chat-page-session-name');
     if (nameEl) nameEl.textContent = displayName;
 
-    // Disconnect and reconnect with new session key
+    // Switch gateway to new session key (no disconnect needed)
     if (gateway && gateway.isConnected()) {
-        gateway.disconnect();
-        await new Promise(resolve => setTimeout(resolve, 300));
+        gateway.setSessionKey(sessionKey);
+    } else if (gateway) {
         connectToGateway();
     }
 

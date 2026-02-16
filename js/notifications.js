@@ -18,10 +18,16 @@ function requestNotificationPermission() {
 
 function subscribeToAllSessions() {
     if (!gateway || !gateway.isConnected()) return;
-    const keys = availableSessions.map(s => s.key).filter(k => k);
+    // Only subscribe to recent/active sessions, not all 200+
+    // Sort by updatedAt descending and take top 20
+    const sorted = [...availableSessions]
+        .filter(s => s.key && s.updatedAt)
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, 20);
+    const keys = sorted.map(s => s.key);
     if (keys.length > 0) {
         gateway.subscribeToAllSessions(keys);
-        console.log(`[Notifications] Subscribed to ${keys.length} sessions for cross-session notifications`);
+        console.log(`[Notifications] Subscribed to ${keys.length} recent sessions (of ${availableSessions.length} total)`);
     }
 }
 
@@ -325,6 +331,12 @@ function connectToGateway() {
         return;
     }
 
+    // Don't reconnect if already connected to the same host with the right session
+    if (gateway && gateway.isConnected() && gateway.sessionKey === sessionKey) {
+        console.log('[Dashboard] Already connected with correct session, skipping reconnect');
+        return;
+    }
+
     // Save settings to both localStorage AND server state
     GATEWAY_CONFIG.host = host;
     GATEWAY_CONFIG.port = port;
@@ -529,10 +541,15 @@ function handleChatEvent(event) {
 }
 
 function loadHistoryMessages(messages) {
-    // Removed verbose log - called frequently on history sync
     // Convert gateway history format and classify as chat vs system
-    // IMPORTANT: Preserve ALL local messages since Gateway doesn't save user messages (bug #5735)
-    const allLocalChatMessages = state.chat.messages.filter(m => m.id.startsWith('m'));
+    // Only preserve local messages that belong to the CURRENT session (prevent cross-session bleed)
+    const currentKey = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const allLocalChatMessages = state.chat.messages.filter(m => {
+        if (!m.id?.startsWith('m')) return false;
+        // If the message was tagged with a session, only keep if it matches
+        if (m._sessionKey && m._sessionKey.toLowerCase() !== currentKey) return false;
+        return true;
+    });
 
     const chatMessages = [];
     const systemMessages = [];
@@ -649,7 +666,7 @@ let _historyRefreshFn = null;
 let _historyVisibilityFn = null;
 let _historyRefreshInFlight = false;
 let _lastHistoryLoadTime = 0;
-const HISTORY_MIN_INTERVAL = 2000; // Minimum 2 seconds between loads
+const HISTORY_MIN_INTERVAL = 8000; // Minimum 8 seconds between loads
 
 function _doHistoryRefresh() {
     if (!gateway || !gateway.isConnected() || isProcessing) return;
@@ -669,8 +686,8 @@ function _doHistoryRefresh() {
 function startHistoryPolling() {
     stopHistoryPolling(); // Clear any existing interval + listeners
 
-    // Poll every 3 seconds to catch user messages from other clients
-    historyPollInterval = setInterval(_doHistoryRefresh, 3000);
+    // Poll every 30 seconds to catch user messages from other clients (was 10s, reduced for perf)
+    historyPollInterval = setInterval(_doHistoryRefresh, 30000);
 
     // Only add focus/visibility listeners ONCE (remove old ones first)
     if (!_historyRefreshFn) {

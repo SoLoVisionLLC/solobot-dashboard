@@ -17,6 +17,61 @@
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
     
+    // Always start at the top
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    const dashPage = document.getElementById('page-dashboard');
+    if (dashPage) {
+        dashPage.scrollTop = 0;
+        requestAnimationFrame(() => dashPage.scrollTop = 0);
+        setTimeout(() => dashPage.scrollTop = 0, 200);
+        setTimeout(() => dashPage.scrollTop = 0, 600);
+    }
+    window.scrollTo(0, 0);
+
+    // Make task board toolbar sticky when scrolling past it
+    if (dashPage) {
+        const toolbar = document.getElementById('task-toolbar');
+        const taskBoard = document.querySelector('.bento-task-board');
+        if (toolbar && taskBoard) {
+            const placeholder = document.createElement('div');
+            placeholder.style.display = 'none';
+            toolbar.parentNode.insertBefore(placeholder, toolbar);
+            let isSticky = false;
+            
+            dashPage.addEventListener('scroll', () => {
+                const boardRect = taskBoard.getBoundingClientRect();
+                const headerH = taskBoard.querySelector('.bento-widget-header')?.offsetHeight || 0;
+                if (boardRect.top + headerH < 60) {
+                    if (!isSticky) {
+                        placeholder.style.display = 'block';
+                        placeholder.style.height = toolbar.offsetHeight + 'px';
+                        // Move toolbar to body so it escapes overflow:hidden
+                        document.body.appendChild(toolbar);
+                        toolbar.style.position = 'fixed';
+                        toolbar.style.top = '60px';
+                        toolbar.style.zIndex = '200';
+                        toolbar.style.background = 'var(--surface-1)';
+                        toolbar.style.borderBottom = '1px solid var(--border-default)';
+                        toolbar.style.boxSizing = 'border-box';
+                        isSticky = true;
+                    }
+                    const contentEl = taskBoard.querySelector('.bento-widget-content');
+                    const contentRect = contentEl.getBoundingClientRect();
+                    toolbar.style.left = contentRect.left + 'px';
+                    toolbar.style.width = contentRect.width + 'px';
+                    toolbar.style.padding = '8px ' + getComputedStyle(contentEl).paddingLeft;
+                } else {
+                    if (isSticky) {
+                        toolbar.style.cssText = '';
+                        placeholder.parentNode.insertBefore(toolbar, placeholder);
+                        placeholder.style.display = 'none';
+                        isSticky = false;
+                    }
+                }
+            });
+        }
+    }
+
     // Initialize dashboard improvement tasks
     initDashboardTasks();
 
@@ -93,31 +148,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTimeout(() => connectToGateway(), 500);
     }
 
-    // Auto-refresh dashboard state from VPS (for tasks, notes, etc. - NOT chat)
-    setInterval(async () => {
-        // Skip auto-refresh while task modal is open (prevents race condition with unsaved changes)
-        if (taskModalOpen) {
-            return;
-        }
-        try {
-            await loadState();
-    
     // Initialize dashboard improvement tasks
     initDashboardTasks();
-            // Don't overwrite chat - that comes from Gateway now
-            render();
-            updateLastSync();
 
-            // Flash sync indicator
-            const syncEl = document.getElementById('last-sync');
-            if (syncEl) {
-                syncEl.style.color = '#22d3ee';
-                setTimeout(() => syncEl.style.color = '', 300);
-            }
+    // Auto-refresh dashboard state from VPS (tasks/notes only, NOT chat)
+    // Reduced to 60s — chat is real-time via gateway, tasks rarely change
+    setInterval(async () => {
+        if (taskModalOpen || document.hidden) return;
+        // Only refresh when on dashboard page (tasks/notes live there)
+        if (typeof window._activePage === 'function' && window._activePage() !== 'dashboard') return;
+        try {
+            await loadState();
+            // Only re-render task/notes widgets, NOT chat (chat has its own real-time updates)
+            if (typeof renderTasks === 'function') renderTasks();
+            if (typeof renderNotes === 'function') renderNotes();
+            if (typeof renderActivity === 'function') renderActivity();
+            updateLastSync();
         } catch (e) {
             console.error('Auto-refresh error:', e);
         }
-    }, 10000); // Slower refresh since chat is real-time now
+    }, 60000);
     
     // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {

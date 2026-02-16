@@ -105,12 +105,36 @@ function timeAgo(timestamp) {
     return Math.floor(diff / 86400000) + 'd ago';
 }
 
+let _switchingAgent = false;
 function switchToAgent(agentId) {
-    // Navigate to chat page with this agent
+    if (_switchingAgent) return; // Debounce
+    _switchingAgent = true;
+    setTimeout(() => _switchingAgent = false, 500);
+
+    // Navigate to chat page immediately
     if (typeof showPage === 'function') showPage('chat');
     if (typeof setActiveSidebarAgent === 'function') setActiveSidebarAgent(agentId);
     currentAgentId = agentId;
-    if (typeof fetchSessions === 'function') fetchSessions();
+
+    // Determine target session: last used for this agent, or agent:ID:main
+    const lastSession = typeof getLastAgentSession === 'function' ? getLastAgentSession(agentId) : null;
+    const targetSession = lastSession || `agent:${agentId}:main`;
+
+    // If already on this session, just refresh the dropdown
+    if (targetSession === (currentSessionName || GATEWAY_CONFIG?.sessionKey)) {
+        if (typeof populateSessionDropdown === 'function') populateSessionDropdown();
+        return;
+    }
+
+    // Switch to the session directly (fast path — no fetchSessions needed)
+    if (typeof switchToSession === 'function') {
+        switchToSession(targetSession);
+    }
+
+    // Fetch sessions in background to update the dropdown
+    if (typeof fetchSessions === 'function') {
+        setTimeout(() => fetchSessions(), 100);
+    }
 }
 
 // Auto-init when gateway connects

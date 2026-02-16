@@ -5,8 +5,7 @@
    =================== */
 
 .bento-ai-insights {
-    grid-column: span 1;
-    grid-row: span 2;
+    /* Grid placement managed by pages.css bento grid section */
 }
 
 .ai-badge {

@@ -321,8 +321,9 @@ function resolveAvatarUrl(agentId) {
 
 function agentDisplayName(agent) {
     if (agent.isDefault) return `SoLoBot (Main)`;
-    // For named agents, use "SoLoBot-{NAME}"
     const name = agent.name || agent.id;
+    // If name already starts with SoLoBot, use as-is (avoid "SoLoBot-SoLoBot-X")
+    if (name.toLowerCase().startsWith('solobot')) return name;
     return `SoLoBot-${name.charAt(0).toUpperCase() + name.slice(1)}`;
 }
 

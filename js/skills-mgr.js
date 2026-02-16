@@ -1,4 +1,4 @@
-// js/skills-mgr.js — Skills Manager page
+// js/skills-mgr.js - Skills Manager page
 
 let skillsList = [];
 let skillsInterval = null;
@@ -9,6 +9,14 @@ const skillsUi = {
     onlyIssues: false,
     onlyInstalled: true
 };
+
+function getHiddenSkills() {
+    try { return JSON.parse(localStorage.getItem('hiddenSkills') || '[]'); } catch { return []; }
+}
+
+function setHiddenSkills(arr) {
+    localStorage.setItem('hiddenSkills', JSON.stringify(arr));
+}
 
 function initSkillsPage() {
     bindSkillsPageControls();
@@ -45,6 +53,14 @@ function bindSkillsPageControls() {
         onlyInstalled.checked = skillsUi.onlyInstalled;
         onlyInstalled.addEventListener('change', () => {
             skillsUi.onlyInstalled = Boolean(onlyInstalled.checked);
+            renderSkills();
+        });
+    }
+
+    const showHidden = document.getElementById('skills-show-hidden');
+    if (showHidden) {
+        showHidden.addEventListener('change', () => {
+            skillsUi.showHidden = Boolean(showHidden.checked);
             renderSkills();
         });
     }
@@ -117,8 +133,8 @@ function renderMissingBadges(skill) {
 }
 
 function skillIsReady(skill) {
-    // “Ready” means prerequisites/binaries are present.
-    // This is NOT the same thing as “installed” (many skills are bundled).
+    // "Ready" means prerequisites/binaries are present.
+    // This is NOT the same thing as "installed" (many skills are bundled).
     const missing = skill?.missing || {};
     const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
     return missingBins === 0;
@@ -131,10 +147,11 @@ function renderInstallButtons(skill) {
     const name = skill?.name;
     if (!name) return '';
 
-    // Only show "Reinstall" if the gateway explicitly reports installed=true.
-    // Otherwise we keep the installer’s label (often these buttons install prerequisites like `uv`).
-    const installed = skill?.installed === true;
+    // Show "Reinstall" if the skill is already installed:
+    // - gateway explicitly reports installed=true, OR
+    // - the skill has install options AND all required bins are present (ready)
     const ready = skillIsReady(skill);
+    const installed = skill?.installed === true || ready;
 
     const readyBadge = ready
         ? `<span class="badge" style="background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.25); color: var(--success); padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;">Ready</span>`
@@ -191,6 +208,12 @@ function renderSkills() {
             return skill?.installed === true || skill?.bundled === true || skill?.enabled !== false;
         })
         .filter(skill => skillsUi.onlyIssues ? skillHasIssues(skill) : true)
+        .filter(skill => {
+            if (skillsUi.showHidden) return true;
+            const hidden = getHiddenSkills();
+            const key = skill?.skillKey || skill?.name || '';
+            return !hidden.includes(key);
+        })
         .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
 
     container.innerHTML = filtered.map(skill => {
@@ -240,23 +263,31 @@ function renderSkills() {
 
                 <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end;">
                     ${installButtons}
-                    <button onclick="viewSkillFiles('${escapeHtml(skillKey)}', '${escapeHtml(skill?.path || '')}')" 
-                            class="btn btn-ghost" 
+                    <button onclick="viewSkillFiles('${escapeHtml(skillKey)}', '${escapeHtml(skill?.path || '')}')"
+                            class="btn btn-ghost"
                             style="padding: 4px 10px; font-size: 11px;"
                             title="View and edit skill files">
                         📂 Files
                     </button>
-                    <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})" 
-                            class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}" 
+                    <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})"
+                            class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}"
                             style="padding: 4px 10px; font-size: 11px;">
                         ${enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button onclick="promptSetApiKey('${escapeHtml(skillKey)}', '${escapeHtml(skill?.primaryEnv || '')}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px;">
                         Set key
                     </button>
-                    <button onclick="promptSetEnv('${escapeHtml(skillKey)}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px;">
+                    <button onclick="promptSetEnv('${escapeHtml(skillKey)}', ${escapeHtml(JSON.stringify(skill?.missing?.env || []))})" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px;">
                         Set env
                     </button>
+                    ${skill?.bundled
+                        ? `<button onclick="toggleHideSkill('${escapeHtml(skillKey)}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px; color: var(--text-muted);">
+                            ${getHiddenSkills().includes(skillKey) ? '👁 Unhide' : '🙈 Hide'}
+                          </button>`
+                        : `<button onclick="uninstallSkill('${escapeHtml(skillKey)}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px; color: var(--error);">
+                            🗑 Uninstall
+                          </button>`
+                    }
                 </div>
             </div>
         </div>`;
@@ -330,36 +361,39 @@ window.promptSetApiKey = async function(skillKey, primaryEnv) {
         return;
     }
 
-    const hint = primaryEnv ? ` (primary env: ${primaryEnv})` : '';
-    const apiKey = window.prompt(`Enter API key for ${skillKey}${hint}.\n\nLeave blank to clear.`);
+    const envName = primaryEnv || `${skillKey.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
+    const apiKey = window.prompt(`Enter API key for ${skillKey} (${envName}).\n\nLeave blank to clear.`);
     if (apiKey === null) return; // cancelled
 
     try {
-        await gateway._request('skills.update', { skillKey, apiKey });
-        showToast('Saved key', 'success');
+        // Store both as apiKey (legacy) and as the proper env var
+        await gateway._request('skills.update', { skillKey, apiKey, env: { [envName]: apiKey } });
+        showToast(`Saved ${envName}`, 'success');
         loadSkills();
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
     }
 };
 
-window.promptSetEnv = async function(skillKey) {
+window.promptSetEnv = async function(skillKey, missingEnv) {
     if (!gateway || !gateway.isConnected()) {
         showToast('Connect to gateway first', 'warning');
         return;
     }
 
-    const key = window.prompt(`Env var name for ${skillKey} (e.g., FOO_TOKEN).\n\nLeave blank to cancel.`);
+    // Pre-fill with first missing env var if available
+    const defaultKey = Array.isArray(missingEnv) && missingEnv.length > 0 ? missingEnv[0] : '';
+    const key = window.prompt(`Env var name for ${skillKey} (e.g., FOO_TOKEN).${defaultKey ? `\n\nMissing: ${missingEnv.join(', ')}` : ''}\n\nLeave blank to cancel.`, defaultKey);
     if (key === null) return;
     const trimmedKey = (key || '').trim();
     if (!trimmedKey) return;
 
-    const value = window.prompt(`Env var value for ${trimmedKey}.\n\nLeave blank to clear this key.`);
+    const value = window.prompt(`Enter value for ${trimmedKey}.\n\nLeave blank to clear this key.`);
     if (value === null) return;
 
     try {
         await gateway._request('skills.update', { skillKey, env: { [trimmedKey]: value } });
-        showToast('Saved env override', 'success');
+        showToast(`Saved ${trimmedKey}`, 'success');
         loadSkills();
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
@@ -376,7 +410,7 @@ let currentEditingFile = null;
 window.viewSkillFiles = async function(skillKey, skillPath) {
     currentSkillPath = skillPath || '';
     currentSkillName = skillKey;
-    
+
     const titleEl = document.getElementById('skill-files-modal-title');
     const treeEl = document.getElementById('skill-files-tree');
     const previewEl = document.getElementById('skill-file-preview');
@@ -424,7 +458,7 @@ function renderSkillFilesTree(files) {
     for (const f of files) {
         const relPath = f.relativePath || f.name || '';
         const parts = relPath.split('/').filter(Boolean);
-        
+
         let node = tree;
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
@@ -462,7 +496,7 @@ function renderSkillTreeNode(node, prefix) {
     for (const f of files.sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''))) {
         const icon = getFileIcon(f.fileName);
         html += `
-        <div class="skill-tree-file" onclick="previewSkillFile('${escapeHtml(f.relPath)}')" 
+        <div class="skill-tree-file" onclick="previewSkillFile('${escapeHtml(f.relPath)}')"
              style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 12px;"
              onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
             <span>${icon}</span>
@@ -567,6 +601,37 @@ window.editSkillFile = async function(relPath) {
     }
 };
 
+window.uninstallSkill = async function(skillKey) {
+    if (!confirm(`Uninstall "${skillKey}"? This will permanently delete the skill directory.`)) return;
+
+    try {
+        const resp = await fetch(`/api/skills/${encodeURIComponent(skillKey)}`, { method: 'DELETE' });
+        const result = await resp.json();
+        if (!resp.ok) {
+            showToast(result.error || 'Uninstall failed', 'error');
+            return;
+        }
+        showToast(`${skillKey} uninstalled`, 'success');
+        loadSkills();
+    } catch (e) {
+        showToast('Uninstall failed: ' + e.message, 'error');
+    }
+};
+
+window.toggleHideSkill = function(skillKey) {
+    const hidden = getHiddenSkills();
+    const idx = hidden.indexOf(skillKey);
+    if (idx >= 0) {
+        hidden.splice(idx, 1);
+        showToast(`${skillKey} unhidden`, 'success');
+    } else {
+        hidden.push(skillKey);
+        showToast(`${skillKey} hidden`, 'success');
+    }
+    setHiddenSkills(hidden);
+    renderSkills();
+};
+
 window.saveSkillFile = async function(relPath) {
     const textarea = document.getElementById('skill-file-editor');
     if (!textarea) return;
@@ -579,12 +644,12 @@ window.saveSkillFile = async function(relPath) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content })
         });
-        
+
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'Failed to save file');
         }
-        
+
         showToast('File saved', 'success');
         previewSkillFile(relPath);
     } catch (e) {

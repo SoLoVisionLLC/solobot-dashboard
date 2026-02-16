@@ -152,6 +152,10 @@ async function clearChatHistory(skipConfirm = false, clearCache = false) {
         localStorage.removeItem(chatStorageKey());
     }
 
+    // Reset incremental render state
+    const chatContainer = document.getElementById('chat-page-messages');
+    if (chatContainer) { chatContainer._renderedCount = 0; chatContainer._sessionKey = null; }
+
     renderChat();
     renderChatPage();
 }

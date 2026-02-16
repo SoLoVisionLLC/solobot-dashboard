@@ -9,8 +9,16 @@
                             <div style="display:flex; align-items:center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
                                 <input id="skills-search" class="input" placeholder="Search skills…" style="flex: 1; min-width: 220px;" />
                                 <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
+                                    <input id="skills-only-installed" type="checkbox" checked />
+                                    Installed only
+                                </label>
+                                <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
                                     <input id="skills-only-issues" type="checkbox" />
                                     Only issues
+                                </label>
+                                <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
+                                    <input id="skills-show-hidden" type="checkbox" />
+                                    Show hidden
                                 </label>
                                 <button id="skills-refresh" class="btn btn-ghost" style="font-size: 12px;">Refresh</button>
                             </div>

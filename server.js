@@ -1012,11 +1012,19 @@ const server = http.createServer((req, res) => {
       }
       
       for (const agentId of agentIds) {
-        // Each agent's workspace is at agents/{id}/workspace
-        // Main agent's primary workspace is at OPENCLAW_HOME/workspace
-        const agentDir = agentId === 'main'
-          ? path.join(OPENCLAW_HOME, 'workspace')
-          : path.join(agentsBaseDir, agentId, 'workspace');
+        // Each agent's workspace can be at:
+        // 1. agents/{id}/workspace (standard)
+        // 2. OPENCLAW_HOME/workspace-{id} (dedicated workspace)
+        // 3. OPENCLAW_HOME/workspace (main agent)
+        let agentDir;
+        if (agentId === 'main') {
+          agentDir = path.join(OPENCLAW_HOME, 'workspace');
+        } else {
+          agentDir = path.join(agentsBaseDir, agentId, 'workspace');
+          if (!fs.existsSync(agentDir)) {
+            agentDir = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+          }
+        }
         if (!fs.existsSync(agentDir)) continue;
         
         const mdFiles = [];
@@ -1252,6 +1260,38 @@ const server = http.createServer((req, res) => {
       }
     });
     return;
+  }
+
+  // DELETE /api/skills/:name - uninstall a user-installed skill (removes directory)
+  if (url.pathname.match(/^\/api\/skills\/([^/]+)$/) && req.method === 'DELETE') {
+    const match = url.pathname.match(/^\/api\/skills\/([^/]+)$/);
+    const skillName = decodeURIComponent(match[1]);
+    const skillPath = findSkillPath(skillName);
+
+    res.setHeader('Content-Type', 'application/json');
+    if (!skillPath) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ error: 'Skill not found' }));
+    }
+
+    // Only allow deleting from user skills directories, not bundled
+    const userSkillsDirs = [
+      path.join(OPENCLAW_DATA, 'workspace/skills'),
+      path.join(OPENCLAW_DATA, 'skills')
+    ];
+    const isUserSkill = userSkillsDirs.some(d => skillPath.startsWith(d));
+    if (!isUserSkill) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Cannot uninstall bundled skills. Use Hide instead.' }));
+    }
+
+    try {
+      fs.rmSync(skillPath, { recursive: true, force: true });
+      return res.end(JSON.stringify({ ok: true, removed: skillPath }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
   }
   // ========== End Skills Files API ==========
   

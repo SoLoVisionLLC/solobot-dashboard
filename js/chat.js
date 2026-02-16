@@ -664,7 +664,8 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
         time: Date.now(),
         image: images[0] || null, // Legacy single image field
         images: images, // New array field
-        model: messageModel // Store which AI model generated this response
+        model: messageModel, // Store which AI model generated this response
+        _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '' // Tag with session to prevent cross-session bleed
     };
 
     const isSystem = isSystemMessage(text, from);
@@ -1135,9 +1136,8 @@ function renderChatPage() {
     // Save distance from bottom (how far up the user has scrolled)
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     
-    // Clear and re-render
-    container.innerHTML = '';
-    
+    // === Incremental rendering — only touch DOM for changes ===
+
     // Show empty state if no messages
     if (messages.length === 0 && !streamingText) {
         const displayName = getAgentDisplayName(currentAgentId);
@@ -1151,15 +1151,43 @@ function renderChatPage() {
                 </div>
             </div>
         `;
+        container._renderedCount = 0;
         return;
     }
-    
-    // Render messages (no filtering - system messages are in separate array)
-    messages.forEach(msg => {
-        const msgEl = createChatPageMessage(msg);
-        if (msgEl) container.appendChild(msgEl);
-    });
-    
+
+    // Remove empty state if it was showing
+    const emptyState = container.querySelector('.chat-page-empty');
+    if (emptyState) { container.innerHTML = ''; container._renderedCount = 0; }
+
+    // How many real messages are already in DOM?
+    const renderedCount = container._renderedCount || 0;
+
+    // Full re-render needed if messages were removed/replaced (session switch, etc.)
+    const needsFullRender = renderedCount > messages.length || container._sessionKey !== (currentSessionName || GATEWAY_CONFIG?.sessionKey);
+    if (needsFullRender) {
+        container.innerHTML = '';
+        container._renderedCount = 0;
+        container._sessionKey = currentSessionName || GATEWAY_CONFIG?.sessionKey;
+    }
+
+    const currentRendered = container._renderedCount || 0;
+
+    // Append only new messages (skip already-rendered ones)
+    // First, remove any transient elements (streaming msg, typing indicator)
+    const transient = container.querySelectorAll('.streaming, .typing-indicator');
+    transient.forEach(el => el.remove());
+
+    // Append new messages
+    if (messages.length > currentRendered) {
+        const fragment = document.createDocumentFragment();
+        for (let i = currentRendered; i < messages.length; i++) {
+            const msgEl = createChatPageMessage(messages[i]);
+            if (msgEl) fragment.appendChild(msgEl);
+        }
+        container.appendChild(fragment);
+        container._renderedCount = messages.length;
+    }
+
     // Render streaming message
     if (streamingText) {
         const streamingMsg = createChatPageMessage({
@@ -1188,11 +1216,8 @@ function renderChatPage() {
     
     // Smart scroll behavior - only auto-scroll if user was truly at the bottom
     if (wasAtBottom) {
-        // User was at bottom, keep them there
         container.scrollTop = container.scrollHeight;
     } else {
-        // Restore position by maintaining same distance from bottom
-        // This keeps the user looking at the same messages even as new ones arrive
         container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
     }
 }
@@ -1513,6 +1538,9 @@ function setupSidebarAgents() {
         const label = el.querySelector('.sidebar-item-text');
         if (label && !label.title) label.title = (label.textContent || '').trim();
 
+        // Only add listener once per element
+        if (el._agentClickBound) return;
+        el._agentClickBound = true;
         el.addEventListener('click', async () => {
             const agentId = el.getAttribute('data-agent');
             if (!agentId) return;

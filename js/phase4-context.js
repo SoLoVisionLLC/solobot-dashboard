@@ -166,7 +166,7 @@
             this.detectCurrentAgent();
             
             // Check periodically (in case agent switched via URL or other means)
-            setInterval(() => this.detectCurrentAgent(), 5000);
+            setInterval(() => this.detectCurrentAgent(), 30000);
             
             // Listen for agent switch events
             document.addEventListener('agentSwitched', (e) => {

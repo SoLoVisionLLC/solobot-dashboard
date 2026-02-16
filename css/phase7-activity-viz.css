@@ -257,7 +257,7 @@
    =================== */
 
 .bento-agent-presence {
-    grid-column: span 1;
+    /* Grid placement managed by pages.css bento grid section */
 }
 
 .agent-presence-list {
