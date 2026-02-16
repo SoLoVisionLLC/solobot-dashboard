@@ -514,6 +514,7 @@ function handleChatEvent(event) {
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
             streamingText = content;
+            _streamingSessionKey = sessionKey || currentSessionName || '';
             isProcessing = true;
             renderChat();
             renderChatPage();

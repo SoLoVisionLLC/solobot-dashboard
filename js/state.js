@@ -222,6 +222,7 @@ function loadGatewaySettingsFromServer() {
 
 let gateway = null;
 let streamingText = '';
+let _streamingSessionKey = '';  // Session key that owns the current streamingText
 let isProcessing = false;
 let lastProcessingEndTime = 0; // Track when processing ended to avoid poll conflicts
 let historyPollInterval = null;

@@ -443,6 +443,11 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     
     showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
     
+    // Immediately clear streaming state from previous session — before any async work
+    streamingText = '';
+    _streamingSessionKey = '';
+    isProcessing = false;
+    
     // Set switching flag — handleChatEvent will drop all events while this is true
     _switchingSession = true;
     
