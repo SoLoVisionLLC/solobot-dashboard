@@ -65,13 +65,9 @@ function renderAgentStatuses(sessions) {
     // Sort by most recent activity
     const sorted = Object.entries(agents).sort((a, b) => b[1].lastActivity - a[1].lastActivity);
 
-    const agentLabels = {
-        main: 'SoLoBot', exec: 'EXEC', coo: 'COO', cfo: 'CFO',
-        cmp: 'CMP', dev: 'DEV', family: 'Family', tax: 'Tax', sec: 'SEC', smm: 'SMM'
-    };
-
     container.innerHTML = sorted.map(([id, data]) => {
-        const label = agentLabels[id] || id.toUpperCase();
+        const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
+        const label = persona ? `${persona.name} (${persona.role})` : id.toUpperCase();
         const sessionCount = data.sessions.length;
         const timeSince = data.lastActivity ? timeAgo(data.lastActivity) : 'No activity';
         const isActive = data.lastActivity && (Date.now() - data.lastActivity < 300000); // 5min

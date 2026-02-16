@@ -320,11 +320,12 @@ function resolveAvatarUrl(agentId) {
 }
 
 function agentDisplayName(agent) {
-    if (agent.isDefault) return `SoLoBot (Main)`;
+    const id = agent.id || agent.name;
+    const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
+    if (persona) return `${persona.name} (${persona.role})`;
+    if (agent.isDefault) return 'Halo (Main)';
     const name = agent.name || agent.id;
-    // If name already starts with SoLoBot, use as-is (avoid "SoLoBot-SoLoBot-X")
-    if (name.toLowerCase().startsWith('solobot')) return name;
-    return `SoLoBot-${name.charAt(0).toUpperCase() + name.slice(1)}`;
+    return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 async function loadSidebarAgents() {
