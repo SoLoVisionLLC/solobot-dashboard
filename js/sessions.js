@@ -38,7 +38,6 @@ function getFriendlySessionName(key) {
 }
 
 let currentSessionName = 'main';
-let _switchingSession = false;  // Flag to drop chat events during session switch
 
 window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');
@@ -443,13 +442,13 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     
     showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
     
-    // Immediately clear streaming state from previous session — before any async work
+    // FIRST: nuke all rendering state synchronously — before any async work
     streamingText = '';
     _streamingSessionKey = '';
     isProcessing = false;
-    
-    // Set switching flag — handleChatEvent will drop all events while this is true
-    _switchingSession = true;
+    state.chat.messages = [];
+    renderChat();
+    renderChatPage();
     
     try {
         // 1. Save current chat and cache it for fast switching back
@@ -508,9 +507,6 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         await historyPromise;
         await modelPromise;
 
-        // Switch complete — resume accepting chat events
-        _switchingSession = false;
-
         if (agentMatch) {
             setActiveSidebarAgent(agentMatch[1]);
             saveLastAgentSession(agentMatch[1], sessionKey);
@@ -520,7 +516,6 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
 
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
-        _switchingSession = false;  // Always reset on failure
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
     }

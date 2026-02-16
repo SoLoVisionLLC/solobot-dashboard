@@ -760,9 +760,9 @@ function renderChat() {
         if (msgEl) container.appendChild(msgEl);
     });
 
-    // Render streaming message if active (only if it belongs to the current session)
+    // Render streaming message ONLY if it belongs to the current session
     const activeKey = (currentSessionName || '').toLowerCase();
-    if (streamingText && (!_streamingSessionKey || _streamingSessionKey.toLowerCase() === activeKey)) {
+    if (streamingText && _streamingSessionKey && _streamingSessionKey.toLowerCase() === activeKey) {
         const streamingMsg = createChatMessageElement({
             id: 'streaming',
             from: 'solobot',
@@ -1191,9 +1191,9 @@ function renderChatPage() {
         container._renderedCount = messages.length;
     }
 
-    // Render streaming message (only if it belongs to the current session)
+    // Render streaming message ONLY if it belongs to the current session
     const activeKeyCP = (currentSessionName || '').toLowerCase();
-    if (streamingText && (!_streamingSessionKey || _streamingSessionKey.toLowerCase() === activeKeyCP)) {
+    if (streamingText && _streamingSessionKey && _streamingSessionKey.toLowerCase() === activeKeyCP) {
         const streamingMsg = createChatPageMessage({
             id: 'streaming',
             from: 'solobot',
