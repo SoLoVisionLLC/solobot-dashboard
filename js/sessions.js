@@ -858,6 +858,10 @@ window.startNewAgentSession = async function(agentId) {
     const nameEl = document.getElementById('chat-page-session-name');
     if (nameEl) nameEl.textContent = displayName;
 
+    // Clear streaming state from previous session to prevent cross-session bleed
+    streamingText = '';
+    isProcessing = false;
+
     // Switch gateway to new session key (no disconnect needed)
     if (gateway && gateway.isConnected()) {
         gateway.setSessionKey(sessionKey);

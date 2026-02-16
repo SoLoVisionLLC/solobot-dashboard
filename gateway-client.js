@@ -370,7 +370,8 @@ class GatewayClient {
             // Pass through model info for dashboard to use
             model: message?.model,
             provider: message?.provider,
-            stopReason: message?.stopReason
+            stopReason: message?.stopReason,
+            runId: message?.runId || payload.runId
         });
     }
 

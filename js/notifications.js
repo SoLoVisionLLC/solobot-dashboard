@@ -441,6 +441,13 @@ function updateConnectionUI(status, message) {
 
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
+
+    // Guard: ignore events that don't belong to the currently active session
+    // This prevents cross-session bleed when events arrive during/after session switches
+    const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || 'main').toLowerCase();
+    if (sessionKey && sessionKey.toLowerCase() !== activeSession) {
+        return;
+    }
     
     // Ignore read-ack sync events
     if (content && content.startsWith(READ_ACK_PREFIX)) {
