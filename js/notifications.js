@@ -48,8 +48,14 @@ function handleCrossSessionNotification(msg) {
     // These are used by cron/background jobs to indicate "no user-visible output".
     if (typeof content === 'string') {
         const t = content.trim();
-        if (t === 'NO_REPLY' || t === 'NO') {
+        if (t === 'NO_REPLY' || t === 'NO' || t === 'HEARTBEAT_OK' || t === 'ANNOUNCE_SKIP' || t === 'REPLY_SKIP') {
             notifLog(`[Notifications] Ignoring silent placeholder notification for ${sessionKey}: ${t}`);
+            return;
+        }
+        // Gateway-injected read-sync / read_ack signals
+        if (t === '[read-sync]' || t.startsWith('[[read_ack]]') || /^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(t)) {
+            notifLog(`[Notifications] Ignoring read-sync notification for ${sessionKey}`);
+            if (sessionKey) clearUnreadForSession(sessionKey);
             return;
         }
     }
@@ -511,6 +517,13 @@ function handleChatEvent(event) {
             // Final response from assistant
             // Prefer streamingText if available for consistency (avoid content mismatch)
             const finalContent = streamingText || content;
+            // Skip gateway-injected internal messages
+            if (finalContent && /^\s*\[read-sync\]\s*(\n\s*\[\[read_ack\]\])?\s*$/s.test(finalContent)) {
+                streamingText = '';
+                isProcessing = false;
+                lastProcessingEndTime = Date.now();
+                break;
+            }
             if (finalContent && role !== 'user') {
                 // Check for duplicate - same content within 10 seconds
                 const isDuplicate = state.chat.messages.some(m =>
@@ -602,6 +615,11 @@ function loadHistoryMessages(messages) {
     messages.forEach(msg => {
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
+            return;
+        }
+        
+        // Skip gateway-injected messages (read-sync, read_ack, etc.)
+        if (msg.model === 'gateway-injected' || msg.provider === 'openclaw') {
             return;
         }
         
@@ -752,6 +770,11 @@ function mergeHistoryMessages(messages) {
         
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
+            continue;
+        }
+        
+        // Skip gateway-injected messages (read-sync, read_ack, etc.)
+        if (msg.model === 'gateway-injected' || msg.provider === 'openclaw') {
             continue;
         }
 

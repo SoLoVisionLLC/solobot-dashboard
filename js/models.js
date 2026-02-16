@@ -66,6 +66,13 @@ function isSystemMessage(text, from) {
     if (trimmed === 'ANNOUNCE_SKIP') return true;
     if (trimmed.startsWith('Agent-to-agent announce')) return true;
     
+    // Gateway-injected read-sync / read_ack messages (internal notification signals)
+    if (trimmed === '[read-sync]') return true;
+    if (trimmed === '[[read_ack]]') return true;
+    if (trimmed.startsWith('[[read_ack]]')) return true;
+    if (trimmed === '[read-sync]\n\n[[read_ack]]') return true;
+    if (/^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(trimmed)) return true;
+    
     // System timestamped messages
     if (trimmed.startsWith('System: [')) return true;
     if (trimmed.startsWith('System:')) return true;
