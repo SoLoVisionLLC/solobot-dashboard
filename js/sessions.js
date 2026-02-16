@@ -9,22 +9,22 @@ function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 
 // Agent persona names and role labels
 const AGENT_PERSONAS = {
-    'main':   { name: 'Halo',     role: 'Orchestrator' },
-    'exec':   { name: 'Elon',     role: 'Chief of Staff' },
+    'main':   { name: 'Halo',     role: 'PA' },
+    'exec':   { name: 'Elon',     role: 'CoS' },
     'cto':    { name: 'Orion',    role: 'CTO' },
     'coo':    { name: 'Atlas',    role: 'COO' },
     'cfo':    { name: 'Sterling', role: 'CFO' },
-    'cmp':    { name: 'Vector',   role: 'Marketing & Product' },
-    'dev':    { name: 'Dev',      role: 'Head of Engineering' },
-    'sec':    { name: 'Knox',     role: 'Security' },
-    'smm':    { name: 'Nova',     role: 'Social Media' },
-    'family': { name: 'Haven',    role: 'Family & Household' },
-    'tax':    { name: 'Ledger',   role: 'Tax Compliance' }
+    'cmp':    { name: 'Vector',   role: 'CMP' },
+    'dev':    { name: 'Dev',      role: 'Eng' },
+    'sec':    { name: 'Knox',     role: 'SEC' },
+    'smm':    { name: 'Nova',     role: 'SMM' },
+    'family': { name: 'Haven',    role: 'Home' },
+    'tax':    { name: 'Ledger',   role: 'TAX' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function getFriendlySessionName(key) {
-    if (!key) return 'Halo (Main)';
+    if (!key) return 'Halo (PA)';
     // For agent sessions, show persona name + session suffix
     const match = key.match(/^agent:([^:]+):(.+)$/);
     if (match) {
@@ -343,7 +343,7 @@ function getAgentLabel(agentId) {
 // Get display name for message bubbles (e.g., "SoLoBot-CTO" or persona name)
 function getAgentDisplayName(agentId) {
     if (!agentId || agentId === 'main') {
-        return 'Halo (Main)';
+        return 'Halo (PA)';
     }
     const persona = AGENT_PERSONAS[agentId];
     if (persona) {

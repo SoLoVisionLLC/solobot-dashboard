@@ -323,7 +323,7 @@ function agentDisplayName(agent) {
     const id = agent.id || agent.name;
     const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
     if (persona) return `${persona.name} (${persona.role})`;
-    if (agent.isDefault) return 'Halo (Main)';
+    if (agent.isDefault) return 'Halo (PA)';
     const name = agent.name || agent.id;
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
