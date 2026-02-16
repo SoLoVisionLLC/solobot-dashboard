@@ -700,6 +700,8 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
         renderChat();
         renderChatPage();
     }
+
+    return message;
 }
 
 // Debounced sync of chat messages to VPS (so messages persist across computers)
@@ -718,8 +720,6 @@ function syncChatToVPS() {
             // Chat sync failed - not critical
         }
     }, 2000);
-
-    return message;
 }
 
 // ===================
