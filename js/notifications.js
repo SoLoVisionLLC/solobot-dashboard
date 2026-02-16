@@ -440,7 +440,7 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
-    const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey } = event;
+    const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
     
     // Ignore read-ack sync events
     if (content && content.startsWith(READ_ACK_PREFIX)) {
@@ -480,7 +480,7 @@ function handleChatEvent(event) {
     if (role === 'user' && eventState === 'final' && content) {
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
-            m.from === 'user' && m.text === content && (Date.now() - m.time) < 5000
+            m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
         );
         if (!isDuplicate) {
             addLocalChatMessage(content, 'user');
@@ -501,12 +501,6 @@ function handleChatEvent(event) {
             
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
-            // Safety: If we have significant streaming content and new content is much shorter,
-            // this might be a new response starting. Finalize the old one first.
-            if (streamingText && streamingText.length > 100 && content.length < streamingText.length * 0.5) {
-                addLocalChatMessage(streamingText, 'solobot');
-            }
-            
             streamingText = content;
             isProcessing = true;
             renderChat();
@@ -525,12 +519,16 @@ function handleChatEvent(event) {
                 break;
             }
             if (finalContent && role !== 'user') {
-                // Check for duplicate - same content within 10 seconds
+                // Check for duplicate - by runId first, then by trimmed text within 10 seconds
+                const trimmed = finalContent.trim();
                 const isDuplicate = state.chat.messages.some(m =>
-                    m.from === 'solobot' && m.text === finalContent && (Date.now() - m.time) < 10000
+                    (runId && m.runId === runId) ||
+                    (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
                 if (!isDuplicate) {
-                    addLocalChatMessage(finalContent, 'solobot', window._lastResponseModel);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', window._lastResponseModel);
+                    // Tag with runId for dedup against history merge
+                    if (msg && runId) msg.runId = runId;
                 }
             }
             streamingText = '';
@@ -738,10 +736,12 @@ function mergeHistoryMessages(messages) {
     // This catches user messages from other clients that weren't broadcast as events
     const existingIds = new Set(state.chat.messages.map(m => m.id));
     const existingSystemIds = new Set(state.system.messages.map(m => m.id));
-    // Also track existing text content to prevent duplicates when IDs differ
+    // Also track existing text content (trimmed) to prevent duplicates when IDs differ
     // (local messages use 'm' + Date.now(), history messages have server IDs)
-    const existingTexts = new Set(state.chat.messages.map(m => m.text));
-    const existingSystemTexts = new Set(state.system.messages.map(m => m.text));
+    const existingTexts = new Set(state.chat.messages.map(m => (m.text || '').trim()));
+    const existingSystemTexts = new Set(state.system.messages.map(m => (m.text || '').trim()));
+    // Track runIds from real-time messages for dedup
+    const existingRunIds = new Set(state.chat.messages.filter(m => m.runId).map(m => m.runId));
     let newChatCount = 0;
     let newSystemCount = 0;
 
@@ -784,16 +784,36 @@ function mergeHistoryMessages(messages) {
                 textContent = extractContentText(msg.message);
             }
 
-            // Only add if we have content and it's not a duplicate by text
+            // Only add if we have content and it's not a duplicate
             if (textContent) {
                 const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot');
 
-                // Skip if we already have this exact text content (prevents duplicates when IDs differ)
+                // Skip if runId matches a real-time message we already have
+                if (msg.runId && existingRunIds.has(msg.runId)) {
+                    continue;
+                }
+
+                // Skip if we already have this exact text content (trimmed, prevents duplicates when IDs differ)
                 if (isSystemMsg && existingSystemTexts.has(textContent)) {
                     continue;
                 }
                 if (!isSystemMsg && existingTexts.has(textContent)) {
                     continue;
+                }
+
+                // Time guard: skip non-user assistant messages if we have any local message added within the last 5 seconds
+                // Uses client-side time (m.time) to avoid clock skew with server timestamps
+                if (msg.role !== 'user') {
+                    const hasRecentLocal = state.chat.messages.some(m =>
+                        m.from === 'solobot' && (Date.now() - m.time) < 5000
+                    );
+                    if (hasRecentLocal && !existingIds.has(msgId)) {
+                        // Check if this message's text matches a recent local one (likely the same)
+                        const recentMatch = state.chat.messages.some(m =>
+                            m.from === 'solobot' && (Date.now() - m.time) < 5000 && m.text?.trim() === textContent
+                        );
+                        if (recentMatch) continue;
+                    }
                 }
 
                 const message = {
@@ -806,12 +826,12 @@ function mergeHistoryMessages(messages) {
                 // Classify and route
                 if (isSystemMsg) {
                     state.system.messages.push(message);
-                    existingSystemTexts.add(textContent);
+                    existingSystemTexts.add(textContent); // already trimmed by extractContentText
                     newSystemCount++;
                 } else {
                     state.chat.messages.push(message);
                     existingIds.add(msgId);
-                    existingTexts.add(textContent);
+                    existingTexts.add(textContent); // already trimmed by extractContentText
                     newChatCount++;
                 }
             }

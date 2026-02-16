@@ -718,6 +718,8 @@ function syncChatToVPS() {
             // Chat sync failed - not critical
         }
     }, 2000);
+
+    return message;
 }
 
 // ===================
