@@ -486,6 +486,14 @@ function handleChatEvent(event) {
 
     // Handle user messages from other clients (WebUI, Telegram, etc.)
     if (role === 'user' && eventState === 'final' && content) {
+        // HARD GATE: Only accept user messages for the current session
+        const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+        const eventSession = sessionKey?.toLowerCase();
+        if (eventSession && activeSession && eventSession !== activeSession) {
+            notifLog(`[Notifications] Ignoring user message for session ${eventSession} (current: ${activeSession})`);
+            return;
+        }
+        
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
             m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
@@ -701,11 +709,24 @@ function _doHistoryRefresh() {
     _historyRefreshInFlight = true;
     _lastHistoryLoadTime = Date.now();
     const pollVersion = sessionVersion;
+    const pollSessionKey = GATEWAY_CONFIG?.sessionKey || 'unknown';
+    notifLog(`[Notifications] _doHistoryRefresh: session=${pollSessionKey}, version=${pollVersion}`);
     gateway.loadHistory().then(result => {
         _historyRefreshInFlight = false;
-        if (pollVersion !== sessionVersion) return;
-        if (result?.messages) mergeHistoryMessages(result.messages);
-    }).catch(() => { _historyRefreshInFlight = false; });
+        if (pollVersion !== sessionVersion) {
+            notifLog(`[Notifications] _doHistoryRefresh: Skipped (version mismatch ${pollVersion} vs ${sessionVersion})`);
+            return;
+        }
+        if (result?.messages) {
+            notifLog(`[Notifications] _doHistoryRefresh: Got ${result.messages.length} messages for session=${pollSessionKey}`);
+            mergeHistoryMessages(result.messages);
+        } else {
+            notifLog(`[Notifications] _doHistoryRefresh: No messages returned`);
+        }
+    }).catch(err => { 
+        _historyRefreshInFlight = false;
+        notifLog(`[Notifications] _doHistoryRefresh: Error - ${err.message}`);
+    });
 }
 
 function startHistoryPolling() {
@@ -740,6 +761,14 @@ function stopHistoryPolling() {
 }
 
 function mergeHistoryMessages(messages) {
+    // HARD GATE: Only merge messages for the current session
+    // This prevents cross-session bleed if history poll returns stale data
+    const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    if (!activeSession) {
+        notifLog('[Notifications] mergeHistoryMessages: No active session, skipping merge');
+        return;
+    }
+    
     // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
@@ -848,6 +877,8 @@ function mergeHistoryMessages(messages) {
     }
 
     if (newChatCount > 0 || newSystemCount > 0) {
+        notifLog(`[Notifications] mergeHistoryMessages: Merged ${newChatCount} chat, ${newSystemCount} system messages for session ${activeSession}`);
+        
         // Sort and trim chat
         state.chat.messages.sort((a, b) => a.time - b.time);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
