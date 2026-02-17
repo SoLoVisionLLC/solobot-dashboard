@@ -216,11 +216,106 @@
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
             }
+
+            /* Ensure cards view properly covers when active */
+            #memory-cards-view {
+                position: relative;
+                z-index: 1;
+            }
+
             .agent-cards-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
                 gap: var(--space-4);
             }
+
+            /* ── Org-Chart Layout ── */
+            .org-chart {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-5);
+            }
+            .org-section {
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                overflow: hidden;
+            }
+            .org-section-header {
+                display: flex;
+                align-items: baseline;
+                gap: var(--space-3);
+                padding: var(--space-3) var(--space-5);
+                background: var(--surface-2);
+                border-bottom: 1px solid var(--border-subtle);
+            }
+            .org-section-label {
+                font-size: 14px;
+                font-weight: 700;
+                color: var(--text-primary);
+                white-space: nowrap;
+            }
+            .org-section-desc {
+                font-size: 11px;
+                color: var(--text-muted);
+            }
+            .org-section-cards {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                gap: var(--space-3);
+                padding: var(--space-4);
+            }
+            .org-empty-slot {
+                font-size: 12px;
+                color: var(--text-faint);
+                padding: var(--space-3);
+                text-align: center;
+                font-style: italic;
+            }
+            .agent-card-role-badge {
+                font-size: 9px;
+                padding: 1px 6px;
+                background: var(--surface-3);
+                border: 1px solid var(--border-subtle);
+                color: var(--text-secondary);
+                border-radius: 9999px;
+                font-weight: 600;
+                letter-spacing: 0.05em;
+            }
+            .agent-card-reports {
+                font-size: 10px;
+                color: var(--text-faint);
+                margin-top: 1px;
+                font-style: italic;
+            }
+
+            /* Org-chart specific section accent colors */
+            .org-section[data-group="leadership"] .org-section-header {
+                border-bottom-color: var(--brand-red, #bc2026);
+            }
+            .org-section[data-group="leadership"] {
+                border-color: color-mix(in srgb, var(--brand-red, #bc2026) 30%, var(--border-default));
+            }
+            .org-section[data-group="c-suite"] .org-section-header {
+                border-bottom-color: #6366f1;
+            }
+            .org-section[data-group="engineering"] .org-section-header {
+                border-bottom-color: #22d3ee;
+            }
+            .org-section[data-group="security-compliance"] .org-section-header {
+                border-bottom-color: #f59e0b;
+            }
+
+            @media (max-width: 768px) {
+                .org-section-cards {
+                    grid-template-columns: 1fr;
+                }
+                .org-section-header {
+                    flex-direction: column;
+                    gap: 2px;
+                }
+            }
+
             .agent-card {
                 background: var(--surface-1);
                 border: 1px solid var(--border-default);
