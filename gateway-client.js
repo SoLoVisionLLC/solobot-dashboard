@@ -8,6 +8,115 @@ function gwWarn(...args){ if (GATEWAY_DEBUG) console.warn(...args); }
 
 const GATEWAY_PROTOCOL_VERSION = 3;
 
+// ── Device Identity (Ed25519) ─────────────────────────────────────
+// Generates/loads a persistent Ed25519 keypair in localStorage so the
+// gateway grants operator scopes (required since OpenClaw v2026.2.15).
+
+const DEVICE_IDENTITY_KEY = 'openclaw-device-identity';
+
+function _base64UrlEncode(buf) {
+    // buf: Uint8Array → base64url string (no padding)
+    const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+    let binary = '';
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function _base64UrlDecode(str) {
+    const padded = str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - str.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
+async function _sha256Hex(data) {
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Ed25519 raw public key is the last 32 bytes of the SPKI export
+// SPKI prefix for Ed25519 is 12 bytes: 302a300506032b6570032100
+const ED25519_SPKI_PREFIX_LEN = 12;
+
+async function _deriveDeviceId(publicKey) {
+    const spki = await crypto.subtle.exportKey('spki', publicKey);
+    const spkiBytes = new Uint8Array(spki);
+    // Raw public key = SPKI minus the 12-byte prefix
+    const raw = spkiBytes.subarray(ED25519_SPKI_PREFIX_LEN);
+    return _sha256Hex(raw);
+}
+
+async function _exportPublicKeyRawBase64Url(publicKey) {
+    const spki = await crypto.subtle.exportKey('spki', publicKey);
+    const raw = new Uint8Array(spki).subarray(ED25519_SPKI_PREFIX_LEN);
+    return _base64UrlEncode(raw);
+}
+
+async function loadOrCreateDeviceIdentity() {
+    try {
+        const stored = localStorage.getItem(DEVICE_IDENTITY_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed?.version === 1 && parsed.publicKeyJwk && parsed.privateKeyJwk && parsed.deviceId) {
+                // Re-import keys from JWK
+                const publicKey = await crypto.subtle.importKey(
+                    'jwk', parsed.publicKeyJwk,
+                    { name: 'Ed25519' }, true, ['verify']
+                );
+                const privateKey = await crypto.subtle.importKey(
+                    'jwk', parsed.privateKeyJwk,
+                    { name: 'Ed25519' }, true, ['sign']
+                );
+                gwLog('[Gateway] Device identity loaded from localStorage');
+                return { deviceId: parsed.deviceId, publicKey, privateKey };
+            }
+        }
+    } catch (e) {
+        gwWarn('[Gateway] Failed to load device identity, regenerating:', e);
+    }
+
+    // Generate new Ed25519 keypair
+    const keyPair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
+    const deviceId = await _deriveDeviceId(keyPair.publicKey);
+    const publicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+    const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+
+    localStorage.setItem(DEVICE_IDENTITY_KEY, JSON.stringify({
+        version: 1,
+        deviceId,
+        publicKeyJwk,
+        privateKeyJwk,
+        createdAtMs: Date.now()
+    }));
+
+    gwLog('[Gateway] Device identity generated and stored');
+    return { deviceId, publicKey: keyPair.publicKey, privateKey: keyPair.privateKey };
+}
+
+function _buildDeviceAuthPayload(params) {
+    const scopes = params.scopes.join(',');
+    const token = params.token || '';
+    const parts = [
+        'v2',
+        params.deviceId,
+        params.clientId,
+        params.clientMode,
+        params.role,
+        scopes,
+        String(params.signedAtMs),
+        token,
+        params.nonce || ''
+    ];
+    return parts.join('|');
+}
+
+async function _signPayload(privateKey, payload) {
+    const encoded = new TextEncoder().encode(payload);
+    const sig = await crypto.subtle.sign('Ed25519', privateKey, encoded);
+    return _base64UrlEncode(new Uint8Array(sig));
+}
+
 class GatewayClient {
     constructor(options = {}) {
         this.socket = null;
@@ -66,11 +175,28 @@ class GatewayClient {
     }
 
     _setupListeners(token, password) {
+        this._challengeNonce = null;
+        this._connectSent = false;
+
         this.socket.onopen = () => {
-            this._sendConnect(token, password);
+            // Don't send connect yet — wait for connect.challenge event with nonce
+            gwLog('[Gateway] Socket open, waiting for connect.challenge...');
         };
 
         this.socket.onmessage = (event) => {
+            // Intercept connect.challenge before normal message handling
+            if (!this._connectSent) {
+                try {
+                    const frame = JSON.parse(event.data);
+                    if (frame.type === 'event' && frame.event === 'connect.challenge') {
+                        this._challengeNonce = frame.payload?.nonce || null;
+                        gwLog(`[Gateway] Received challenge nonce: ${this._challengeNonce ? 'yes' : 'none'}`);
+                        this._sendConnect(token, password);
+                        this._connectSent = true;
+                        return;
+                    }
+                } catch {}
+            }
             this._handleMessage(event.data);
         };
 
@@ -90,21 +216,26 @@ class GatewayClient {
         };
     }
 
-    _sendConnect(token, password) {
+    async _sendConnect(token, password) {
+        const clientId = 'gateway-client';
+        const clientMode = 'ui';
+        const role = 'operator';
+        const scopes = ['operator.read', 'operator.write', 'operator.admin'];
+
         const clientInfo = {
-            id: 'gateway-client',
+            id: clientId,
             displayName: 'SoLoBot Dashboard',
             version: '3.1.0',
             platform: 'web',
-            mode: 'ui'
+            mode: clientMode
         };
 
         const params = {
             minProtocol: GATEWAY_PROTOCOL_VERSION,
             maxProtocol: GATEWAY_PROTOCOL_VERSION,
             client: clientInfo,
-            role: 'operator',
-            scopes: ['operator.read', 'operator.write', 'operator.admin'],
+            role,
+            scopes,
             caps: ['chat.subscribe']
         };
 
@@ -114,6 +245,39 @@ class GatewayClient {
             params.auth = { password };
         }
 
+        // Build device identity for operator scope grants
+        try {
+            const identity = await loadOrCreateDeviceIdentity();
+            const signedAt = Date.now();
+            const publicKeyBase64Url = await _exportPublicKeyRawBase64Url(identity.publicKey);
+
+            const payload = _buildDeviceAuthPayload({
+                deviceId: identity.deviceId,
+                clientId,
+                clientMode,
+                role,
+                scopes,
+                signedAtMs: signedAt,
+                token: token || null,
+                nonce: this._challengeNonce || ''
+            });
+
+            const signature = await _signPayload(identity.privateKey, payload);
+
+            params.device = {
+                id: identity.deviceId,
+                publicKey: publicKeyBase64Url,
+                signature,
+                signedAt,
+                nonce: this._challengeNonce || undefined
+            };
+
+            gwLog(`[Gateway] Device identity attached: ${identity.deviceId.substring(0, 12)}...`);
+        } catch (err) {
+            gwWarn('[Gateway] Device identity failed (scopes may be limited):', err.message);
+            // Continue without device identity — will have no scopes on v2026.2.15+
+        }
+
         this._request('connect', params).then(result => {
             this.connected = true;
             this.reconnectAttempts = 0;
@@ -121,6 +285,11 @@ class GatewayClient {
             const serverName = result?.server?.host || 'moltbot';
             gwLog(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
             
+            // Log granted scopes/auth info
+            if (result?.auth?.scopes) {
+                gwLog(`[Gateway] Granted scopes: ${result.auth.scopes.join(', ')}`);
+            }
+
             // Check if provider/model info is available
             if (result?.provider || result?.model) {
                 gwLog(`[Gateway] Server provider: ${result.provider || 'unknown'}, model: ${result.model || 'unknown'}`);
@@ -295,22 +464,33 @@ class GatewayClient {
             
             if (state === 'final' && role === 'assistant') {
                 let contentText = '';
+                let images = [];
                 if (message?.content) {
                     for (const part of message.content) {
                         if (part.type === 'text') {
                             contentText += part.text || '';
+                        } else if (part.type === 'image') {
+                            // OpenClaw sends 'content', other APIs may send 'data'
+                            const imageData = part.data || part.content;
+                            if (imageData) {
+                                const mimeType = part.mimeType || 'image/jpeg';
+                                images.push(`data:${mimeType};base64,${imageData}`);
+                            }
+                        } else if (part.type === 'image_url' && part.url) {
+                            images.push(part.url);
                         }
                     }
                 }
-                if (contentText.trim()) {
+                if (contentText.trim() || images.length > 0) {
                     // Skip read-ack sync messages
                     if (contentText.startsWith('[[read_ack]]')) {
                         return;
                     }
-                    gwLog(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars)`);
+                    gwLog(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars, ${images.length} images)`);
                     this.onCrossSessionMessage({
                         sessionKey: eventSessionKey,
                         content: contentText,
+                        images: images,
                         model: message?.model,
                         provider: message?.provider
                     });
@@ -333,8 +513,11 @@ class GatewayClient {
                     contentText += part.text || '';
                 } else if (part.type === 'image') {
                     // Base64 image data from AI response
-                    if (part.data) {
-                        images.push(`data:image/jpeg;base64,${part.data}`);
+                    // OpenClaw sends 'content', other APIs may send 'data'
+                    const imageData = part.data || part.content;
+                    if (imageData) {
+                        const mimeType = part.mimeType || 'image/jpeg';
+                        images.push(`data:${mimeType};base64,${imageData}`);
                     }
                 } else if (part.type === 'image_url') {
                     // Image URL from AI response
