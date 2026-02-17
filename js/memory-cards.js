@@ -120,6 +120,7 @@
     function initPanZoom() {
         const wrapper = document.querySelector('.org-tree-wrapper');
         const viewport = document.querySelector('.org-tree-viewport');
+        const connectors = document.querySelector('.org-tree-connectors');
         if (!wrapper || !viewport || !window.panzoom) return;
 
         // Destroy existing instance
@@ -143,6 +144,15 @@
             }
         });
 
+        // Sync transform to connector SVG (keeps lines attached to nodes)
+        const syncConnectors = () => {
+            if (!panzoomInstance || !connectors) return;
+            const state = panzoomInstance.getTransform();
+            // Match the transform on the connector SVG so lines stay aligned
+            connectors.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+            connectors.style.transformOrigin = '0 0';
+        };
+
         // Load persisted state
         const savedState = localStorage.getItem('solobot-orgchart-viewport');
         if (savedState) {
@@ -150,23 +160,36 @@
                 const { x, y, scale } = JSON.parse(savedState);
                 panzoomInstance.moveTo(x, y);
                 panzoomInstance.zoom(scale);
+                syncConnectors();
             } catch (e) {
                 console.warn('Failed to restore viewport state:', e);
             }
         }
 
-        // Save state on change
+        // Save state and sync connectors on pan/zoom (throttled with rAF)
+        let rafId = null;
         panzoomInstance.on('panzoom', () => {
-            const state = panzoomInstance.getTransform();
-            localStorage.setItem('solobot-orgchart-viewport', JSON.stringify({
-                x: state.x,
-                y: state.y,
-                scale: state.scale
-            }));
+            if (rafId) cancelAnimationFrame(rafId);
+            rafId = requestAnimationFrame(() => {
+                rafId = null;
+                const state = panzoomInstance.getTransform();
+                localStorage.setItem('solobot-orgchart-viewport', JSON.stringify({
+                    x: state.x,
+                    y: state.y,
+                    scale: state.scale
+                }));
+                syncConnectors();
+            });
         });
 
+        // Initial sync
+        syncConnectors();
+
         // Fit to content on load
-        setTimeout(() => fitToContent(), 300);
+        setTimeout(() => {
+            fitToContent();
+            syncConnectors();
+        }, 300);
     }
 
     function zoomIn() {
@@ -302,7 +325,8 @@
             </div>
 
             <!-- Minimap Navigator -->
-            <div class="org-minimap">
+            <div class="org-minimap" id="org-minimap">
+                <button class="org-minimap-toggle" onclick="window._memoryCards.toggleMinimap()" title="Toggle minimap">⊡</button>
                 <div class="org-minimap-content">
                     ${generateMinimapContent(levels)}
                 </div>
@@ -312,7 +336,7 @@
             <!-- Pan/Zoom Viewport -->
             <div class="org-tree-wrapper">
                 <div class="org-tree-viewport">
-                    <svg class="org-tree-connectors" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet">
+                    <svg class="org-tree-connectors">
                         ${connectorPaths}
                     </svg>
                     <div class="org-tree-nodes">
@@ -594,6 +618,22 @@
         zoomIn,
         zoomOut,
         resetView,
-        fitToContent
+        fitToContent,
+        toggleMinimap: function() {
+            const minimap = document.getElementById('org-minimap');
+            if (minimap) {
+                minimap.classList.toggle('collapsed');
+                localStorage.setItem('solobot-minimap-collapsed', minimap.classList.contains('collapsed'));
+            }
+        }
     };
+    
+    // Restore minimap state
+    document.addEventListener('DOMContentLoaded', () => {
+        const collapsed = localStorage.getItem('solobot-minimap-collapsed') === 'true';
+        if (collapsed) {
+            const minimap = document.getElementById('org-minimap');
+            if (minimap) minimap.classList.add('collapsed');
+        }
+    });
 })();
