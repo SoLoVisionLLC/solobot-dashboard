@@ -15,11 +15,16 @@ const AGENT_PERSONAS = {
     'coo':    { name: 'Atlas',    role: 'COO' },
     'cfo':    { name: 'Sterling', role: 'CFO' },
     'cmp':    { name: 'Vector',   role: 'CMP' },
-    'dev':    { name: 'Dev',      role: 'Eng' },
-    'sec':    { name: 'Knox',     role: 'SEC' },
-    'smm':    { name: 'Nova',     role: 'SMM' },
-    'family': { name: 'Haven',    role: 'Home' },
-    'tax':    { name: 'Ledger',   role: 'TAX' }
+    'dev':    { name: 'Dev',      role: 'ENG' },
+    'forge':  { name: 'Forge',   role: 'DEVOPS' },
+    'quill':  { name: 'Quill',   role: 'FE/UI' },
+    'chip':    { name: 'Chip',    role: 'SWE' },
+    'snip':    { name: 'Snip',    role: 'YT' },
+    'sec':     { name: 'Knox',    role: 'SEC' },
+    'smm':    { name: 'Nova',    role: 'SMM' },
+    'family':  { name: 'Haven',   role: 'FAM' },
+    'tax':     { name: 'Ledger',  role: 'TAX' },
+    'docs':    { name: 'Canon',   role: 'DOC' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
