@@ -229,114 +229,92 @@
                 gap: var(--space-4);
             }
 
-            /* ── Org-Chart Layout ── */
-            .org-chart {
+            /* ── Org-Tree Layout (True Org Chart) ── */
+            .org-tree-wrapper {
+                position: relative;
+                min-height: 600px;
+                padding: var(--space-6) var(--space-4);
+                overflow-x: auto;
+                overflow-y: hidden;
+            }
+
+            .org-tree-connectors {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 0;
+            }
+
+            .org-connector {
+                stroke-dasharray: 4 2;
+                opacity: 0.6;
+            }
+
+            .org-tree-nodes {
+                position: relative;
+                z-index: 1;
                 display: flex;
                 flex-direction: column;
-                gap: var(--space-5);
+                gap: 60px;
             }
-            .org-section {
-                background: var(--surface-1);
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-lg);
-                overflow: hidden;
-            }
-            .org-section-header {
+
+            .org-tree-level {
                 display: flex;
-                align-items: baseline;
-                gap: var(--space-3);
-                padding: var(--space-3) var(--space-5);
-                background: var(--surface-2);
-                border-bottom: 1px solid var(--border-subtle);
-            }
-            .org-section-label {
-                font-size: 14px;
-                font-weight: 700;
-                color: var(--text-primary);
-                white-space: nowrap;
-            }
-            .org-section-desc {
-                font-size: 11px;
-                color: var(--text-muted);
-            }
-            .org-section-cards {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-                gap: var(--space-3);
-                padding: var(--space-4);
-            }
-            .org-empty-slot {
-                font-size: 12px;
-                color: var(--text-faint);
-                padding: var(--space-3);
-                text-align: center;
-                font-style: italic;
-            }
-            .agent-card-role-badge {
-                font-size: 9px;
-                padding: 1px 6px;
-                background: var(--surface-3);
-                border: 1px solid var(--border-subtle);
-                color: var(--text-secondary);
-                border-radius: 9999px;
-                font-weight: 600;
-                letter-spacing: 0.05em;
-            }
-            .agent-card-reports {
-                font-size: 10px;
-                color: var(--text-faint);
-                margin-top: 1px;
-                font-style: italic;
+                justify-content: center;
+                gap: var(--space-4);
+                flex-wrap: wrap;
             }
 
-            /* Org-chart specific section accent colors */
-            .org-section[data-group="leadership"] .org-section-header {
-                border-bottom-color: var(--brand-red, #bc2026);
-            }
-            .org-section[data-group="leadership"] {
-                border-color: color-mix(in srgb, var(--brand-red, #bc2026) 30%, var(--border-default));
-            }
-            .org-section[data-group="c-suite"] .org-section-header {
-                border-bottom-color: #6366f1;
-            }
-            .org-section[data-group="engineering"] .org-section-header {
-                border-bottom-color: #22d3ee;
-            }
-            .org-section[data-group="security-compliance"] .org-section-header {
-                border-bottom-color: #f59e0b;
+            .org-node {
+                position: relative;
+                cursor: pointer;
+                transition: transform 0.2s ease;
             }
 
-            @media (max-width: 768px) {
-                .org-section-cards {
-                    grid-template-columns: 1fr;
-                }
-                .org-section-header {
-                    flex-direction: column;
-                    gap: 2px;
-                }
+            .org-node:hover {
+                transform: translateY(-4px);
             }
 
-            .agent-card {
+            .org-node-connector-top {
+                position: absolute;
+                top: -30px;
+                left: 50%;
+                width: 2px;
+                height: 30px;
+                background: var(--border-subtle);
+                transform: translateX(-50%);
+            }
+
+            .org-node:first-child .org-node-connector-top {
+                display: none;
+            }
+
+            .org-node-card {
                 background: var(--surface-1);
                 border: 1px solid var(--border-default);
                 border-radius: var(--radius-lg);
-                padding: var(--space-5);
-                cursor: pointer;
-                transition: all var(--transition-normal);
-                backdrop-filter: blur(12px);
+                padding: var(--space-4);
+                min-width: 200px;
+                max-width: 240px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                transition: all 0.2s ease;
             }
-            .agent-card:hover {
-                background: var(--surface-2);
+
+            .org-node:hover .org-node-card {
                 border-color: var(--brand-red);
-                transform: translateY(-2px);
-                box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+                box-shadow: 0 4px 16px rgba(0,0,0,0.2);
             }
-            .agent-card-header {
+
+            .org-node-header {
                 display: flex;
                 align-items: center;
                 gap: var(--space-3);
             }
-            .agent-card-avatar {
+
+            .org-node-avatar {
                 font-size: 28px;
                 width: 44px;
                 height: 44px;
@@ -347,51 +325,80 @@
                 border-radius: var(--radius-md);
                 flex-shrink: 0;
             }
-            .agent-card-info {
+
+            .org-node-info {
                 flex: 1;
                 min-width: 0;
             }
-            .agent-card-name {
+
+            .org-node-name {
                 font-weight: 600;
+                font-size: 14px;
                 color: var(--text-primary);
-                font-size: 15px;
                 display: flex;
                 align-items: center;
                 gap: var(--space-2);
+                flex-wrap: wrap;
             }
+
+            .org-node-role {
+                font-size: 11px;
+                color: var(--text-muted);
+                margin-top: 2px;
+            }
+
+            .org-node-status {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+
+            .org-node-status.status-active {
+                background: var(--success, #3fb950);
+                box-shadow: 0 0 8px rgba(63,185,80,0.4);
+            }
+
+            .org-node-status.status-idle {
+                background: var(--text-faint, #555);
+            }
+
+            .org-node-pills {
+                display: flex;
+                gap: var(--space-2);
+                margin-top: var(--space-3);
+                flex-wrap: wrap;
+            }
+
+            .org-node-meta {
+                font-size: 10px;
+                color: var(--text-faint);
+                margin-top: var(--space-2);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--border-subtle);
+            }
+
             .agent-card-badge {
-                font-size: 9px;
-                padding: 1px 6px;
+                font-size: 8px;
+                padding: 1px 5px;
                 background: var(--brand-red);
                 color: #fff;
                 border-radius: 9999px;
                 font-weight: 600;
                 letter-spacing: 0.05em;
             }
-            .agent-card-meta {
-                font-size: 12px;
-                color: var(--text-muted);
-                margin-top: 2px;
+
+            .agent-card-role-badge {
+                font-size: 9px;
+                padding: 1px 6px;
+                background: var(--surface-3);
+                border: 1px solid var(--border-subtle);
+                color: var(--text-secondary);
+                border-radius: 9999px;
+                font-weight: 600;
+                letter-spacing: 0.05em;
             }
-            .agent-card-status {
-                width: 10px;
-                height: 10px;
-                border-radius: 50%;
-                flex-shrink: 0;
-            }
-            .agent-card-status.status-active {
-                background: var(--success, #3fb950);
-                box-shadow: 0 0 8px rgba(63,185,80,0.4);
-            }
-            .agent-card-status.status-idle {
-                background: var(--text-faint, #555);
-            }
-            .agent-card-pills {
-                display: flex;
-                gap: var(--space-2);
-                margin-top: var(--space-3);
-                flex-wrap: wrap;
-            }
+
             .agent-file-pill {
                 font-size: 10px;
                 padding: 2px 8px;
@@ -401,6 +408,34 @@
                 color: var(--text-secondary);
             }
 
+            @media (max-width: 768px) {
+                .org-tree-wrapper {
+                    padding: var(--space-4) var(--space-2);
+                    min-height: 400px;
+                }
+
+                .org-tree-level {
+                    flex-direction: column;
+                    align-items: center;
+                }
+
+                .org-node-card {
+                    min-width: 180px;
+                    max-width: 100%;
+                    width: 100%;
+                }
+            }
+
+            /* Drill-down view styles */
+            .agent-drill-header {
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                padding: var(--space-5);
+                cursor: pointer;
+                transition: all var(--transition-normal);
+                backdrop-filter: blur(12px);
+            }
             /* Layout toggle buttons */
             .memory-layout-toggle {
                 display: inline-flex;

@@ -1,90 +1,157 @@
-// js/memory-cards.js — Agent Cards Grid layout for memory page (org-chart view)
+// js/memory-cards.js — True Org-Chart Tree Layout for Memory page
 
 (function() {
     'use strict';
 
     let agentsData = [];
     let currentDrilledAgent = null;
-    let currentPreviewFile = null;
 
-    // ── Org-chart hierarchy definition ──
-    const ORG_HIERARCHY = [
-        {
-            id: 'leadership',
-            label: '👑 Leadership',
-            desc: 'Orchestration & Executive',
-            agents: ['main', 'exec']
+    // ── Org-Tree Data Structure ──
+    // Top-down hierarchy with reporting lines
+    const ORG_TREE = {
+        // Level 0: CEO / Top
+        'main': {
+            name: 'Halo',
+            role: 'PA',
+            emoji: '🤖',
+            reports: ['exec', 'cto', 'coo', 'cfo'],
+            description: 'Orchestrator'
         },
-        {
-            id: 'c-suite',
-            label: '🏛️ C-Suite',
-            desc: 'Architecture · Operations · Finance',
-            agents: ['cto', 'coo', 'cfo']
+        // Level 1: C-Suite + CoS
+        'exec': {
+            name: 'Elon',
+            role: 'CoS',
+            emoji: '👔',
+            reports: [],
+            description: 'Chief of Staff'
         },
-        {
-            id: 'engineering',
-            label: '⚙️ Engineering',
-            desc: 'Development · DevOps · Frontend',
-            agents: ['dev', 'forge', 'quill', 'chip']
+        'cto': {
+            name: 'Orion',
+            role: 'CTO',
+            emoji: '🧠',
+            reports: ['dev', 'forge', 'sec'],
+            description: 'Architecture & Standards'
         },
-        {
-            id: 'product-marketing',
-            label: '📣 Product & Marketing',
-            desc: 'Marketing · Social · Content',
-            agents: ['cmp', 'smm', 'snip']
+        'coo': {
+            name: 'Atlas',
+            role: 'COO',
+            emoji: '📋',
+            reports: ['cmp', 'docs', 'creative'],
+            description: 'Operations'
         },
-        {
-            id: 'security-compliance',
-            label: '🔒 Security & Compliance',
-            desc: 'Security · Tax',
-            agents: ['sec', 'tax']
+        'cfo': {
+            name: 'Sterling',
+            role: 'CFO',
+            emoji: '💰',
+            reports: ['tax'],
+            description: 'Finance & Tax'
         },
-        {
-            id: 'creative-knowledge',
-            label: '🎨 Creative & Knowledge',
-            desc: 'Documentation · Creative',
-            agents: ['creative', 'docs']
+        // Level 2: Reports to CTO
+        'dev': {
+            name: 'Dev',
+            role: 'ENG',
+            emoji: '⚙️',
+            reports: ['quill', 'chip'],
+            description: 'Head of Engineering'
         },
-        {
-            id: 'personal',
-            label: '🏠 Personal',
-            desc: 'Family & Household',
-            agents: ['family']
+        'forge': {
+            name: 'Forge',
+            role: 'DEVOPS',
+            emoji: '🔨',
+            reports: [],
+            description: 'DevOps'
+        },
+        'sec': {
+            name: 'Knox',
+            role: 'SEC',
+            emoji: '🔒',
+            reports: [],
+            description: 'Security'
+        },
+        // Level 2: Reports to COO
+        'cmp': {
+            name: 'Vector',
+            role: 'CMP',
+            emoji: '📣',
+            reports: ['smm', 'snip'],
+            description: 'Marketing & Product'
+        },
+        'docs': {
+            name: 'Canon',
+            role: 'DOC',
+            emoji: '📚',
+            reports: [],
+            description: 'Knowledge & Docs'
+        },
+        'creative': {
+            name: 'Luma',
+            role: 'ART',
+            emoji: '🎨',
+            reports: [],
+            description: 'Creative Director'
+        },
+        // Level 2: Reports to CFO
+        'tax': {
+            name: 'Ledger',
+            role: 'TAX',
+            emoji: '📒',
+            reports: [],
+            description: 'Tax Compliance'
+        },
+        // Level 3: Reports to Dev
+        'quill': {
+            name: 'Quill',
+            role: 'FE/UI',
+            emoji: '✒️',
+            reports: [],
+            description: 'Frontend / UI'
+        },
+        'chip': {
+            name: 'Chip',
+            role: 'SWE',
+            emoji: '💻',
+            reports: [],
+            description: 'Software Engineer'
+        },
+        // Level 3: Reports to CMP
+        'smm': {
+            name: 'Nova',
+            role: 'SMM',
+            emoji: '📱',
+            reports: [],
+            description: 'Social Media'
+        },
+        'snip': {
+            name: 'Snip',
+            role: 'YT',
+            emoji: '🎬',
+            reports: [],
+            description: 'Content'
+        },
+        // Personal
+        'family': {
+            name: 'Haven',
+            role: 'FAM',
+            emoji: '🏠',
+            reports: [],
+            description: 'Family & Household'
         }
+    };
+
+    // All agent IDs in order (top to bottom, left to right)
+    const ORG_ORDER = [
+        'main',           // CEO
+        'exec', 'cto', 'coo', 'cfo',  // Direct reports
+        'dev', 'forge', 'sec',         // Reports to CTO
+        'cmp', 'docs', 'creative',     // Reports to COO  
+        'tax',                         // Reports to CFO
+        'quill', 'chip',               // Reports to Dev
+        'smm', 'snip',                 // Reports to CMP
+        'family'                       // Personal
     ];
 
-    // Agent metadata (matches AGENT_PERSONAS from sessions.js)
-    const AGENT_META = {
-        'main':     { name: 'Halo',     role: 'PA',     emoji: '🤖' },
-        'exec':     { name: 'Elon',     role: 'CoS',    emoji: '👔' },
-        'cto':      { name: 'Orion',    role: 'CTO',    emoji: '🧠' },
-        'coo':      { name: 'Atlas',    role: 'COO',    emoji: '📋' },
-        'cfo':      { name: 'Sterling', role: 'CFO',    emoji: '💰' },
-        'cmp':      { name: 'Vector',   role: 'CMP',    emoji: '📣' },
-        'dev':      { name: 'Dev',      role: 'ENG',    emoji: '⚙️' },
-        'forge':    { name: 'Forge',    role: 'DEVOPS', emoji: '🔨' },
-        'quill':    { name: 'Quill',    role: 'FE/UI',  emoji: '✒️' },
-        'chip':     { name: 'Chip',     role: 'SWE',    emoji: '💻' },
-        'snip':     { name: 'Snip',     role: 'YT',     emoji: '🎬' },
-        'sec':      { name: 'Knox',     role: 'SEC',    emoji: '🔒' },
-        'smm':      { name: 'Nova',     role: 'SMM',    emoji: '📱' },
-        'family':   { name: 'Haven',    role: 'FAM',    emoji: '🏠' },
-        'tax':      { name: 'Ledger',   role: 'TAX',    emoji: '📒' },
-        'docs':     { name: 'Canon',    role: 'DOC',    emoji: '📚' },
-        'creative': { name: 'Luma',     role: 'ART',    emoji: '🎨' }
-    };
-
-    // Reporting lines for visual connectors (who reports to whom)
-    const REPORTS_TO = {
-        'dev': 'cto', 'forge': 'cto', 'quill': 'dev', 'chip': 'dev',
-        'cmp': 'coo', 'smm': 'cmp', 'snip': 'cmp',
-        'sec': 'cto', 'tax': 'cfo',
-        'docs': 'coo', 'creative': 'coo',
-        'cto': 'main', 'coo': 'main', 'cfo': 'main', 'exec': 'main'
-    };
-
     function getMemoryLayout() {
-        return localStorage.getItem('solobot-memory-layout') || 'cards';
+        return localStorage.getItem('solobot-memory-layout') || 'org-tree';
     }
 
     function setMemoryLayout(layout) {
@@ -101,12 +168,12 @@
         const settingsToggle = document.getElementById('setting-memory-layout');
 
         if (classicView) classicView.style.display = layout === 'classic' ? '' : 'none';
-        if (cardsView) cardsView.style.display = layout === 'cards' ? '' : 'none';
-        if (toggleBtnGrid) toggleBtnGrid.classList.toggle('active', layout === 'cards');
+        if (cardsView) cardsView.style.display = layout === 'cards' || layout === 'org-tree' ? '' : 'none';
+        if (toggleBtnGrid) toggleBtnGrid.classList.toggle('active', layout !== 'classic');
         if (toggleBtnList) toggleBtnList.classList.toggle('active', layout === 'classic');
         if (settingsToggle) settingsToggle.value = layout;
 
-        if (layout === 'cards') {
+        if (layout === 'org-tree' || layout === 'cards') {
             renderAgentCardsView();
         }
     }
@@ -160,8 +227,8 @@
         return { totalAgents, totalFiles, modifiedToday, activeAgents };
     }
 
-    // ── Main render ──
-    async function renderAgentCardsView(filter) {
+    // ── Render Org-Tree View ──
+    async function renderOrgTree(filter) {
         const container = document.getElementById('memory-cards-view');
         if (!container) return;
 
@@ -175,28 +242,45 @@
             return;
         }
 
-        // If drilled in, show that view
         if (currentDrilledAgent) {
             renderDrilledView(container);
             return;
         }
 
-        // Build a lookup map: agentId -> agentData
+        // Build agent map
         const agentMap = {};
         agentsData.forEach(a => { agentMap[a.id] = a; });
 
-        let agents = agentsData;
+        // Filter logic
+        let visibleIds = new Set(ORG_ORDER);
         if (filter) {
             const q = filter.toLowerCase();
-            agents = agents.filter(a =>
-                a.name.toLowerCase().includes(q) ||
-                (a.files || []).some(f => f.name.toLowerCase().includes(q))
-            );
+            visibleIds = new Set(ORG_ORDER.filter(id => {
+                const org = ORG_TREE[id];
+                const agent = agentMap[id];
+                if (!org) return false;
+                if (org.name.toLowerCase().includes(q)) return true;
+                if (org.role.toLowerCase().includes(q)) return true;
+                if (agent?.files?.some(f => f.name.toLowerCase().includes(q))) return true;
+                return false;
+            }));
         }
-        const filteredIds = new Set(agents.map(a => a.id));
 
         const stats = computeStats(agentsData);
         const today = new Date().toDateString();
+
+        // Build tree levels for rendering
+        const levels = {};
+        ORG_ORDER.forEach(id => {
+            if (!visibleIds.has(id)) return;
+            const org = ORG_TREE[id];
+            const depth = getDepth(id);
+            if (!levels[depth]) levels[depth] = [];
+            levels[depth].push({ id, org, agent: agentMap[id] });
+        });
+
+        // Generate SVG connectors
+        const connectorPaths = generateConnectorPaths(levels);
 
         let html = `
             <div class="agent-stats-bar">
@@ -205,127 +289,139 @@
                 <div class="agent-stat"><span class="agent-stat-value">${stats.modifiedToday}</span><span class="agent-stat-label">Modified Today</span></div>
                 <div class="agent-stat"><span class="agent-stat-value">${stats.activeAgents}</span><span class="agent-stat-label">Active Today</span></div>
             </div>
-            <div class="org-chart">
+            <div class="org-tree-wrapper">
+                <svg class="org-tree-connectors" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet">
+                    ${connectorPaths}
+                </svg>
+                <div class="org-tree-nodes">
         `;
 
-        // Track which agents are placed in groups
-        const placedIds = new Set();
-
-        ORG_HIERARCHY.forEach(group => {
-            // Filter to agents that exist in data AND match search filter
-            const groupAgents = group.agents
-                .filter(id => agentMap[id] && filteredIds.has(id));
-            
-            if (groupAgents.length === 0 && filter) return; // hide empty groups when filtering
-
-            html += `
-                <div class="org-section" data-group="${group.id}">
-                    <div class="org-section-header">
-                        <div class="org-section-label">${group.label}</div>
-                        <div class="org-section-desc">${group.desc}</div>
-                    </div>
-                    <div class="org-section-cards">
-            `;
-
-            if (groupAgents.length === 0) {
-                html += '<div class="org-empty-slot">No agents in this group</div>';
-            } else {
-                groupAgents.forEach(agentId => {
-                    const agent = agentMap[agentId];
-                    placedIds.add(agentId);
-                    html += renderAgentCard(agent, today);
-                });
-            }
-
-            html += `
-                    </div>
-                </div>
-            `;
+        // Render levels top to bottom
+        const levelKeys = Object.keys(levels).sort((a, b) => parseInt(a) - parseInt(b));
+        levelKeys.forEach(level => {
+            html += `<div class="org-tree-level" data-level="${level}">`;
+            levels[level].forEach(({ id, org, agent }) => {
+                html += renderOrgNode(id, org, agent, today);
+            });
+            html += `</div>`;
         });
 
-        // Render any uncategorized agents
-        const uncategorized = agents.filter(a => !placedIds.has(a.id));
-        if (uncategorized.length > 0) {
-            html += `
-                <div class="org-section" data-group="other">
-                    <div class="org-section-header">
-                        <div class="org-section-label">🔧 Other</div>
-                        <div class="org-section-desc">Uncategorized agents</div>
-                    </div>
-                    <div class="org-section-cards">
-            `;
-            uncategorized.forEach(agent => {
-                html += renderAgentCard(agent, today);
-            });
-            html += '</div></div>';
-        }
+        html += `
+                </div>
+            </div>
+        `;
 
-        html += '</div>'; // close .org-chart
         container.innerHTML = html;
     }
 
-    function renderAgentCard(agent, today) {
-        const files = agent.files || [];
-        const fileCount = files.length;
-        const meta = AGENT_META[agent.id] || {};
-        const emoji = meta.emoji || agent.emoji || agent.name.charAt(0).toUpperCase();
-        const roleBadge = meta.role || '';
-        const displayName = meta.name || agent.name;
-        const isDefault = agent.isDefault;
-        const reportsTo = REPORTS_TO[agent.id];
-        const reportsToMeta = reportsTo ? AGENT_META[reportsTo] : null;
+    function getDepth(agentId) {
+        if (agentId === 'main') return 0;
+        for (const [mgr, info] of Object.entries(ORG_TREE)) {
+            if (info.reports.includes(agentId)) return getDepth(mgr) + 1;
+        }
+        return 2;
+    }
 
+    function generateConnectorPaths(levels) {
+        const levelHeight = 140;
+        const nodeWidth = 200;
+        const levelKeys = Object.keys(levels).sort((a, b) => parseInt(a) - parseInt(b));
+        
+        let paths = '';
+        
+        levelKeys.forEach((level, li) => {
+            const y = li * levelHeight + 60;
+            const nodes = levels[level];
+            
+            nodes.forEach((node, ni) => {
+                const x = ni * (nodeWidth + 40) + 80;
+                const org = node.org;
+                
+                // Draw line from manager (above) to this node
+                if (org.reports && org.reports.length > 0) {
+                    org.reports.forEach(reportId => {
+                        // Find position of report node
+                        const nextLevel = levels[parseInt(level) + 1];
+                        if (nextLevel) {
+                            const reportIdx = nextLevel.findIndex(n => n.id === reportId);
+                            if (reportIdx >= 0) {
+                                const reportX = reportIdx * (nodeWidth + 40) + 80 + (nodeWidth / 2);
+                                const reportY = (parseInt(level) + 1) * levelHeight + 30;
+                                const nodeX = x + nodeWidth / 2;
+                                
+                                paths += `<path class="org-connector" d="M ${nodeX} ${y + 30} L ${nodeX} ${reportY - 30} L ${reportX} ${reportY - 30}" fill="none" stroke="var(--border-subtle)" stroke-width="2"/>`;
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        return paths;
+    }
+
+    function renderOrgNode(id, org, agent, today) {
+        const files = agent?.files || [];
+        const fileCount = files.length;
+        const isDefault = agent?.isDefault;
         const sortedFiles = [...files].sort((a, b) => {
             if (!a.modified) return 1;
             if (!b.modified) return -1;
             return new Date(b.modified) - new Date(a.modified);
         });
         const lastMod = sortedFiles[0]?.modified;
-        const recentFiles = sortedFiles.slice(0, 3);
-
+        const recentFiles = sortedFiles.slice(0, 2);
+        
         const hasToday = files.some(f => f.modified && new Date(f.modified).toDateString() === today);
         const statusClass = hasToday ? 'status-active' : 'status-idle';
 
         return `
-            <div class="agent-card" onclick="window._memoryCards.drillInto('${agent.id}')">
-                <div class="agent-card-header">
-                    <div class="agent-card-avatar">${emoji}</div>
-                    <div class="agent-card-info">
-                        <div class="agent-card-name">
-                            ${escapeHtml(displayName)}
-                            ${roleBadge ? `<span class="agent-card-role-badge">${escapeHtml(roleBadge)}</span>` : ''}
-                            ${isDefault ? ' <span class="agent-card-badge">DEFAULT</span>' : ''}
+            <div class="org-node" onclick="window._memoryCards.drillInto('${id}')" data-agent="${id}">
+                <div class="org-node-connector-top"></div>
+                <div class="org-node-card">
+                    <div class="org-node-header">
+                        <div class="org-node-avatar">${org.emoji}</div>
+                        <div class="org-node-info">
+                            <div class="org-node-name">
+                                ${org.name}
+                                ${isDefault ? '<span class="agent-card-badge">DEFAULT</span>' : ''}
+                            </div>
+                            <div class="org-node-role">${org.role} · ${org.description}</div>
                         </div>
-                        <div class="agent-card-meta">${fileCount} file${fileCount !== 1 ? 's' : ''} · ${lastMod ? timeAgo(lastMod) : 'No files'}</div>
-                        ${reportsToMeta ? `<div class="agent-card-reports">↳ reports to ${escapeHtml(reportsToMeta.name)}</div>` : ''}
+                        <div class="org-node-status ${statusClass}"></div>
                     </div>
-                    <div class="agent-card-status ${statusClass}"></div>
+                    ${recentFiles.length ? `<div class="org-node-pills">${recentFiles.map(f => `<span class="agent-file-pill">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
+                    <div class="org-node-meta">${fileCount} file${fileCount !== 1 ? 's' : ''} · ${lastMod ? timeAgo(lastMod) : 'No files'}</div>
                 </div>
-                ${recentFiles.length ? `<div class="agent-card-pills">${recentFiles.map(f => `<span class="agent-file-pill">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
             </div>
         `;
+    }
+
+    // ── Legacy Card Grid (fallback) ──
+    async function renderAgentCardsView(filter) {
+        const layout = getMemoryLayout();
+        if (layout === 'org-tree') {
+            return renderOrgTree(filter);
+        }
+        // Classic cards grid (simplified)
+        return renderOrgTree(filter); // Use tree by default
     }
 
     function drillInto(agentId) {
         currentDrilledAgent = agentsData.find(a => a.id === agentId);
         if (!currentDrilledAgent) return;
-        currentPreviewFile = null;
         renderAgentCardsView();
     }
 
     function backToGrid() {
         currentDrilledAgent = null;
-        currentPreviewFile = null;
         renderAgentCardsView();
     }
 
     function renderDrilledView(container) {
         const agent = currentDrilledAgent;
+        const org = ORG_TREE[agent.id] || {};
         const files = agent.files || [];
-        const meta = AGENT_META[agent.id] || {};
-        const emoji = meta.emoji || agent.emoji || agent.name.charAt(0).toUpperCase();
-        const displayName = meta.name || agent.name;
-        const roleBadge = meta.role || '';
         const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name));
 
         const rootFiles = sortedFiles.filter(f => !f.name.includes('/'));
@@ -333,7 +429,7 @@
 
         let fileListHtml = '';
         const renderFile = (f) => {
-            const active = currentPreviewFile === f.name ? 'active' : '';
+            const active = false;
             return `<div class="agent-file-item ${active}" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
                 <span class="agent-file-icon">📄</span>
                 <span class="agent-file-name">${escapeHtml(f.name)}</span>
@@ -354,9 +450,9 @@
             <div class="agent-drill-header">
                 <button class="btn btn-ghost" onclick="window._memoryCards.backToGrid()">← Back to Org Chart</button>
                 <div class="agent-drill-title">
-                    <span class="agent-card-avatar">${emoji}</span>
-                    <span>${escapeHtml(displayName)}</span>
-                    ${roleBadge ? `<span class="agent-card-role-badge" style="font-size: 12px;">${escapeHtml(roleBadge)}</span>` : ''}
+                    <span class="org-node-avatar" style="font-size: 24px; width: 36px; height: 36px;">${org.emoji || '🤖'}</span>
+                    <span>${escapeHtml(org.name || agent.name)}</span>
+                    ${org.role ? `<span class="agent-card-role-badge">${escapeHtml(org.role)}</span>` : ''}
                 </div>
             </div>
             <div class="agent-drill-layout">
@@ -372,13 +468,9 @@
     }
 
     async function previewFile(filename) {
-        currentPreviewFile = filename;
         const agent = currentDrilledAgent;
         const previewEl = document.getElementById('agent-drill-preview');
         if (!previewEl) return;
-
-        document.querySelectorAll('.agent-file-item').forEach(el => el.classList.remove('active'));
-        event?.target?.closest?.('.agent-file-item')?.classList.add('active');
 
         previewEl.innerHTML = '<div class="loading-state">Loading...</div>';
 
@@ -410,29 +502,13 @@
 
     async function refresh() {
         agentsData = await fetchAgents();
-        if (getMemoryLayout() === 'cards') {
-            renderAgentCardsView();
-        }
+        renderAgentCardsView();
     }
 
-    // ── Cleanup: dismiss any stale overlays/modals when memory page is shown ──
-    function cleanupStaleOverlays() {
-        // Remove any orphaned tooltips, popovers, or floating elements
-        document.querySelectorAll('.tooltip-floating, .popover-stale, [data-memory-overlay]').forEach(el => el.remove());
-        
-        // Ensure no skeleton loaders linger on the memory page
-        const memPage = document.getElementById('page-memory');
-        if (memPage) {
-            memPage.querySelectorAll('.skeleton').forEach(el => el.remove());
-        }
-    }
-
-    // Auto-init on load
+    // Init
     document.addEventListener('DOMContentLoaded', () => {
-        // Delay slightly to let other scripts set up showPage
         setTimeout(() => {
             applyMemoryLayout();
-            cleanupStaleOverlays();
         }, 200);
     });
 
@@ -444,7 +520,6 @@
         drillInto,
         backToGrid,
         previewFile,
-        refresh,
-        cleanup: cleanupStaleOverlays
+        refresh
     };
 })();
