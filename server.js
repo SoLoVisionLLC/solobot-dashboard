@@ -926,6 +926,124 @@ const server = http.createServer((req, res) => {
   }
   
   // ===================
+  // NOTION TASKS API
+  // ===================
+  
+  const NOTION_API_CACHE_TTL = 60000; // 60 seconds
+  let notionCache = { tasks: [], timestamp: 0 };
+  
+  async function fetchNotionTasks() {
+    const now = Date.now();
+    if (notionCache.tasks.length > 0 && (now - notionCache.timestamp) < NOTION_API_CACHE_TTL) {
+      return { ...notionCache, cached: true };
+    }
+    
+    const NOTION_API_KEY_PATH = process.env.NOTION_API_KEY_PATH || path.join(os.homedir(), '.config', 'notion', 'api_key');
+    const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || '5cc6c5a1-8d74-48e9-a692-4a40cff496a0';
+    
+    let apiKey;
+    try {
+      apiKey = fs.readFileSync(NOTION_API_KEY_PATH, 'utf8').trim();
+    } catch (err) {
+      console.error('[Notion] Failed to read API key:', err.message);
+      return { error: 'Notion API key not configured', cached: false };
+    }
+    
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const req = https.request({
+          hostname: 'api.notion.com',
+          path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Notion-Version': '2025-09-03',
+            'Content-Type': 'application/json'
+          }
+        }, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(body));
+            } catch (e) {
+              reject(new Error(`Failed to parse Notion response: ${e.message}`));
+            }
+          });
+        });
+        req.on('error', reject);
+        req.write(JSON.stringify({})); // Empty request body for default query
+        req.end();
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message || 'Notion API error');
+      }
+      
+      const tasks = response.results.map(page => {
+        const props = page.properties;
+        return {
+          id: page.id,
+          title: getNotionProperty(props.Name || props.Title || props.Title || props.name, 'title'),
+          description: getNotionProperty(props.Description || props.Description || props.description, 'rich_text'),
+          status: getNotionProperty(props.Status || props.Status || props.status, 'select'),
+          priority: mapNotionPriority(props.Priority || props.Priority || props.priority),
+          owner: getNotionProperty(props.Owner || props.Owner || props.owner, 'select'),
+          dueDate: getNotionDate(props.Due || props.DueDate || props['Due Date'] || props.date),
+          url: page.url
+        };
+      });
+      
+      notionCache = { tasks, timestamp: now };
+      return { tasks, timestamp: now.toISOString(), cached: false };
+    } catch (err) {
+      console.error('[Notion] Fetch error:', err.message);
+      // Return cached data on error if available
+      if (notionCache.tasks.length > 0) {
+        return { ...notionCache, cached: true, error: err.message };
+      }
+      return { error: err.message, cached: false };
+    }
+  }
+  
+  function getNotionProperty(prop, type) {
+    if (!prop) return '';
+    switch (type) {
+      case 'title':
+        return prop.title?.[0]?.plain_text || '';
+      case 'rich_text':
+        return prop.rich_text?.[0]?.plain_text || '';
+      case 'select':
+        return prop.select?.name || '';
+      case 'multi_select':
+        return prop.multi_select?.map(o => o.name) || [];
+      default:
+        return '';
+    }
+  }
+  
+  function getNotionDate(dateProp) {
+    if (!dateProp?.date?.start) return null;
+    return dateProp.date.start;
+  }
+  
+  function mapNotionPriority(priorityProp) {
+    const value = getNotionProperty(priorityProp, 'select').toLowerCase();
+    if (value.includes('critical') || value === 'p0' || value === '0') return 0;
+    if (value.includes('high') || value === 'p1' || value === '1') return 1;
+    if (value.includes('low') || value === 'p3' || value === '3') return 3;
+    return 2; // Default to normal
+  }
+  
+  if (url.pathname === '/api/notion/tasks' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const result = await fetchNotionTasks();
+    res.end(JSON.stringify(result));
+    return;
+  }
+  
+  // ===================
   // MEMORY FILES API (reads from mounted OpenClaw workspace)
   // ===================
   

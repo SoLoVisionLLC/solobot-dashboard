@@ -1,0 +1,227 @@
+/* ==========================================
+   NOTION KANBAN WIDGET STYLES
+   ========================================== */
+
+.notion-kanban-loading,
+.notion-kanban-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8);
+    text-align: center;
+    min-height: 200px;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-default);
+    border-top-color: var(--brand-red);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--space-4);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.notion-kanban-error .error-icon {
+    font-size: 24px;
+    margin-bottom: var(--space-2);
+}
+
+.notion-kanban-error small {
+    color: var(--text-muted);
+    margin-bottom: var(--space-4);
+}
+
+.notion-kanban-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.notion-kanban-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.notion-kanban-title svg {
+    opacity: 0.6;
+}
+
+.notion-kanban-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.notion-kanban-actions .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.notion-kanban-board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-4);
+    min-height: 300px;
+}
+
+.notion-kanban-column {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.notion-kanban-column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-3);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.column-title {
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.column-count {
+    background: var(--surface-3);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.notion-kanban-cards {
+    flex: 1;
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+.notion-kanban-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: var(--space-4);
+}
+
+.notion-kanban-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.notion-kanban-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.notion-kanban-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-2);
+}
+
+.priority-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    color: white;
+    text-transform: uppercase;
+}
+
+.owner-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: var(--surface-3);
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.notion-kanban-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.4;
+    margin-bottom: var(--space-1);
+}
+
+.notion-kanban-card-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.due-date {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.notion-kanban-footer {
+    padding: var(--space-2) var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+}
+
+.cache-indicator {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* ==========================================
+   WIDGET CONTAINER (for bento grid)
+   ========================================== */
+
+.bento-widget.notion-kanban {
+    min-height: 400px;
+}
+
+.bento-widget.notion-kanban .bento-widget-content {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .notion-kanban-board {
+        grid-template-columns: 1fr;
+    }
+
+    .notion-kanban-column {
+        min-height: 150px;
+    }
+}
