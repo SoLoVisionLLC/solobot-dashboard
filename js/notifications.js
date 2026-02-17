@@ -32,8 +32,8 @@ function subscribeToAllSessions() {
 }
 
 function handleCrossSessionNotification(msg) {
-    const { sessionKey, content } = msg;
-    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content||'').slice(0,80)}...`);
+    const { sessionKey, content, images } = msg;
+    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content||'').slice(0,80)}..., images=${images?.length || 0}`);
 
     // Never count read-ack sync events as notifications.
     // These are internal signals used to clear unreads across clients.
@@ -535,7 +535,7 @@ function handleChatEvent(event) {
                     (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
                 if (!isDuplicate) {
-                    const msg = addLocalChatMessage(finalContent, 'solobot', images || window._lastResponseModel);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
                 }

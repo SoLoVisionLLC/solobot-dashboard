@@ -608,7 +608,8 @@ class GatewayClient {
         // Build attachments array from all images
         const attachments = [];
         for (const imageDataUrl of imageDataUrls) {
-            const matches = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
+            gwLog('[Gateway] Image data type:', typeof imageDataUrl, 'length:', imageDataUrl?.length, 'prefix:', String(imageDataUrl).substring(0, 40));
+            const matches = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/s);
             if (!matches) {
                 gwWarn('[Gateway] Skipping invalid image data URL');
                 continue;
