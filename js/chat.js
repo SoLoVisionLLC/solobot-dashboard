@@ -3,6 +3,44 @@
 const CHAT_DEBUG = false;
 function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
 
+/**
+ * Converts plain text to HTML with clickable links.
+ * - Escapes HTML to prevent XSS
+ * - Converts markdown links [text](url) to <a> tags
+ * - Auto-links bare http/https URLs
+ * - Preserves newlines as <br>
+ * - Skips URLs inside code blocks (``` ... ```)
+ */
+function linkifyText(text) {
+    if (!text) return '';
+
+    // Split on code blocks to avoid linkifying inside them
+    const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
+
+    return parts.map((part, i) => {
+        // Odd indices are code blocks — escape only, no linkify
+        if (i % 2 === 1) {
+            return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Escape HTML
+        let safe = part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Convert markdown links [text](url)
+        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        // Auto-link bare URLs (not already inside an href)
+        safe = safe.replace(/(^|[^"'>])(https?:\/\/[^\s<]+)/g,
+            '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+
+        // Preserve newlines
+        safe = safe.replace(/\n/g, '<br>');
+
+        return safe;
+    }).join('');
+}
+
 // ===================
 // CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
@@ -878,7 +916,7 @@ function createChatMessageElement(msg) {
     content.style.color = 'var(--text-primary)';
     content.style.lineHeight = '1.5';
     content.style.whiteSpace = 'pre-wrap';
-    content.textContent = msg.text; // Use textContent for safety - no HTML injection
+    content.innerHTML = linkifyText(msg.text); // linkifyText escapes HTML first, then adds <a> tags
 
     // Images if present - show thumbnails
     const images = msg.images || (msg.image ? [msg.image] : []);
@@ -1326,7 +1364,7 @@ function createChatPageMessage(msg) {
     // Content
     const content = document.createElement('div');
     content.className = 'chat-page-bubble-content';
-    content.textContent = msg.text;
+    content.innerHTML = linkifyText(msg.text);
     bubble.appendChild(content);
     
     // Action buttons (copy, etc.) - show on hover

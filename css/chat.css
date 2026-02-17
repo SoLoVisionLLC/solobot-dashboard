@@ -784,6 +784,19 @@
                 text-decoration: underline;
             }
 
+            /* Clickable links in chat messages */
+            .chat-page-bubble-content a,
+            .message-bubble a {
+                color: var(--brand-red, #e63946);
+                text-decoration: underline;
+                word-break: break-all;
+            }
+
+            .chat-page-bubble-content a:hover,
+            .message-bubble a:hover {
+                opacity: 0.8;
+            }
+
             /* New message indicator */
             .chat-page-new-message-indicator {
                 position: absolute;
