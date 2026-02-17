@@ -154,6 +154,11 @@
                     },
                 );
 
+                // Route-change cleanup: close stale overlays/portals and clear drag helper layers
+                document.querySelectorAll('.modal-overlay.visible').forEach((el) => el.classList.remove('visible'));
+                document.querySelectorAll('.chat-page-wrapper.drag-over, .drop-zone.drag-over').forEach((el) => el.classList.remove('drag-over'));
+                document.querySelectorAll('[data-onboarding-helper], [data-helper-overlay], .tooltip-floating, .popover-stale').forEach((el) => el.remove());
+
                 // Show selected page
                 const targetPage = document.getElementById(
                     "page-" + pageName,

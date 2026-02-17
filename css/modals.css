@@ -865,6 +865,9 @@
             /* Memory page specific styles */
             .memory-page {
                 /* Padding handled by #page-memory */
+                position: relative;
+                isolation: isolate;
+                z-index: 2;
             }
 
             .memory-page .page-header {
