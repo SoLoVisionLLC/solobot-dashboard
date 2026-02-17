@@ -939,7 +939,7 @@ const server = http.createServer((req, res) => {
     }
     
     const NOTION_API_KEY_PATH = process.env.NOTION_API_KEY_PATH || path.join(os.homedir(), '.config', 'notion', 'api_key');
-    const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || '5cc6c5a1-8d74-48e9-a692-4a40cff496a0';
+    const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || '426bc82e-256d-4bfc-9e23-2254cd16f87f';
     
     let apiKey;
     try {
@@ -953,7 +953,7 @@ const server = http.createServer((req, res) => {
       const response = await new Promise((resolve, reject) => {
         const req = https.request({
           hostname: 'api.notion.com',
-          path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
+          path: `/v1/data_sources/${NOTION_DATABASE_ID}/query`,
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -980,16 +980,21 @@ const server = http.createServer((req, res) => {
         throw new Error(response.error.message || 'Notion API error');
       }
       
+      if (!response.results) {
+        console.error('[Notion] Unexpected response structure:', JSON.stringify(response).slice(0, 500));
+        throw new Error('Notion API returned unexpected response (no results array)');
+      }
+      
       const tasks = response.results.map(page => {
         const props = page.properties;
         return {
           id: page.id,
-          title: getNotionProperty(props.Name || props.Title || props.Title || props.name, 'title'),
-          description: getNotionProperty(props.Description || props.Description || props.description, 'rich_text'),
-          status: getNotionProperty(props.Status || props.Status || props.status, 'select'),
-          priority: mapNotionPriority(props.Priority || props.Priority || props.priority),
-          owner: getNotionProperty(props.Owner || props.Owner || props.owner, 'select'),
-          dueDate: getNotionDate(props.Due || props.DueDate || props['Due Date'] || props.date),
+          title: getNotionProperty(props.Task || props.Name || props.Title || props.title, 'title'),
+          description: getNotionProperty(props.Notes || props.Description || props.description, 'rich_text'),
+          status: getNotionProperty(props.Status || props.status, 'select'),
+          priority: mapNotionPriority(props.Priority || props.priority),
+          owner: getNotionProperty(props['Assigned Agent'] || props.Assigned || props.owner, 'select'),
+          dueDate: getNotionDate(props['Due Date'] || props.Due || props.DueDate || props.date),
           url: page.url
         };
       });
@@ -1038,8 +1043,12 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/notion/tasks' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    const result = await fetchNotionTasks();
-    res.end(JSON.stringify(result));
+    fetchNotionTasks().then(result => {
+      res.end(JSON.stringify(result));
+    }).catch(err => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return;
   }
   
