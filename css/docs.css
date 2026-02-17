@@ -230,12 +230,33 @@
             }
 
             /* ── Org-Tree Layout (True Org Chart) ── */
+            /* ── Org-Tree Layout with Pan/Zoom ── */
             .org-tree-wrapper {
                 position: relative;
-                min-height: 600px;
-                padding: var(--space-6) var(--space-4);
-                overflow-x: auto;
-                overflow-y: hidden;
+                width: 100%;
+                height: 700px;
+                overflow: hidden;
+                background: var(--surface-0);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                cursor: grab;
+            }
+
+            .org-tree-wrapper:active {
+                cursor: grabbing;
+            }
+
+            .org-tree-wrapper.space-panning {
+                cursor: crosshair !important;
+            }
+
+            .org-tree-viewport {
+                position: absolute;
+                top: 0;
+                left: 0;
+                min-width: 1200px;
+                min-height: 800px;
+                transform-origin: 0 0;
             }
 
             .org-tree-connectors {
@@ -254,41 +275,41 @@
             }
 
             .org-tree-nodes {
-                position: relative;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
                 z-index: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 60px;
             }
 
             .org-tree-level {
                 display: flex;
                 justify-content: center;
                 gap: var(--space-4);
-                flex-wrap: wrap;
+                position: absolute;
+                left: 0;
+                right: 0;
             }
+
+            /* Level positions */
+            .org-tree-level[data-level="0"] { top: 40px; }
+            .org-tree-level[data-level="1"] { top: 200px; }
+            .org-tree-level[data-level="2"] { top: 360px; }
+            .org-tree-level[data-level="3"] { top: 520px; }
 
             .org-node {
                 position: relative;
                 cursor: pointer;
-                transition: transform 0.2s ease;
+                transition: transform 0.15s ease;
             }
 
             .org-node:hover {
-                transform: translateY(-4px);
+                transform: scale(1.05);
+                z-index: 10;
             }
 
             .org-node-connector-top {
-                position: absolute;
-                top: -30px;
-                left: 50%;
-                width: 2px;
-                height: 30px;
-                background: var(--border-subtle);
-                transform: translateX(-50%);
-            }
-
-            .org-node:first-child .org-node-connector-top {
                 display: none;
             }
 
@@ -296,16 +317,16 @@
                 background: var(--surface-1);
                 border: 1px solid var(--border-default);
                 border-radius: var(--radius-lg);
-                padding: var(--space-4);
-                min-width: 200px;
-                max-width: 240px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                transition: all 0.2s ease;
+                padding: var(--space-3) var(--space-4);
+                min-width: 180px;
+                max-width: 220px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                transition: all 0.15s ease;
             }
 
             .org-node:hover .org-node-card {
                 border-color: var(--brand-red);
-                box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.25);
             }
 
             .org-node-header {
@@ -408,10 +429,95 @@
                 color: var(--text-secondary);
             }
 
+            /* ── Navigation Controls ── */
+            .org-nav-controls {
+                position: absolute;
+                top: var(--space-3);
+                right: var(--space-3);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                z-index: 100;
+            }
+
+            .org-nav-btn {
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--surface-2);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                color: var(--text-primary);
+                font-size: 18px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+
+            .org-nav-btn:hover {
+                background: var(--surface-3);
+                border-color: var(--brand-red);
+            }
+
+            .org-nav-btn:active {
+                transform: scale(0.95);
+            }
+
+            /* ── Minimap Navigator ── */
+            .org-minimap {
+                position: absolute;
+                bottom: var(--space-3);
+                right: var(--space-3);
+                width: 160px;
+                height: 120px;
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                z-index: 100;
+                opacity: 0.8;
+                transition: opacity 0.2s;
+            }
+
+            .org-minimap:hover {
+                opacity: 1;
+            }
+
+            .org-minimap-content {
+                position: relative;
+                width: 100%;
+                height: 100%;
+            }
+
+            .org-minimap-node {
+                position: absolute;
+                width: 8px;
+                height: 6px;
+                background: var(--text-muted);
+                border-radius: 2px;
+            }
+
+            .org-minimap-node[data-agent="main"] {
+                background: var(--brand-red);
+            }
+
+            .org-minimap-viewport {
+                position: absolute;
+                border: 2px solid var(--brand-red);
+                background: rgba(188, 32, 38, 0.1);
+                border-radius: 2px;
+                pointer-events: none;
+            }
+
+            /* Space-panning cursor */
+            body.space-panning {
+                cursor: crosshair !important;
+            }
+
             @media (max-width: 768px) {
                 .org-tree-wrapper {
-                    padding: var(--space-4) var(--space-2);
-                    min-height: 400px;
+                    height: 500px;
                 }
 
                 .org-tree-level {
