@@ -573,8 +573,10 @@ function loadHistoryMessages(messages) {
     // Only preserve local messages that belong to the CURRENT session (prevent cross-session bleed)
     const currentKey = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
     const allLocalChatMessages = state.chat.messages.filter(m => {
+        // Skip non-local messages (have real IDs from server)
         if (!m.id?.startsWith('m')) return false;
         // If the message was tagged with a session, only keep if it matches
+        // If NOT tagged, assume it's from current session (conservative - old messages)
         if (m._sessionKey && m._sessionKey.toLowerCase() !== currentKey) return false;
         return true;
     });

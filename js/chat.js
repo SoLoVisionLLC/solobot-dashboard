@@ -666,6 +666,16 @@ async function sendChatMessage() {
 }
 
 function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
+    // DEFENSIVE: Hard session gate - validate incoming messages match current session
+    // Check if this message already has a session tag from outside
+    const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
+    const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    
+    if (incomingSession && currentSession && incomingSession !== currentSession) {
+        chatLog(`[Chat] BLOCKED addLocalChatMessage: incoming session=${incomingSession}, current=${currentSession}`);
+        return null;
+    }
+    
     if (!state.chat) state.chat = { messages: [] };
     if (!state.system) state.system = { messages: [] };
     
@@ -792,8 +802,15 @@ function renderChat() {
         return;
     }
 
-    // Render each message (no filtering needed - system messages are in separate array)
+    // Render each message (filtered by session to prevent bleed)
+    const activeKey = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
     messages.forEach(msg => {
+        // Defensive: Skip messages from other sessions
+        const msgSession = (msg._sessionKey || '').toLowerCase();
+        if (msgSession && activeKey && msgSession !== activeKey) {
+            chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKey}`);
+            return;
+        }
         const msgEl = createChatMessageElement(msg);
         if (msgEl) container.appendChild(msgEl);
     });
@@ -1218,11 +1235,19 @@ function renderChatPage() {
     const transient = container.querySelectorAll('.streaming, .typing-indicator');
     transient.forEach(el => el.remove());
 
-    // Append new messages
+    // Append new messages (filtered by session to prevent bleed)
+    const activeKeyCP = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
     if (messages.length > currentRendered) {
         const fragment = document.createDocumentFragment();
         for (let i = currentRendered; i < messages.length; i++) {
-            const msgEl = createChatPageMessage(messages[i]);
+            // Defensive: Skip messages from other sessions
+            const msg = messages[i];
+            const msgSession = (msg._sessionKey || '').toLowerCase();
+            if (msgSession && activeKeyCP && msgSession !== activeKeyCP) {
+                chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKeyCP}`);
+                continue;
+            }
+            const msgEl = createChatPageMessage(msg);
             if (msgEl) fragment.appendChild(msgEl);
         }
         container.appendChild(fragment);
