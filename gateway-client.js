@@ -322,14 +322,25 @@ class GatewayClient {
         const state = payload.state;
         const message = payload.message;
 
-        // Extract text content and role
+        // Extract text content, images, and role
         let contentText = '';
+        let images = [];
         let role = message?.role || 'assistant';
 
         if (message?.content) {
             for (const part of message.content) {
                 if (part.type === 'text') {
                     contentText += part.text || '';
+                } else if (part.type === 'image') {
+                    // Base64 image data from AI response
+                    if (part.data) {
+                        images.push(`data:image/jpeg;base64,${part.data}`);
+                    }
+                } else if (part.type === 'image_url') {
+                    // Image URL from AI response
+                    if (part.url) {
+                        images.push(part.url);
+                    }
                 }
             }
         }
@@ -364,6 +375,7 @@ class GatewayClient {
         this.onChatEvent({
             state,
             content: contentText,
+            images: images,
             role,
             sessionKey: eventSessionKey,
             errorMessage: message?.errorMessage || payload.errorMessage,

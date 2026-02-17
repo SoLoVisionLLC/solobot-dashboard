@@ -440,7 +440,7 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
-    const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
 
     // HARD GATE: only render events for the active session. Period.
     // Cross-session notifications are handled separately by onCrossSessionMessage.
@@ -535,7 +535,7 @@ function handleChatEvent(event) {
                     (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
                 if (!isDuplicate) {
-                    const msg = addLocalChatMessage(finalContent, 'solobot', window._lastResponseModel);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images || window._lastResponseModel);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
                 }
