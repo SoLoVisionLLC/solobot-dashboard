@@ -8,6 +8,21 @@
     let panzoomInstance = null;
     let isSpacePressed = false;
 
+    function setPanzoomScale(instance, scale, opts) {
+        if (!instance) return;
+        if (typeof instance.zoom === 'function') {
+            instance.zoom(scale, opts);
+            return;
+        }
+        if (typeof instance.zoomAbs === 'function') {
+            instance.zoomAbs(0, 0, scale);
+            return;
+        }
+        if (typeof instance.zoomTo === 'function') {
+            instance.zoomTo(0, 0, scale);
+        }
+    }
+
     // ── Org-Tree Data Structure ──
     const ORG_TREE = {
         'main': { name: 'Halo', role: 'PA', emoji: '🤖', reports: ['exec', 'cto', 'coo', 'cfo'], description: 'Orchestrator' },
@@ -159,7 +174,7 @@
             try {
                 const { x, y, scale } = JSON.parse(savedState);
                 panzoomInstance.moveTo(x, y);
-                panzoomInstance.zoom(scale);
+                setPanzoomScale(panzoomInstance, scale);
                 syncConnectors();
             } catch (e) {
                 console.warn('Failed to restore viewport state:', e);
@@ -207,7 +222,7 @@
     function resetView() {
         if (panzoomInstance) {
             panzoomInstance.moveTo(0, 0);
-            panzoomInstance.zoom(1, { animate: true });
+            setPanzoomScale(panzoomInstance, 1, { animate: true });
         }
     }
 
@@ -228,7 +243,7 @@
         );
 
         panzoomInstance.moveTo(0, 0);
-        panzoomInstance.zoom(scale, { animate: true });
+        setPanzoomScale(panzoomInstance, scale, { animate: true });
     }
 
     // ── Minimap Navigator ──
