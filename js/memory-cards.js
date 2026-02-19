@@ -3,6 +3,12 @@
 (function() {
     'use strict';
 
+    // Guard against early inline handler access before full API registration.
+    const memoryCardsApi = window._memoryCards || (window._memoryCards = {});
+    if (typeof memoryCardsApi.wasDragging !== 'boolean') {
+        memoryCardsApi.wasDragging = false;
+    }
+
     let agentsData = [];
     let currentDrilledAgent = null;
     let panzoomInstance = null;
@@ -621,7 +627,7 @@
         }, 200);
     });
 
-    window._memoryCards = {
+    Object.assign(memoryCardsApi, {
         getLayout: getMemoryLayout,
         setLayout: setMemoryLayout,
         applyLayout: applyMemoryLayout,
@@ -641,7 +647,7 @@
                 localStorage.setItem('solobot-minimap-collapsed', minimap.classList.contains('collapsed'));
             }
         }
-    };
+    });
     
     // Restore minimap state
     document.addEventListener('DOMContentLoaded', () => {
