@@ -14,18 +14,25 @@
     let panzoomInstance = null;
     let isSpacePressed = false;
 
+    function sanitizeScale(rawScale, fallback = 1) {
+        const n = Number(rawScale);
+        if (!Number.isFinite(n) || n <= 0) return fallback;
+        return Math.min(2.5, Math.max(0.3, n));
+    }
+
     function setPanzoomScale(instance, scale, opts) {
         if (!instance) return;
+        const safeScale = sanitizeScale(scale, 1);
         if (typeof instance.zoom === 'function') {
-            instance.zoom(scale, opts);
+            instance.zoom(safeScale, opts);
             return;
         }
         if (typeof instance.zoomAbs === 'function') {
-            instance.zoomAbs(0, 0, scale);
+            instance.zoomAbs(0, 0, safeScale);
             return;
         }
         if (typeof instance.zoomTo === 'function') {
-            instance.zoomTo(0, 0, scale);
+            instance.zoomTo(0, 0, safeScale);
         }
     }
 
@@ -179,7 +186,9 @@
         if (savedState) {
             try {
                 const { x, y, scale } = JSON.parse(savedState);
-                panzoomInstance.moveTo(x, y);
+                const safeX = Number.isFinite(Number(x)) ? Number(x) : 0;
+                const safeY = Number.isFinite(Number(y)) ? Number(y) : 0;
+                panzoomInstance.moveTo(safeX, safeY);
                 setPanzoomScale(panzoomInstance, scale);
                 syncConnectors();
             } catch (e) {
@@ -239,14 +248,19 @@
         if (!wrapper || !viewport) return;
 
         const wrapperRect = wrapper.getBoundingClientRect();
-        const contentWidth = viewport.scrollWidth;
-        const contentHeight = viewport.scrollHeight;
+        const contentWidth = Number(viewport.scrollWidth);
+        const contentHeight = Number(viewport.scrollHeight);
 
-        const scale = Math.min(
-            (wrapperRect.width * 0.8) / contentWidth,
-            (wrapperRect.height * 0.8) / contentHeight,
+        const safeWrapperW = Number.isFinite(wrapperRect.width) && wrapperRect.width > 0 ? wrapperRect.width : 1;
+        const safeWrapperH = Number.isFinite(wrapperRect.height) && wrapperRect.height > 0 ? wrapperRect.height : 1;
+        const safeContentW = Number.isFinite(contentWidth) && contentWidth > 0 ? contentWidth : 1;
+        const safeContentH = Number.isFinite(contentHeight) && contentHeight > 0 ? contentHeight : 1;
+
+        const scale = sanitizeScale(Math.min(
+            (safeWrapperW * 0.8) / safeContentW,
+            (safeWrapperH * 0.8) / safeContentH,
             1.5
-        );
+        ), 1);
 
         panzoomInstance.moveTo(0, 0);
         setPanzoomScale(panzoomInstance, scale, { animate: true });
