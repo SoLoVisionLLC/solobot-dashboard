@@ -330,7 +330,8 @@ function connectToGateway() {
     const host = document.getElementById('gateway-host')?.value || GATEWAY_CONFIG.host;
     const port = parseInt(document.getElementById('gateway-port')?.value) || GATEWAY_CONFIG.port;
     const token = document.getElementById('gateway-token')?.value || GATEWAY_CONFIG.token;
-    const sessionKey = document.getElementById('gateway-session')?.value || GATEWAY_CONFIG.sessionKey || 'main';
+    const rawSessionKey = document.getElementById('gateway-session')?.value || GATEWAY_CONFIG.sessionKey || 'agent:main:main';
+    const sessionKey = (rawSessionKey === 'main') ? 'agent:main:main' : rawSessionKey;
 
     if (!host) {
         showToast('Please enter a gateway host in Settings', 'warning');

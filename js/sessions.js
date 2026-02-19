@@ -28,6 +28,11 @@ const AGENT_PERSONAS = {
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
+function normalizeDashboardSessionKey(key) {
+    if (!key || key === 'main') return 'agent:main:main';
+    return key;
+}
+
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
     // For agent sessions, show persona name + session suffix
@@ -42,7 +47,7 @@ function getFriendlySessionName(key) {
     return key;
 }
 
-let currentSessionName = 'main';
+let currentSessionName = 'agent:main:main';
 
 window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');

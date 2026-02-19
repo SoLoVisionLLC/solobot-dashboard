@@ -78,7 +78,7 @@ async function openSettingsModal() {
     if (hostEl) hostEl.value = GATEWAY_CONFIG.host || '';
     if (portEl) portEl.value = GATEWAY_CONFIG.port || 443;
     if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
-    if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
+    if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'agent:main:main';
 }
 
 function closeSettingsModal() {

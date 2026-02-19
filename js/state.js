@@ -49,8 +49,13 @@ const AGENT_COLORS = new Proxy({}, {
     }
 });
 
+function normalizeSessionKey(sessionKey) {
+    if (!sessionKey || sessionKey === 'main') return 'agent:main:main';
+    return sessionKey;
+}
+
 function chatStorageKey(sessionKey) {
-    const key = sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'main';
+    const key = normalizeSessionKey(sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
     return 'solobot-chat-' + key;
 }
 
@@ -179,20 +184,22 @@ const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
     token: localStorage.getItem('gateway_token') || '',
-    sessionKey: localStorage.getItem('gateway_session') || 'main',
+    sessionKey: normalizeSessionKey(localStorage.getItem('gateway_session') || 'agent:main:main'),
     maxMessages: 500
 };
 
 // Function to save gateway settings to both localStorage AND server state
 function saveGatewaySettings(host, port, token, sessionKey) {
+    const normalizedSessionKey = normalizeSessionKey(sessionKey);
+
     // Save to localStorage
     localStorage.setItem('gateway_host', host);
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
-    localStorage.setItem('gateway_session', sessionKey);
+    localStorage.setItem('gateway_session', normalizedSessionKey);
     
     // Also save to server state for persistence across deploys
-    state.gatewayConfig = { host, port, token, sessionKey };
+    state.gatewayConfig = { host, port, token, sessionKey: normalizedSessionKey };
     saveState('Gateway settings updated');
 }
 
@@ -205,7 +212,7 @@ function loadGatewaySettingsFromServer() {
         GATEWAY_CONFIG.host = state.gatewayConfig.host;
         GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
         GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
-        GATEWAY_CONFIG.sessionKey = state.gatewayConfig.sessionKey || 'main';
+        GATEWAY_CONFIG.sessionKey = normalizeSessionKey(state.gatewayConfig.sessionKey || 'agent:main:main');
         
         // Also save to localStorage for faster loading next time
         localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);

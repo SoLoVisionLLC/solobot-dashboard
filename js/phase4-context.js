@@ -176,7 +176,8 @@
         
         detectCurrentAgent() {
             // Try to detect from session key
-            const sessionKey = window.GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'main';
+            const rawSessionKey = window.GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main';
+            const sessionKey = (rawSessionKey === 'main') ? 'agent:main:main' : rawSessionKey;
             let agent = 'default';
             
             if (sessionKey.includes('dev')) agent = 'dev';
