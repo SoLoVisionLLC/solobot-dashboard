@@ -205,7 +205,8 @@ function saveGatewaySettings(host, port, token, sessionKey) {
 
 // Function to load gateway settings from server state (called after loadState)
 function loadGatewaySettingsFromServer() {
-    // console.log('[Dashboard] loadGatewaySettingsFromServer called'); // Keep quiet
+    // DEBUG
+    console.log('[loadGatewaySettingsFromServer] Called, state.gatewayConfig exists:', !!state.gatewayConfig);
     
     if (state.gatewayConfig && state.gatewayConfig.host) {
         // Always prefer server settings if they exist (server is source of truth)
@@ -216,21 +217,27 @@ function loadGatewaySettingsFromServer() {
         
         // Prefer localStorage sessionKey over server state (user's explicit choice wins)
         const localSession = localStorage.getItem('gateway_session');
+        const serverSession = state.gatewayConfig.sessionKey;
+        
+        console.log('[loadGatewaySettingsFromServer] localSession:', localSession);
+        console.log('[loadGatewaySettingsFromServer] serverSession:', serverSession);
+        
         if (localSession) {
             GATEWAY_CONFIG.sessionKey = normalizeSessionKey(localSession);
         } else {
-            GATEWAY_CONFIG.sessionKey = normalizeSessionKey(state.gatewayConfig.sessionKey || 'agent:main:main');
+            GATEWAY_CONFIG.sessionKey = normalizeSessionKey(serverSession || 'agent:main:main');
         }
+        
+        console.log('[loadGatewaySettingsFromServer] Final GATEWAY_CONFIG.sessionKey:', GATEWAY_CONFIG.sessionKey);
         
         // Also save to localStorage for faster loading next time
         localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
         localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
         localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
         localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
-        
-        // console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host); // Keep quiet
+    } else {
+        console.log('[loadGatewaySettingsFromServer] No state.gatewayConfig or host, skipping server merge');
     }
-    // No gateway config in server state - that's fine
 }
 
 // Gateway client instance
@@ -315,6 +322,9 @@ async function loadState() {
 
             console.log(`[loadState] Loaded from server: ${countTasks(vpsState)} tasks, ${(vpsState.activity || []).length} activity, v${vpsState._taskVersion || 0}`);
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
+
+            // NOW load gateway settings from server state (after state is populated)
+            loadGatewaySettingsFromServer();
             return;
         }
     } catch (e) {
@@ -331,6 +341,9 @@ async function loadState() {
     } else {
         initSampleData();
     }
+
+    // Still try to load gateway settings from server state even if VPS load failed
+    loadGatewaySettingsFromServer();
 }
 
 const SYNC_API = '/api/sync';
