@@ -47,9 +47,23 @@ function getFriendlySessionName(key) {
     return key;
 }
 
-let currentSessionName = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey)
-    ? GATEWAY_CONFIG.sessionKey
-    : 'agent:main:main';
+let currentSessionName;
+
+// Initialize currentSessionName from localStorage (browser is authoritative for session)
+function initCurrentSessionName() {
+    const localSession = localStorage.getItem('gateway_session');
+    const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
+    
+    // localStorage is authoritative (user's explicit choice)
+    currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+    
+    console.log('[initCurrentSessionName] localStorage:', localSession);
+    console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
+    console.log('[initCurrentSessionName] Final:', currentSessionName);
+}
+
+// Initialize immediately (before any other code uses it)
+initCurrentSessionName();
 
 window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');

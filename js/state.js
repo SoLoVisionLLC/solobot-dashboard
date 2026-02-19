@@ -178,8 +178,7 @@ function syncChatToServer(messages) {
 // Load persisted messages immediately
 loadPersistedMessages();
 
-// Gateway connection configuration - load from localStorage first, server state as fallback
-
+// Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
 const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
@@ -188,56 +187,23 @@ const GATEWAY_CONFIG = {
     maxMessages: 500
 };
 
-// Function to save gateway settings to both localStorage AND server state
+// Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
     const normalizedSessionKey = normalizeSessionKey(sessionKey);
-
-    // Save to localStorage
+    
+    // Save to localStorage only (sessionKey is browser/localStorage concern)
     localStorage.setItem('gateway_host', host);
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
     localStorage.setItem('gateway_session', normalizedSessionKey);
     
-    // Also save to server state for persistence across deploys
-    state.gatewayConfig = { host, port, token, sessionKey: normalizedSessionKey };
-    saveState('Gateway settings updated');
-}
-
-// Function to load gateway settings from server state (called after loadState)
-function loadGatewaySettingsFromServer() {
-    // DEBUG
-    console.log('[loadGatewaySettingsFromServer] Called, state.gatewayConfig exists:', !!state.gatewayConfig);
+    // Update config
+    GATEWAY_CONFIG.host = host;
+    GATEWAY_CONFIG.port = port;
+    GATEWAY_CONFIG.token = token;
+    GATEWAY_CONFIG.sessionKey = normalizedSessionKey;
     
-    if (state.gatewayConfig && state.gatewayConfig.host) {
-        // Always prefer server settings if they exist (server is source of truth)
-        // BUT: prefer localStorage for sessionKey (user's explicit choice takes precedence)
-        GATEWAY_CONFIG.host = state.gatewayConfig.host;
-        GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
-        GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
-        
-        // Prefer localStorage sessionKey over server state (user's explicit choice wins)
-        const localSession = localStorage.getItem('gateway_session');
-        const serverSession = state.gatewayConfig.sessionKey;
-        
-        console.log('[loadGatewaySettingsFromServer] localSession:', localSession);
-        console.log('[loadGatewaySettingsFromServer] serverSession:', serverSession);
-        
-        if (localSession) {
-            GATEWAY_CONFIG.sessionKey = normalizeSessionKey(localSession);
-        } else {
-            GATEWAY_CONFIG.sessionKey = normalizeSessionKey(serverSession || 'agent:main:main');
-        }
-        
-        console.log('[loadGatewaySettingsFromServer] Final GATEWAY_CONFIG.sessionKey:', GATEWAY_CONFIG.sessionKey);
-        
-        // Also save to localStorage for faster loading next time
-        localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
-        localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
-        localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
-        localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
-    } else {
-        console.log('[loadGatewaySettingsFromServer] No state.gatewayConfig or host, skipping server merge');
-    }
+    console.log('[saveGatewaySettings] Saved sessionKey:', normalizedSessionKey);
 }
 
 // Gateway client instance
@@ -322,9 +288,6 @@ async function loadState() {
 
             console.log(`[loadState] Loaded from server: ${countTasks(vpsState)} tasks, ${(vpsState.activity || []).length} activity, v${vpsState._taskVersion || 0}`);
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
-
-            // NOW load gateway settings from server state (after state is populated)
-            loadGatewaySettingsFromServer();
             return;
         }
     } catch (e) {
@@ -341,9 +304,6 @@ async function loadState() {
     } else {
         initSampleData();
     }
-
-    // Still try to load gateway settings from server state even if VPS load failed
-    loadGatewaySettingsFromServer();
 }
 
 const SYNC_API = '/api/sync';
