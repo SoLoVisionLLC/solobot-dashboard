@@ -209,10 +209,18 @@ function loadGatewaySettingsFromServer() {
     
     if (state.gatewayConfig && state.gatewayConfig.host) {
         // Always prefer server settings if they exist (server is source of truth)
+        // BUT: prefer localStorage for sessionKey (user's explicit choice takes precedence)
         GATEWAY_CONFIG.host = state.gatewayConfig.host;
         GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
         GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
-        GATEWAY_CONFIG.sessionKey = normalizeSessionKey(state.gatewayConfig.sessionKey || 'agent:main:main');
+        
+        // Prefer localStorage sessionKey over server state (user's explicit choice wins)
+        const localSession = localStorage.getItem('gateway_session');
+        if (localSession) {
+            GATEWAY_CONFIG.sessionKey = normalizeSessionKey(localSession);
+        } else {
+            GATEWAY_CONFIG.sessionKey = normalizeSessionKey(state.gatewayConfig.sessionKey || 'agent:main:main');
+        }
         
         // Also save to localStorage for faster loading next time
         localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
