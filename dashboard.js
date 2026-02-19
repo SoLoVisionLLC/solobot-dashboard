@@ -80,8 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const model = localStorage.getItem('selected_model') || 'claude-3-opus';
     console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
     
-    // Load gateway settings from server state if localStorage is empty
-    loadGatewaySettingsFromServer();
+    // Gateway settings are now loaded from localStorage only (see state.js)
     
     // Request browser notification permission
     requestNotificationPermission();
