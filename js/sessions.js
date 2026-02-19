@@ -904,7 +904,21 @@ window.startNewAgentSession = async function(agentId) {
     // Switch gateway to new session
     currentSessionName = sessionKey;
     GATEWAY_CONFIG.sessionKey = sessionKey;
-    localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
+    // Persist for reload - save to BOTH localStorage AND server state
+    localStorage.setItem('gateway_session', sessionKey);
+    // Also update server state so refresh doesn't revert to stale cached session
+    if (typeof saveGatewaySettings === 'function') {
+        saveGatewaySettings(
+            GATEWAY_CONFIG.host,
+            GATEWAY_CONFIG.port,
+            GATEWAY_CONFIG.token,
+            sessionKey
+        );
+    } else if (typeof state !== 'undefined' && state.gatewayConfig) {
+        // Fallback: update server state directly if saveGatewaySettings unavailable
+        state.gatewayConfig.sessionKey = sessionKey;
+        if (typeof saveState === 'function') saveState('Updated session for reload');
+    }
 
     // Update session input field
     const sessionInput = document.getElementById('gateway-session');
