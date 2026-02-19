@@ -33,6 +33,11 @@ function normalizeDashboardSessionKey(key) {
     return key;
 }
 
+function normalizeDashboardSessionKey(key) {
+    if (!key || key === 'main') return 'agent:main:main';
+    return key;
+}
+
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
     // For agent sessions, show persona name + session suffix
@@ -47,7 +52,9 @@ function getFriendlySessionName(key) {
     return key;
 }
 
-let currentSessionName = 'agent:main:main';
+let currentSessionName = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey)
+    ? GATEWAY_CONFIG.sessionKey
+    : 'agent:main:main';
 
 window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');
@@ -193,65 +200,53 @@ async function fetchSessions() {
     if (_fetchSessionsInFlight) { _fetchSessionsQueued = true; return availableSessions; }
     _fetchSessionsInFlight = true;
 
-    // Preserve locally-added sessions that might not be in gateway yet
-    const localSessions = availableSessions.filter(s => s.sessionId === null);
-    
-    // Try gateway first if connected (direct RPC call)
-    if (gateway && gateway.isConnected()) {
-        try {
-            // Fetch all sessions without label filter
-            // Note: gateway's label filter checks entry.label but dashboard sessions have origin.label
-            // Don't pass label parameter at all - empty string fails validation
-            const result = await gateway.listSessions({});
-            let sessions = result?.sessions || [];
-
-            // Show all sessions from gateway (main + DMs + dashboard)
-
-            // Map gateway response to expected format
-            // Always use friendly name for display (strips agent:main: prefix)
-            const gatewaySessions = sessions.map(s => {
-                const friendlyName = getFriendlySessionName(s.key);
-                return {
-                    key: s.key,
-                    name: friendlyName,
-                    displayName: friendlyName,  // Always use friendly name, not gateway's displayName
-                    updatedAt: s.updatedAt,
-                    totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
-                    model: s.model || 'unknown',
-                    sessionId: s.sessionId
-                };
-            });
-            
-            // Merge: gateway sessions + local sessions not in gateway
-            const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
-            const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
-            availableSessions = [...gatewaySessions, ...mergedLocalSessions];
-
-            sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
-            
-            // If current session is a subagent, determine the correct agent from its label
-            handleSubagentSessionAgent();
-            
-            populateSessionDropdown();
-            if (typeof updateSidebarAgentsFromSessions === 'function') {
-                try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
-            }
-            // Subscribe to all sessions for cross-session notifications
-            subscribeToAllSessions();
-            return availableSessions;
-        } catch (e) {
-            console.warn('[Dashboard] Gateway sessions.list failed, falling back to server:', e.message);
-        }
-    }
-
-    // Fallback to server API
     try {
+        // Preserve locally-added sessions that might not be in gateway yet
+        const localSessions = availableSessions.filter(s => s.sessionId === null);
+
+        // Try gateway first if connected (direct RPC call)
+        if (gateway && gateway.isConnected()) {
+            try {
+                const result = await gateway.listSessions({});
+                let sessions = result?.sessions || [];
+
+                const gatewaySessions = sessions.map(s => {
+                    const friendlyName = getFriendlySessionName(s.key);
+                    return {
+                        key: s.key,
+                        name: friendlyName,
+                        displayName: friendlyName,
+                        updatedAt: s.updatedAt,
+                        totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                        model: s.model || 'unknown',
+                        sessionId: s.sessionId
+                    };
+                });
+
+                const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
+                const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
+                availableSessions = [...gatewaySessions, ...mergedLocalSessions];
+
+                sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
+
+                handleSubagentSessionAgent();
+                populateSessionDropdown();
+                if (typeof updateSidebarAgentsFromSessions === 'function') {
+                    try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
+                }
+                subscribeToAllSessions();
+                return availableSessions;
+            } catch (e) {
+                console.warn('[Dashboard] Gateway sessions.list failed, falling back to server:', e.message);
+            }
+        }
+
+        // Fallback to server API
         const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const rawServerSessions = data.sessions || [];
-        
-        // Map server sessions to expected format (same as gateway mapping)
+
         const serverSessions = rawServerSessions.map(s => {
             const friendlyName = getFriendlySessionName(s.key);
             return {
@@ -264,29 +259,25 @@ async function fetchSessions() {
                 sessionId: s.sessionId
             };
         });
-        
-        // Merge: server sessions + local sessions not in server
+
         const serverKeys = new Set(serverSessions.map(s => s.key));
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
         availableSessions = [...serverSessions, ...mergedLocalSessions];
-        
+
         sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
-        
-        // If current session is a subagent, determine the correct agent from its label
+
         handleSubagentSessionAgent();
-        
         populateSessionDropdown();
         if (typeof updateSidebarAgentsFromSessions === 'function') {
             try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
         }
-        _fetchSessionsInFlight = false;
-        if (_fetchSessionsQueued) { _fetchSessionsQueued = false; setTimeout(fetchSessions, 100); }
         return availableSessions;
     } catch (e) {
         console.error('[Dashboard] Failed to fetch sessions:', e);
+        return [];
+    } finally {
         _fetchSessionsInFlight = false;
         if (_fetchSessionsQueued) { _fetchSessionsQueued = false; setTimeout(fetchSessions, 100); }
-        return [];
     }
 }
 
@@ -435,6 +426,7 @@ window.deleteSession = async function(sessionKey, sessionName) {
 }
 
 window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
+    sessionKey = normalizeDashboardSessionKey(sessionKey);
     toggleChatPageSessionMenu();
     
     // Clear unread notifications for this session
@@ -535,6 +527,7 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
 // Usage: window.goToSession('agent:main:subagent:abc123')
 // Or via URL: ?session=agent:main:subagent:abc123
 window.goToSession = async function(sessionKey) {
+    sessionKey = normalizeDashboardSessionKey(sessionKey);
     if (!sessionKey) {
         showToast('No session key provided', 'warning');
         return;
@@ -672,12 +665,15 @@ function initGateway() {
             // On reconnect, the gateway client reports whatever sessionKey it has.
             // If the user switched sessions while disconnected, currentSessionName
             // is authoritative — re-sync the gateway client to match.
-            const intendedSession = currentSessionName || sessionKey;
+                    const intendedSession = normalizeDashboardSessionKey(
+                GATEWAY_CONFIG.sessionKey || currentSessionName || sessionKey
+            );
             if (sessionKey !== intendedSession) {
                 sessLog(`[Dashboard] Reconnect mismatch: gateway=${sessionKey}, intended=${intendedSession}. Re-syncing gateway.`);
                 if (gateway) gateway.setSessionKey(intendedSession);
             }
             GATEWAY_CONFIG.sessionKey = intendedSession;
+            currentSessionName = intendedSession;
             
             // Fetch live model config from gateway (populates dropdowns),
             // then apply per-session override (authoritative model display).

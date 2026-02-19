@@ -345,21 +345,8 @@ class GatewayClient {
         const normalizedKey = normalizeSessionKey(sessionKey);
         this._subscribedSessions.add(normalizedKey.toLowerCase());
 
-        // Operator clients are not authorized for node.event on newer gateways.
-        // Keep chat functional without creating INVALID_REQUEST spam.
-        if (this._nodeEventUnsupported) return;
-
-        this._request('node.event', {
-            event: 'chat.subscribe',
-            payload: { sessionKey: normalizedKey }
-        }).catch((err) => {
-            const msg = String(err?.message || '');
-            if (msg.includes('unauthorized role') || msg.includes('missing scope')) {
-                this._nodeEventUnsupported = true;
-                gwWarn('[Gateway] node.event chat.subscribe not allowed for operator role; disabling further subscribe attempts');
-            }
-            // Subscription may fail but chat events for active session still work.
-        });
+        // Disabled for operator-role UI clients on current gateway policy.
+        // Prevents repeated unauthorized warnings and reconnect noise.
     }
 
     subscribeToAllSessions(sessionKeys) {
@@ -614,7 +601,7 @@ class GatewayClient {
         });
     }
 
-    sendMessage(text) {
+    async sendMessage(text) {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));
         }
@@ -631,20 +618,30 @@ class GatewayClient {
         gwLog(`[Gateway]    Model: ${model}`);
         gwLog(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
-        return this._request('chat.send', params).then(result => {
+        try {
+            const result = await this._request('chat.send', params);
             gwLog(`[Gateway] ✅ Message sent, runId: ${result?.runId || 'none'}`);
             return result;
-        }).catch(err => {
-            console.error(`[Gateway] ❌ Failed to send message: ${err.message}`);
+        } catch (err) {
+            const msg = String(err?.message || '');
+            if (!this._identityRecoveryAttempted && /user not found/i.test(msg)) {
+                this._identityRecoveryAttempted = true;
+                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch {}
+                this.connected = false;
+                this.socket?.close();
+                this._scheduleReconnect();
+                throw new Error('User identity missing; reconnecting and regenerating identity. Please retry.');
+            }
+            console.error(`[Gateway] ❌ Failed to send message: ${msg}`);
             throw err;
-        });
+        }
     }
 
     sendMessageWithImage(text, imageDataUrl) {
         return this.sendMessageWithImages(text, [imageDataUrl]);
     }
 
-    sendMessageWithImages(text, imageDataUrls) {
+    async sendMessageWithImages(text, imageDataUrls) {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));
         }
@@ -685,7 +682,20 @@ class GatewayClient {
         const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
         gwLog(`[Gateway] Sending with ${model}`);
 
-        return this._request('chat.send', params);
+        try {
+            return await this._request('chat.send', params);
+        } catch (err) {
+            const msg = String(err?.message || '');
+            if (!this._identityRecoveryAttempted && /user not found/i.test(msg)) {
+                this._identityRecoveryAttempted = true;
+                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch {}
+                this.connected = false;
+                this.socket?.close();
+                this._scheduleReconnect();
+                throw new Error('User identity missing; reconnecting and regenerating identity. Please retry image send.');
+            }
+            throw err;
+        }
     }
 
     loadHistory() {
