@@ -14,6 +14,11 @@ const GATEWAY_PROTOCOL_VERSION = 3;
 
 const DEVICE_IDENTITY_KEY = 'openclaw-device-identity';
 
+function normalizeSessionKey(key) {
+    if (!key || key === 'main') return 'agent:main:main';
+    return key;
+}
+
 function _base64UrlEncode(buf) {
     // buf: Uint8Array → base64url string (no padding)
     const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
@@ -121,11 +126,15 @@ class GatewayClient {
     constructor(options = {}) {
         this.socket = null;
         this.connected = false;
-        this.sessionKey = options.sessionKey || 'main';
+        this.sessionKey = normalizeSessionKey(options.sessionKey || 'agent:main:main');
         this.pending = new Map();
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.desiredConnection = null;
+        this._reconnectTimer = null;
+        this._isConnecting = false;
+        this._nodeEventUnsupported = false;
+        this._identityRecoveryAttempted = false;
 
         // Callbacks
         this.onConnected = options.onConnected || (() => {});
@@ -149,12 +158,19 @@ class GatewayClient {
             this.socket = null;
             this.connected = false;
         }
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
         this.desiredConnection = { host, port, token, password };
         this._doConnect();
     }
 
     _doConnect() {
         if (!this.desiredConnection) return;
+        if (this._isConnecting) return;
+
+        this._isConnecting = true;
 
         const { host, port, token, password } = this.desiredConnection;
         const cleanHost = host.replace(/^(wss?|https?):\/\//, '');
@@ -168,6 +184,7 @@ class GatewayClient {
             this.socket = new WebSocket(url);
             this._setupListeners(token, password);
         } catch (err) {
+            this._isConnecting = false;
             console.error('[Gateway] Connection failed:', err);
             this.onError(`Connection failed: ${err.message}`);
             this._scheduleReconnect();
@@ -179,6 +196,7 @@ class GatewayClient {
         this._connectSent = false;
 
         this.socket.onopen = () => {
+            this._isConnecting = false;
             // Don't send connect yet — wait for connect.challenge event with nonce
             gwLog('[Gateway] Socket open, waiting for connect.challenge...');
         };
@@ -201,11 +219,13 @@ class GatewayClient {
         };
 
         this.socket.onerror = (err) => {
+            this._isConnecting = false;
             console.error('[Gateway] WebSocket error');
             this.onError('WebSocket error');
         };
 
         this.socket.onclose = (event) => {
+            this._isConnecting = false;
             gwLog(`[Gateway] Disconnected: ${event.code}`);
             this.connected = false;
             this.onDisconnected(event.reason || 'Connection closed');
@@ -281,6 +301,7 @@ class GatewayClient {
         this._request('connect', params).then(result => {
             this.connected = true;
             this.reconnectAttempts = 0;
+            this._identityRecoveryAttempted = false;
 
             const serverName = result?.server?.host || 'moltbot';
             gwLog(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
@@ -302,19 +323,42 @@ class GatewayClient {
             this._subscribeToSession(this.sessionKey);
 
         }).catch(err => {
-            console.error('[Gateway] Auth failed:', err.message);
-            this.onError(`Auth failed: ${err.message}`);
+            const errMsg = String(err?.message || 'Auth failed');
+            console.error('[Gateway] Auth failed:', errMsg);
+
+            // Recover once from stale identity/token state observed as "User not found"
+            if (!this._identityRecoveryAttempted && /user not found/i.test(errMsg)) {
+                this._identityRecoveryAttempted = true;
+                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch {}
+                this.onError('Auth user missing; regenerating device identity and reconnecting...');
+                this.socket?.close();
+                this._scheduleReconnect();
+                return;
+            }
+
+            this.onError(`Auth failed: ${errMsg}`);
             this.socket?.close();
         });
     }
 
     _subscribeToSession(sessionKey) {
-        this._subscribedSessions.add(sessionKey.toLowerCase());
+        const normalizedKey = normalizeSessionKey(sessionKey);
+        this._subscribedSessions.add(normalizedKey.toLowerCase());
+
+        // Operator clients are not authorized for node.event on newer gateways.
+        // Keep chat functional without creating INVALID_REQUEST spam.
+        if (this._nodeEventUnsupported) return;
+
         this._request('node.event', {
             event: 'chat.subscribe',
-            payload: { sessionKey }
-        }).catch(() => {
-            // Subscription may fail but chat events still work
+            payload: { sessionKey: normalizedKey }
+        }).catch((err) => {
+            const msg = String(err?.message || '');
+            if (msg.includes('unauthorized role') || msg.includes('missing scope')) {
+                this._nodeEventUnsupported = true;
+                gwWarn('[Gateway] node.event chat.subscribe not allowed for operator role; disabling further subscribe attempts');
+            }
+            // Subscription may fail but chat events for active session still work.
         });
     }
 
@@ -577,7 +621,7 @@ class GatewayClient {
 
         const params = {
             message: text,
-            sessionKey: this.sessionKey,
+            sessionKey: normalizeSessionKey(this.sessionKey),
             idempotencyKey: crypto.randomUUID()
         };
 
@@ -629,7 +673,7 @@ class GatewayClient {
 
         const params = {
             message: text || 'Attached image',
-            sessionKey: this.sessionKey,
+            sessionKey: normalizeSessionKey(this.sessionKey),
             idempotencyKey: crypto.randomUUID(),
             attachments: attachments
         };
@@ -656,10 +700,11 @@ class GatewayClient {
     }
 
     setSessionKey(key) {
-        gwLog(`[Gateway] Switching session from "${this.sessionKey}" to "${key}"`);
-        this.sessionKey = key;
+        const normalized = normalizeSessionKey(key);
+        gwLog(`[Gateway] Switching session from "${this.sessionKey}" to "${normalized}"`);
+        this.sessionKey = normalized;
         if (this.connected) {
-            this._subscribeToSession(key);
+            this._subscribeToSession(normalized);
         }
     }
 
@@ -696,6 +741,11 @@ class GatewayClient {
     disconnect() {
         this.desiredConnection = null;
         this.connected = false;
+        this._isConnecting = false;
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
         if (this.socket) {
             this.socket.close(1000, 'User disconnect');
             this.socket = null;
@@ -769,7 +819,11 @@ class GatewayClient {
         const delay = Math.min(8000, 350 * Math.pow(1.7, this.reconnectAttempts));
         gwLog(`[Gateway] Reconnecting in ${Math.round(delay)}ms`);
 
-        setTimeout(() => this._doConnect(), delay);
+        if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = setTimeout(() => {
+            this._reconnectTimer = null;
+            this._doConnect();
+        }, delay);
     }
 
     isConnected() {
