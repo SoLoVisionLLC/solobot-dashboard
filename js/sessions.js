@@ -33,11 +33,6 @@ function normalizeDashboardSessionKey(key) {
     return key;
 }
 
-function normalizeDashboardSessionKey(key) {
-    if (!key || key === 'main') return 'agent:main:main';
-    return key;
-}
-
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
     // For agent sessions, show persona name + session suffix
@@ -113,6 +108,8 @@ document.addEventListener('click', function(e) {
 // Session Management
 let availableSessions = [];
 let currentAgentId = 'main'; // Track which agent's sessions we're viewing
+let _switchInFlight = false;
+let _queuedSessionSwitch = null;
 
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
@@ -427,32 +424,39 @@ window.deleteSession = async function(sessionKey, sessionName) {
 
 window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
-    toggleChatPageSessionMenu();
-    
-    // Clear unread notifications for this session
-    clearUnreadForSession(sessionKey);
-    
-    if (sessionKey === currentSessionName && state.chat?.messages?.length > 0) {
-        showToast('Already on this session', 'info');
+
+    // Last-write-wins when users click agents quickly.
+    if (_switchInFlight) {
+        _queuedSessionSwitch = sessionKey;
         return;
     }
-    
-    // If session matches but chat is empty, allow re-switch to reload content
-    if (sessionKey === currentSessionName) {
-        sessLog(`[Dashboard] Re-switching to ${sessionKey} (chat was empty, reloading)`);
-    }
-    
-    showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
-    
-    // FIRST: nuke all rendering state synchronously — before any async work
-    streamingText = '';
-    _streamingSessionKey = '';
-    isProcessing = false;
-    state.chat.messages = [];
-    renderChat();
-    renderChatPage();
-    
+    _switchInFlight = true;
+
     try {
+        toggleChatPageSessionMenu();
+
+        // Clear unread notifications for this session
+        clearUnreadForSession(sessionKey);
+
+        if (sessionKey === currentSessionName && state.chat?.messages?.length > 0) {
+            showToast('Already on this session', 'info');
+            return;
+        }
+
+        if (sessionKey === currentSessionName) {
+            sessLog(`[Dashboard] Re-switching to ${sessionKey} (chat was empty, reloading)`);
+        }
+
+        showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
+
+        // FIRST: nuke all rendering state synchronously — before any async work
+        streamingText = '';
+        _streamingSessionKey = '';
+        isProcessing = false;
+        state.chat.messages = [];
+        renderChat();
+        renderChatPage();
+
         // 1. Save current chat and cache it for fast switching back
         await saveCurrentChat();
         cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
@@ -464,10 +468,10 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         // 3. Update session config and input field
         currentSessionName = sessionKey;
         GATEWAY_CONFIG.sessionKey = sessionKey;
-        localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
+        localStorage.setItem('gateway_session', sessionKey);
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
-        
+
         // 3a. Update current agent ID from session key
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
@@ -489,14 +493,13 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         if (gateway && gateway.isConnected()) {
             gateway.setSessionKey(sessionKey);
         } else if (gateway) {
-            // Not connected — do a full connect
             connectToGateway();
         }
 
         // 6. Load history + model override in parallel (not sequential)
         const historyPromise = loadSessionHistory(sessionKey);
         const modelPromise = applySessionModelOverride(sessionKey).catch(() => {});
-        
+
         // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
@@ -505,7 +508,7 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         }
         populateSessionDropdown();
 
-        // Wait for history (the critical path)
+        // Wait for history (critical path)
         await historyPromise;
         await modelPromise;
 
@@ -520,6 +523,15 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
+    } finally {
+        _switchInFlight = false;
+        if (_queuedSessionSwitch && _queuedSessionSwitch !== currentSessionName) {
+            const next = _queuedSessionSwitch;
+            _queuedSessionSwitch = null;
+            setTimeout(() => window.switchToSession(next), 0);
+        } else {
+            _queuedSessionSwitch = null;
+        }
     }
 }
 
