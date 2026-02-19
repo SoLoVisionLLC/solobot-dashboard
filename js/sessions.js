@@ -109,7 +109,7 @@ document.addEventListener('click', function(e) {
 let availableSessions = [];
 let currentAgentId = 'main'; // Track which agent's sessions we're viewing
 let _switchInFlight = false;
-let _queuedSessionSwitch = null;
+let _sessionSwitchQueue = []; // Queue array for rapid switches
 
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
@@ -424,12 +424,32 @@ window.deleteSession = async function(sessionKey, sessionName) {
 
 window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
+    const isExplicitClick = true; // Track this as user-initiated
 
-    // Last-write-wins when users click agents quickly.
+    // Enqueue switch request (FIFO)
+    _sessionSwitchQueue.push({ sessionKey, isExplicitClick });
+    
+    // If switch already in progress, queue will be processed after current completes
     if (_switchInFlight) {
-        _queuedSessionSwitch = sessionKey;
         return;
     }
+    
+    // Process queue
+    while (_sessionSwitchQueue.length > 0) {
+        const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
+        
+        if (nextKey === currentSessionName) {
+            // Already on this session, skip but update UI
+            populateSessionDropdown();
+            continue;
+        }
+        
+        await executeSessionSwitch(nextKey);
+    }
+}
+
+// Core switch execution (no queue handling)
+async function executeSessionSwitch(sessionKey) {
     _switchInFlight = true;
 
     try {
@@ -437,15 +457,6 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
 
         // Clear unread notifications for this session
         clearUnreadForSession(sessionKey);
-
-        if (sessionKey === currentSessionName && state.chat?.messages?.length > 0) {
-            showToast('Already on this session', 'info');
-            return;
-        }
-
-        if (sessionKey === currentSessionName) {
-            sessLog(`[Dashboard] Re-switching to ${sessionKey} (chat was empty, reloading)`);
-        }
 
         showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
 
@@ -466,6 +477,7 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         sessLog(`[Dashboard] Session version now ${sessionVersion}`);
 
         // 3. Update session config and input field
+        const oldSessionName = currentSessionName;
         currentSessionName = sessionKey;
         GATEWAY_CONFIG.sessionKey = sessionKey;
         localStorage.setItem('gateway_session', sessionKey);
@@ -476,6 +488,10 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
             currentAgentId = agentMatch[1];
+            // Force sync UI immediately (before async work)
+            if (typeof forceSyncActiveAgent === 'function') {
+                forceSyncActiveAgent(agentMatch[1]);
+            }
         }
 
         // 4. Clear current chat display
@@ -525,13 +541,6 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         showToast('Failed to switch session', 'error');
     } finally {
         _switchInFlight = false;
-        if (_queuedSessionSwitch && _queuedSessionSwitch !== currentSessionName) {
-            const next = _queuedSessionSwitch;
-            _queuedSessionSwitch = null;
-            setTimeout(() => window.switchToSession(next), 0);
-        } else {
-            _queuedSessionSwitch = null;
-        }
     }
 }
 

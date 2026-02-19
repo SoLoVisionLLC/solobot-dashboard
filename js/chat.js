@@ -1581,6 +1581,25 @@ function setActiveSidebarAgent(agentId) {
     }
 }
 
+// Force sync active state (for rapid switches)
+function forceSyncActiveAgent(agentId) {
+    const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
+    agentEls.forEach(el => {
+        const elAgent = el.getAttribute('data-agent');
+        if (agentId && elAgent === agentId) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
+    });
+    
+    currentAgentId = agentId;
+    const agentNameEl = document.getElementById('chat-page-agent-name');
+    if (agentNameEl) {
+        agentNameEl.textContent = getAgentLabel(agentId);
+    }
+}
+
 // Track last-used session per agent (persisted to localStorage)
 function getLastAgentSession(agentId) {
     try {
