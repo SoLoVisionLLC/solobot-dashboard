@@ -1620,17 +1620,6 @@ function setupSidebarAgents() {
     const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
     if (!agentEls.length) return;
 
-    const hasChatTextSelection = () => {
-        const selection = window.getSelection && window.getSelection();
-        if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
-        const chatContainer = document.getElementById('chat-page-messages') || document.getElementById('chat-messages');
-        if (!chatContainer) return false;
-        return (
-            (selection.anchorNode && chatContainer.contains(selection.anchorNode)) ||
-            (selection.focusNode && chatContainer.contains(selection.focusNode))
-        );
-    };
-
     const activateAgentFromEl = (el) => {
         const agentId = el.getAttribute('data-agent');
         if (!agentId) return;
@@ -1658,23 +1647,35 @@ function setupSidebarAgents() {
         if (el._agentClickBound) return;
         el._agentClickBound = true;
 
-        // Repro fix: when chat text is highlighted, first click can be consumed by deselection.
-        // Use mousedown to force switch intent in that state.
+        // PATCH: Always handle mousedown to prevent selection from blocking agent switch
+        // This ensures sidebar clicks work even when chat text is highlighted
         el.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return;
-            if (!hasChatTextSelection()) return;
+            if (e.button !== 0) return;  // Left click only
+            
+            // Clear any text selection to prevent interference
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed) {
+                try { selection.removeAllRanges(); } catch {}
+            }
+            
+            // Always prevent default to avoid any selection-related interference
             e.preventDefault();
             e.stopPropagation();
-            el._handledBySelectionMouseDown = true;
-            try { window.getSelection()?.removeAllRanges(); } catch {}
+            
+            // Mark as handled so click doesn't double-fire
+            el._handledByMousedown = true;
+            
+            // Execute switch
             activateAgentFromEl(el);
         });
 
-        el.addEventListener('click', () => {
-            if (el._handledBySelectionMouseDown) {
-                el._handledBySelectionMouseDown = false;
+        el.addEventListener('click', (e) => {
+            // Skip if mousedown already handled it
+            if (el._handledByMousedown) {
+                el._handledByMousedown = false;
                 return;
             }
+            // Handle normal click (no selection case)
             activateAgentFromEl(el);
         });
     });
