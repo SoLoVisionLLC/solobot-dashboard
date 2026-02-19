@@ -1620,6 +1620,35 @@ function setupSidebarAgents() {
     const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
     if (!agentEls.length) return;
 
+    const hasChatTextSelection = () => {
+        const selection = window.getSelection && window.getSelection();
+        if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
+        const chatContainer = document.getElementById('chat-page-messages') || document.getElementById('chat-messages');
+        if (!chatContainer) return false;
+        return (
+            (selection.anchorNode && chatContainer.contains(selection.anchorNode)) ||
+            (selection.focusNode && chatContainer.contains(selection.focusNode))
+        );
+    };
+
+    const activateAgentFromEl = (el) => {
+        const agentId = el.getAttribute('data-agent');
+        if (!agentId) return;
+
+        // IMMEDIATE UI feedback - show active state before switch completes
+        forceSyncActiveAgent(agentId);
+
+        // Update current agent ID first so dropdown filters correctly
+        currentAgentId = agentId;
+
+        // Restore last session for this agent, or default to main
+        const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
+        showPage('chat');
+
+        // Fire-and-forget switch (queue in sessions.js handles ordering)
+        switchToSession(sessionKey).catch(() => {});
+    };
+
     agentEls.forEach(el => {
         // If text gets truncated in the UI, give a native tooltip with the full name.
         const label = el.querySelector('.sidebar-item-text');
@@ -1628,25 +1657,25 @@ function setupSidebarAgents() {
         // Only add listener once per element
         if (el._agentClickBound) return;
         el._agentClickBound = true;
-        el.addEventListener('click', async () => {
-            const agentId = el.getAttribute('data-agent');
-            if (!agentId) return;
-            
-            // IMMEDIATE UI feedback - show active state before switch completes
-            forceSyncActiveAgent(agentId);
-            
-            // Update current agent ID first so dropdown filters correctly
-            currentAgentId = agentId;
-            
-            // Restore last session for this agent, or default to main
-            const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
-            showPage('chat');
-            
-            // Fire-and-forget switch (don't await - queue handles ordering)
-            // This prevents the click handler from blocking and allows rapid clicks
-            switchToSession(sessionKey).then(() => {
-                // Optional: post-switch validation or cleanup
-            });
+
+        // Repro fix: when chat text is highlighted, first click can be consumed by deselection.
+        // Use mousedown to force switch intent in that state.
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (!hasChatTextSelection()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            el._handledBySelectionMouseDown = true;
+            try { window.getSelection()?.removeAllRanges(); } catch {}
+            activateAgentFromEl(el);
+        });
+
+        el.addEventListener('click', () => {
+            if (el._handledBySelectionMouseDown) {
+                el._handledBySelectionMouseDown = false;
+                return;
+            }
+            activateAgentFromEl(el);
         });
     });
 
