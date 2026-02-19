@@ -16,6 +16,24 @@
                                     >Disconnected</span>
                                 </div>
                                 <div class="chat-page-actions">
+                                    <!-- Chat Search Input -->
+                                    <div
+                                        class="chat-search-wrapper"
+                                        style="position: relative; display: flex; align-items: center;"
+                                    >
+                                        <input
+                                            type="text"
+                                            id="chat-search"
+                                            placeholder="Search chat..."
+                                            class="input chat-search-input"
+                                            style="width: 180px; font-size: 12px; padding: 6px 10px 6px 28px; height: 32px; border-radius: 6px; transition: width 0.2s ease;"
+                                            onfocus="this.style.width='240px'"
+                                            onblur="this.style.width='180px'"
+                                        >
+                                        <span
+                                            style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; opacity: 0.5; pointer-events: none;"
+                                        >🔍</span>
+                                    </div>
                                     <div
                                         class="session-selector-wrapper"
                                         style="position: relative; display: inline-flex; align-items: center; margin-right: 8px"

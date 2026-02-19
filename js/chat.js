@@ -1301,6 +1301,7 @@ function createChatPageMessage(msg) {
     // Message wrapper
     const wrapper = document.createElement('div');
     wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
+    wrapper.setAttribute('data-msg-id', msg.id || '');
     
     // Avatar (for bot and user messages, not system)
     if (!isSystem) {
@@ -1691,5 +1692,104 @@ async function sendChatPageMessage() {
         renderChatPage();
     }
 }
+
+// ========================================
+// Chat Search Functionality
+// ========================================
+
+let chatSearchQuery = '';
+let chatSearchResults = [];
+let chatSearchCurrentIndex = -1;
+
+function initChatSearch() {
+    const searchInput = document.getElementById('chat-search');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        chatSearchQuery = e.target.value.trim().toLowerCase();
+        performChatSearch();
+    });
+
+    // Keyboard navigation within results
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (chatSearchResults.length > 0) {
+                // Navigate to next/previous result
+                if (e.shiftKey) {
+                    chatSearchCurrentIndex = (chatSearchCurrentIndex - 1 + chatSearchResults.length) % chatSearchResults.length;
+                } else {
+                    chatSearchCurrentIndex = (chatSearchCurrentIndex + 1) % chatSearchResults.length;
+                }
+                scrollToChatSearchResult(chatSearchResults[chatSearchCurrentIndex]);
+            }
+        } else if (e.key === 'Escape') {
+            searchInput.blur();
+        }
+    });
+}
+
+function performChatSearch() {
+    if (!chatSearchQuery) {
+        // Clear any search highlights
+        clearChatSearchHighlights();
+        chatSearchResults = [];
+        chatSearchCurrentIndex = -1;
+        return;
+    }
+
+    const messages = state.chat?.messages || [];
+    chatSearchResults = messages.filter(msg => {
+        const text = msg.text?.toLowerCase() || '';
+        return text.includes(chatSearchQuery);
+    });
+
+    if (chatSearchResults.length > 0) {
+        chatSearchCurrentIndex = 0;
+        scrollToChatSearchResult(chatSearchResults[0]);
+        showToast(`Found ${chatSearchResults.length} match${chatSearchResults.length !== 1 ? 'es' : ''}`, 'info', 2000);
+    } else {
+        showToast('No matches found', 'warning', 2000);
+    }
+}
+
+function scrollToChatSearchResult(msg) {
+    const container = document.getElementById('chat-page-messages');
+    if (!container || !msg) return;
+
+    // Find the message element
+    const msgEl = container.querySelector(`[data-msg-id="${msg.id}"]`);
+    if (msgEl) {
+        msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        highlightChatSearchResult(msgEl);
+    }
+}
+
+function highlightChatSearchResult(element) {
+    // Remove previous highlights
+    clearChatSearchHighlights();
+    // Add highlight class
+    element.classList.add('chat-search-highlight');
+    // Remove highlight after 3 seconds
+    setTimeout(() => {
+        element.classList.remove('chat-search-highlight');
+    }, 3000);
+}
+
+function clearChatSearchHighlights() {
+    const container = document.getElementById('chat-page-messages');
+    if (container) {
+        container.querySelectorAll('.chat-search-highlight').forEach(el => {
+            el.classList.remove('chat-search-highlight');
+        });
+    }
+}
+
+// Initialize search on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
+});
+
+
 
 
