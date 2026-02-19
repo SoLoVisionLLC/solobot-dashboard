@@ -424,27 +424,30 @@ window.deleteSession = async function(sessionKey, sessionName) {
 
 window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
-    const isExplicitClick = true; // Track this as user-initiated
-
+    
     // Enqueue switch request (FIFO)
-    _sessionSwitchQueue.push({ sessionKey, isExplicitClick });
+    _sessionSwitchQueue.push({ sessionKey, timestamp: Date.now() });
     
     // If switch already in progress, queue will be processed after current completes
     if (_switchInFlight) {
         return;
     }
     
-    // Process queue
+    // Process queue until empty (defeats rapid clicks by processing all)
     while (_sessionSwitchQueue.length > 0) {
         const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
         
+        // Skip if already on this session
         if (nextKey === currentSessionName) {
-            // Already on this session, skip but update UI
             populateSessionDropdown();
             continue;
         }
         
         await executeSessionSwitch(nextKey);
+        
+        // Check if a newer request superseded this one
+        // If queue has items that came in AFTER we started this switch, process them
+        // If queue is empty or only has our own re-submit, we're done
     }
 }
 
@@ -506,9 +509,13 @@ async function executeSessionSwitch(sessionKey) {
         }
 
         // 5. Switch gateway session key (no disconnect/reconnect needed)
+        // Add small delay to allow gateway state to stabilize
+        await new Promise(r => setTimeout(r, 50));
+        
         if (gateway && gateway.isConnected()) {
             gateway.setSessionKey(sessionKey);
         } else if (gateway) {
+            sessLog(`[Dashboard] Gateway not connected, initiating connect...`);
             connectToGateway();
         }
 

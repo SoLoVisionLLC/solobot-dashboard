@@ -1632,14 +1632,21 @@ function setupSidebarAgents() {
             const agentId = el.getAttribute('data-agent');
             if (!agentId) return;
             
+            // IMMEDIATE UI feedback - show active state before switch completes
+            forceSyncActiveAgent(agentId);
+            
             // Update current agent ID first so dropdown filters correctly
             currentAgentId = agentId;
             
             // Restore last session for this agent, or default to main
             const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
             showPage('chat');
-            await switchToSession(sessionKey);
-            setActiveSidebarAgent(agentId);
+            
+            // Fire-and-forget switch (don't await - queue handles ordering)
+            // This prevents the click handler from blocking and allows rapid clicks
+            switchToSession(sessionKey).then(() => {
+                // Optional: post-switch validation or cleanup
+            });
         });
     });
 
