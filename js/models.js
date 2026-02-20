@@ -828,9 +828,10 @@ async function applySessionModelOverride(sessionKey) {
     if (sessionModel) {
         sessionModel = resolveFullModelId(sessionModel);
         const provider = sessionModel.includes('/') ? sessionModel.split('/')[0] : currentProvider;
+        console.log(`[Dashboard] applySessionModelOverride: Setting model to ${sessionModel} for session ${sessionKey}`);
         syncModelDisplay(sessionModel, provider);
     } else {
-        console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
+        console.log(`[Dashboard] applySessionModelOverride: No override for ${sessionKey}, keeping current display`);
     }
 }
 
