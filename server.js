@@ -2043,8 +2043,9 @@ const server = http.createServer((req, res) => {
           try {
             if (fs.existsSync(configPath)) {
               const oc = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-              // Check agent-specific model override
-              const agentModel = oc?.agents?.[requestedAgentId]?.model;
+              // Check agent-specific model override in agents.list array
+              const agent = oc?.agents?.list?.find(a => a.id === requestedAgentId);
+              const agentModel = agent?.model;
               if (agentModel && agentModel !== 'global/default') {
                 modelInfo = {
                   modelId: agentModel,
