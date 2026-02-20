@@ -279,7 +279,26 @@ window.changeSessionModel = async function() {
             });
             
             // Also clear session override
-            try { await gateway.patchSession(sessionKey, { model: null }); } catch (_) {}
+            try { 
+                await gateway.patchSession(sessionKey, { model: null }); 
+                // Refresh session cache to update the model
+                try {
+                    const result = await gateway?.listSessions?.({});
+                    if (result?.sessions?.length) {
+                        availableSessions = result.sessions.map(s => ({
+                            key: s.key,
+                            name: getFriendlySessionName(s.key),
+                            displayName: getFriendlySessionName(s.key),
+                            updatedAt: s.updatedAt,
+                            totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                            model: s.model || 'unknown',
+                            sessionId: s.sessionId
+                        }));
+                    }
+                } catch (e) {
+                    console.warn('[Dashboard] Failed to refresh sessions after model change:', e.message);
+                }
+            } catch (_) {}
             
             // Fetch current global default to update UI
             const response = await fetch('/api/models/current');
@@ -309,6 +328,23 @@ window.changeSessionModel = async function() {
             // Also patch current session so it takes effect immediately
             try {
                 await gateway.patchSession(sessionKey, { model: selectedModel });
+                // Refresh session cache to update the model
+                try {
+                    const result = await gateway?.listSessions?.({});
+                    if (result?.sessions?.length) {
+                        availableSessions = result.sessions.map(s => ({
+                            key: s.key,
+                            name: getFriendlySessionName(s.key),
+                            displayName: getFriendlySessionName(s.key),
+                            updatedAt: s.updatedAt,
+                            totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                            model: s.model || 'unknown',
+                            sessionId: s.sessionId
+                        }));
+                    }
+                } catch (e) {
+                    console.warn('[Dashboard] Failed to refresh sessions after model change:', e.message);
+                }
             } catch (e) {
                 console.warn('[Dashboard] sessions.patch model failed (may need gateway restart):', e.message);
             }
@@ -835,11 +871,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         let provider = null;
         
         try {
-            const response = await fetch('/api/models/current');
+            // Pass agentId to get per-agent model override if set
+            const agentId = currentAgentId || localStorage.getItem('gateway_session')?.replace('agent:', '').split(':')[0] || 'main';
+            const response = await fetch(`/api/models/current?agentId=${encodeURIComponent(agentId)}`);
             const modelInfo = await response.json();
             modelId = modelInfo?.modelId;
             provider = modelInfo?.provider;
-            console.log(`[Dashboard] Model from API: ${modelId} (provider: ${provider})`);
+            console.log(`[Dashboard] Model from API: ${modelId} (provider: ${provider}, agent: ${agentId})`);
         } catch (e) {
             console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
             // Fall back to localStorage only if API fails

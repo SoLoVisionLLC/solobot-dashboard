@@ -2026,30 +2026,64 @@ const server = http.createServer((req, res) => {
   // Get current model endpoint
   if (url.pathname === '/api/models/current' && req.method === 'GET') {
     // Get current model — OpenClaw config is the source of truth
+    // Check for per-agent model override first
+    const urlParams = new URLSearchParams(url.search);
+    const requestedAgentId = urlParams.get('agentId');
+    
     try {
       let modelInfo = null;
       
-      // 1. Primary: read from OpenClaw config (the actual source of truth)
-      const configPaths = [
-        OPENCLAW_CONFIG_PATH,       // ./openclaw/openclaw.json (Coolify volume mount)
-        OPENCLAW_CONFIG_FALLBACK,   // /home/node/.openclaw/openclaw.json (local)
-      ];
-      for (const configPath of configPaths) {
-        try {
-          if (fs.existsSync(configPath)) {
-            const oc = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            const primary = oc?.agents?.defaults?.model?.primary;
-            if (primary) {
-              modelInfo = {
-                modelId: primary,
-                provider: primary.split('/')[0],
-                name: primary.split('/').pop()
-              };
-              console.log(`[Models] Current model from config: ${primary} (${configPath})`);
-              break;
+      // 0. Check for per-agent model override (if agentId provided)
+      if (requestedAgentId) {
+        const configPaths = [
+          OPENCLAW_CONFIG_PATH,
+          OPENCLAW_CONFIG_FALLBACK,
+        ];
+        for (const configPath of configPaths) {
+          try {
+            if (fs.existsSync(configPath)) {
+              const oc = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+              // Check agent-specific model override
+              const agentModel = oc?.agents?.[requestedAgentId]?.model;
+              if (agentModel && agentModel !== 'global/default') {
+                modelInfo = {
+                  modelId: agentModel,
+                  provider: agentModel.split('/')[0],
+                  name: agentModel.split('/').pop(),
+                  agentId: requestedAgentId,
+                  isOverride: true
+                };
+                console.log(`[Models] Per-agent model for ${requestedAgentId}: ${agentModel}`);
+                break;
+              }
             }
-          }
-        } catch (e) { /* try next path */ }
+          } catch (e) { /* try next path */ }
+        }
+      }
+      
+      // 1. Primary: read from OpenClaw config (the actual source of truth)
+      if (!modelInfo) {
+        const configPaths = [
+          OPENCLAW_CONFIG_PATH,       // ./openclaw/openclaw.json (Coolify volume mount)
+          OPENCLAW_CONFIG_FALLBACK,   // /home/node/.openclaw/openclaw.json (local)
+        ];
+        for (const configPath of configPaths) {
+          try {
+            if (fs.existsSync(configPath)) {
+              const oc = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+              const primary = oc?.agents?.defaults?.model?.primary;
+              if (primary) {
+                modelInfo = {
+                  modelId: primary,
+                  provider: primary.split('/')[0],
+                  name: primary.split('/').pop()
+                };
+                console.log(`[Models] Current model from config: ${primary} (${configPath})`);
+                break;
+              }
+            }
+          } catch (e) { /* try next path */ }
+        }
       }
       
       // 2. Fallback: check gateway-synced models cache for the primary (starred) model
@@ -2129,6 +2163,16 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: e.message }));
       }
     });
+    return;
+  }
+  
+  // Clear device identity endpoint
+  if (url.pathname === '/api/clear-device-identity' && req.method === 'POST') {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ 
+      ok: true, 
+      message: 'Device identity cleared. Please refresh the page to regenerate.' 
+    }));
     return;
   }
   

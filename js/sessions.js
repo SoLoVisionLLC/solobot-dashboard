@@ -1,6 +1,8 @@
 // js/sessions.js — Session management, switching, agent selection
 
 const SESSION_DEBUG = false;
+// Make sessLog globally available
+window.sessLog = function(...args) { if (SESSION_DEBUG) console.log(...args); }
 function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 
 const AGENT_PERSONAS = {
@@ -108,6 +110,7 @@ document.addEventListener('click', function(e) {
 // Session Management
 let availableSessions = [];
 let currentAgentId = 'main';
+window.currentAgentId = currentAgentId; // Expose for other modules
 let _switchInFlight = false;
 let _sessionSwitchQueue = [];
 
@@ -154,6 +157,7 @@ function handleSubagentSessionAgent() {
         
         // Update current agent ID
         currentAgentId = agentFromLabel;
+        window.currentAgentId = agentFromLabel;
         
         // Update sidebar highlight
         setActiveSidebarAgent(agentFromLabel);
@@ -467,6 +471,7 @@ async function executeSessionSwitch(sessionKey) {
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
             currentAgentId = agentMatch[1];
+            window.currentAgentId = agentMatch[1];
             // Force sync UI immediately (before async work)
             if (typeof forceSyncActiveAgent === 'function') {
                 forceSyncActiveAgent(agentMatch[1]);
@@ -872,6 +877,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Update agent context
     currentAgentId = agentId;
+    window.currentAgentId = agentId;
 
     // Render immediately to show empty chat
     renderChat();
