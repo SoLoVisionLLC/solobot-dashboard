@@ -811,13 +811,16 @@ async function applySessionModelOverride(sessionKey) {
     // 3. Check per-agent model override via server API
     if (!sessionModel) {
         try {
-            // Use server API to get current model configuration
-            const response = await fetch('/api/models/current');
+            // Extract agentId from sessionKey to get per-agent model
+            const agentIdMatch = sessionKey.match(/^agent:([^:]+):/);
+            const agentId = agentIdMatch ? agentIdMatch[1] : 'main';
+            
+            const response = await fetch(`/api/models/current?agentId=${encodeURIComponent(agentId)}`);
             if (response.ok) {
                 const modelInfo = await response.json();
                 if (modelInfo?.modelId) {
                     sessionModel = modelInfo.modelId;
-                    console.log(`[Dashboard] Session ${sessionKey} using server model: ${sessionModel}`);
+                    console.log(`[Dashboard] Session ${sessionKey} using per-agent model from API: ${sessionModel} (agent: ${agentId})`);
                 }
             }
         } catch (e) {
