@@ -1,129 +1,59 @@
-// js/chat.js — Chat event handling, message rendering, voice input, image handling, chat page
+// js/chat.js — Chat event handling, message rendering, voice input, image handling
 
-const CHAT_DEBUG = false;
-function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
-
-/**
- * Converts plain text to HTML with clickable links.
- * - Escapes HTML to prevent XSS
- * - Converts markdown links [text](url) to <a> tags
- * - Auto-links bare http/https URLs
- * - Preserves newlines as <br>
- * - Skips URLs inside code blocks (``` ... ```)
- */
 function linkifyText(text) {
     if (!text) return '';
-
-    // Split on code blocks to avoid linkifying inside them
     const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-
     return parts.map((part, i) => {
-        // Odd indices are code blocks — escape only, no linkify
         if (i % 2 === 1) {
             return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
-
-        // Escape HTML
         let safe = part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        // Convert markdown links [text](url)
-        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-        // Auto-link bare URLs (not already inside an href)
-        safe = safe.replace(/(^|[^"'>])(https?:\/\/[^\s<]+)/g,
-            '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
-
-        // Preserve newlines
-        safe = safe.replace(/\n/g, '<br>');
-
-        return safe;
+        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        safe = safe.replace(/(^|["'>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+        return safe.replace(/\n/g, '<br>');
     }).join('');
 }
-
-// ===================
-// CHAT FUNCTIONS (Gateway WebSocket)
-// ===================
 
 // ===================
 // VOICE INPUT (Web Speech API)
 // ===================
 
 let voiceRecognition = null;
-let voiceInputState = 'idle'; // idle, listening, processing
-let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-send after speech
-let lastVoiceTranscript = ''; // Store last transcript for auto-send
-let accumulatedTranscript = ''; // Store accumulated text across pause/resume cycles
-
-// Live transcript indicator functions (disabled - transcript shows directly in input field)
-function showLiveTranscriptIndicator() { }
-function hideLiveTranscriptIndicator() { }
-function updateLiveTranscriptIndicator(text, isInterim) { }
+let voiceInputState = 'idle';
+let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true';
+let lastVoiceTranscript = '';
+let accumulatedTranscript = '';
 
 function initVoiceInput() {
-    // Check for Web Speech API support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    // Update both voice buttons
-    const btns = [
-        document.getElementById('voice-input-btn'),
-        document.getElementById('voice-input-btn-chatpage')
-    ];
+    const btns = [document.getElementById('voice-input-btn'), document.getElementById('voice-input-btn-chatpage')];
     
     if (!SpeechRecognition) {
-        for (const btn of btns) {
-            if (btn) {
-                btn.disabled = true;
-                btn.title = 'Voice input not supported in this browser';
-                btn.innerHTML = '<span class="voice-unsupported">🎤✗</span>';
-            }
-        }
-        chatLog('[Voice] Web Speech API not supported');
+        btns.forEach(btn => {
+            if (btn) { btn.disabled = true; btn.title = 'Voice input not supported'; btn.innerHTML = '🎤✗'; }
+        });
         return;
     }
     
     if (btns.every(b => !b)) return;
 
     voiceRecognition = new SpeechRecognition();
-    voiceRecognition.continuous = true; // Keep listening until manually stopped
+    voiceRecognition.continuous = true;
     voiceRecognition.interimResults = true;
     voiceRecognition.lang = 'en-US';
     voiceRecognition.maxAlternatives = 1;
 
     voiceRecognition.onstart = () => {
-        chatLog('[Voice] Started listening, target input:', activeVoiceTarget);
-        // Don't reset transcript - keep accumulated text for pause/resume
         setVoiceState('listening');
-        
-        // Show live transcript indicator
-        showLiveTranscriptIndicator();
-        
-        // Focus the target input
         const input = document.getElementById(activeVoiceTarget);
-        if (input) {
-            input.focus();
-            input.placeholder = 'Listening... (speak now)';
-            // Keep existing accumulated text in the field
-            if (accumulatedTranscript) {
-                input.value = accumulatedTranscript;
-            }
-        }
+        if (input) { input.focus(); input.placeholder = 'Listening...'; if (accumulatedTranscript) input.value = accumulatedTranscript; }
     };
     
-    voiceRecognition.onaudiostart = () => {
-        chatLog('[Voice] Audio capture started - microphone is working');
-    };
-    
-    voiceRecognition.onsoundstart = () => {
-        chatLog('[Voice] Sound detected');
-    };
-    
+    voiceRecognition.onaudiostart = () => { };
+    voiceRecognition.onsoundstart = () => { };
     voiceRecognition.onspeechstart = () => {
-        chatLog('[Voice] Speech detected - processing...');
         const input = document.getElementById(activeVoiceTarget);
-        if (input) {
-            input.placeholder = 'Hearing you...';
-        }
+        if (input) input.placeholder = 'Hearing you...';
     };
 
     voiceRecognition.onresult = (event) => {
@@ -167,105 +97,52 @@ function initVoiceInput() {
             accumulatedTranscript += finalTranscript;
         }
         
-        // Display accumulated + interim
+    voiceRecognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            if (result.isFinal) finalTranscript += transcript;
+            else interimTranscript += transcript;
+        }
         const displayText = accumulatedTranscript + interimTranscript;
-        chatLog('[Voice] Display text:', displayText, '(accumulated:', accumulatedTranscript.length, 'interim:', interimTranscript.length, ')');
-
-        // Update live transcript indicator (banner)
-        updateLiveTranscriptIndicator(displayText, !!interimTranscript);
-
-        // Always update the input with current text (even if empty during pauses)
-        chatLog('[Voice] Setting targetInput.value to:', displayText);
-        targetInput.value = displayText;
-        
-        // Style based on whether we have final or interim
-        if (interimTranscript) {
-            // Has interim - show as in-progress with subtle indicator
-            targetInput.style.fontStyle = 'italic';
-            targetInput.style.color = 'var(--text-secondary)';
-        } else if (finalTranscript) {
-            // Only final content - solid style
-            targetInput.style.fontStyle = 'normal';
-            targetInput.style.color = 'var(--text-primary)';
+        const targetInput = document.getElementById(activeVoiceTarget);
+        if (targetInput) {
+            targetInput.value = displayText;
+            if (interimTranscript) { targetInput.style.fontStyle = 'italic'; targetInput.style.color = 'var(--text-secondary)'; }
+            else if (finalTranscript) { targetInput.style.fontStyle = 'normal'; targetInput.style.color = 'var(--text-primary)'; }
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+            targetInput.focus();
+            if (targetInput.setSelectionRange) targetInput.setSelectionRange(targetInput.value.length, targetInput.value.length);
         }
-        
-        // Trigger input event to handle auto-resize and any listeners
-        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        
-        // Keep input focused and cursor at end
-        targetInput.focus();
-        if (targetInput.setSelectionRange) {
-            targetInput.setSelectionRange(targetInput.value.length, targetInput.value.length);
-        }
-
-        // Store final transcript for auto-send
-        if (finalTranscript) {
-            lastVoiceTranscript = finalTranscript;
-            chatLog('[Voice] Final transcript stored:', finalTranscript);
-        }
+        if (finalTranscript) lastVoiceTranscript = finalTranscript;
     };
 
     voiceRecognition.onerror = (event) => {
-        console.error('[Voice] Error:', event.error, event.message || '');
-        
-        if (event.error === 'not-allowed') {
-            setVoiceState('idle');
-            showToast('Microphone access denied. Click the lock icon in your browser address bar to allow.', 'error');
-        } else if (event.error === 'no-speech') {
-            // Don't stop on no-speech if continuous mode - just keep listening
-            chatLog('[Voice] No speech detected yet, still listening...');
-            // Only show toast if we're ending
-            if (!voiceRecognition || voiceInputState !== 'listening') {
-                showToast('No speech detected. Make sure your microphone is working.', 'info');
-            }
-        } else if (event.error === 'audio-capture') {
-            setVoiceState('idle');
-            showToast('No microphone found. Please connect a microphone and try again.', 'error');
-        } else if (event.error === 'network') {
-            setVoiceState('idle');
-            showToast('Network error. Speech recognition requires internet connection.', 'error');
-        } else if (event.error !== 'aborted') {
-            setVoiceState('idle');
-            showToast(`Voice error: ${event.error}`, 'error');
-        }
+        console.error('[Voice] Error:', event.error);
+        if (event.error === 'not-allowed') { setVoiceState('idle'); showToast('Microphone access denied.', 'error'); }
+        else if (event.error === 'no-speech') { chatLog('[Voice] No speech detected'); }
+        else if (event.error === 'audio-capture') { setVoiceState('idle'); showToast('No microphone found.', 'error'); }
+        else if (event.error === 'network') { setVoiceState('idle'); showToast('Network error.', 'error'); }
+        else if (event.error !== 'aborted') { setVoiceState('idle'); showToast(`Voice error: ${event.error}`, 'error'); }
     };
 
     voiceRecognition.onend = () => {
-        chatLog('[Voice] Ended, accumulated transcript:', accumulatedTranscript);
-        // Note: hideLiveTranscriptIndicator is called by setVoiceState('idle') below
-        
-        // Reset styling on both inputs
-        for (const inputId of ['chat-input', 'chat-page-input']) {
+        ['chat-input', 'chat-page-input'].forEach(inputId => {
             const input = document.getElementById(inputId);
-            if (input) {
-                input.style.fontStyle = 'normal';
-                input.style.color = 'var(--text-primary)';
-                // Reset placeholder
-                if (inputId === 'chat-input') {
-                    input.placeholder = 'Type a message...';
-                } else {
-                    input.placeholder = 'Message SoLoBot...';
-                }
-            }
-        }
+            if (input) { input.style.fontStyle = 'normal'; input.style.color = 'var(--text-primary)'; input.placeholder = inputId === 'chat-input' ? 'Type a message...' : 'Message SoLoBot...'; }
+        });
         
-        // Auto-send if enabled and we have a transcript
         if (voiceAutoSend && accumulatedTranscript.trim()) {
-            chatLog('[Voice] Auto-sending:', accumulatedTranscript);
-            // Determine which send function to use based on target
-            if (activeVoiceTarget === 'chat-page-input') {
-                sendChatPageMessage();
-            } else {
-                sendChatMessage();
-            }
-            // Clear accumulated text after auto-send
+            if (activeVoiceTarget === 'chat-page-input') sendChatPageMessage();
+            else sendChatMessage();
             accumulatedTranscript = '';
             const input = document.getElementById(activeVoiceTarget);
             if (input) input.value = '';
         }
-        
         setVoiceState('idle');
-        activeVoiceTarget = 'chat-input'; // Reset target
+        activeVoiceTarget = 'chat-input';
     };
 
     chatLog('[Voice] Initialized successfully');
@@ -380,77 +257,22 @@ function toggleVoiceInput() {
     // Don't reset target here - it should persist until onend resets it
 }
 
-// Toggle auto-send setting
-function toggleVoiceAutoSend() {
-    voiceAutoSend = !voiceAutoSend;
-    localStorage.setItem('voice_auto_send', voiceAutoSend);
-    updateVoiceAutoSendUI();
-    showToast(voiceAutoSend ? 'Voice auto-send enabled' : 'Voice auto-send disabled', 'info');
-}
-
-function updateVoiceAutoSendUI() {
-    const toggles = document.querySelectorAll('.voice-auto-send-toggle');
-    toggles.forEach(toggle => {
-        toggle.classList.toggle('active', voiceAutoSend);
-        toggle.title = voiceAutoSend ? 'Auto-send ON (click to disable)' : 'Auto-send OFF (click to enable)';
-    });
-}
-
-// Alt+Space toggle: Press once to start, press again to stop
-function initPushToTalk() {
-    document.addEventListener('keydown', (e) => {
-        // Toggle on Alt+Space (works even in input fields)
-        if (e.code === 'Space' && e.altKey) {
-            e.preventDefault();
-            
-            if (voiceInputState === 'listening') {
-                // Already listening - stop
-                chatLog('[Voice] Alt+Space toggle: stopping');
-                stopVoiceInput();
-            } else {
-                // Not listening - start
-                // Determine which input to target based on current page
-                const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
-                activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
-                
-                chatLog('[Voice] Alt+Space toggle: starting, target:', activeVoiceTarget);
-                startVoiceInput();
-            }
-        }
-    });
-    
-    chatLog('[Voice] Alt+Space toggle initialized (press to start/stop recording)');
-}
-
-// Check if user is typing in an input field
-function isTypingInInput(element) {
-    if (!element) return false;
-    const tagName = element.tagName.toLowerCase();
-    const isEditable = element.isContentEditable;
-    const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
-    return isInput || isEditable;
-}
-
 // ===================
 // IMAGE HANDLING
 // ===================
 
-// Image handling - supports multiple images
 let pendingImages = [];
 
 function handleImageSelect(event) {
     const files = event.target.files;
     for (const file of files) {
-        if (file.type.startsWith('image/')) {
-            processImageFile(file);
-        }
+        if (file.type.startsWith('image/')) processImageFile(file);
     }
 }
 
 function handlePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -466,24 +288,13 @@ let chatInputSelection = { start: 0, end: 0 };
 function handleChatInputKeydown(event) {
     const input = event.target;
     if (event.key !== 'Enter' || !input) return;
-
-    if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        sendChatMessage();
-        return;
-    }
-
+    if (event.ctrlKey || event.metaKey) { event.preventDefault(); sendChatMessage(); return; }
     if (event.shiftKey) {
         event.preventDefault();
         const start = input.selectionStart;
-        const end = input.selectionEnd;
         const value = input.value;
-        const before = value.slice(0, start);
-        const after = value.slice(end);
-        const newValue = `${before}\n${after}`;
-        input.value = newValue;
-        const cursor = start + 1;
-        input.setSelectionRange(cursor, cursor);
+        input.value = `${value.slice(0, start)}\n${value.slice(start)}`;
+        input.setSelectionRange(start + 1, start + 1);
         adjustChatInputHeight(input);
         return;
     }
@@ -497,17 +308,14 @@ function cacheChatInputSelection(input) {
 
 function restoreChatInputSelection(input) {
     if (!input) return;
-    const length = input.value.length;
-    const start = Math.min(chatInputSelection.start ?? length, length);
-    const end = Math.min(chatInputSelection.end ?? length, length);
-    input.setSelectionRange(start, end);
+    const len = input.value.length;
+    input.setSelectionRange(Math.min(chatInputSelection.start ?? len, len), Math.min(chatInputSelection.end ?? len, len));
 }
 
 function adjustChatInputHeight(input) {
     if (!input) return;
     input.style.height = 'auto';
-    const height = Math.min(input.scrollHeight, 160);
-    input.style.height = `${Math.max(height, 36)}px`;
+    input.style.height = `${Math.min(Math.max(input.scrollHeight, 36), 160)}px`;
 }
 
 function attachChatInputHandlers() {
@@ -515,10 +323,7 @@ function attachChatInputHandlers() {
     if (!input) return;
     input.addEventListener('keydown', handleChatInputKeydown);
     input.addEventListener('blur', () => cacheChatInputSelection(input));
-    input.addEventListener('focus', () => {
-        restoreChatInputSelection(input);
-        adjustChatInputHeight(input);
-    });
+    input.addEventListener('focus', () => { restoreChatInputSelection(input); adjustChatInputHeight(input); });
     input.addEventListener('input', () => adjustChatInputHeight(input));
     adjustChatInputHeight(input);
 }
