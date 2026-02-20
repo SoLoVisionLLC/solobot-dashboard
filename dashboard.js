@@ -1,23 +1,9 @@
 // SoLoVision Command Center Dashboard v4.2.0
 // Modular architecture — see js/*.js for module files
-//
-// Message Architecture:
-// - Chat messages: Synced via Gateway (single source of truth across all devices)
-// - System messages: Local UI noise (heartbeats, errors) - persisted to localStorage only
-
-// ===================
-// STATE MANAGEMENT
-// ===================
-
-
-// ===================
-// INITIALIZATION
-// ===================
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
     
-    // Always start at the top
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     const dashPage = document.getElementById('page-dashboard');
     if (dashPage) {
@@ -28,7 +14,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     window.scrollTo(0, 0);
 
-    // Make task board toolbar sticky when scrolling past it
     if (dashPage) {
         const toolbar = document.getElementById('task-toolbar');
         const taskBoard = document.querySelector('.bento-task-board');
@@ -45,14 +30,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!isSticky) {
                         placeholder.style.display = 'block';
                         placeholder.style.height = toolbar.offsetHeight + 'px';
-                        // Move toolbar to body so it escapes overflow:hidden
                         document.body.appendChild(toolbar);
-                        toolbar.style.position = 'fixed';
-                        toolbar.style.top = '60px';
-                        toolbar.style.zIndex = '200';
-                        toolbar.style.background = 'var(--surface-1)';
-                        toolbar.style.borderBottom = '1px solid var(--border-default)';
-                        toolbar.style.boxSizing = 'border-box';
+                        toolbar.style.cssText = 'position:fixed;top:60px;z-index:200;background:var(--surface-1);border-bottom:1px solid var(--border-default);box-sizing:border-box;';
                         isSticky = true;
                     }
                     const contentEl = taskBoard.querySelector('.bento-widget-content');
@@ -60,35 +39,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                     toolbar.style.left = contentRect.left + 'px';
                     toolbar.style.width = contentRect.width + 'px';
                     toolbar.style.padding = '8px ' + getComputedStyle(contentEl).paddingLeft;
-                } else {
-                    if (isSticky) {
-                        toolbar.style.cssText = '';
-                        placeholder.parentNode.insertBefore(toolbar, placeholder);
-                        placeholder.style.display = 'none';
-                        isSticky = false;
-                    }
+                } else if (isSticky) {
+                    toolbar.style.cssText = '';
+                    placeholder.parentNode.insertBefore(toolbar, placeholder);
+                    placeholder.style.display = 'none';
+                    isSticky = false;
                 }
             });
         }
     }
 
-    // Initialize dashboard improvement tasks
     initDashboardTasks();
-
-    // Log summary after state is loaded
-    const provider = localStorage.getItem('selected_provider') || 'anthropic';
-    const model = localStorage.getItem('selected_model') || 'claude-3-opus';
-    console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
+    console.log(`[Dashboard] Ready - Provider: ${localStorage.getItem('selected_provider') || 'anthropic'}, Model: ${localStorage.getItem('selected_model') || 'claude-3-opus'}`);
     
-    // Gateway settings are now loaded from localStorage only (see state.js)
-    
-    // Request browser notification permission
     requestNotificationPermission();
-    
-    render({ includeSystem: true }); // Initial render includes system page
+    render({ includeSystem: true });
     updateLastSync();
-
-    // Initialize chat input behavior
     setupChatPageInput();
 
     // Populate saved gateway settings BEFORE setting up sidebar
