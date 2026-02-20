@@ -1,5 +1,8 @@
 // js/sessions.js — Session management, switching, agent selection
 
+const SESSION_DEBUG = false;
+function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
+
 const AGENT_PERSONAS = {
     'main':   { name: 'Halo',     role: 'PA' },
     'exec':   { name: 'Elon',     role: 'CoS' },
