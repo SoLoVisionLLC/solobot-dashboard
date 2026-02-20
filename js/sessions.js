@@ -43,11 +43,13 @@ function getFriendlySessionName(key) {
 }
 
 let currentSessionName;
+window.currentSessionName = currentSessionName; // Expose globally for other modules
 
 function initCurrentSessionName() {
     const localSession = localStorage.getItem('gateway_session');
     const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
     currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+    window.currentSessionName = currentSessionName; // Keep exposed value in sync
     console.log('[initCurrentSessionName] localStorage:', localSession, 'Final:', currentSessionName);
 }
 
@@ -73,6 +75,7 @@ window.renameSession = async function() {
         
         if (response.ok) {
             currentSessionName = newName;
+            window.currentSessionName = currentSessionName; // Sync to window for other modules
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) nameEl.textContent = newName;
             showToast(`Session renamed to "${newName}"`, 'success');
@@ -462,6 +465,7 @@ async function executeSessionSwitch(sessionKey) {
         // 3. Update session config and input field
         const oldSessionName = currentSessionName;
         currentSessionName = sessionKey;
+        window.currentSessionName = currentSessionName; // Sync to window for other modules
         GATEWAY_CONFIG.sessionKey = sessionKey;
         localStorage.setItem('gateway_session', sessionKey);
         const sessionInput = document.getElementById('gateway-session');
@@ -550,6 +554,7 @@ window.goToSession = async function(sessionKey) {
         // If not connected, set the session key and let auto-connect handle it
         GATEWAY_CONFIG.sessionKey = sessionKey;
         currentSessionName = sessionKey;
+        window.currentSessionName = currentSessionName; // Sync to window for other modules
         localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
@@ -683,6 +688,7 @@ function initGateway() {
             }
             GATEWAY_CONFIG.sessionKey = intendedSession;
             currentSessionName = intendedSession;
+            window.currentSessionName = currentSessionName; // Sync to window for other modules
             
             // Fetch live model config from gateway (populates dropdowns),
             // then apply per-session override (authoritative model display).
@@ -885,6 +891,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Switch gateway to new session
     currentSessionName = sessionKey;
+    window.currentSessionName = currentSessionName; // Sync to window for other modules
     GATEWAY_CONFIG.sessionKey = sessionKey;
     // Persist for reload - save to BOTH localStorage AND server state
     localStorage.setItem('gateway_session', sessionKey);
