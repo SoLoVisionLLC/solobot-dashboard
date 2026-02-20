@@ -1,13 +1,5 @@
 // js/sessions.js — Session management, switching, agent selection
 
-const SESSION_DEBUG = false;
-function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
-
-// ===================
-// SESSION MANAGEMENT
-// ===================
-
-// Agent persona names and role labels
 const AGENT_PERSONAS = {
     'main':   { name: 'Halo',     role: 'PA' },
     'exec':   { name: 'Elon',     role: 'CoS' },
@@ -27,7 +19,6 @@ const AGENT_PERSONAS = {
     'docs':    { name: 'Canon',   role: 'DOC' }
 };
 
-// Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function normalizeDashboardSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
     return key;
@@ -35,7 +26,6 @@ function normalizeDashboardSessionKey(key) {
 
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
-    // For agent sessions, show persona name + session suffix
     const match = key.match(/^agent:([^:]+):(.+)$/);
     if (match) {
         const agentId = match[1];
@@ -49,20 +39,13 @@ function getFriendlySessionName(key) {
 
 let currentSessionName;
 
-// Initialize currentSessionName from localStorage (browser is authoritative for session)
 function initCurrentSessionName() {
     const localSession = localStorage.getItem('gateway_session');
     const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
-    
-    // localStorage is authoritative (user's explicit choice)
     currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
-    
-    console.log('[initCurrentSessionName] localStorage:', localSession);
-    console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
-    console.log('[initCurrentSessionName] Final:', currentSessionName);
+    console.log('[initCurrentSessionName] localStorage:', localSession, 'Final:', currentSessionName);
 }
 
-// Initialize immediately (before any other code uses it)
 initCurrentSessionName();
 
 window.toggleSessionMenu = function() {
@@ -121,58 +104,34 @@ document.addEventListener('click', function(e) {
 
 // Session Management
 let availableSessions = [];
-let currentAgentId = 'main'; // Track which agent's sessions we're viewing
+let currentAgentId = 'main';
 let _switchInFlight = false;
-let _sessionSwitchQueue = []; // Queue array for rapid switches
+let _sessionSwitchQueue = [];
 
-// Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
     const match = sessionKey?.match(/^agent:([^:]+):/);
     return match ? match[1] : 'main';
 }
 
-// Filter sessions to only show those belonging to a specific agent
-// Also includes spawned subagent sessions (agent:main:subagent:*) where the label starts with the agentId
-// Example: agentId="dev" matches:
-//   - agent:dev:main (direct match)
-//   - agent:main:subagent:abc123 with label "dev-avatar-fix" (label prefix match)
 function filterSessionsForAgent(sessions, agentId) {
     return sessions.filter(s => {
-        // Direct match: session belongs to this agent
         const sessAgent = getAgentIdFromSession(s.key);
         if (sessAgent === agentId) return true;
-        
-        // Subagent match: spawned by main but labeled for this agent
-        // Pattern: agent:main:subagent:* with label starting with "{agentId}-"
         if (s.key?.startsWith('agent:main:subagent:')) {
             const label = s.displayName || s.name || '';
-            // Label pattern: {agentId}-{taskname} (e.g., "dev-avatar-fix", "cmp-marketing-research")
-            if (label.toLowerCase().startsWith(agentId.toLowerCase() + '-')) {
-                return true;
-            }
+            if (label.toLowerCase().startsWith(agentId.toLowerCase() + '-')) return true;
         }
-        
         return false;
     });
 }
 
-// Check URL parameters for auto-session connection
 function checkUrlSessionParam() {
     const params = new URLSearchParams(window.location.search);
-    const sessionParam = params.get('session');
-    if (sessionParam) {
-        sessLog(`[Dashboard] URL session param detected: ${sessionParam}`);
-        return sessionParam;
-    }
-    return null;
+    return params.get('session');
 }
 
-// For subagent sessions (agent:main:subagent:*), determine the correct agent from the label
-// and update currentAgentId so the sidebar highlights correctly
 function handleSubagentSessionAgent() {
-    if (!currentSessionName?.startsWith('agent:main:subagent:')) {
-        return; // Not a subagent session
-    }
+    if (!currentSessionName?.startsWith('agent:main:subagent:')) return;
     
     // Find the session in availableSessions
     const session = availableSessions.find(s => s.key === currentSessionName);
