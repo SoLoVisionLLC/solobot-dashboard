@@ -871,8 +871,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         let provider = null;
         
         try {
-            // Pass agentId to get per-agent model override if set
-            const agentId = currentAgentId || localStorage.getItem('gateway_session')?.replace('agent:', '').split(':')[0] || 'main';
+            // Extract agentId from session key - this is more reliable than currentAgentId which may not be set yet
+            const sessionKey = localStorage.getItem('gateway_session') || 'agent:main:main';
+            const agentIdMatch = sessionKey.match(/^agent:([^:]+):/);
+            const agentId = agentIdMatch ? agentIdMatch[1] : 'main';
+            
             const response = await fetch(`/api/models/current?agentId=${encodeURIComponent(agentId)}`);
             const modelInfo = await response.json();
             modelId = modelInfo?.modelId;
