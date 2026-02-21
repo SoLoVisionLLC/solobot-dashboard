@@ -37,7 +37,7 @@ function loadPersistedMessages() {
                 return; // Have local messages, no need to fetch from server
             }
         }
-        
+
         // No local messages - fetch from server
         loadChatFromServer();
     } catch (e) {
@@ -81,7 +81,7 @@ function persistChatMessages() {
         // Limit to 50 messages to prevent localStorage quota exceeded
         const chatToSave = state.chat.messages.slice(-50);
         localStorage.setItem('solobot-chat-messages', JSON.stringify(chatToSave));
-        
+
         // Also sync to server for persistence across deploys
         syncChatToServer(chatToSave);
     } catch (e) {
@@ -101,7 +101,7 @@ function saveGatewaySettings(host, port, token, sessionKey) {
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
     localStorage.setItem('gateway_session', sessionKey);
-    
+
     // Also save to server state for persistence across deploys
     state.gatewayConfig = { host, port, token, sessionKey };
     saveState('Gateway settings updated');
@@ -110,20 +110,20 @@ function saveGatewaySettings(host, port, token, sessionKey) {
 // Function to load gateway settings from server state (called after loadState)
 function loadGatewaySettingsFromServer() {
     // console.log('[Dashboard] loadGatewaySettingsFromServer called'); // Keep quiet
-    
+
     if (state.gatewayConfig && state.gatewayConfig.host) {
         // Always prefer server settings if they exist (server is source of truth)
         GATEWAY_CONFIG.host = state.gatewayConfig.host;
         GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
         GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
         GATEWAY_CONFIG.sessionKey = state.gatewayConfig.sessionKey || 'main';
-        
+
         // Also save to localStorage for faster loading next time
         localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
         localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
         localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
         localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
-        
+
         // console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host); // Keep quiet
     }
     // No gateway config in server state - that's fine
@@ -137,94 +137,7 @@ function loadGatewaySettingsFromServer() {
 // (js/state.js is loaded before this file)
 
 // ===================
-// CUSTOM CONFIRM & TOAST (no browser alerts!)
-// ===================
-
-// (confirmResolver also declared in js/state.js)
-
-// Custom confirm dialog - returns Promise<boolean>
-function showConfirm(message, title = 'Confirm', okText = 'OK') {
-    return new Promise((resolve) => {
-        confirmResolver = resolve;
-        document.getElementById('confirm-modal-title').textContent = title;
-        document.getElementById('confirm-modal-message').innerHTML = message;
-        document.getElementById('confirm-modal-ok').textContent = okText;
-        showModal('confirm-modal');
-    });
-}
-
-function closeConfirmModal(result) {
-    hideModal('confirm-modal');
-    if (confirmResolver) {
-        confirmResolver(result);
-        confirmResolver = null;
-    }
-}
-
-// Toast notification - replaces alert()
-function showToast(message, type = 'info', duration = 4000) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    
-    const toast = document.createElement('div');
-    toast.style.cssText = `
-        padding: 12px 20px;
-        border-radius: 8px;
-        color: white;
-        font-size: 14px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        animation: slideIn 0.3s ease;
-        max-width: 350px;
-        word-wrap: break-word;
-    `;
-    
-    // Set color based on type
-    switch(type) {
-        case 'success': toast.style.background = 'var(--success)'; break;
-        case 'error': toast.style.background = 'var(--error)'; break;
-        case 'warning': toast.style.background = '#f59e0b'; break;
-        default: toast.style.background = 'var(--accent)'; break;
-    }
-    
-    toast.textContent = message;
-    container.appendChild(toast);
-    
-    // Auto-remove after duration
-    setTimeout(() => {
-        toast.style.animation = 'fadeOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-}
-
-// Make functions globally available
-window.showConfirm = showConfirm;
-window.closeConfirmModal = closeConfirmModal;
-window.showToast = showToast;
-
-// === OVERRIDE NATIVE alert/confirm ===
-// Intercept ALL browser dialogs and use our custom UI instead
-window.alert = function(message) {
-    showToast(message, 'info', 5000);
-};
-
-// Store original confirm for emergency use
-const _originalConfirm = window.confirm;
-
-window.confirm = function(message) {
-    // Show our custom confirm modal
-    // Since confirm() is synchronous, we show the modal but return false
-    // to block the action. Code should be refactored to use showConfirm().
-    console.warn('[Dashboard] Native confirm() intercepted. Use showConfirm() for proper async handling.');
-    
-    // Show toast explaining what happened
-    showToast('Action blocked - please try again', 'warning');
-    
-    // Show the confirm modal (user can see the message)
-    showConfirm(message, 'Confirm');
-    
-    // Return false to block the synchronous action
-    return false;
-};
+// CUSTOM CONFIRM & TOAST functions have been extracted to js/ui.js
 
 // Classify messages as system/heartbeat noise vs real chat
 function isSystemMessage(text, from) {
@@ -243,52 +156,52 @@ function isSystemMessage(text, from) {
 
     // === TOOL OUTPUT FILTERING ===
     // Filter out obvious tool results that shouldn't appear in chat
-    
+
     // JSON outputs (API responses, fetch results)
     if (trimmed.startsWith('{') && trimmed.includes('"')) return true;
-    
+
     // Command outputs
     if (trimmed.startsWith('Successfully replaced text in')) return true;
     if (trimmed.startsWith('Successfully wrote')) return true;
     if (trimmed === '(no output)') return true;
     if (trimmed.startsWith('[main ') && trimmed.includes('file changed')) return true;
     if (trimmed.startsWith('To https://github.com')) return true;
-    
+
     // Git/file operation outputs  
     if (/^\[main [a-f0-9]+\]/.test(trimmed)) return true;
     if (trimmed.startsWith('Exported ') && trimmed.includes(' activities')) return true;
     if (trimmed.startsWith('Posted ') && trimmed.includes(' activities')) return true;
-    
+
     // Token/key outputs (security - never show these)
     if (/^ghp_[A-Za-z0-9]+$/.test(trimmed)) return true;
     if (/^sk_[A-Za-z0-9]+$/.test(trimmed)) return true;
-    
+
     // File content dumps (markdown files being read)
     if (trimmed.startsWith('# ') && trimmed.length > 500) return true;
-    
+
     // Grep/search output (line numbers with code)
     if (/^\d+:\s*(if|const|let|var|function|class|return|import|export)\s/.test(trimmed)) return true;
     if (/^\d+[-:].*\.(js|ts|py|md|json|html|css)/.test(trimmed)) return true;
-    
+
     // Multiple line number prefixes (grep output)
     const lineNumberPattern = /^\d+:/;
     const lines = trimmed.split('\n');
     if (lines.length > 2 && lines.filter(l => lineNumberPattern.test(l.trim())).length > lines.length / 2) return true;
-    
+
     // Code blocks with state/config references
     if (trimmed.includes('state.chat.messages') || trimmed.includes('GATEWAY_CONFIG')) return true;
     if (trimmed.includes('maxMessages:') && /\d+:/.test(trimmed)) return true;
-    
+
     // === HEARTBEAT FILTERING ===
-    
+
     // Exact heartbeat matches
     if (trimmed === 'HEARTBEAT_OK') return true;
-    
+
     // System timestamped messages
     if (trimmed.startsWith('System: [')) return true;
     if (trimmed.startsWith('System:')) return true;
     if (/^System:\s*\[/i.test(trimmed)) return true;
-    
+
     // HEARTBEAT messages (cron/scheduled)
     if (trimmed.includes('] HEARTBEAT:')) return true;
     if (trimmed.includes('] Cron:')) return true;
@@ -317,21 +230,21 @@ function isSystemMessage(text, from) {
 }
 
 // Provider and Model selection functions (currently just for display)
-window.changeProvider = function() {
+window.changeProvider = function () {
     console.warn('[Dashboard] Provider selection not implemented - providers are configured at OpenClaw gateway level');
     showToast('Providers must be configured at the OpenClaw gateway level', 'warning');
 };
 
-window.updateProviderDisplay = function() {
+window.updateProviderDisplay = function () {
     const providerSelect = document.getElementById('provider-select');
     if (!providerSelect) return;
-    
+
     const selectedProvider = providerSelect.value;
-    
+
     // Update display (with null check)
     const providerNameEl = document.getElementById('provider-name');
     if (providerNameEl) providerNameEl.textContent = selectedProvider;
-    
+
     // Update model dropdown for this provider
     updateModelDropdown(selectedProvider);
 };
@@ -343,23 +256,23 @@ async function populateProviderDropdown() {
         console.warn('[Dashboard] provider-select element not found');
         return [];
     }
-    
+
     try {
         const response = await fetch('/api/models/list');
         if (!response.ok) throw new Error(`API returned ${response.status}`);
 
         const allModels = await response.json();
         const providers = Object.keys(allModels);
-        
+
         // Clear existing options
         providerSelect.innerHTML = '';
-        
+
         // Add options for each provider
         providers.forEach(provider => {
             const option = document.createElement('option');
             option.value = provider;
             // Format display name (capitalize, replace hyphens)
-            option.textContent = provider.split('-').map(w => 
+            option.textContent = provider.split('-').map(w =>
                 w.charAt(0).toUpperCase() + w.slice(1)
             ).join(' ');
             providerSelect.appendChild(option);
@@ -373,13 +286,13 @@ async function populateProviderDropdown() {
 }
 
 // Refresh models from CLI (force cache invalidation)
-window.refreshModels = async function() {
+window.refreshModels = async function () {
     showToast('Refreshing models from CLI...', 'info');
-    
+
     try {
         const response = await fetch('/api/models/refresh', { method: 'POST' });
         const result = await response.json();
-        
+
         if (result.ok) {
             showToast(`${result.message}`, 'success');
             // Refresh the provider dropdown with new models
@@ -397,24 +310,24 @@ window.refreshModels = async function() {
     }
 }
 
-window.changeModel = async function() {
+window.changeModel = async function () {
     // Support both model-select and setting-model IDs
     const modelSelect = document.getElementById('model-select') || document.getElementById('setting-model');
     const selectedModel = modelSelect?.value;
-    
+
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
         return;
     }
-    
+
     if (selectedModel.includes('ERROR')) {
         showToast('Cannot change model - configuration error', 'error');
         return;
     }
-    
+
     try {
         console.log(`[Dashboard] Attempting to change model to: ${selectedModel}`);
-        
+
         const response = await fetch('/api/models/set', {
             method: 'POST',
             headers: {
@@ -422,9 +335,9 @@ window.changeModel = async function() {
             },
             body: JSON.stringify({ modelId: selectedModel })
         });
-        
+
         const result = await response.json();
-        
+
         if (response.ok) {
             console.log(`[Dashboard] Model successfully changed to: ${selectedModel}`);
 
@@ -473,14 +386,14 @@ window.changeModel = async function() {
         } else {
             console.error('[Dashboard] Failed to change model:', result);
             showToast(`Failed to change model: ${result.error || 'Unknown error'}`, 'error');
-            
+
             // Make error visible - don't hide it
             throw new Error(`Model change failed: ${result.error || 'Unknown error'}`);
         }
     } catch (error) {
         console.error('[Dashboard] Error changing model:', error);
         showToast(`Failed to change model: ${error.message}`, 'error');
-        
+
         // Re-throw to make error visible
         throw error;
     }
@@ -493,12 +406,12 @@ async function updateModelDropdown(provider) {
         console.warn('[Dashboard] No model select element found (tried model-select and setting-model)');
         return;
     }
-    
+
     const models = await getModelsForProvider(provider);
-    
+
     // Clear current options
     modelSelect.innerHTML = '';
-    
+
     // Add new options
     models.forEach(model => {
         const option = document.createElement('option');
@@ -507,7 +420,7 @@ async function updateModelDropdown(provider) {
         if (model.selected) option.selected = true;
         modelSelect.appendChild(option);
     });
-    
+
     // Also update setting-model if it's a different element
     const settingModel = document.getElementById('setting-model');
     if (settingModel && settingModel !== modelSelect) {
@@ -548,16 +461,16 @@ function getConfiguredModels() {
     try {
         const exec = require('child_process').execSync;
         const result = exec('moltbot models list 2>/dev/null | tail -n +4', { encoding: 'utf8' });
-        
+
         const models = [];
         const lines = result.split('\n').filter(line => line.trim());
-        
+
         for (const line of lines) {
             const parts = line.trim().split(/\s+/);
             if (parts.length >= 2) {
                 const modelId = parts[0];
                 const tags = parts[parts.length - 1] || '';
-                
+
                 models.push({
                     value: modelId,
                     name: modelId.split('/').pop() || modelId,
@@ -565,7 +478,7 @@ function getConfiguredModels() {
                 });
             }
         }
-        
+
         return models;
     } catch (e) {
         return [];
@@ -577,15 +490,15 @@ let currentProvider = 'anthropic';
 let currentModel = 'anthropic/claude-opus-4-5';
 
 // Initialize provider/model display on page load
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     try {
         // First populate the provider dropdown dynamically
         await populateProviderDropdown();
-        
+
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
         const modelInfo = await response.json();
-        
+
         currentProvider = modelInfo.provider;
         currentModel = modelInfo.modelId;
 
@@ -594,23 +507,23 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('selected_model', currentModel);
 
         console.log(`[Dashboard] Current model: ${currentModel}`);
-        
+
         // Update displays (with null checks)
         const providerNameEl = document.getElementById('provider-name');
         const modelNameEl = document.getElementById('model-name');
         const currentProviderDisplay = document.getElementById('current-provider-display');
         const currentModelDisplay = document.getElementById('current-model-display');
         const providerSelectEl = document.getElementById('provider-select');
-        
+
         if (providerNameEl) providerNameEl.textContent = currentProvider;
         if (modelNameEl) modelNameEl.textContent = currentModel;
         if (currentProviderDisplay) currentProviderDisplay.textContent = currentProvider;
         if (currentModelDisplay) currentModelDisplay.textContent = currentModel;
         if (providerSelectEl) providerSelectEl.value = currentProvider;
-        
+
         // Populate model dropdown for current provider
         await updateModelDropdown(currentProvider);
-        
+
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
         // Don't crash the whole page - just log the error
@@ -669,24 +582,24 @@ function getFriendlySessionName(key) {
 
 let currentSessionName = 'main';
 
-window.toggleSessionMenu = function() {
+window.toggleSessionMenu = function () {
     const menu = document.getElementById('session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
 }
 
-window.renameSession = async function() {
+window.renameSession = async function () {
     toggleSessionMenu();
     const newName = prompt('Enter new session name:', currentSessionName);
     if (!newName || newName === currentSessionName) return;
-    
+
     try {
         const response = await fetch('/api/session/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ oldName: currentSessionName, newName })
         });
-        
+
         if (response.ok) {
             currentSessionName = newName;
             const nameEl = document.getElementById('current-session-name');
@@ -702,13 +615,13 @@ window.renameSession = async function() {
     }
 }
 
-window.showSessionSwitcher = function() {
+window.showSessionSwitcher = function () {
     toggleSessionMenu();
     showToast('Session switcher coming soon', 'info');
 }
 
 // Chat Page Session Menu Functions
-window.toggleChatPageSessionMenu = function() {
+window.toggleChatPageSessionMenu = function () {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
@@ -782,17 +695,17 @@ async function fetchSessions() {
 function populateSessionDropdown() {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
-    
+
     if (availableSessions.length === 0) {
         menu.innerHTML = '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">No sessions available</div>';
         return;
     }
-    
+
     menu.innerHTML = availableSessions.map(s => {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
-        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-        
+        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
@@ -816,10 +729,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-window.editSessionName = function(sessionKey, currentName) {
+window.editSessionName = function (sessionKey, currentName) {
     const newName = prompt('Enter new session name:', currentName);
     if (!newName || newName === currentName) return;
-    
+
     fetch('/api/session/rename', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -846,16 +759,16 @@ window.editSessionName = function(sessionKey, currentName) {
     });
 }
 
-window.switchToSession = async function(sessionKey) {
+window.switchToSession = async function (sessionKey) {
     toggleChatPageSessionMenu();
-    
+
     if (sessionKey === currentSessionName) {
         showToast('Already on this session', 'info');
         return;
     }
-    
+
     showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
-    
+
     try {
         // 1. Save current chat as safeguard
         await saveCurrentChat();
@@ -902,14 +815,14 @@ async function saveCurrentChat() {
     try {
         const response = await fetch('/api/state');
         const state = await response.json();
-        
+
         // Save chat history to archivedChats
         if (!state.archivedChats) state.archivedChats = {};
         state.archivedChats[currentSessionName] = {
             savedAt: Date.now(),
             messages: chatHistory.slice(-100) // Last 100 messages
         };
-        
+
         await fetch('/api/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -924,7 +837,7 @@ async function loadSessionHistory(sessionKey) {
     try {
         // Find session in available sessions (which now includes messages)
         const session = availableSessions.find(s => s.key === sessionKey);
-        
+
         if (session?.messages && session.messages.length > 0) {
             // Convert to chat format
             chatHistory = session.messages.map(msg => ({
@@ -933,7 +846,7 @@ async function loadSessionHistory(sessionKey) {
                 timestamp: msg.timestamp || Date.now(),
                 name: msg.name
             }));
-            
+
             renderChat();
             renderChatPage();
             console.log(`[Dashboard] Loaded ${session.messages.length} messages from ${sessionKey}`);
@@ -953,7 +866,7 @@ async function loadArchivedChat(sessionKey) {
     try {
         const response = await fetch('/api/state');
         const state = await response.json();
-        
+
         const archived = state.archivedChats?.[sessionKey];
         if (archived?.messages) {
             chatHistory = archived.messages;
@@ -984,7 +897,7 @@ function initGateway() {
             console.log(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
             GATEWAY_CONFIG.sessionKey = sessionKey;
-            
+
             // Update session name displays (use friendly name without agent prefix)
             currentSessionName = sessionKey;
             const friendlyName = getFriendlySessionName(sessionKey);
@@ -992,7 +905,7 @@ function initGateway() {
             if (nameEl) nameEl.textContent = friendlyName;
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) chatPageNameEl.textContent = friendlyName;
-            
+
             checkRestartToast();
 
             // Load chat history on connect
@@ -1082,7 +995,7 @@ function disconnectFromGateway() {
 }
 
 // Restart gateway directly via WebSocket RPC (no bot involved)
-window.requestGatewayRestart = async function() {
+window.requestGatewayRestart = async function () {
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to gateway', 'warning');
         return;
@@ -1155,7 +1068,7 @@ function updateConnectionUI(status, message) {
 
 function handleChatEvent(event) {
     const { state: eventState, content, role, errorMessage, model, provider, stopReason } = event;
-    
+
     // Track the current model being used for responses
     if (model) {
         window._lastResponseModel = model;
@@ -1183,7 +1096,7 @@ function handleChatEvent(event) {
             if (streamingText && streamingText.length > 100 && content.length < streamingText.length * 0.5) {
                 addLocalChatMessage(streamingText, 'solobot');
             }
-            
+
             streamingText = content;
             isProcessing = true;
             renderChat();
@@ -1235,7 +1148,7 @@ function loadHistoryMessages(messages) {
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
         }
-        
+
         let textContent = '';
         if (msg.content) {
             for (const part of msg.content) {
@@ -1349,7 +1262,7 @@ function mergeHistoryMessages(messages) {
         if (existingIds.has(msgId) || existingSystemIds.has(msgId)) {
             continue;
         }
-        
+
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             continue;
@@ -1432,10 +1345,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const provider = localStorage.getItem('selected_provider') || 'anthropic';
     const model = localStorage.getItem('selected_model') || 'claude-3-opus';
     console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
-    
+
     // Load gateway settings from server state if localStorage is empty
     loadGatewaySettingsFromServer();
-    
+
     render({ includeSystem: true }); // Initial render includes system page
     updateLastSync();
 
@@ -1480,28 +1393,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Auto-refresh error:', e);
         }
     }, 10000); // Slower refresh since chat is real-time now
-    
+
     // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') addNote();
     });
-    
+
     document.getElementById('new-task-title').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') submitTask();
     });
-    
+
     // Docs search
     const docsSearch = document.getElementById('docs-search'); if (docsSearch) docsSearch.addEventListener('input', (e) => {
         renderDocs(e.target.value);
     });
-    
+
     // Close menus when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.task-menu') && !e.target.closest('.task-menu-btn')) {
             closeAllTaskMenus();
         }
     });
-    
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -1517,12 +1430,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             selectAllTasks();
         }
     });
-    
+
     // Enter key for edit title modal
     document.getElementById('edit-title-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') saveEditedTitle();
     });
-    
+
     // Drag and drop for images on chat page
     setupChatDragDrop();
 });
@@ -1531,7 +1444,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupChatDragDrop() {
     const chatWrapper = document.querySelector('.chat-page-wrapper');
     if (!chatWrapper) return;
-    
+
     // Prevent default drag behaviors on the whole page
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         chatWrapper.addEventListener(eventName, (e) => {
@@ -1539,20 +1452,20 @@ function setupChatDragDrop() {
             e.stopPropagation();
         }, false);
     });
-    
+
     // Highlight drop zone
     ['dragenter', 'dragover'].forEach(eventName => {
         chatWrapper.addEventListener(eventName, () => {
             chatWrapper.classList.add('drag-over');
         }, false);
     });
-    
+
     ['dragleave', 'drop'].forEach(eventName => {
         chatWrapper.addEventListener(eventName, () => {
             chatWrapper.classList.remove('drag-over');
         }, false);
     });
-    
+
     // Handle drop
     chatWrapper.addEventListener('drop', (e) => {
         const files = e.dataTransfer?.files;
@@ -1624,7 +1537,7 @@ async function saveState(changeDescription = null) {
     if (changeDescription) {
         state.lastChange = changeDescription;
     }
-    
+
     // Create a trimmed copy for localStorage (limit messages to prevent quota exceeded)
     try {
         const stateForStorage = JSON.parse(JSON.stringify(state));
@@ -1653,7 +1566,7 @@ async function saveState(changeDescription = null) {
         }
     }
     updateLastSync();
-    
+
     // Sync to server
     await syncToServer();
 }
@@ -1665,7 +1578,7 @@ async function syncToServer() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(state)
         });
-        
+
         if (response.ok) {
             if (state.console && state.console.logs) {
                 state.console.logs.push({
@@ -1717,7 +1630,7 @@ function handleImageSelect(event) {
 function handlePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
+
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -1736,19 +1649,19 @@ async function compressImage(dataUrl, maxWidth = 1200, quality = 0.8) {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            
+
             // Scale down if too large
             if (width > maxWidth) {
                 height = (height * maxWidth) / width;
                 width = maxWidth;
             }
-            
+
             canvas.width = width;
             canvas.height = height;
-            
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
+
             // Convert to JPEG for better compression (unless PNG transparency needed)
             const compressed = canvas.toDataURL('image/jpeg', quality);
             resolve(compressed);
@@ -1765,7 +1678,7 @@ function processImageFile(file) {
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
         }
-        
+
         pendingImages.push({
             id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
@@ -1780,13 +1693,13 @@ function processImageFile(file) {
 function renderImagePreviews() {
     const container = document.getElementById('image-preview-container');
     if (!container) return;
-    
+
     if (pendingImages.length === 0) {
         container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
-    
+
     container.classList.add('visible');
     container.innerHTML = pendingImages.map((img, idx) => `
         <div class="image-preview-wrapper">
@@ -1825,7 +1738,7 @@ async function sendChatMessage() {
     // Get images to send
     const imagesToSend = [...pendingImages];
     const hasImages = imagesToSend.length > 0;
-    
+
     // Add to local display
     if (hasImages) {
         // Show first image in local preview, note if there are more
@@ -1835,7 +1748,7 @@ async function sendChatMessage() {
     } else {
         addLocalChatMessage(text, 'user');
     }
-    
+
     input.value = '';
     clearImagePreviews();
 
@@ -1858,7 +1771,7 @@ async function sendChatMessage() {
 function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
     if (!state.chat) state.chat = { messages: [] };
     if (!state.system) state.system = { messages: [] };
-    
+
     // Handle both (text, from, image) and (text, from, model) call signatures
     // If third param is a string that looks like a model name, treat it as model
     let image = null;
@@ -1905,10 +1818,10 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
 
         // Persist chat to localStorage (workaround for Gateway bug #5735)
         persistChatMessages();
-        
+
         // Also sync chat to VPS for cross-computer access
         syncChatToVPS();
-        
+
         renderChat();
         renderChatPage();
     }
@@ -2047,7 +1960,7 @@ function createChatMessageElement(msg) {
         nameSpan.style.color = 'var(--success)';
         nameSpan.textContent = msg.isStreaming ? 'SoLoBot (typing...)' : 'SoLoBot';
     }
-    
+
     // Model badge for bot messages (shows which AI model generated the response)
     if (!isUser && !isSystem && msg.model) {
         const modelBadge = document.createElement('span');
@@ -2154,10 +2067,10 @@ function saveChatScrollPosition() {
 function restoreChatScrollPosition() {
     const container = document.getElementById('chat-page-messages');
     if (!container) return;
-    
+
     const savedPosition = sessionStorage.getItem('chatScrollPosition');
     const savedHeight = sessionStorage.getItem('chatScrollHeight');
-    
+
     if (savedPosition && savedHeight) {
         // Calculate relative position and apply
         const ratio = parseFloat(savedPosition) / parseFloat(savedHeight);
@@ -2198,10 +2111,10 @@ function scrollChatToBottom() {
 function updateNewMessageIndicator() {
     const indicator = document.getElementById('chat-page-new-indicator');
     if (!indicator) return;
-    
+
     const container = document.getElementById('chat-page-messages');
     const notAtBottom = container && !isAtBottom(container);
-    
+
     if (notAtBottom && chatPageNewMessageCount > 0) {
         indicator.textContent = `↓ ${chatPageNewMessageCount} new message${chatPageNewMessageCount > 1 ? 's' : ''}`;
         indicator.classList.remove('hidden');
@@ -2217,18 +2130,18 @@ function updateNewMessageIndicator() {
 function setupChatPageScrollListener() {
     const container = document.getElementById('chat-page-messages');
     if (!container || container.dataset.scrollListenerAttached) return;
-    
+
     container.addEventListener('scroll', () => {
         // Update indicator based on scroll position
         updateNewMessageIndicator();
-        
+
         // Show/hide floating scroll button
         updateScrollToBottomButton();
-        
+
         // Save position periodically
         saveChatScrollPosition();
     });
-    
+
     container.dataset.scrollListenerAttached = 'true';
 }
 
@@ -2236,7 +2149,7 @@ function updateScrollToBottomButton() {
     const container = document.getElementById('chat-page-messages');
     const btn = document.getElementById('scroll-to-bottom-btn');
     if (!container || !btn) return;
-    
+
     // Show button if scrolled up more than 200px from bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distanceFromBottom > 200) {
@@ -2269,36 +2182,36 @@ function renderChatPage() {
     }
 
     const messages = state.chat?.messages || [];
-    
+
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
     // Save distance from bottom (how far up the user has scrolled)
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    
+
     // Clear and re-render
     container.innerHTML = '';
-    
+
     // Show empty state if no messages
     if (messages.length === 0 && !streamingText) {
         container.innerHTML = `
             <div class="chat-page-empty">
                 <div class="chat-page-empty-icon">💬</div>
                 <div class="chat-page-empty-text">
-                    ${isConnected 
-                        ? 'Start a conversation with SoLoBot' 
-                        : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
+                    ${isConnected
+                ? 'Start a conversation with SoLoBot'
+                : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
                 </div>
             </div>
         `;
         return;
     }
-    
+
     // Render messages (no filtering - system messages are in separate array)
     messages.forEach(msg => {
         const msgEl = createChatPageMessage(msg);
         if (msgEl) container.appendChild(msgEl);
     });
-    
+
     // Render streaming message
     if (streamingText) {
         const streamingMsg = createChatPageMessage({
@@ -2310,7 +2223,7 @@ function renderChatPage() {
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
-    
+
     // Smart scroll behavior - only auto-scroll if user was truly at the bottom
     if (wasAtBottom) {
         // User was at bottom, keep them there
@@ -2325,19 +2238,19 @@ function renderChatPage() {
 // Create a chat page message element (different styling from widget)
 function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
-    
+
     const isUser = msg.from === 'user';
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
-    
+
     // Message wrapper
     const wrapper = document.createElement('div');
     wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
-    
+
     // Bubble
     const bubble = document.createElement('div');
     bubble.className = 'chat-page-bubble';
-    
+
     // Image if present
     if (msg.image) {
         const img = document.createElement('img');
@@ -2346,11 +2259,11 @@ function createChatPageMessage(msg) {
         img.onclick = () => openImageModal(msg.image);
         bubble.appendChild(img);
     }
-    
+
     // Header with sender and time
     const header = document.createElement('div');
     header.className = 'chat-page-bubble-header';
-    
+
     const sender = document.createElement('span');
     sender.className = 'chat-page-sender';
     if (isUser) {
@@ -2360,21 +2273,21 @@ function createChatPageMessage(msg) {
     } else {
         sender.textContent = msg.isStreaming ? 'SoLoBot is typing...' : 'SoLoBot';
     }
-    
+
     const time = document.createElement('span');
     time.className = 'chat-page-bubble-time';
     time.textContent = formatTime(msg.time);
-    
+
     header.appendChild(sender);
     header.appendChild(time);
     bubble.appendChild(header);
-    
+
     // Content
     const content = document.createElement('div');
     content.className = 'chat-page-bubble-content';
     content.textContent = msg.text;
     bubble.appendChild(content);
-    
+
     wrapper.appendChild(bubble);
     return wrapper;
 }
@@ -2401,7 +2314,7 @@ function handleChatPageImageSelect(event) {
 function handleChatPagePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
+
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -2420,7 +2333,7 @@ function processChatPageImageFile(file) {
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
         }
-        
+
         chatPagePendingImages.push({
             id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
@@ -2435,14 +2348,14 @@ function processChatPageImageFile(file) {
 function renderChatPageImagePreviews() {
     const container = document.getElementById('chat-page-image-preview');
     if (!container) return;
-    
+
     if (chatPagePendingImages.length === 0) {
         container.classList.add('hidden');
         container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
-    
+
     container.classList.remove('hidden');
     container.classList.add('visible');
     container.innerHTML = chatPagePendingImages.map((img, idx) => `
@@ -2473,15 +2386,15 @@ async function sendChatPageMessage() {
     const input = document.getElementById('chat-page-input');
     const text = input.value.trim();
     if (!text && chatPagePendingImages.length === 0) return;
-    
+
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to Gateway. Please connect first in Settings.', 'warning');
         return;
     }
-    
+
     const imagesToSend = [...chatPagePendingImages];
     const hasImages = imagesToSend.length > 0;
-    
+
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
@@ -2489,17 +2402,17 @@ async function sendChatPageMessage() {
     } else {
         addLocalChatMessage(text, 'user');
     }
-    
+
     input.value = '';
     clearChatPageImagePreviews();
-    
+
     // Force scroll to bottom when user sends
     chatPageUserScrolled = false;
-    
+
     // Render both areas
     renderChat();
     renderChatPage();
-    
+
     // Send via Gateway
     try {
         console.log(`[Chat] Sending message with model: ${currentModel}`);
@@ -2529,7 +2442,7 @@ function showConfirm(title, message, okText = 'OK', cancelText = 'Cancel', isDan
         const messageEl = document.getElementById('confirm-modal-message');
         const okBtn = document.getElementById('confirm-modal-ok');
         const cancelBtn = document.getElementById('confirm-modal-cancel');
-        
+
         if (titleEl) titleEl.textContent = title;
         if (messageEl) messageEl.textContent = message;
         if (okBtn) {
@@ -2537,7 +2450,7 @@ function showConfirm(title, message, okText = 'OK', cancelText = 'Cancel', isDan
             okBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
         }
         if (cancelBtn) cancelBtn.textContent = cancelText;
-        
+
         confirmModalCallback = resolve;
         showModal('confirm-modal');
     });
@@ -2580,7 +2493,7 @@ async function clearChatHistory(skipConfirm = false, clearCache = false) {
     renderChatPage();
 }
 
-window.startNewSession = async function() {
+window.startNewSession = async function () {
     // Generate a new session name: "Dashboard" + timestamp
     const now = new Date();
     const timestamp = now.toISOString().slice(5, 16).replace('T', '-').replace(':', ''); // MM-DD-HHMM
@@ -2766,7 +2679,7 @@ function renderStatus() {
     // Use design system status-dot classes (with null checks)
     if (indicator) {
         indicator.className = 'status-dot';
-        switch(state.status) {
+        switch (state.status) {
             case 'working':
                 indicator.classList.add('success', 'pulse');
                 break;
@@ -2780,9 +2693,9 @@ function renderStatus() {
                 indicator.classList.add('success');
         }
     }
-    
+
     if (text) {
-        switch(state.status) {
+        switch (state.status) {
             case 'working': text.textContent = 'WORKING'; break;
             case 'thinking': text.textContent = 'THINKING'; break;
             case 'offline': text.textContent = 'OFFLINE'; break;
@@ -2870,7 +2783,7 @@ function renderTasks() {
                             <span class="badge ${getPriorityBadgeClass(task.priority)}">P${task.priority}</span>
                         </div>
                         <div class="task-meta">
-                            #${index + 1} • ${formatTime(task.created || task.completedAt || task.id?.replace('t',''))}
+                            #${index + 1} • ${formatTime(task.created || task.completedAt || task.id?.replace('t', ''))}
                             ${task.description ? ' • 📝' : ''}
                             ${task.images?.length ? ` • 📎${task.images.length}` : ''}
                         </div>
@@ -2903,8 +2816,8 @@ function renderNotes() {
             <div style="display: flex; align-items: flex-start; justify-content: space-between;">
                 <span class="note-text">${escapeHtml(note.text)}</span>
                 ${note.seen
-                    ? '<span class="badge badge-success">✓ Seen</span>'
-                    : '<span class="badge badge-warning">Pending</span>'}
+            ? '<span class="badge badge-success">✓ Seen</span>'
+            : '<span class="badge badge-warning">Pending</span>'}
             </div>
             <div class="note-meta">${formatTime(note.created)}</div>
         </div>
@@ -2932,24 +2845,24 @@ function renderActivity() {
 
 function renderDocs(filter = '') {
     const container = document.getElementById('docs-grid');
-    
+
     // If docs-grid doesn't exist (moved to Memory page), skip
     if (!container) return;
-    
+
     // First, render the memory files from our local documentation
     renderMemoryFiles(filter);
-    
+
     // Then, append the existing Google Drive docs (if any) below the memory files
     const filtered = state.docs.filter(doc =>
         doc.name.toLowerCase().includes(filter.toLowerCase())
     );
-    
+
     if (filtered.length > 0) {
         // Add a separator if we have both memory files and Google Drive docs
         if (container.innerHTML && filtered.length > 0) {
             container.innerHTML += '<div class="docs-separator"><h3 class="category-title">Google Drive Documents</h3></div>';
         }
-        
+
         const driveDocsHtml = filtered.map(doc => {
             const iconClass = getDocIconClass(doc.type, doc.url);
             const iconSymbol = getDocIconSymbol(doc.type, doc.url);
@@ -2964,10 +2877,10 @@ function renderDocs(filter = '') {
                 </div>
             </a>
         `}).join('');
-        
+
         container.innerHTML += driveDocsHtml;
     }
-    
+
     // If completely empty, show message
     if (!container.innerHTML) {
         container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: var(--space-4);">No documents found</div>';
@@ -3038,7 +2951,7 @@ function getPriorityBadgeClass(p) {
 }
 
 function getLogColor(type) {
-    switch(type) {
+    switch (type) {
         case 'command': return 'text-green-400';
         case 'success': return 'text-green-300';
         case 'error': return 'text-red-400';
@@ -3051,7 +2964,7 @@ function getLogColor(type) {
 }
 
 function getLogPrefix(type) {
-    switch(type) {
+    switch (type) {
         case 'command': return '$ ';
         case 'thinking': return '🧠 ';
         case 'success': return '✓ ';
@@ -3078,7 +2991,7 @@ function addActivity(action, type = 'info') {
         action,
         type
     });
-    
+
     if (state.activity.length > 500) {
         state.activity = state.activity.slice(-500);
     }
@@ -3087,7 +3000,7 @@ function addActivity(action, type = 'info') {
 function updateArchiveBadge() {
     const badgeEl = document.getElementById('archive-badge');
     if (!badgeEl) return;
-    
+
     const count = (state.tasks.archive || []).length;
     badgeEl.textContent = count;
     if (count > 0) {
@@ -3130,17 +3043,17 @@ async function openSettingsModal() {
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
         const modelInfo = await response.json();
-        
+
         // Update settings modal display
         document.getElementById('current-provider-display').textContent = modelInfo.provider;
         document.getElementById('current-model-display').textContent = modelInfo.modelId;
-        
+
         // Set provider select to current
         document.getElementById('setting-provider').value = modelInfo.provider;
-        
+
         // Populate model dropdown for current provider
         await updateModelDropdown(modelInfo.provider);
-        
+
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
         // Fallback
@@ -3467,26 +3380,26 @@ function clearConsole() {
 // Add a log entry to the terminal
 function addTerminalLog(text, type = 'info', timestamp = null) {
     if (!state.console) state.console = { logs: [] };
-    
+
     const log = {
         time: timestamp || Date.now(),
         text: text,
         type: type
     };
-    
+
     // Dedupe - don't add if identical to last entry within 5 seconds
     const lastLog = state.console.logs[state.console.logs.length - 1];
     if (lastLog && lastLog.text === text && Math.abs(log.time - lastLog.time) < 5000) {
         return;
     }
-    
+
     state.console.logs.push(log);
-    
+
     // Keep last 500 entries for review
     if (state.console.logs.length > 500) {
         state.console.logs = state.console.logs.slice(-500);
     }
-    
+
     renderConsole();
 }
 
@@ -3496,25 +3409,25 @@ async function syncActivitiesFromFile() {
     try {
         const response = await fetch('/api/memory/memory/recent-activity.json');
         if (!response.ok) return;
-        
+
         const wrapper = await response.json();
         // API wraps content in {name, content, modified, size}
         const data = typeof wrapper.content === 'string' ? JSON.parse(wrapper.content) : wrapper.content;
         if (!data || !data.activities || data.updatedMs <= lastActivitySync) return;
-        
+
         lastActivitySync = data.updatedMs;
-        
+
         // Convert activities to console log format
         const activityLogs = data.activities.map(a => ({
             time: a.timestamp,
             text: a.text,
             type: 'info'
         }));
-        
+
         // Merge with existing logs (dedupe by timestamp + text)
         if (!state.console) state.console = { logs: [] };
         const existing = new Set(state.console.logs.map(l => `${l.time}-${l.text}`));
-        
+
         let added = 0;
         for (const log of activityLogs) {
             const key = `${log.time}-${log.text}`;
@@ -3524,7 +3437,7 @@ async function syncActivitiesFromFile() {
                 added++;
             }
         }
-        
+
         if (added > 0) {
             // Sort by time and keep last 100
             state.console.logs.sort((a, b) => a.time - b.time);
@@ -3568,7 +3481,7 @@ function updateSetting(key, value) {
         showToast(`${key.charAt(0).toUpperCase() + key.slice(1)} must be configured at OpenClaw gateway level`, 'warning');
         return;
     }
-    
+
     // Settings are stored in localStorage
     localStorage.setItem(`setting_${key}`, JSON.stringify(value));
 }
@@ -3682,17 +3595,17 @@ window.dashboardAPI = {
     addConsoleLog: (text, type) => {
         if (!state.console) state.console = { logs: [] };
         if (!state.console.logs) state.console.logs = [];
-        
+
         state.console.logs.push({
             text,
             type,
             time: Date.now()
         });
-        
+
         if (state.console.logs.length > 100) {
             state.console.logs = state.console.logs.slice(-100);
         }
-        
+
         saveState();
         renderConsole();
     },
@@ -3724,36 +3637,36 @@ window.dashboardAPI = {
 let currentMemoryFile = null;
 
 // View a memory file in the modal
-window.viewMemoryFile = async function(filePath) {
+window.viewMemoryFile = async function (filePath) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
-    
+
     if (!titleEl || !contentEl) return;
-    
+
     // Show loading state
     titleEl.textContent = filePath;
     contentEl.value = 'Loading...';
     contentEl.disabled = true;
     if (saveBtn) saveBtn.disabled = true;
-    
+
     currentMemoryFile = filePath;
     showModal('memory-file-modal');
-    
+
     try {
         // Fetch file content from API
         const response = await fetch(`/api/memory/${encodeURIComponent(filePath)}`);
         const data = await response.json();
-        
+
         if (data.error) {
             contentEl.value = `Error: ${data.error}`;
             return;
         }
-        
+
         contentEl.value = data.content || '';
         contentEl.disabled = false;
         if (saveBtn) saveBtn.disabled = false;
-        
+
         // Show bot-update badge and acknowledge button if applicable
         if (data.botUpdated && !data.acknowledged) {
             titleEl.innerHTML = `
@@ -3767,12 +3680,12 @@ window.viewMemoryFile = async function(filePath) {
         } else {
             titleEl.textContent = data.name;
         }
-        
+
         // Load version history (function from docs-hub-memory-files.js)
         if (typeof window.loadVersionHistory === 'function') {
             window.loadVersionHistory(filePath);
         }
-        
+
     } catch (error) {
         console.error('Error loading memory file:', error);
         contentEl.value = `Error loading file: ${error.message}`;
@@ -3780,31 +3693,31 @@ window.viewMemoryFile = async function(filePath) {
 };
 
 // Save memory file changes
-window.saveMemoryFile = async function() {
+window.saveMemoryFile = async function () {
     if (!currentMemoryFile) return;
-    
+
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
-    
+
     if (!contentEl) return;
-    
+
     const content = contentEl.value;
-    
+
     // Show saving state
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving...';
     }
-    
+
     try {
         const response = await fetch(`/api/memory/${encodeURIComponent(currentMemoryFile)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.ok) {
             // Success feedback
             if (saveBtn) {
@@ -3821,7 +3734,7 @@ window.saveMemoryFile = async function() {
         } else {
             throw new Error(data.error || 'Save failed');
         }
-        
+
     } catch (error) {
         console.error('Error saving memory file:', error);
         showToast(`Failed to save: ${error.message}`, 'error');
@@ -3833,7 +3746,7 @@ window.saveMemoryFile = async function() {
 };
 
 // Close memory modal
-window.closeMemoryModal = function() {
+window.closeMemoryModal = function () {
     currentMemoryFile = null;
     hideModal('memory-file-modal');
 };
@@ -3855,7 +3768,7 @@ function initHealthPage() {
 function updateHealthGatewayStatus() {
     const statusEl = document.getElementById('health-gateway-status');
     if (!statusEl) return;
-    
+
     if (gateway && gateway.isConnected()) {
         statusEl.innerHTML = `
             <span style="font-size: 20px;">✅</span>
@@ -3875,14 +3788,14 @@ async function loadHealthModels() {
         const response = await fetch('/api/models/list');
         if (!response.ok) throw new Error('Failed to fetch models');
         const data = await response.json();
-        
+
         const models = data.models || [];
         const countEl = document.getElementById('health-model-count');
         if (countEl) countEl.textContent = models.length;
-        
+
         // Render initial model list (not tested yet)
         renderHealthModelList(models, {});
-        
+
         return models;
     } catch (error) {
         console.error('[Health] Failed to load models:', error);
@@ -3895,7 +3808,7 @@ async function loadHealthModels() {
 // Test a single model by sending it a simple prompt
 async function testSingleModel(modelId) {
     const startTime = Date.now();
-    
+
     try {
         // Use the gateway's chat.send but with a test session
         // We'll use the /api/models/test endpoint if available, or simulate via chat
@@ -3907,9 +3820,9 @@ async function testSingleModel(modelId) {
                 prompt: 'Respond with exactly "OK" and nothing else.'
             })
         });
-        
+
         const latencyMs = Date.now() - startTime;
-        
+
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             return {
@@ -3918,9 +3831,9 @@ async function testSingleModel(modelId) {
                 latencyMs
             };
         }
-        
+
         const data = await response.json();
-        
+
         if (data.error) {
             return {
                 success: false,
@@ -3928,13 +3841,13 @@ async function testSingleModel(modelId) {
                 latencyMs
             };
         }
-        
+
         return {
             success: true,
             response: data.response || 'OK',
             latencyMs
         };
-        
+
     } catch (error) {
         return {
             success: false,
@@ -3945,78 +3858,78 @@ async function testSingleModel(modelId) {
 }
 
 // Run health checks on all models
-window.runAllModelTests = async function() {
+window.runAllModelTests = async function () {
     if (healthTestInProgress) {
         showToast('Health check already in progress', 'warning');
         return;
     }
-    
+
     healthTestInProgress = true;
     healthTestResults = {};
-    
+
     const testBtn = document.getElementById('test-all-btn');
     const progressEl = document.getElementById('health-test-progress');
-    
+
     if (testBtn) {
         testBtn.disabled = true;
         testBtn.innerHTML = '⏳ Testing...';
     }
-    
+
     try {
         // Load models
         const models = await loadHealthModels();
-        
+
         if (models.length === 0) {
             showToast('No models found to test', 'warning');
             return;
         }
-        
+
         // Mark all as testing
         models.forEach(m => {
             healthTestResults[m.id] = { status: 'testing' };
         });
         renderHealthModelList(models, healthTestResults);
-        
+
         // Test each model sequentially
         let tested = 0;
         let passed = 0;
         let failed = 0;
-        
+
         for (const model of models) {
             tested++;
             if (progressEl) {
                 progressEl.textContent = `Testing ${tested}/${models.length}...`;
             }
-            
+
             const result = await testSingleModel(model.id);
-            
+
             healthTestResults[model.id] = {
                 status: result.success ? 'success' : 'error',
                 error: result.error,
                 latencyMs: result.latencyMs,
                 response: result.response
             };
-            
+
             if (result.success) passed++;
             else failed++;
-            
+
             // Re-render after each test for real-time updates
             renderHealthModelList(models, healthTestResults);
         }
-        
+
         // Update last test time
         const lastTestEl = document.getElementById('health-last-test');
         if (lastTestEl) {
             lastTestEl.textContent = new Date().toLocaleTimeString();
         }
-        
+
         if (progressEl) {
             progressEl.textContent = `✅ ${passed} passed, ❌ ${failed} failed`;
         }
-        
-        showToast(`Health check complete: ${passed}/${models.length} models working`, 
+
+        showToast(`Health check complete: ${passed}/${models.length} models working`,
             failed > 0 ? 'warning' : 'success');
-        
+
     } catch (error) {
         console.error('[Health] Test failed:', error);
         showToast('Health check failed: ' + error.message, 'error');
@@ -4033,7 +3946,7 @@ window.runAllModelTests = async function() {
 function renderHealthModelList(models, results) {
     const container = document.getElementById('health-model-list');
     if (!container) return;
-    
+
     if (models.length === 0) {
         container.innerHTML = `
             <div style="padding: var(--space-4); color: var(--text-muted); text-align: center;">
@@ -4042,10 +3955,10 @@ function renderHealthModelList(models, results) {
         `;
         return;
     }
-    
+
     container.innerHTML = models.map(model => {
         const result = results[model.id] || { status: 'pending' };
-        
+
         let statusIcon, statusColor, statusText;
         switch (result.status) {
             case 'success':
@@ -4068,11 +3981,11 @@ function renderHealthModelList(models, results) {
                 statusColor = 'var(--text-muted)';
                 statusText = 'Not tested';
         }
-        
+
         // Extract provider from model ID (e.g., 'anthropic/claude-3-5-sonnet' -> 'anthropic')
         const provider = model.id.split('/')[0] || 'unknown';
         const modelName = model.id.split('/').slice(1).join('/') || model.id;
-        
+
         return `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle);">
                 <div style="display: flex; align-items: center; gap: var(--space-3);">
@@ -4095,11 +4008,11 @@ function renderHealthModelList(models, results) {
 }
 
 // Test single model from UI button
-window.testSingleModelUI = async function(modelId) {
+window.testSingleModelUI = async function (modelId) {
     const models = await loadHealthModels();
     healthTestResults[modelId] = { status: 'testing' };
     renderHealthModelList(models, healthTestResults);
-    
+
     const result = await testSingleModel(modelId);
     healthTestResults[modelId] = {
         status: result.success ? 'success' : 'error',
@@ -4107,7 +4020,7 @@ window.testSingleModelUI = async function(modelId) {
         latencyMs: result.latencyMs
     };
     renderHealthModelList(models, healthTestResults);
-    
+
     showToast(result.success ? `${modelId.split('/').pop()} is working!` : `${modelId.split('/').pop()} failed: ${result.error}`,
         result.success ? 'success' : 'error');
 };
@@ -4115,7 +4028,7 @@ window.testSingleModelUI = async function(modelId) {
 // Hook into page navigation to init health page
 const originalShowPage = window.showPage;
 if (typeof originalShowPage === 'function') {
-    window.showPage = function(pageName, updateURL = true) {
+    window.showPage = function (pageName, updateURL = true) {
         originalShowPage(pageName, updateURL);
         if (pageName === 'health') {
             initHealthPage();
