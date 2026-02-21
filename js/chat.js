@@ -709,23 +709,21 @@ function createChatMessageElement(msg) {
         nameSpan.textContent = msg.isStreaming ? `${displayName} (typing...)` : displayName;
     }
 
-    // Model badge for bot messages (shows which AI model generated the response)
-    if (!isUser && !isSystem && msg.model) {
-        const modelBadge = document.createElement('span');
-        modelBadge.style.cssText = 'font-size: 10px; padding: 1px 5px; background: var(--surface-3); border-radius: 3px; color: var(--text-muted); margin-left: 4px;';
-        // Show short model name (e.g., 'claude-3-5-sonnet' instead of 'anthropic/claude-3-5-sonnet-latest')
-        const shortModel = msg.model.split('/').pop().replace(/-latest$/, '');
-        modelBadge.textContent = shortModel;
-        modelBadge.title = msg.model; // Full model name on hover
-        header.appendChild(modelBadge);
-    }
-
     const timeSpan = document.createElement('span');
     timeSpan.style.color = 'var(--text-muted)';
     timeSpan.textContent = formatTime(msg.time);
 
     header.appendChild(nameSpan);
     header.appendChild(timeSpan);
+
+    // Provider/Model badge - shows full provider/model (e.g., "ollama/qwen2.5:14b", "openai/gpt-4o")
+    if (!isUser && !isSystem && msg.model) {
+        const providerModelSpan = document.createElement('span');
+        providerModelSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); font-family: monospace; background: var(--surface-3); padding: 1px 4px; border-radius: 3px; margin-left: 4px;';
+        providerModelSpan.textContent = msg.model;
+        providerModelSpan.title = msg.model;
+        header.appendChild(providerModelSpan);
+    }
 
     // Message content
     const content = document.createElement('div');
@@ -1185,6 +1183,16 @@ function createChatPageMessage(msg) {
 
     header.appendChild(sender);
     header.appendChild(time);
+
+    // Provider/Model badge for bot messages - shows full provider/model ID
+    if (isBot && msg.model) {
+        const providerModelSpan = document.createElement('span');
+        providerModelSpan.className = 'chat-page-provider-model';
+        providerModelSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); font-family: monospace; background: var(--surface-3); padding: 1px 5px; border-radius: 3px; margin-left: 4px;';
+        providerModelSpan.textContent = msg.model;
+        providerModelSpan.title = msg.model;
+        header.appendChild(providerModelSpan);
+    }
     bubble.appendChild(header);
 
     // Content
