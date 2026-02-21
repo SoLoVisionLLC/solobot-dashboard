@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 
 // ============================================
@@ -1373,7 +1374,8 @@ const server = http.createServer((req, res) => {
   const pageContent = assemblePage(resolvedPage);
   const pageHash = crypto.createHash('md5').update(pageContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');
-  return res.end(fs.readFileSync('./index.html'));
+  res.setHeader('ETag', `"${pageHash}"`);
+  return res.end(pageContent);
 });
 
 // Start server after async initialization
