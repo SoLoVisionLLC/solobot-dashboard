@@ -32,13 +32,13 @@ function fetchModelsFromConfig() {
 
     // Try mounted config first, then fallback path
     const configPaths = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK];
-    
+
     for (const configPath of configPaths) {
       try {
         if (fs.existsSync(configPath)) {
           const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
           const models = parseOpenClawConfig(config);
-          
+
           if (Object.keys(models).length > 0) {
             cachedModels = models;
             modelsLastFetched = Date.now();
@@ -62,50 +62,50 @@ function fetchModelsFromConfig() {
  */
 function parseOpenClawConfig(config) {
   const models = {};
-  
+
   // Get picker models (the dropdown selection) - this is the main source
   const pickerModels = config?.agents?.defaults?.model?.picker || [];
-  
+
   // Also check primary/fallback models
   const primaryModel = config?.agents?.defaults?.model?.primary;
   const fallbackModels = config?.agents?.defaults?.model?.fallbacks || [];
-  
+
   // Combine all configured models
   const allModelIds = [...new Set([
     ...(primaryModel ? [primaryModel] : []),
     ...pickerModels,
     ...fallbackModels
   ])];
-  
+
   // Parse each model ID
   for (const modelId of allModelIds) {
     if (!modelId || typeof modelId !== 'string') continue;
-    
+
     const slashIndex = modelId.indexOf('/');
     if (slashIndex === -1) continue;
-    
+
     const provider = modelId.substring(0, slashIndex);
     const modelName = modelId.substring(slashIndex + 1);
-    
+
     // Determine tier
     let tier = 'configured';
     if (modelId === primaryModel) tier = 'default';
     else if (fallbackModels.includes(modelId)) tier = 'fallback';
-    
+
     // Format display name
     let displayName = modelName
       .split(/[-\/]/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-    
+
     // Add indicator for primary model
     if (modelId === primaryModel) displayName += ' ⭐';
-    
+
     // Initialize provider array if needed
     if (!models[provider]) {
       models[provider] = [];
     }
-    
+
     // Avoid duplicates
     if (!models[provider].some(m => m.id === modelId)) {
       models[provider].push({
@@ -115,7 +115,7 @@ function parseOpenClawConfig(config) {
       });
     }
   }
-  
+
   return models;
 }
 
@@ -124,9 +124,9 @@ function parseOpenClawConfig(config) {
  */
 function fetchModelsFromCLI() {
   return new Promise((resolve) => {
-    exec('solobot models list 2>/dev/null || openclaw models list 2>/dev/null', { 
+    exec('solobot models list 2>/dev/null || openclaw models list 2>/dev/null', {
       encoding: 'utf8',
-      timeout: 10000 
+      timeout: 10000
     }, (error, stdout, stderr) => {
       if (error || !stdout) {
         return resolve(null);
@@ -147,31 +147,31 @@ function parseModelsOutput(output) {
   const models = {};
   const lines = output.split('\n').filter(line => line.trim());
   const dataLines = lines.filter(line => !line.startsWith('Model') && line.includes('/'));
-  
+
   for (const line of dataLines) {
     const parts = line.trim().split(/\s{2,}/);
     if (parts.length < 1) continue;
-    
+
     let modelId = parts[0].trim().replace(/\.\.\.+$/, '');
     const slashIndex = modelId.indexOf('/');
     if (slashIndex === -1) continue;
-    
+
     const provider = modelId.substring(0, slashIndex);
     const modelName = modelId.substring(slashIndex + 1);
     const tags = parts[parts.length - 1] || '';
-    
+
     let tier = 'standard';
     if (tags.includes('default')) tier = 'default';
     else if (tags.includes('fallback#1') || tags.includes('fallback#2')) tier = 'flagship';
     else if (tags.includes('configured')) tier = 'configured';
-    
+
     let displayName = modelName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     if (tags.includes('default')) displayName += ' ⭐';
-    
+
     if (!models[provider]) models[provider] = [];
     models[provider].push({ id: modelId, name: displayName, tier });
   }
-  
+
   return models;
 }
 
@@ -263,30 +263,30 @@ async function checkAndRestoreFromBackup(localState) {
     console.log('[Auto-Restore] Disabled (missing env vars: GDRIVE_BACKUP_FILE_ID, GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN)');
     return localState;
   }
-  
+
   console.log('[Auto-Restore] Checking if backup restore is needed...');
-  
+
   const localTaskCount = countTasks(localState);
   const localLastSync = localState?.lastSync || 0;
-  
+
   console.log(`[Auto-Restore] Local state: ${localTaskCount} tasks, lastSync: ${localLastSync ? new Date(localLastSync).toISOString() : 'never'}`);
-  
+
   // If local state has tasks and recent sync, skip restore
   if (localTaskCount > 0 && localLastSync > Date.now() - 24 * 60 * 60 * 1000) {
     console.log('[Auto-Restore] Local state looks good, skipping restore');
     return localState;
   }
-  
+
   try {
     console.log('[Auto-Restore] Local state empty/stale, fetching backup from Google Drive...');
     const accessToken = await getGoogleAccessToken();
     const backupState = await fetchBackupFromDrive(accessToken);
-    
+
     const backupTaskCount = countTasks(backupState);
     const backupLastSync = backupState?.lastSync || 0;
-    
+
     console.log(`[Auto-Restore] Backup state: ${backupTaskCount} tasks, lastSync: ${backupLastSync ? new Date(backupLastSync).toISOString() : 'never'}`);
-    
+
     // Use backup if it has more tasks or is more recent
     if (backupTaskCount > localTaskCount || backupLastSync > localLastSync) {
       console.log('[Auto-Restore] ✓ Restoring from Google Drive backup!');
@@ -338,17 +338,17 @@ function saveModTimes() {
 // Check for external file changes and create versions/badges
 function checkForExternalChanges() {
   if (!fs.existsSync(MEMORY_DIR)) return;
-  
+
   const checkFile = (filepath, relativePath) => {
     try {
       const stat = fs.statSync(filepath);
       const mtime = stat.mtime.getTime();
       const lastKnown = fileModTimes[relativePath];
-      
+
       if (lastKnown && mtime > lastKnown) {
         // File was modified externally!
         console.log(`External change detected: ${relativePath}`);
-        
+
         // Mark as bot-updated
         if (!fileMeta[relativePath]) {
           fileMeta[relativePath] = {};
@@ -358,21 +358,21 @@ function checkForExternalChanges() {
         fileMeta[relativePath].acknowledged = false;
         saveFileMeta();
       }
-      
+
       // Update tracked mod time
       fileModTimes[relativePath] = mtime;
     } catch (e) {
       // File might have been deleted
     }
   };
-  
+
   // Check root memory files
   try {
     const items = fs.readdirSync(MEMORY_DIR);
     for (const item of items) {
       const itemPath = path.join(MEMORY_DIR, item);
       const stat = fs.statSync(itemPath);
-      
+
       if (stat.isFile() && item.endsWith('.md')) {
         checkFile(itemPath, item);
       } else if (stat.isDirectory() && item === 'memory') {
@@ -388,7 +388,7 @@ function checkForExternalChanges() {
   } catch (e) {
     console.log('Error checking for external changes:', e.message);
   }
-  
+
   saveModTimes();
 }
 
@@ -403,20 +403,20 @@ function createVersion(filename, content) {
   const safeFilename = filename.replace(/\//g, '__');
   const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
   fs.writeFileSync(versionPath, content, 'utf8');
-  
+
   // Keep only last 20 versions per file
   const prefix = `${safeFilename}.`;
   const versions = fs.readdirSync(VERSIONS_DIR)
     .filter(f => f.startsWith(prefix))
     .sort()
     .reverse();
-  
+
   if (versions.length > 20) {
     versions.slice(20).forEach(v => {
       fs.unlinkSync(path.join(VERSIONS_DIR, v));
     });
   }
-  
+
   return timestamp;
 }
 
@@ -436,7 +436,7 @@ function saveState() {
 // Async state initialization with auto-restore
 async function initializeState() {
   let localState = {};
-  
+
   try {
     if (fs.existsSync(STATE_FILE)) {
       localState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -450,13 +450,65 @@ async function initializeState() {
   } catch (e) {
     console.log('Error loading state, starting fresh:', e.message);
   }
-  
+
   // Check if we should restore from Google Drive backup
   state = await checkAndRestoreFromBackup(localState);
-  
+
   // Save the (possibly restored) state
   saveState();
   console.log(`State initialized with ${countTasks(state)} tasks`);
+}
+
+// ============================================
+// Page Assembly from Partials
+// ============================================
+function readPartial(name) {
+  try {
+    return fs.readFileSync(`./partials/${name}.html`, 'utf8');
+  } catch (e) {
+    console.error(`Missing partial: ${name}.html`);
+    return `<!-- missing partial: ${name} -->`;
+  }
+}
+
+function readPage(name) {
+  try {
+    return fs.readFileSync(`./pages/${name}.html`, 'utf8');
+  } catch (e) {
+    console.error(`Missing page: ${name}.html`);
+    return `<!-- missing page: ${name} -->`;
+  }
+}
+
+const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products', 'business', 'cron', 'security', 'skills'];
+
+function assemblePage(activePage) {
+  // Build all pages, marking the active one
+  const pageHtml = PAGE_NAMES.map(name => {
+    let content = readPage(name);
+    // Ensure the active page has class="page active"
+    if (name === activePage) {
+      content = content.replace('class="page"', 'class="page active"');
+    } else {
+      content = content.replace('class="page active"', 'class="page"');
+    }
+    return content;
+  }).join('\n');
+
+  return [
+    readPartial('head'),
+    readPartial('body-open'),
+    readPartial('sidebar'),
+    readPartial('header'),
+    pageHtml,
+    readPartial('footer'),
+    readPartial('modals-tasks'),
+    readPartial('modals-memory'),
+    readPartial('modals-settings-main'),
+    readPartial('modals-settings-themes'),
+    readPartial('modals-misc'),
+    readPartial('scripts'),
+  ].join('\n');
 }
 
 const MIME_TYPES = {
@@ -473,46 +525,46 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
   }
 
   const url = new URL(req.url, `http://${req.headers.host}`);
-  
+
   // API Routes
   if (url.pathname === '/api/state') {
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify(state));
   }
-  
+
   if (url.pathname === '/api/sync' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const update = JSON.parse(body);
-        
+
         // PROTECT tasks and notes from being wiped by empty client state!
         // Only update tasks/notes if client has actual content, or if server is empty
         const serverHasTasks = countTasks(state) > 0;
         const serverHasNotes = (state.notes?.length || 0) > 0;
         const clientHasTasks = countTasks(update) > 0;
         const clientHasNotes = (update.notes?.length || 0) > 0;
-        
+
         // If server has tasks but client doesn't, preserve server tasks
         if (serverHasTasks && !clientHasTasks) {
           console.log('[Sync] Protecting tasks - server has', countTasks(state), 'tasks, client has 0');
           delete update.tasks;
         }
-        
+
         // If server has notes but client doesn't, preserve server notes
         if (serverHasNotes && !clientHasNotes) {
           console.log('[Sync] Protecting notes - server has', state.notes.length, 'notes, client has 0');
           delete update.notes;
         }
-        
+
         state = { ...state, ...update, lastSync: Date.now() };
         saveState();
         res.setHeader('Content-Type', 'application/json');
@@ -524,7 +576,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Append chat messages (doesn't replace existing)
   if (url.pathname === '/api/chat' && req.method === 'POST') {
     let body = '';
@@ -553,7 +605,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Append activity logs
   if (url.pathname === '/api/activity' && req.method === 'POST') {
     let body = '';
@@ -579,11 +631,11 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // ===================
   // MEMORY FILES API (reads from mounted OpenClaw workspace)
   // ===================
-  
+
   // List all memory files (with bot-update metadata)
   if (url.pathname === '/api/memory' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
@@ -591,14 +643,14 @@ const server = http.createServer((req, res) => {
       if (!fs.existsSync(MEMORY_DIR)) {
         return res.end(JSON.stringify({ files: [], error: 'Memory directory not mounted' }));
       }
-      
+
       const files = [];
       const items = fs.readdirSync(MEMORY_DIR);
-      
+
       for (const item of items) {
         const itemPath = path.join(MEMORY_DIR, item);
         const stat = fs.statSync(itemPath);
-        
+
         if (stat.isFile() && item.endsWith('.md')) {
           const meta = fileMeta[item] || {};
           files.push({
@@ -635,20 +687,20 @@ const server = http.createServer((req, res) => {
           }
         }
       }
-      
+
       return res.end(JSON.stringify({ files, meta: fileMeta }));
     } catch (e) {
       res.writeHead(500);
       return res.end(JSON.stringify({ error: e.message }));
     }
   }
-  
+
   // Get file metadata (bot updates)
   if (url.pathname === '/api/memory-meta' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify(fileMeta));
   }
-  
+
   // Acknowledge bot update (clear badge)
   if (url.pathname === '/api/memory-meta/acknowledge' && req.method === 'POST') {
     let body = '';
@@ -670,13 +722,13 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // List versions for a file (MUST be before generic GET)
   if (url.pathname.match(/^\/api\/memory\/(.+)\/versions$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions$/);
     const filename = decodeURIComponent(match[1]);
     const safeFilename = filename.replace(/\//g, '__');
-    
+
     res.setHeader('Content-Type', 'application/json');
     try {
       const prefix = `${safeFilename}.`;
@@ -694,14 +746,14 @@ const server = http.createServer((req, res) => {
           };
         })
         .sort((a, b) => b.timestamp - a.timestamp);
-      
+
       return res.end(JSON.stringify({ versions }));
     } catch (e) {
       res.writeHead(500);
       return res.end(JSON.stringify({ error: e.message }));
     }
   }
-  
+
   // Get a specific version content (MUST be before generic GET)
   if (url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/);
@@ -709,17 +761,17 @@ const server = http.createServer((req, res) => {
     const timestamp = match[2];
     const safeFilename = filename.replace(/\//g, '__');
     const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
-    
+
     res.setHeader('Content-Type', 'application/json');
     try {
       if (!fs.existsSync(versionPath)) {
         res.writeHead(404);
         return res.end(JSON.stringify({ error: 'Version not found' }));
       }
-      
+
       const content = fs.readFileSync(versionPath, 'utf8');
-      return res.end(JSON.stringify({ 
-        content, 
+      return res.end(JSON.stringify({
+        content,
         timestamp: parseInt(timestamp),
         date: new Date(parseInt(timestamp)).toISOString()
       }));
@@ -734,23 +786,23 @@ const server = http.createServer((req, res) => {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
     const filePath = path.resolve(MEMORY_DIR, filename);
     const memoryDirResolved = path.resolve(MEMORY_DIR);
-    
+
     // Security: prevent path traversal
     if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     try {
       if (!fs.existsSync(filePath)) {
         res.writeHead(404);
         return res.end(JSON.stringify({ error: 'File not found' }));
       }
-      
+
       const content = fs.readFileSync(filePath, 'utf8');
       const stat = fs.statSync(filePath);
       const meta = fileMeta[filename] || {};
-      
+
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({
         name: filename,
@@ -766,41 +818,41 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: e.message }));
     }
   }
-  
+
   // Update a memory file (with version history)
   if (url.pathname.startsWith('/api/memory/') && req.method === 'PUT') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
     const filePath = path.resolve(MEMORY_DIR, filename);
     const memoryDirResolved = path.resolve(MEMORY_DIR);
-    
+
     // Security: prevent path traversal
     if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const { content, updatedBy } = JSON.parse(body);
-        
+
         // Ensure directory exists for nested paths
         const dir = path.dirname(filePath);
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }
-        
+
         // Create version backup if file exists
         let versionTimestamp = null;
         if (fs.existsSync(filePath)) {
           const oldContent = fs.readFileSync(filePath, 'utf8');
           versionTimestamp = createVersion(filename, oldContent);
         }
-        
+
         // Write new content
         fs.writeFileSync(filePath, content, 'utf8');
-        
+
         // Track if bot made the update
         if (updatedBy === 'bot') {
           fileMeta[filename] = {
@@ -817,7 +869,7 @@ const server = http.createServer((req, res) => {
             saveFileMeta();
           }
         }
-        
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, saved: filename, versionCreated: versionTimestamp }));
       } catch (e) {
@@ -827,20 +879,20 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Restore a version
   if (url.pathname.match(/^\/api\/memory\/(.+)\/restore$/) && req.method === 'POST') {
     const match = url.pathname.match(/^\/api\/memory\/(.+)\/restore$/);
     const filename = decodeURIComponent(match[1]);
     const filePath = path.resolve(MEMORY_DIR, filename);
     const memoryDirResolved = path.resolve(MEMORY_DIR);
-    
+
     // Security: prevent path traversal
     if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -848,22 +900,22 @@ const server = http.createServer((req, res) => {
         const { timestamp } = JSON.parse(body);
         const safeFilename = filename.replace(/\//g, '__');
         const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
-        
+
         if (!fs.existsSync(versionPath)) {
           res.writeHead(404);
           return res.end(JSON.stringify({ error: 'Version not found' }));
         }
-        
+
         // Create backup of current before restoring
         if (fs.existsSync(filePath)) {
           const currentContent = fs.readFileSync(filePath, 'utf8');
           createVersion(filename, currentContent);
         }
-        
+
         // Restore the version
         const versionContent = fs.readFileSync(versionPath, 'utf8');
         fs.writeFileSync(filePath, versionContent, 'utf8');
-        
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, restored: timestamp }));
       } catch (e) {
@@ -873,19 +925,19 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Change AI Model endpoint
   // Get available models list (for dropdowns)
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
-    
+
     // Primary: fetch from mounted OpenClaw config file (works across containers)
     fetchModelsFromConfig().then(configModels => {
       if (configModels && Object.keys(configModels).length > 0) {
         res.end(JSON.stringify(configModels));
         return;
       }
-      
+
       // Fallback 1: try CLI (only works if solobot is installed locally)
       return fetchModelsFromCLI();
     }).then(cliModels => {
@@ -893,7 +945,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify(cliModels));
         return;
       }
-      
+
       // Fallback 2: check state file for cached models
       try {
         const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -902,7 +954,7 @@ const server = http.createServer((req, res) => {
           return;
         }
       } catch (e) { /* use defaults */ }
-      
+
       // Final fallback: hardcoded defaults
       const models = {
         'openai-codex': [
@@ -921,7 +973,7 @@ const server = http.createServer((req, res) => {
           { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
         ]
       };
-      
+
       res.end(JSON.stringify(models));
     }).catch(err => {
       console.error('[Models] Error fetching models:', err);
@@ -932,32 +984,32 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Refresh models cache (force re-fetch from config)
   if (url.pathname === '/api/models/refresh' && req.method === 'POST') {
     // Clear cache to force refresh
     cachedModels = null;
     modelsLastFetched = 0;
-    
+
     // Fetch fresh models from config
     fetchModelsFromConfig().then(async models => {
       // If config didn't work, try CLI
       if (!models || Object.keys(models).length === 0) {
         models = await fetchModelsFromCLI();
       }
-      
+
       res.setHeader('Content-Type', 'application/json');
       if (models && Object.keys(models).length > 0) {
         const count = Object.values(models).flat().length;
-        res.end(JSON.stringify({ 
-          ok: true, 
+        res.end(JSON.stringify({
+          ok: true,
           message: `Refreshed ${count} models from config`,
           providers: Object.keys(models),
           count: count
         }));
       } else {
-        res.end(JSON.stringify({ 
-          ok: false, 
+        res.end(JSON.stringify({
+          ok: false,
           message: 'Config file not found or empty. Check volume mount for openclaw-config.json'
         }));
       }
@@ -967,7 +1019,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Change model (updates OpenClaw config directly)
   if (url.pathname === '/api/models/set' && req.method === 'POST') {
     let body = '';
@@ -1056,7 +1108,7 @@ const server = http.createServer((req, res) => {
     try {
       const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       let modelInfo = state.currentModel;
-      
+
       // Fallback: if missing, try reading OpenClaw config primary model
       if (!modelInfo) {
         try {
@@ -1073,9 +1125,9 @@ const server = http.createServer((req, res) => {
           // ignore fallback errors
         }
       }
-      
+
       if (!modelInfo) {
-        modelInfo = { 
+        modelInfo = {
           modelId: 'anthropic/claude-opus-4-5',
           provider: 'anthropic',
           name: 'claude-opus-4-5'
@@ -1092,7 +1144,7 @@ const server = http.createServer((req, res) => {
         modelInfo.provider = modelInfo.modelId.split('/')[0];
         modelInfo.name = modelInfo.modelId.split('/').pop();
       }
-      
+
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(modelInfo));
     } catch (e) {
@@ -1106,7 +1158,7 @@ const server = http.createServer((req, res) => {
     }
     return;
   }
-  
+
   // Update current model (called by OpenClaw agent)
   if (url.pathname === '/api/models/current' && req.method === 'POST') {
     let body = '';
@@ -1118,7 +1170,7 @@ const server = http.createServer((req, res) => {
         state.currentModel = modelInfo;
         state.lastSync = Date.now();
         fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-        
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, model: modelInfo }));
       } catch (e) {
@@ -1128,7 +1180,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Session rename endpoint
   if (url.pathname === '/api/session/rename' && req.method === 'POST') {
     let body = '';
@@ -1160,15 +1212,15 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Manual state backup endpoint
   if (url.pathname === '/api/state/backup' && req.method === 'POST') {
     try {
       const backupFile = `./data/state-backup-${Date.now()}.json`;
       fs.writeFileSync(backupFile, JSON.stringify(state, null, 2));
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ 
-        ok: true, 
+      res.end(JSON.stringify({
+        ok: true,
         backupFile: path.basename(backupFile),
         timestamp: new Date().toISOString()
       }));
@@ -1178,7 +1230,7 @@ const server = http.createServer((req, res) => {
     }
     return;
   }
-  
+
   // Manual state restore endpoint
   if (url.pathname === '/api/state/restore' && req.method === 'POST') {
     let body = '';
@@ -1197,7 +1249,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // List sessions endpoint (fetches from OpenClaw)
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
     // Return sessions from state, or empty if not cached
@@ -1239,30 +1291,30 @@ const server = http.createServer((req, res) => {
       // Extract session key from URL (everything between /api/session/ and /history)
       const pathMatch = url.pathname.match(/\/api\/session\/(.+)\/history$/);
       const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
-      
+
       console.log(`[Server] History request for session: ${sessionKey}`);
       console.log(`[Server] Available sessions: ${state.sessions?.map(s => s.key).join(', ')}`);
-      
+
       const sessionInfo = state.sessions?.find(s => s.key === sessionKey);
-      
+
       if (!sessionInfo?.sessionId) {
         console.log(`[Server] Session not found: ${sessionKey}`);
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'Session not found', sessionKey }));
         return;
       }
-      
+
       // Read transcript file from mounted sessions folder
       const transcriptPath = path.join('/app/sessions', `${sessionInfo.sessionId}.jsonl`);
       console.log(`[Server] Looking for transcript at: ${transcriptPath}`);
-      
+
       if (!fs.existsSync(transcriptPath)) {
         console.log(`[Server] Transcript not found at: ${transcriptPath}`);
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'Transcript not found', path: transcriptPath }));
         return;
       }
-      
+
       // Parse JSONL file
       const lines = fs.readFileSync(transcriptPath, 'utf8').split('\n').filter(l => l.trim());
       const messages = lines.map(line => {
@@ -1278,7 +1330,7 @@ const server = http.createServer((req, res) => {
           return null;
         }
       }).filter(m => m !== null);
-      
+
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ ok: true, sessionKey, messages, count: messages.length }));
     } catch (e) {
@@ -1292,14 +1344,34 @@ const server = http.createServer((req, res) => {
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
-  
+
   if (ext && fs.existsSync(filePath)) {
     res.setHeader('Content-Type', MIME_TYPES[ext] || 'application/octet-stream');
     return res.end(fs.readFileSync(filePath));
   }
-  
-  // SPA fallback: return index.html for all other routes
-  // This allows client-side routing to handle /chat, /memory, /system, etc.
+
+  // Page routing: assemble pages from partials
+  const pageRoutes = {
+    '/': 'dashboard',
+    '/dashboard': 'dashboard',
+    '/memory': 'memory',
+    '/chat': 'chat',
+    '/system': 'system',
+    '/products': 'products',
+    '/business': 'business',
+    '/cron': 'cron',
+    '/security': 'security',
+    '/skills': 'skills',
+  };
+
+  const pageName = pageRoutes[url.pathname];
+  if (!pageName && !url.pathname.startsWith('/api/')) {
+    // Unknown non-API route — default to dashboard
+  }
+
+  const resolvedPage = pageName || 'dashboard';
+  const pageContent = assemblePage(resolvedPage);
+  const pageHash = crypto.createHash('md5').update(pageContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');
   return res.end(fs.readFileSync('./index.html'));
 });
@@ -1307,7 +1379,7 @@ const server = http.createServer((req, res) => {
 // Start server after async initialization
 async function startServer() {
   await initializeState();
-  
+
   server.listen(PORT, () => {
     console.log(`SoLoBot Dashboard running on port ${PORT}`);
     console.log(`Auto-restore from Google Drive: enabled`);
