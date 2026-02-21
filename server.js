@@ -641,48 +641,23 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/agents' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
-      if (!fs.existsSync(MEMORY_DIR)) {
-        return res.end(JSON.stringify({ agents: [], error: 'Memory directory not mounted' }));
-      }
+      const ocConfigPath = '/home/solo/.openclaw/openclaw.json';
+      let agentsList = [];
 
-      const agentsList = [];
-      const files = fs.readdirSync(MEMORY_DIR);
-
-      for (const item of files) {
-        const itemPath = path.join(MEMORY_DIR, item);
-        const stat = fs.statSync(itemPath);
-
-        // Agent directories are typically named after the agent
-        if (stat.isDirectory() && item !== 'memory' && item !== 'data') {
-          const agentId = item;
-          const agentFiles = [];
-
-          try {
-            const subItems = fs.readdirSync(itemPath);
-            for (const subItem of subItems) {
-              if (subItem.endsWith('.md')) {
-                const subPath = path.join(itemPath, subItem);
-                const subStat = fs.statSync(subPath);
-                agentFiles.push({
-                  name: subItem,
-                  path: `${agentId}/${subItem}`,
-                  size: subStat.size,
-                  modified: subStat.mtime.toISOString(),
-                  type: 'file'
-                });
-              }
-            }
-          } catch (e) {
-            console.error(`Error reading agent directory ${itemPath}:`, e);
+      try {
+        if (fs.existsSync(ocConfigPath)) {
+          const ocConfig = JSON.parse(fs.readFileSync(ocConfigPath, 'utf8'));
+          if (ocConfig.agents && ocConfig.agents.list) {
+            agentsList = ocConfig.agents.list.map(a => ({
+              id: a.id,
+              name: a.name || a.id,
+              isDefault: a.default === true,
+              files: [] // Core agents share the workspace; no separate per-agent files for now
+            }));
           }
-
-          agentsList.push({
-            id: agentId,
-            name: agentId,
-            isDefault: false,
-            files: agentFiles
-          });
         }
+      } catch (e) {
+        console.error('Failed to read openclaw.json for agents:', e);
       }
 
       return res.end(JSON.stringify({ agents: agentsList }));
@@ -692,33 +667,11 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // Get a specific agent file
+  // Get a specific agent file (stub - see above comment)
   if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
-    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
-    const agentId = decodeURIComponent(match[1]);
-    const filename = decodeURIComponent(match[2]);
-    const filePath = path.resolve(MEMORY_DIR, agentId, filename);
-    const memoryDirResolved = path.resolve(MEMORY_DIR);
-
-    // Security: prevent path traversal
-    if (!filePath.startsWith(memoryDirResolved)) {
-      res.writeHead(403);
-      return res.end(JSON.stringify({ error: 'Access denied' }));
-    }
-
-    try {
-      if (!fs.existsSync(filePath)) {
-        res.writeHead(404);
-        return res.end(JSON.stringify({ error: 'File not found' }));
-      }
-
-      const content = fs.readFileSync(filePath, 'utf8');
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ content }));
-    } catch (e) {
-      res.writeHead(500);
-      return res.end(JSON.stringify({ error: e.message }));
-    }
+    res.writeHead(404);
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ error: 'Per-agent files not supported in shared workspace' }));
   }
 
   // List all memory files (with bot-update metadata)
