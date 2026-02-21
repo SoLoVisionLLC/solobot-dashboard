@@ -19,3 +19,8 @@ Thumbs.db
 # Runtime state (use persistent volume in production)
 # Only default-state.json is tracked as a template
 data/state.json
+data/state.latest.json
+data/file-mod-times.json
+data/file-meta.json
+data/backups/
+data/versions/
