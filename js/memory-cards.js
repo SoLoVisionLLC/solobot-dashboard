@@ -1,6 +1,6 @@
 // js/memory-cards.js — True Org-Chart Tree Layout with Pan/Zoom Navigation
 
-(function() {
+(function () {
     'use strict';
 
     // Guard against early inline handler access before full API registration.
@@ -166,7 +166,7 @@
             disablePanOnZoom: false,
             disableZoomOnPan: false,
             exclude: ['.org-node-card'],
-            onTouch: function(e) {
+            onTouch: function (e) {
                 // Allow touch on nodes for click
                 return !e.target.closest('.org-node-card');
             }
@@ -515,10 +515,16 @@
         const agent = currentDrilledAgent;
         const org = ORG_TREE[agent.id] || {};
         const files = agent.files || [];
+
+        // Define core file names
+        const CORE_FILES = ['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'MEMORY.md', 'USER.md', 'RUNNING_CONTEXT.md'];
+
         const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name));
 
-        const rootFiles = sortedFiles.filter(f => !f.name.includes('/'));
-        const memoryFiles = sortedFiles.filter(f => f.name.startsWith('memory/'));
+        // Separate into categories
+        const coreFilesList = sortedFiles.filter(f => CORE_FILES.includes(f.name));
+        const otherRootFiles = sortedFiles.filter(f => !f.name.includes('/') && !CORE_FILES.includes(f.name));
+        const dailyLogs = sortedFiles.filter(f => f.name.startsWith('memory/'));
 
         let fileListHtml = '';
         const renderFile = (f) => {
@@ -529,13 +535,17 @@
             </div>`;
         };
 
-        if (rootFiles.length) {
-            fileListHtml += '<div class="agent-file-group-title">Root Files</div>';
-            fileListHtml += rootFiles.map(renderFile).join('');
+        if (coreFilesList.length) {
+            fileListHtml += '<div class="agent-file-group-title">Core Identity</div>';
+            fileListHtml += coreFilesList.map(renderFile).join('');
         }
-        if (memoryFiles.length) {
-            fileListHtml += '<div class="agent-file-group-title">Memory</div>';
-            fileListHtml += memoryFiles.map(renderFile).join('');
+        if (otherRootFiles.length) {
+            fileListHtml += '<div class="agent-file-group-title">Workspace Documents</div>';
+            fileListHtml += otherRootFiles.map(renderFile).join('');
+        }
+        if (dailyLogs.length) {
+            fileListHtml += '<div class="agent-file-group-title">Daily Logs</div>';
+            fileListHtml += dailyLogs.map(renderFile).join('');
         }
 
         container.innerHTML = `
@@ -583,7 +593,7 @@
             previewEl.innerHTML = `
                 <div class="agent-preview-header">
                     <span class="agent-preview-filename">${escapeHtml(filename)}</span>
-                    <button class="btn btn-sm btn-secondary" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(filePath)}')` : `viewAgentFile('${escapeHtml(agent.id)}', '${escapeHtml(filename)}')`}">✏️ Edit</button>
+                    <button class="btn btn-sm btn-secondary" onclick="viewMemoryFile('${escapeHtml(filename)}')">✏️ Edit</button>
                 </div>
                 <div class="agent-preview-content"><pre>${escapeHtml(content)}</pre></div>
             `;
@@ -654,7 +664,7 @@
         zoomOut,
         resetView,
         fitToContent,
-        toggleMinimap: function() {
+        toggleMinimap: function () {
             const minimap = document.getElementById('org-minimap');
             if (minimap) {
                 minimap.classList.toggle('collapsed');
@@ -662,7 +672,7 @@
             }
         }
     });
-    
+
     // Restore minimap state
     document.addEventListener('DOMContentLoaded', () => {
         const collapsed = localStorage.getItem('solobot-minimap-collapsed') === 'true';

@@ -178,9 +178,63 @@ function parseModelsOutput(output) {
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
-const MEMORY_DIR = './memory';  // Mounted from OpenClaw workspace via Coolify
+const MEMORY_DIR = '/home/solo/.openclaw/workspace';
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
+
+/**
+ * Helper to get all relevant memory files from the workspace
+ */
+function getMemoryFiles() {
+  const files = [];
+  if (!fs.existsSync(MEMORY_DIR)) return files;
+
+  try {
+    const items = fs.readdirSync(MEMORY_DIR);
+    for (const item of items) {
+      const itemPath = path.join(MEMORY_DIR, item);
+      const stat = fs.statSync(itemPath);
+
+      if (stat.isFile() && item.endsWith('.md')) {
+        const meta = fileMeta[item] || {};
+        files.push({
+          name: item,
+          path: item,
+          size: stat.size,
+          modified: stat.mtime.toISOString(),
+          type: 'file',
+          botUpdated: meta.botUpdated || false,
+          botUpdatedAt: meta.botUpdatedAt || null,
+          acknowledged: meta.acknowledged || false
+        });
+      } else if (stat.isDirectory() && item === 'memory') {
+        const subItems = fs.readdirSync(itemPath);
+        for (const subItem of subItems) {
+          const subPath = path.join(itemPath, subItem);
+          const subStat = fs.statSync(subPath);
+          if (subStat.isFile() && subItem.endsWith('.md')) {
+            const filePath = `memory/${subItem}`;
+            const meta = fileMeta[filePath] || {};
+            files.push({
+              name: subItem,
+              path: filePath,
+              size: subStat.size,
+              modified: subStat.mtime.toISOString(),
+              type: 'file',
+              category: 'Daily Logs',
+              botUpdated: meta.botUpdated || false,
+              botUpdatedAt: meta.botUpdatedAt || null,
+              acknowledged: meta.acknowledged || false
+            });
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[Memory] Error reading files:', e);
+  }
+  return files;
+}
 
 // Google Drive backup config (for auto-restore on startup)
 // Set these in Coolify environment variables for auto-restore to work
@@ -647,11 +701,12 @@ const server = http.createServer((req, res) => {
         if (fs.existsSync(ocConfigPath)) {
           const ocConfig = JSON.parse(fs.readFileSync(ocConfigPath, 'utf8'));
           if (ocConfig.agents && ocConfig.agents.list) {
+            const workspaceFiles = getMemoryFiles();
             agentsList = ocConfig.agents.list.map(a => ({
               id: a.id,
               name: a.name || a.id,
               isDefault: a.default === true,
-              files: [] // Core agents share the workspace; no separate per-agent files for now
+              files: workspaceFiles // Core agents share the workspace
             }));
           }
         }
@@ -666,65 +721,48 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // Get a specific agent file (stub - see above comment)
+  // Get a specific agent file (Core agents share the workspace)
   if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
-    res.writeHead(404);
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
+    const agentId = match[1];
+    const filename = decodeURIComponent(match[2]);
+    const filePath = path.resolve(MEMORY_DIR, filename);
+    const memoryDirResolved = path.resolve(MEMORY_DIR);
+
     res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ error: 'Per-agent files not supported in shared workspace' }));
+
+    // Security: prevent path traversal
+    if (!filePath.startsWith(memoryDirResolved)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    try {
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ error: 'File not found in shared workspace' }));
+      }
+
+      const stat = fs.statSync(filePath);
+      const content = fs.readFileSync(filePath, 'utf8');
+
+      return res.end(JSON.stringify({
+        name: filename,
+        content: content,
+        modified: stat.mtime.toISOString(),
+        size: stat.size
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
   }
 
   // List all memory files (with bot-update metadata)
   if (url.pathname === '/api/memory' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
-      if (!fs.existsSync(MEMORY_DIR)) {
-        return res.end(JSON.stringify({ files: [], error: 'Memory directory not mounted' }));
-      }
-
-      const files = [];
-      const items = fs.readdirSync(MEMORY_DIR);
-
-      for (const item of items) {
-        const itemPath = path.join(MEMORY_DIR, item);
-        const stat = fs.statSync(itemPath);
-
-        if (stat.isFile() && item.endsWith('.md')) {
-          const meta = fileMeta[item] || {};
-          files.push({
-            name: item,
-            path: item,
-            size: stat.size,
-            modified: stat.mtime.toISOString(),
-            type: 'file',
-            botUpdated: meta.botUpdated || false,
-            botUpdatedAt: meta.botUpdatedAt || null,
-            acknowledged: meta.acknowledged || false
-          });
-        } else if (stat.isDirectory() && item === 'memory') {
-          // Also list files in memory/ subdirectory
-          const subItems = fs.readdirSync(itemPath);
-          for (const subItem of subItems) {
-            const subPath = path.join(itemPath, subItem);
-            const subStat = fs.statSync(subPath);
-            if (subStat.isFile() && subItem.endsWith('.md')) {
-              const filePath = `memory/${subItem}`;
-              const meta = fileMeta[filePath] || {};
-              files.push({
-                name: subItem,
-                path: filePath,
-                size: subStat.size,
-                modified: subStat.mtime.toISOString(),
-                type: 'file',
-                category: 'Daily Logs',
-                botUpdated: meta.botUpdated || false,
-                botUpdatedAt: meta.botUpdatedAt || null,
-                acknowledged: meta.acknowledged || false
-              });
-            }
-          }
-        }
-      }
-
+      const files = getMemoryFiles();
       return res.end(JSON.stringify({ files, meta: fileMeta }));
     } catch (e) {
       res.writeHead(500);
