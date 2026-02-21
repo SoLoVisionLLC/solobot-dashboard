@@ -89,23 +89,6 @@ function persistChatMessages() {
     }
 }
 
-// Sync chat messages to server (debounced)
-let chatSyncTimeout = null;
-function syncChatToServer(messages) {
-    if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
-    chatSyncTimeout = setTimeout(async () => {
-        try {
-            await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
-            });
-        } catch (e) {
-            // Silently fail - not critical
-        }
-    }, 2000); // Debounce 2 seconds
-}
-
 // Load persisted messages immediately
 loadPersistedMessages();
 
@@ -153,31 +136,18 @@ function loadGatewaySettingsFromServer() {
     // No gateway config in server state - that's fine
 }
 
-// Gateway client instance
-let gateway = null;
-let streamingText = '';
-let isProcessing = false;
-let lastProcessingEndTime = 0; // Track when processing ended to avoid poll conflicts
-let historyPollInterval = null;
-let sessionVersion = 0; // Incremented on session switch to ignore stale history data
+// Variables declared in js/state.js: gateway, streamingText, isProcessing, 
+// lastProcessingEndTime, historyPollInterval, sessionVersion, newTaskPriority,
+// newTaskColumn, selectedTasks, editingTaskId, currentModalTask, currentModalColumn,
+// refreshIntervalId, taskModalOpen, DISABLE_SYSTEM_FILTER
 
-let newTaskPriority = 1;
-let newTaskColumn = 'todo';
-let selectedTasks = new Set();
-let editingTaskId = null;
-let currentModalTask = null;
-let currentModalColumn = null;
-let refreshIntervalId = null;
-let taskModalOpen = false; // Flag to pause auto-refresh while editing tasks
-
-// DEBUG: Set to true to disable all filtering and show EVERYTHING in chat
-const DISABLE_SYSTEM_FILTER = false;
+// (js/state.js is loaded before this file)
 
 // ===================
 // CUSTOM CONFIRM & TOAST (no browser alerts!)
 // ===================
 
-let confirmResolver = null;
+// (confirmResolver also declared in js/state.js)
 
 // Custom confirm dialog - returns Promise<boolean>
 function showConfirm(message, title = 'Confirm', okText = 'OK') {
