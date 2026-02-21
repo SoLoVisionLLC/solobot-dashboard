@@ -10,60 +10,7 @@
 // STATE MANAGEMENT
 // ===================
 
-// Agent color mappings for UI visualization
-const AGENT_COLORS = {
-    main: '#3b82f6',
-    exec: '#8b5cf6',
-    coo: '#10b981',
-    cfo: '#f59e0b',
-    cmp: '#ec4899',
-    dev: '#06b6d4',
-    sec: '#ef4444',
-    smm: '#f97316',
-    family: '#84cc16',
-    tax: '#6366f1',
-    docs: '#14b8a6',
-    cto: '#8b5cf6',
-    creative: '#d946ef',
-    forge: '#0891b2',
-    quill: '#0ea5e9',
-    chip: '#22c55e'
-};
-
-let state = {
-    status: 'idle',
-    model: 'opus 4.5',
-    currentTask: null,
-    subagent: null,
-    tasks: {
-        todo: [],
-        progress: [],
-        done: [],
-        archive: []
-    },
-    notes: [],
-    activity: [],
-    docs: [],
-    pendingNotify: null,
-    live: {
-        status: 'idle',
-        task: null,
-        taskStarted: null,
-        thoughts: [],
-        lastActive: null,
-        tasksToday: 0
-    },
-    console: {
-        logs: [],
-        expanded: false
-    },
-    chat: {
-        messages: []  // User and SoLoBot messages only
-    },
-    system: {
-        messages: []  // System messages, heartbeats, errors, etc.
-    }
-};
+// State is declared in js/state.js (loaded first via partials/scripts.html)
 
 // Load persisted system messages from localStorage (chat from localStorage + server fallback)
 function loadPersistedMessages() {
