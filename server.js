@@ -42,13 +42,13 @@ function fetchModelsFromConfig() {
 
     // Try mounted config first, then fallback path
     const configPaths = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK, OPENCLAW_CONFIG_FALLBACK2];
-    
+
     for (const configPath of configPaths) {
       try {
         if (fs.existsSync(configPath)) {
           const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
           const models = parseOpenClawConfig(config);
-          
+
           if (Object.keys(models).length > 0) {
             cachedModels = models;
             modelsLastFetched = Date.now();
@@ -80,14 +80,14 @@ function fetchModelsFromConfig() {
  */
 function parseOpenClawConfig(config) {
   const models = {};
-  
+
   // Get picker models (the dropdown selection) - this is the main source
   const pickerModels = config?.agents?.defaults?.model?.picker || [];
-  
+
   // Also check primary/fallback models
   const primaryModel = config?.agents?.defaults?.model?.primary;
   const fallbackModels = config?.agents?.defaults?.model?.fallbacks || [];
-  
+
   // Also include configured models list (agents.defaults.models keys)
   const configuredModels = Object.keys(config?.agents?.defaults?.models || {});
 
@@ -98,36 +98,36 @@ function parseOpenClawConfig(config) {
     ...fallbackModels,
     ...configuredModels
   ])];
-  
+
   // Parse each model ID
   for (const modelId of allModelIds) {
     if (!modelId || typeof modelId !== 'string') continue;
-    
+
     const slashIndex = modelId.indexOf('/');
     if (slashIndex === -1) continue;
-    
+
     const provider = modelId.substring(0, slashIndex);
     const modelName = modelId.substring(slashIndex + 1);
-    
+
     // Determine tier
     let tier = 'configured';
     if (modelId === primaryModel) tier = 'default';
     else if (fallbackModels.includes(modelId)) tier = 'fallback';
-    
+
     // Format display name
     let displayName = modelName
       .split(/[-\/]/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-    
+
     // Add indicator for primary model
     if (modelId === primaryModel) displayName += ' ⭐';
-    
+
     // Initialize provider array if needed
     if (!models[provider]) {
       models[provider] = [];
     }
-    
+
     // Avoid duplicates
     if (!models[provider].some(m => m.id === modelId)) {
       models[provider].push({
@@ -137,7 +137,7 @@ function parseOpenClawConfig(config) {
       });
     }
   }
-  
+
   return models;
 }
 
@@ -146,9 +146,9 @@ function parseOpenClawConfig(config) {
  */
 function fetchModelsFromCLI() {
   return new Promise((resolve) => {
-    exec('solobot models list 2>/dev/null || openclaw models list 2>/dev/null', { 
+    exec('solobot models list 2>/dev/null || openclaw models list 2>/dev/null', {
       encoding: 'utf8',
-      timeout: 10000 
+      timeout: 10000
     }, (error, stdout, stderr) => {
       if (error || !stdout) {
         return resolve(null);
@@ -169,31 +169,31 @@ function parseModelsOutput(output) {
   const models = {};
   const lines = output.split('\n').filter(line => line.trim());
   const dataLines = lines.filter(line => !line.startsWith('Model') && line.includes('/'));
-  
+
   for (const line of dataLines) {
     const parts = line.trim().split(/\s{2,}/);
     if (parts.length < 1) continue;
-    
+
     let modelId = parts[0].trim().replace(/\.\.\.+$/, '');
     const slashIndex = modelId.indexOf('/');
     if (slashIndex === -1) continue;
-    
+
     const provider = modelId.substring(0, slashIndex);
     const modelName = modelId.substring(slashIndex + 1);
     const tags = parts[parts.length - 1] || '';
-    
+
     let tier = 'standard';
     if (tags.includes('default')) tier = 'default';
     else if (tags.includes('fallback#1') || tags.includes('fallback#2')) tier = 'flagship';
     else if (tags.includes('configured')) tier = 'configured';
-    
+
     let displayName = modelName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     if (tags.includes('default')) displayName += ' ⭐';
-    
+
     if (!models[provider]) models[provider] = [];
     models[provider].push({ id: modelId, name: displayName, tier });
   }
-  
+
   return models;
 }
 
@@ -203,9 +203,9 @@ const DEFAULT_STATE_FILE = './data/default-state.json';
 // OpenClaw data — uses OPENCLAW_HOME (auto-detected or env var)
 // Falls back to ./memory for local dev without OpenClaw
 const OPENCLAW_DATA = OPENCLAW_HOME;
-const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace')) 
-    ? path.join(OPENCLAW_DATA, 'workspace') 
-    : './memory';
+const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace'))
+  ? path.join(OPENCLAW_DATA, 'workspace')
+  : './memory';
 const VERSIONS_DIR = './data/versions';  // Version history storage
 const META_FILE = './data/file-meta.json';  // Track bot updates
 const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
@@ -226,7 +226,7 @@ function loadSessionsFromOpenClaw() {
   try {
     // Load sessions from ALL agents, not just main
     let sessionsData = {};
-    
+
     // First try to load from all agent directories
     const agentsDir = path.join(OPENCLAW_DATA, 'agents');
     if (fs.existsSync(agentsDir)) {
@@ -246,7 +246,7 @@ function loadSessionsFromOpenClaw() {
         } catch (e) { /* skip broken files */ }
       }
     }
-    
+
     // Fallback to legacy paths if no agents found
     if (Object.keys(sessionsData).length === 0) {
       for (const p of SESSIONS_PATHS) {
@@ -470,14 +470,14 @@ async function checkAndRestoreFromBackup(localState) {
     console.log('[Auto-Restore] Disabled (missing env vars: GDRIVE_BACKUP_FILE_ID, GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN)');
     return localState;
   }
-  
+
   console.log('[Auto-Restore] Checking if backup restore is needed...');
-  
+
   const localTaskCount = countTasks(localState);
   const localLastSync = localState?.lastSync || 0;
-  
+
   console.log(`[Auto-Restore] Local state: ${localTaskCount} tasks, lastSync: ${localLastSync ? new Date(localLastSync).toISOString() : 'never'}`);
-  
+
   const localNotesCount = (localState?.notes?.length || 0);
   const localChatCount = (localState?.chat?.messages?.length || 0);
   const localLooksEmpty = localTaskCount === 0 && localNotesCount === 0 && localChatCount === 0;
@@ -496,17 +496,17 @@ async function checkAndRestoreFromBackup(localState) {
     console.log('[Auto-Restore] Local state looks good, skipping restore');
     return localState;
   }
-  
+
   try {
     console.log('[Auto-Restore] Local state empty, fetching backup from Google Drive...');
     const accessToken = await getGoogleAccessToken();
     const backupState = await fetchBackupFromDrive(accessToken);
-    
+
     const backupTaskCount = countTasks(backupState);
     const backupLastSync = backupState?.lastSync || 0;
-    
+
     console.log(`[Auto-Restore] Backup state: ${backupTaskCount} tasks, lastSync: ${backupLastSync ? new Date(backupLastSync).toISOString() : 'never'}`);
-    
+
     // Use backup if it has more tasks or is more recent
     if (backupTaskCount > localTaskCount || backupLastSync > localLastSync) {
       console.log('[Auto-Restore] ✓ Restoring from Google Drive backup!');
@@ -558,17 +558,17 @@ function saveModTimes() {
 // Check for external file changes and create versions/badges
 function checkForExternalChanges() {
   if (!fs.existsSync(MEMORY_DIR)) return;
-  
+
   const checkFile = (filepath, relativePath) => {
     try {
       const stat = fs.statSync(filepath);
       const mtime = stat.mtime.getTime();
       const lastKnown = fileModTimes[relativePath];
-      
+
       if (lastKnown && mtime > lastKnown) {
         // File was modified externally!
         console.log(`External change detected: ${relativePath}`);
-        
+
         // Mark as bot-updated
         if (!fileMeta[relativePath]) {
           fileMeta[relativePath] = {};
@@ -578,21 +578,21 @@ function checkForExternalChanges() {
         fileMeta[relativePath].acknowledged = false;
         saveFileMeta();
       }
-      
+
       // Update tracked mod time
       fileModTimes[relativePath] = mtime;
     } catch (e) {
       // File might have been deleted
     }
   };
-  
+
   // Check root memory files
   try {
     const items = fs.readdirSync(MEMORY_DIR);
     for (const item of items) {
       const itemPath = path.join(MEMORY_DIR, item);
       const stat = fs.statSync(itemPath);
-      
+
       if (stat.isFile() && item.endsWith('.md')) {
         checkFile(itemPath, item);
       } else if (stat.isDirectory() && item === 'memory') {
@@ -608,7 +608,7 @@ function checkForExternalChanges() {
   } catch (e) {
     console.log('Error checking for external changes:', e.message);
   }
-  
+
   saveModTimes();
 }
 
@@ -623,20 +623,20 @@ function createVersion(filename, content) {
   const safeFilename = filename.replace(/\//g, '__');
   const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
   fs.writeFileSync(versionPath, content, 'utf8');
-  
+
   // Keep only last 20 versions per file
   const prefix = `${safeFilename}.`;
   const versions = fs.readdirSync(VERSIONS_DIR)
     .filter(f => f.startsWith(prefix))
     .sort()
     .reverse();
-  
+
   if (versions.length > 20) {
     versions.slice(20).forEach(v => {
       fs.unlinkSync(path.join(VERSIONS_DIR, v));
     });
   }
-  
+
   return timestamp;
 }
 
@@ -659,7 +659,7 @@ function saveState() {
 // Async state initialization with auto-restore
 async function initializeState() {
   let localState = {};
-  
+
   try {
     if (fs.existsSync(STATE_FILE)) {
       localState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -673,10 +673,10 @@ async function initializeState() {
   } catch (e) {
     console.log('Error loading state, starting fresh:', e.message);
   }
-  
+
   // Check if we should restore from Google Drive backup
   state = await checkAndRestoreFromBackup(localState);
-  
+
   // Save the (possibly restored) state
   saveState();
   console.log(`State initialized with ${countTasks(state)} tasks`);
@@ -753,47 +753,47 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
   }
 
   const url = new URL(req.url, `http://${req.headers.host}`);
-  
+
   // API Routes
   if (url.pathname === '/api/state') {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
     return res.end(JSON.stringify(state));
   }
-  
+
   if (url.pathname === '/api/sync' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleSync = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const update = JSON.parse(body);
         const protections = { tasks: false, notes: false, activity: false };
-        
+
         // ============================================================
         // BULLETPROOF DATA PROTECTION
         // Tasks, notes, and activity are NEVER overwritten with less data.
         // The server always keeps the version with MORE content.
         // ============================================================
-        
+
         const serverTaskCount = countTasks(state);
         const clientTaskCount = countTasks(update);
         const serverActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
         const clientActivityCount = Array.isArray(update.activity) ? update.activity.length : 0;
         const serverNoteCount = state.notes?.length || 0;
         const clientNoteCount = update.notes?.length || 0;
-        
+
         // PROTECT TASKS with versioning — reject stale task syncs
         if (update.tasks !== undefined) {
           const serverVersion = state._taskVersion || 0;
           const clientVersion = update._taskVersion || 0;
-          
+
           // If server has a higher OR EQUAL task version, client is stale — reject task update
           // Server is source of truth. Only accept tasks from clients with a STRICTLY higher version.
           if (serverVersion >= clientVersion && serverTaskCount > 0) {
@@ -821,7 +821,7 @@ const server = http.createServer((req, res) => {
             state._taskVersion = (state._taskVersion || 0) + 1;
           }
         }
-        
+
         // PROTECT ACTIVITY: never allow fewer entries to replace more entries
         if (update.activity !== undefined) {
           if (serverActivityCount > 0 && clientActivityCount < serverActivityCount) {
@@ -830,57 +830,57 @@ const server = http.createServer((req, res) => {
             protections.activity = true;
           }
         }
-        
+
         // PROTECT NOTES: never allow fewer notes to replace more notes
         if (update.notes !== undefined) {
-          if (serverNoteCount > 0 && clientNoteCount < serverNoteCount) {
-            console.log(`[Sync] PROTECTING notes - server has ${serverNoteCount}, client has ${clientNoteCount}`);
+          if (serverNoteCount > 0 && clientNoteCount === 0) {
+            console.log(`[Sync] PROTECTING notes - server has ${serverNoteCount}, client has 0`);
             delete update.notes;
             protections.notes = true;
           }
         }
-        
+
         state = { ...state, ...update, lastSync: Date.now() };
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, protected: protections }));
+        return res.end(JSON.stringify({ ok: true, protected: protections }));
       } catch (e) {
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleSync();
     return;
   }
-  
+
   // Append chat messages (doesn't replace existing)
   if (url.pathname === '/api/chat' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleChat = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const { messages } = JSON.parse(body);
         if (!state.chat) state.chat = { messages: [] };
         if (Array.isArray(messages)) {
-          // Append new messages, avoid duplicates by id
           const existingIds = new Set(state.chat.messages.map(m => m.id));
           const newMsgs = messages.filter(m => !existingIds.has(m.id));
           state.chat.messages.push(...newMsgs);
-          // Keep last 200 messages
           if (state.chat.messages.length > 200) {
             state.chat.messages = state.chat.messages.slice(-200);
           }
         }
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, added: messages?.length || 0 }));
+        return res.end(JSON.stringify({ ok: true, added: messages?.length || 0 }));
       } catch (e) {
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleChat();
     return;
   }
-  
+
   // Archive all done tasks (atomic, server-side — can't be raced by frontend sync)
   if (url.pathname === '/api/tasks/archive-done' && req.method === 'POST') {
     if (!state.tasks) state.tasks = {};
@@ -901,46 +901,46 @@ const server = http.createServer((req, res) => {
 
   // Append activity logs
   if (url.pathname === '/api/activity' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleActivity = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const { logs } = JSON.parse(body);
         if (!state.activity) state.activity = { logs: [] };
         if (Array.isArray(logs)) {
           state.activity.logs.unshift(...logs);
-          // Keep last 100 activity logs
           if (state.activity.logs.length > 100) {
             state.activity.logs = state.activity.logs.slice(0, 100);
           }
         }
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true }));
+        return res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleActivity();
     return;
   }
-  
+
   // ===================
   // NOTION TASKS API
   // ===================
-  
+
   const NOTION_API_CACHE_TTL = 60000; // 60 seconds
   let notionCache = { tasks: [], timestamp: 0 };
-  
+
   async function fetchNotionTasks() {
     const now = Date.now();
     if (notionCache.tasks.length > 0 && (now - notionCache.timestamp) < NOTION_API_CACHE_TTL) {
       return { ...notionCache, cached: true };
     }
-    
+
     const NOTION_API_KEY_PATH = process.env.NOTION_API_KEY_PATH || path.join(os.homedir(), '.config', 'notion', 'api_key');
     const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || '426bc82e-256d-4bfc-9e23-2254cd16f87f';
-    
+
     let apiKey;
     try {
       apiKey = fs.readFileSync(NOTION_API_KEY_PATH, 'utf8').trim();
@@ -948,7 +948,7 @@ const server = http.createServer((req, res) => {
       console.error('[Notion] Failed to read API key:', err.message);
       return { error: 'Notion API key not configured', cached: false };
     }
-    
+
     try {
       const response = await new Promise((resolve, reject) => {
         const req = https.request({
@@ -975,16 +975,16 @@ const server = http.createServer((req, res) => {
         req.write(JSON.stringify({})); // Empty request body for default query
         req.end();
       });
-      
+
       if (response.error) {
         throw new Error(response.error.message || 'Notion API error');
       }
-      
+
       if (!response.results) {
         console.error('[Notion] Unexpected response structure:', JSON.stringify(response).slice(0, 500));
         throw new Error('Notion API returned unexpected response (no results array)');
       }
-      
+
       const tasks = response.results.map(page => {
         const props = page.properties;
         return {
@@ -998,7 +998,7 @@ const server = http.createServer((req, res) => {
           url: page.url
         };
       });
-      
+
       notionCache = { tasks, timestamp: now };
       return { tasks, timestamp: now.toISOString(), cached: false };
     } catch (err) {
@@ -1010,7 +1010,7 @@ const server = http.createServer((req, res) => {
       return { error: err.message, cached: false };
     }
   }
-  
+
   function getNotionProperty(prop, type) {
     if (!prop) return '';
     switch (type) {
@@ -1026,12 +1026,12 @@ const server = http.createServer((req, res) => {
         return '';
     }
   }
-  
+
   function getNotionDate(dateProp) {
     if (!dateProp?.date?.start) return null;
     return dateProp.date.start;
   }
-  
+
   function mapNotionPriority(priorityProp) {
     const value = getNotionProperty(priorityProp, 'select').toLowerCase();
     if (value.includes('critical') || value === 'p0' || value === '0') return 0;
@@ -1039,7 +1039,7 @@ const server = http.createServer((req, res) => {
     if (value.includes('low') || value === 'p3' || value === '3') return 3;
     return 2; // Default to normal
   }
-  
+
   if (url.pathname === '/api/notion/tasks' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1051,11 +1051,11 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // ===================
   // MEMORY FILES API (reads from mounted OpenClaw workspace)
   // ===================
-  
+
   // List all memory files (with bot-update metadata)
   if (url.pathname === '/api/memory' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
@@ -1063,14 +1063,14 @@ const server = http.createServer((req, res) => {
       if (!fs.existsSync(MEMORY_DIR)) {
         return res.end(JSON.stringify({ files: [], error: 'Memory directory not mounted' }));
       }
-      
+
       const files = [];
       const items = fs.readdirSync(MEMORY_DIR);
-      
+
       for (const item of items) {
         const itemPath = path.join(MEMORY_DIR, item);
         const stat = fs.statSync(itemPath);
-        
+
         if (stat.isFile() && item.endsWith('.md')) {
           const meta = fileMeta[item] || {};
           files.push({
@@ -1107,27 +1107,27 @@ const server = http.createServer((req, res) => {
           }
         }
       }
-      
+
       return res.end(JSON.stringify({ files, meta: fileMeta }));
     } catch (e) {
       res.writeHead(500);
       return res.end(JSON.stringify({ error: e.message }));
     }
   }
-  
+
   // Get file metadata (bot updates)
   if (url.pathname === '/api/memory-meta' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify(fileMeta));
   }
-  
+
   // Sub-agent workspaces API
   // Reads openclaw.json to discover agents and their workspace paths dynamically
   if (url.pathname === '/api/agents' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     try {
       const agents = [];
-      
+
       // Scan agents directory directly (config.agents.list was removed in recent OpenClaw versions)
       const agentsBaseDir = path.join(OPENCLAW_HOME, 'agents');
       let agentIds = [];
@@ -1137,7 +1137,7 @@ const server = http.createServer((req, res) => {
           catch { return false; }
         });
       }
-      
+
       for (const agentId of agentIds) {
         // Each agent's workspace can be at:
         // 1. agents/{id}/workspace (standard)
@@ -1153,9 +1153,9 @@ const server = http.createServer((req, res) => {
           }
         }
         if (!fs.existsSync(agentDir)) continue;
-        
+
         const mdFiles = [];
-        
+
         try {
           // List .md files in agent workspace root
           const agentFiles = fs.readdirSync(agentDir);
@@ -1183,7 +1183,7 @@ const server = http.createServer((req, res) => {
             }
           }
         } catch (e) { /* skip unreadable dirs */ }
-        
+
         // Parse identity from IDENTITY.md if it exists
         let name = agentId;
         let emoji = '';
@@ -1197,7 +1197,7 @@ const server = http.createServer((req, res) => {
             if (emojiMatch) emoji = emojiMatch[1].trim();
           }
         } catch (e) { /* skip */ }
-        
+
         agents.push({
           id: agentId,
           name,
@@ -1207,39 +1207,39 @@ const server = http.createServer((req, res) => {
           files: mdFiles
         });
       }
-      
+
       // Sort: default agent first, then alphabetically
       agents.sort((a, b) => {
         if (a.isDefault) return -1;
         if (b.isDefault) return 1;
         return a.id.localeCompare(b.id);
       });
-      
+
       return res.end(JSON.stringify({ agents }));
     } catch (e) {
       return res.end(JSON.stringify({ agents: [], error: e.message }));
     }
   }
-  
+
   // Read sub-agent file
   if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
     const agentId = decodeURIComponent(match[1]);
     const filename = decodeURIComponent(match[2]);
-    
+
     // Resolve workspace path from agents directory
     const agentWorkspace = agentId === 'main'
       ? path.join(OPENCLAW_HOME, 'workspace')
       : path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
     const filePath = path.resolve(agentWorkspace, filename);
-    
+
     // Security: ensure path is within workspace
     const resolvedWorkspace = path.resolve(agentWorkspace);
     if (!filePath.startsWith(resolvedWorkspace)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     res.setHeader('Content-Type', 'application/json');
     try {
       const content = fs.readFileSync(filePath, 'utf8');
@@ -1421,7 +1421,7 @@ const server = http.createServer((req, res) => {
     }
   }
   // ========== End Skills Files API ==========
-  
+
   // Acknowledge bot update (clear badge)
   if (url.pathname === '/api/memory-meta/acknowledge' && req.method === 'POST') {
     let body = '';
@@ -1443,13 +1443,13 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // List versions for a file (MUST be before generic GET)
   if (url.pathname.match(/^\/api\/memory\/(.+)\/versions$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions$/);
     const filename = decodeURIComponent(match[1]);
     const safeFilename = filename.replace(/\//g, '__');
-    
+
     res.setHeader('Content-Type', 'application/json');
     try {
       const prefix = `${safeFilename}.`;
@@ -1467,14 +1467,14 @@ const server = http.createServer((req, res) => {
           };
         })
         .sort((a, b) => b.timestamp - a.timestamp);
-      
+
       return res.end(JSON.stringify({ versions }));
     } catch (e) {
       res.writeHead(500);
       return res.end(JSON.stringify({ error: e.message }));
     }
   }
-  
+
   // Get a specific version content (MUST be before generic GET)
   if (url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/memory\/(.+)\/versions\/(\d+)$/);
@@ -1482,17 +1482,17 @@ const server = http.createServer((req, res) => {
     const timestamp = match[2];
     const safeFilename = filename.replace(/\//g, '__');
     const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
-    
+
     res.setHeader('Content-Type', 'application/json');
     try {
       if (!fs.existsSync(versionPath)) {
         res.writeHead(404);
         return res.end(JSON.stringify({ error: 'Version not found' }));
       }
-      
+
       const content = fs.readFileSync(versionPath, 'utf8');
-      return res.end(JSON.stringify({ 
-        content, 
+      return res.end(JSON.stringify({
+        content,
         timestamp: parseInt(timestamp),
         date: new Date(parseInt(timestamp)).toISOString()
       }));
@@ -1547,23 +1547,23 @@ const server = http.createServer((req, res) => {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
     const filePath = path.resolve(MEMORY_DIR, filename);
     const memoryDirResolved = path.resolve(MEMORY_DIR);
-    
+
     // Security: prevent path traversal
     if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     try {
       if (!fs.existsSync(filePath)) {
         res.writeHead(404);
         return res.end(JSON.stringify({ error: 'File not found' }));
       }
-      
+
       const content = fs.readFileSync(filePath, 'utf8');
       const stat = fs.statSync(filePath);
       const meta = fileMeta[filename] || {};
-      
+
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({
         name: filename,
@@ -1579,48 +1579,48 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: e.message }));
     }
   }
-  
+
   // Update a memory file (with version history)
   if (url.pathname.startsWith('/api/memory/') && req.method === 'PUT') {
     const filename = decodeURIComponent(url.pathname.replace('/api/memory/', ''));
     const filePath = path.resolve(MEMORY_DIR, filename);
     const memoryDirResolved = path.resolve(MEMORY_DIR);
-    
+
     // Security: prevent path traversal
     if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const { content, updatedBy } = JSON.parse(body);
-        
+
         // Ensure directory exists for nested paths
         const dir = path.dirname(filePath);
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }
-        
+
         // Create version backup if file exists
         let versionTimestamp = null;
         if (fs.existsSync(filePath)) {
           const oldContent = fs.readFileSync(filePath, 'utf8');
           versionTimestamp = createVersion(filename, oldContent);
         }
-        
+
         // Write new content
         fs.writeFileSync(filePath, content, 'utf8');
-        
+
         // Update mod time tracker so external change detector doesn't re-flag this write
         try {
           const newStat = fs.statSync(filePath);
           fileModTimes[filename] = newStat.mtime.getTime();
           saveModTimes();
         } catch (e) { /* best effort */ }
-        
+
         // Track if bot made the update
         if (updatedBy === 'bot') {
           fileMeta[filename] = {
@@ -1637,7 +1637,7 @@ const server = http.createServer((req, res) => {
             saveFileMeta();
           }
         }
-        
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, saved: filename, versionCreated: versionTimestamp }));
       } catch (e) {
@@ -1647,20 +1647,20 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Restore a version
   if (url.pathname.match(/^\/api\/memory\/(.+)\/restore$/) && req.method === 'POST') {
     const match = url.pathname.match(/^\/api\/memory\/(.+)\/restore$/);
     const filename = decodeURIComponent(match[1]);
     const filePath = path.resolve(MEMORY_DIR, filename);
     const memoryDirResolved = path.resolve(MEMORY_DIR);
-    
+
     // Security: prevent path traversal
     if (!filePath.startsWith(memoryDirResolved)) {
       res.writeHead(403);
       return res.end(JSON.stringify({ error: 'Access denied' }));
     }
-    
+
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -1668,22 +1668,22 @@ const server = http.createServer((req, res) => {
         const { timestamp } = JSON.parse(body);
         const safeFilename = filename.replace(/\//g, '__');
         const versionPath = path.join(VERSIONS_DIR, `${safeFilename}.${timestamp}`);
-        
+
         if (!fs.existsSync(versionPath)) {
           res.writeHead(404);
           return res.end(JSON.stringify({ error: 'Version not found' }));
         }
-        
+
         // Create backup of current before restoring
         if (fs.existsSync(filePath)) {
           const currentContent = fs.readFileSync(filePath, 'utf8');
           createVersion(filename, currentContent);
         }
-        
+
         // Restore the version
         const versionContent = fs.readFileSync(versionPath, 'utf8');
         fs.writeFileSync(filePath, versionContent, 'utf8');
-        
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, restored: timestamp }));
       } catch (e) {
@@ -1693,12 +1693,12 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Get available models list (for dropdowns)
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
     let responseSent = false;
-    
+
     // Primary: fetch from mounted OpenClaw config file (works across containers)
     fetchModelsFromConfig().then(configModels => {
       if (responseSent) return;
@@ -1707,7 +1707,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify(configModels));
         return;
       }
-      
+
       // Fallback 1: try CLI (only works if solobot is installed locally)
       return fetchModelsFromCLI();
     }).then(cliModels => {
@@ -1717,7 +1717,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify(cliModels));
         return;
       }
-      
+
       // Fallback 2: check state file for cached models
       try {
         const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -1727,7 +1727,7 @@ const server = http.createServer((req, res) => {
           return;
         }
       } catch (e) { /* use defaults */ }
-      
+
       // Final fallback: hardcoded defaults
       const models = {
         'openai-codex': [
@@ -1746,7 +1746,7 @@ const server = http.createServer((req, res) => {
           { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
         ]
       };
-      
+
       responseSent = true;
       res.end(JSON.stringify(models));
     }).catch(err => {
@@ -1760,7 +1760,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Sync models from gateway (called by frontend after WebSocket config fetch)
   // This allows the server to serve models even without a config file volume mount.
   if (url.pathname === '/api/models/sync' && req.method === 'POST') {
@@ -1793,26 +1793,26 @@ const server = http.createServer((req, res) => {
     // Clear cache to force refresh
     cachedModels = null;
     modelsLastFetched = 0;
-    
+
     // Fetch fresh models from config
     fetchModelsFromConfig().then(async models => {
       // If config didn't work, try CLI
       if (!models || Object.keys(models).length === 0) {
         models = await fetchModelsFromCLI();
       }
-      
+
       res.setHeader('Content-Type', 'application/json');
       if (models && Object.keys(models).length > 0) {
         const count = Object.values(models).flat().length;
-        res.end(JSON.stringify({ 
-          ok: true, 
+        res.end(JSON.stringify({
+          ok: true,
           message: `Refreshed ${count} models from config`,
           providers: Object.keys(models),
           count: count
         }));
       } else {
-        res.end(JSON.stringify({ 
-          ok: false, 
+        res.end(JSON.stringify({
+          ok: false,
           message: 'Config file not found or empty. Check volume mount for openclaw-config.json'
         }));
       }
@@ -1822,7 +1822,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Test model endpoint - sends a test prompt to verify model is working
   if (url.pathname === '/api/models/test' && req.method === 'POST') {
     let body = '';
@@ -1838,11 +1838,11 @@ const server = http.createServer((req, res) => {
         }
 
         console.log(`[Health] Testing model: ${model}`);
-        
+
         // Use external gateway URL (containers aren't on same network)
         const gatewayUrl = process.env.GATEWAY_URL || 'https://solobot.sololink.cloud';
         const testPrompt = prompt || 'Say OK';
-        
+
         const gatewayRes = await fetch(`${gatewayUrl}/api/rpc`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1856,24 +1856,24 @@ const server = http.createServer((req, res) => {
           }),
           signal: AbortSignal.timeout(30000)
         });
-        
+
         const latencyMs = Date.now() - startTime;
-        
+
         if (!gatewayRes.ok) {
           const errText = await gatewayRes.text().catch(() => 'Unknown');
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ success: false, error: `Gateway ${gatewayRes.status}`, latencyMs }));
           return;
         }
-        
+
         const data = await gatewayRes.json();
-        
+
         if (data.error) {
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ success: false, error: data.error.message || data.error, latencyMs }));
           return;
         }
-        
+
         console.log(`[Health] Model ${model} OK in ${latencyMs}ms`);
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ success: true, latencyMs, model }));
@@ -1887,7 +1887,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Change model (updates OpenClaw config directly)
   if (url.pathname === '/api/models/set' && req.method === 'POST') {
     let body = '';
@@ -2028,7 +2028,7 @@ const server = http.createServer((req, res) => {
     // Get current model — OpenClaw config is the source of truth
     try {
       let modelInfo = null;
-      
+
       // 1. Primary: read from OpenClaw config (the actual source of truth)
       const configPaths = [
         OPENCLAW_CONFIG_PATH,       // ./openclaw/openclaw.json (Coolify volume mount)
@@ -2051,7 +2051,7 @@ const server = http.createServer((req, res) => {
           }
         } catch (e) { /* try next path */ }
       }
-      
+
       // 2. Fallback: check gateway-synced models cache for the primary (starred) model
       if (!modelInfo && global._gatewayModelsCache) {
         for (const [provider, models] of Object.entries(global._gatewayModelsCache)) {
@@ -2066,7 +2066,7 @@ const server = http.createServer((req, res) => {
           }
         }
       }
-      
+
       // 3. Fallback: check state.json
       if (!modelInfo) {
         try {
@@ -2076,10 +2076,10 @@ const server = http.createServer((req, res) => {
           }
         } catch (e) { /* continue */ }
       }
-      
+
       // 4. Hardcoded fallback
       if (!modelInfo) {
-        modelInfo = { 
+        modelInfo = {
           modelId: 'anthropic/claude-opus-4-5',
           provider: 'anthropic',
           name: 'claude-opus-4-5'
@@ -2095,7 +2095,7 @@ const server = http.createServer((req, res) => {
         modelInfo.provider = modelInfo.modelId.split('/')[0];
         modelInfo.name = modelInfo.modelId.split('/').pop();
       }
-      
+
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(modelInfo));
     } catch (e) {
@@ -2109,7 +2109,7 @@ const server = http.createServer((req, res) => {
     }
     return;
   }
-  
+
   // Update current model (called by OpenClaw agent)
   if (url.pathname === '/api/models/current' && req.method === 'POST') {
     let body = '';
@@ -2121,7 +2121,7 @@ const server = http.createServer((req, res) => {
         state.currentModel = modelInfo;
         state.lastSync = Date.now();
         fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-        
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, model: modelInfo }));
       } catch (e) {
@@ -2131,7 +2131,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Session rename endpoint
   if (url.pathname === '/api/session/rename' && req.method === 'POST') {
     let body = '';
@@ -2163,7 +2163,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Session delete endpoint
   if (url.pathname === '/api/session/delete' && req.method === 'POST') {
     let body = '';
@@ -2190,15 +2190,15 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // Manual state backup endpoint
   if (url.pathname === '/api/state/backup' && req.method === 'POST') {
     try {
       const backupFile = `./data/state-backup-${Date.now()}.json`;
       fs.writeFileSync(backupFile, JSON.stringify(state, null, 2));
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ 
-        ok: true, 
+      res.end(JSON.stringify({
+        ok: true,
         backupFile: path.basename(backupFile),
         timestamp: new Date().toISOString()
       }));
@@ -2208,7 +2208,7 @@ const server = http.createServer((req, res) => {
     }
     return;
   }
-  
+
   // Manual state restore endpoint
   if (url.pathname === '/api/state/restore' && req.method === 'POST') {
     let body = '';
@@ -2227,7 +2227,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
+
   // List sessions endpoint (fetches from OpenClaw)
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
     const sessions = loadSessionsFromOpenClaw();
@@ -2268,20 +2268,20 @@ const server = http.createServer((req, res) => {
       // Extract session key from URL (everything between /api/session/ and /history)
       const pathMatch = url.pathname.match(/\/api\/session\/(.+)\/history$/);
       const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
-      
+
       console.log(`[Server] History request for session: ${sessionKey}`);
       const sessions = loadSessionsFromOpenClaw();
       console.log(`[Server] Available sessions: ${sessions.map(s => s.key).join(', ')}`);
-      
+
       const sessionInfo = sessions.find(s => s.key === sessionKey);
-      
+
       if (!sessionInfo?.sessionId) {
         console.log(`[Server] Session not found: ${sessionKey}`);
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'Session not found', sessionKey }));
         return;
       }
-      
+
       // Read transcript file from the correct agent's sessions folder
       const agent = sessionInfo._agent || 'main';
       const transcriptCandidates = [
@@ -2290,14 +2290,14 @@ const server = http.createServer((req, res) => {
       ];
       const transcriptPath = transcriptCandidates.find(p => fs.existsSync(p));
       console.log(`[Server] Looking for transcript for agent=${agent}, tried: ${transcriptCandidates.join(', ')}, found: ${transcriptPath || 'none'}`);
-      
+
       if (!transcriptPath) {
         console.log(`[Server] Transcript not found for session ${sessionInfo.sessionId}`);
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'Transcript not found', tried: transcriptCandidates }));
         return;
       }
-      
+
       // Parse JSONL file
       const lines = fs.readFileSync(transcriptPath, 'utf8').split('\n').filter(l => l.trim());
       const messages = lines.map(line => {
@@ -2313,7 +2313,7 @@ const server = http.createServer((req, res) => {
           return null;
         }
       }).filter(m => m !== null);
-      
+
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ ok: true, sessionKey, messages, count: messages.length }));
     } catch (e) {
@@ -2327,12 +2327,12 @@ const server = http.createServer((req, res) => {
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
-  
+
   if (ext && fs.existsSync(filePath)) {
     const content = fs.readFileSync(filePath);
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
     res.setHeader('Content-Type', mimeType);
-    
+
     // Dynamic assets (HTML, JS, CSS) — always revalidate so updates appear instantly
     if (['.html', '.js', '.css'].includes(ext)) {
       const hash = crypto.createHash('md5').update(content).digest('hex').slice(0, 12);
@@ -2341,7 +2341,7 @@ const server = http.createServer((req, res) => {
       res.setHeader('Expires', '0');
       res.setHeader('Surrogate-Control', 'no-store');
       res.setHeader('ETag', `"${hash}"`);
-      
+
       // If browser sends matching ETag, return 304 Not Modified
       const ifNoneMatch = req.headers['if-none-match'];
       if (ifNoneMatch === `"${hash}"`) {
@@ -2352,10 +2352,10 @@ const server = http.createServer((req, res) => {
       // Static assets (images, fonts) — cache for 1 hour
       res.setHeader('Cache-Control', 'public, max-age=3600');
     }
-    
+
     return res.end(content);
   }
-  
+
   // Page routing: assemble pages from partials
   const pageRoutes = {
     '/': 'dashboard',
@@ -2386,7 +2386,7 @@ const server = http.createServer((req, res) => {
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('ETag', `"${pageHash}"`);
-  
+
   const ifNoneMatch = req.headers['if-none-match'];
   if (ifNoneMatch === `"${pageHash}"`) {
     res.writeHead(304);
@@ -2398,7 +2398,7 @@ const server = http.createServer((req, res) => {
 // Start server after async initialization
 async function startServer() {
   await initializeState();
-  
+
   server.listen(PORT, () => {
     console.log(`SoLoBot Dashboard running on port ${PORT}`);
     console.log(`Auto-restore from Google Drive: enabled`);
