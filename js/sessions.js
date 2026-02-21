@@ -1,13 +1,10 @@
 // js/sessions.js — Session management, switching, agent selection
 
 const SESSION_DEBUG = false;
+// Make sessLog globally available
+window.sessLog = function(...args) { if (SESSION_DEBUG) console.log(...args); }
 function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 
-// ===================
-// SESSION MANAGEMENT
-// ===================
-
-// Agent persona names and role labels
 const AGENT_PERSONAS = {
     'main':   { name: 'Halo',     role: 'PA' },
     'exec':   { name: 'Elon',     role: 'CoS' },
@@ -27,7 +24,6 @@ const AGENT_PERSONAS = {
     'docs':    { name: 'Canon',   role: 'DOC' }
 };
 
-// Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function normalizeDashboardSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
     return key;
@@ -35,7 +31,6 @@ function normalizeDashboardSessionKey(key) {
 
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
-    // For agent sessions, show persona name + session suffix
     const match = key.match(/^agent:([^:]+):(.+)$/);
     if (match) {
         const agentId = match[1];
@@ -47,9 +42,18 @@ function getFriendlySessionName(key) {
     return key;
 }
 
-let currentSessionName = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey)
-    ? GATEWAY_CONFIG.sessionKey
-    : 'agent:main:main';
+let currentSessionName;
+window.currentSessionName = currentSessionName; // Expose globally for other modules
+
+function initCurrentSessionName() {
+    const localSession = localStorage.getItem('gateway_session');
+    const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
+    currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+    window.currentSessionName = currentSessionName; // Keep exposed value in sync
+    console.log('[initCurrentSessionName] localStorage:', localSession, 'Final:', currentSessionName);
+}
+
+initCurrentSessionName();
 
 window.toggleSessionMenu = function() {
     const menu = document.getElementById('session-menu');
@@ -71,6 +75,7 @@ window.renameSession = async function() {
         
         if (response.ok) {
             currentSessionName = newName;
+            window.currentSessionName = currentSessionName; // Sync to window for other modules
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) nameEl.textContent = newName;
             showToast(`Session renamed to "${newName}"`, 'success');
@@ -107,58 +112,35 @@ document.addEventListener('click', function(e) {
 
 // Session Management
 let availableSessions = [];
-let currentAgentId = 'main'; // Track which agent's sessions we're viewing
+let currentAgentId = 'main';
+window.currentAgentId = currentAgentId; // Expose for other modules
 let _switchInFlight = false;
-let _sessionSwitchQueue = []; // Queue array for rapid switches
+let _sessionSwitchQueue = [];
 
-// Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
     const match = sessionKey?.match(/^agent:([^:]+):/);
     return match ? match[1] : 'main';
 }
 
-// Filter sessions to only show those belonging to a specific agent
-// Also includes spawned subagent sessions (agent:main:subagent:*) where the label starts with the agentId
-// Example: agentId="dev" matches:
-//   - agent:dev:main (direct match)
-//   - agent:main:subagent:abc123 with label "dev-avatar-fix" (label prefix match)
 function filterSessionsForAgent(sessions, agentId) {
     return sessions.filter(s => {
-        // Direct match: session belongs to this agent
         const sessAgent = getAgentIdFromSession(s.key);
         if (sessAgent === agentId) return true;
-        
-        // Subagent match: spawned by main but labeled for this agent
-        // Pattern: agent:main:subagent:* with label starting with "{agentId}-"
         if (s.key?.startsWith('agent:main:subagent:')) {
             const label = s.displayName || s.name || '';
-            // Label pattern: {agentId}-{taskname} (e.g., "dev-avatar-fix", "cmp-marketing-research")
-            if (label.toLowerCase().startsWith(agentId.toLowerCase() + '-')) {
-                return true;
-            }
+            if (label.toLowerCase().startsWith(agentId.toLowerCase() + '-')) return true;
         }
-        
         return false;
     });
 }
 
-// Check URL parameters for auto-session connection
 function checkUrlSessionParam() {
     const params = new URLSearchParams(window.location.search);
-    const sessionParam = params.get('session');
-    if (sessionParam) {
-        sessLog(`[Dashboard] URL session param detected: ${sessionParam}`);
-        return sessionParam;
-    }
-    return null;
+    return params.get('session');
 }
 
-// For subagent sessions (agent:main:subagent:*), determine the correct agent from the label
-// and update currentAgentId so the sidebar highlights correctly
 function handleSubagentSessionAgent() {
-    if (!currentSessionName?.startsWith('agent:main:subagent:')) {
-        return; // Not a subagent session
-    }
+    if (!currentSessionName?.startsWith('agent:main:subagent:')) return;
     
     // Find the session in availableSessions
     const session = availableSessions.find(s => s.key === currentSessionName);
@@ -178,6 +160,7 @@ function handleSubagentSessionAgent() {
         
         // Update current agent ID
         currentAgentId = agentFromLabel;
+        window.currentAgentId = agentFromLabel;
         
         // Update sidebar highlight
         setActiveSidebarAgent(agentFromLabel);
@@ -482,6 +465,7 @@ async function executeSessionSwitch(sessionKey) {
         // 3. Update session config and input field
         const oldSessionName = currentSessionName;
         currentSessionName = sessionKey;
+        window.currentSessionName = currentSessionName; // Sync to window for other modules
         GATEWAY_CONFIG.sessionKey = sessionKey;
         localStorage.setItem('gateway_session', sessionKey);
         const sessionInput = document.getElementById('gateway-session');
@@ -491,6 +475,7 @@ async function executeSessionSwitch(sessionKey) {
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
             currentAgentId = agentMatch[1];
+            window.currentAgentId = agentMatch[1];
             // Force sync UI immediately (before async work)
             if (typeof forceSyncActiveAgent === 'function') {
                 forceSyncActiveAgent(agentMatch[1]);
@@ -569,6 +554,7 @@ window.goToSession = async function(sessionKey) {
         // If not connected, set the session key and let auto-connect handle it
         GATEWAY_CONFIG.sessionKey = sessionKey;
         currentSessionName = sessionKey;
+        window.currentSessionName = currentSessionName; // Sync to window for other modules
         localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
@@ -702,6 +688,7 @@ function initGateway() {
             }
             GATEWAY_CONFIG.sessionKey = intendedSession;
             currentSessionName = intendedSession;
+            window.currentSessionName = currentSessionName; // Sync to window for other modules
             
             // Fetch live model config from gateway (populates dropdowns),
             // then apply per-session override (authoritative model display).
@@ -896,6 +883,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Update agent context
     currentAgentId = agentId;
+    window.currentAgentId = agentId;
 
     // Render immediately to show empty chat
     renderChat();
@@ -903,6 +891,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Switch gateway to new session
     currentSessionName = sessionKey;
+    window.currentSessionName = currentSessionName; // Sync to window for other modules
     GATEWAY_CONFIG.sessionKey = sessionKey;
     // Persist for reload - save to BOTH localStorage AND server state
     localStorage.setItem('gateway_session', sessionKey);

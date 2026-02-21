@@ -1,23 +1,9 @@
 // SoLoVision Command Center Dashboard v4.2.0
 // Modular architecture — see js/*.js for module files
-//
-// Message Architecture:
-// - Chat messages: Synced via Gateway (single source of truth across all devices)
-// - System messages: Local UI noise (heartbeats, errors) - persisted to localStorage only
-
-// ===================
-// STATE MANAGEMENT
-// ===================
-
-
-// ===================
-// INITIALIZATION
-// ===================
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
     
-    // Always start at the top
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     const dashPage = document.getElementById('page-dashboard');
     if (dashPage) {
@@ -28,7 +14,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     window.scrollTo(0, 0);
 
-    // Make task board toolbar sticky when scrolling past it
     if (dashPage) {
         const toolbar = document.getElementById('task-toolbar');
         const taskBoard = document.querySelector('.bento-task-board');
@@ -45,14 +30,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!isSticky) {
                         placeholder.style.display = 'block';
                         placeholder.style.height = toolbar.offsetHeight + 'px';
-                        // Move toolbar to body so it escapes overflow:hidden
                         document.body.appendChild(toolbar);
-                        toolbar.style.position = 'fixed';
-                        toolbar.style.top = '60px';
-                        toolbar.style.zIndex = '200';
-                        toolbar.style.background = 'var(--surface-1)';
-                        toolbar.style.borderBottom = '1px solid var(--border-default)';
-                        toolbar.style.boxSizing = 'border-box';
+                        toolbar.style.cssText = 'position:fixed;top:60px;z-index:200;background:var(--surface-1);border-bottom:1px solid var(--border-default);box-sizing:border-box;';
                         isSticky = true;
                     }
                     const contentEl = taskBoard.querySelector('.bento-widget-content');
@@ -60,56 +39,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                     toolbar.style.left = contentRect.left + 'px';
                     toolbar.style.width = contentRect.width + 'px';
                     toolbar.style.padding = '8px ' + getComputedStyle(contentEl).paddingLeft;
-                } else {
-                    if (isSticky) {
-                        toolbar.style.cssText = '';
-                        placeholder.parentNode.insertBefore(toolbar, placeholder);
-                        placeholder.style.display = 'none';
-                        isSticky = false;
-                    }
+                } else if (isSticky) {
+                    toolbar.style.cssText = '';
+                    placeholder.parentNode.insertBefore(toolbar, placeholder);
+                    placeholder.style.display = 'none';
+                    isSticky = false;
                 }
             });
         }
     }
 
-    // Initialize dashboard improvement tasks
     initDashboardTasks();
-
-    // Log summary after state is loaded
-    const provider = localStorage.getItem('selected_provider') || 'anthropic';
-    const model = localStorage.getItem('selected_model') || 'claude-3-opus';
-    console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
+    console.log(`[Dashboard] Ready - Provider: ${localStorage.getItem('selected_provider') || 'anthropic'}, Model: ${localStorage.getItem('selected_model') || 'claude-3-opus'}`);
     
-    // Load gateway settings from server state if localStorage is empty
-    loadGatewaySettingsFromServer();
-    
-    // Request browser notification permission
     requestNotificationPermission();
-    
-    render({ includeSystem: true }); // Initial render includes system page
+    render({ includeSystem: true });
     updateLastSync();
-
-    // Initialize chat input behavior
     setupChatPageInput();
 
-    // Initialize sidebar agent shortcuts
-    setupSidebarAgents();
-    
-    // Initialize agent name display based on current session
-    const agentNameEl = document.getElementById('chat-page-agent-name');
-    if (agentNameEl) {
-        agentNameEl.textContent = getAgentLabel(currentAgentId);
-    }
-
-    // Initialize Gateway client
-    initGateway();
-
-    // Initialize voice input
-    initVoiceInput();
-    initPushToTalk();
-    updateVoiceAutoSendUI();
-
-    // Populate saved gateway settings
+    // Populate saved gateway settings BEFORE setting up sidebar
     const hostEl = document.getElementById('gateway-host');
     const portEl = document.getElementById('gateway-port');
     const tokenEl = document.getElementById('gateway-token');
@@ -121,20 +69,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
 
     // Check URL for session parameter (?session=agent:main:subagent:abc123)
+    // This must happen BEFORE setupSidebarAgents so sidebar reflects the correct agent
     const urlSession = checkUrlSessionParam();
     if (urlSession) {
         GATEWAY_CONFIG.sessionKey = urlSession;
         currentSessionName = urlSession;
         if (sessionEl) sessionEl.value = urlSession;
-        
-        // Extract agent ID from session key for sidebar highlighting
-        const agentMatch = urlSession.match(/^agent:([^:]+):/);
-        if (agentMatch) {
-            currentAgentId = agentMatch[1];
-        }
-        
-        // If it's a subagent session, try to determine the target agent from the label
-        // We'll do this after sessions are fetched
         
         // Clear URL parameter to avoid re-loading on refresh
         const cleanUrl = window.location.pathname + window.location.hash;
@@ -142,6 +82,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         console.log(`[Dashboard] Will connect to session from URL: ${urlSession}`);
     }
+
+    // Derive currentAgentId from currentSessionName (GATEWAY_CONFIG.sessionKey) immediately
+    // This ensures sidebar shows the correct agent on page load
+    function initCurrentAgentId() {
+        const sessionKey = GATEWAY_CONFIG.sessionKey || 'main';
+        const match = sessionKey.match(/^agent:([^:]+):/);
+        if (match) {
+            currentAgentId = match[1];
+        } else {
+            currentAgentId = 'main';
+        }
+        
+        // Also update currentSessionName if not set
+        if (!currentSessionName) {
+            currentSessionName = sessionKey;
+        }
+        
+        return currentAgentId;
+    }
+    
+    const initialAgentId = initCurrentAgentId();
+
+    // Initialize sidebar agent shortcuts AFTER config is loaded
+    setupSidebarAgents();
+    
+    // Ensure active sidebar state is synced (setupSidebarAgents should handle this, but double-check)
+    if (initialAgentId) {
+        setActiveSidebarAgent(initialAgentId);
+    }
+    
+    // Initialize agent name display based on current session
+    const agentNameEl = document.getElementById('chat-page-agent-name');
+    if (agentNameEl) {
+        agentNameEl.textContent = getAgentLabel(currentAgentId);
+    }
+
+    // Initialize Gateway client
+    initGateway();
 
     // Auto-connect if we have saved host
     if (GATEWAY_CONFIG.host) {

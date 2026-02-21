@@ -279,7 +279,26 @@ window.changeSessionModel = async function() {
             });
             
             // Also clear session override
-            try { await gateway.patchSession(sessionKey, { model: null }); } catch (_) {}
+            try { 
+                await gateway.patchSession(sessionKey, { model: null }); 
+                // Refresh session cache to update the model
+                try {
+                    const result = await gateway?.listSessions?.({});
+                    if (result?.sessions?.length) {
+                        availableSessions = result.sessions.map(s => ({
+                            key: s.key,
+                            name: getFriendlySessionName(s.key),
+                            displayName: getFriendlySessionName(s.key),
+                            updatedAt: s.updatedAt,
+                            totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                            model: s.model || 'unknown',
+                            sessionId: s.sessionId
+                        }));
+                    }
+                } catch (e) {
+                    console.warn('[Dashboard] Failed to refresh sessions after model change:', e.message);
+                }
+            } catch (_) {}
             
             // Fetch current global default to update UI
             const response = await fetch('/api/models/current');
@@ -309,6 +328,23 @@ window.changeSessionModel = async function() {
             // Also patch current session so it takes effect immediately
             try {
                 await gateway.patchSession(sessionKey, { model: selectedModel });
+                // Refresh session cache to update the model
+                try {
+                    const result = await gateway?.listSessions?.({});
+                    if (result?.sessions?.length) {
+                        availableSessions = result.sessions.map(s => ({
+                            key: s.key,
+                            name: getFriendlySessionName(s.key),
+                            displayName: getFriendlySessionName(s.key),
+                            updatedAt: s.updatedAt,
+                            totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                            model: s.model || 'unknown',
+                            sessionId: s.sessionId
+                        }));
+                    }
+                } catch (e) {
+                    console.warn('[Dashboard] Failed to refresh sessions after model change:', e.message);
+                }
             } catch (e) {
                 console.warn('[Dashboard] sessions.patch model failed (may need gateway restart):', e.message);
             }
@@ -775,13 +811,16 @@ async function applySessionModelOverride(sessionKey) {
     // 3. Check per-agent model override via server API
     if (!sessionModel) {
         try {
-            // Use server API to get current model configuration
-            const response = await fetch('/api/models/current');
+            // Extract agentId from sessionKey to get per-agent model
+            const agentIdMatch = sessionKey.match(/^agent:([^:]+):/);
+            const agentId = agentIdMatch ? agentIdMatch[1] : 'main';
+            
+            const response = await fetch(`/api/models/current?agentId=${encodeURIComponent(agentId)}`);
             if (response.ok) {
                 const modelInfo = await response.json();
                 if (modelInfo?.modelId) {
                     sessionModel = modelInfo.modelId;
-                    console.log(`[Dashboard] Session ${sessionKey} using server model: ${sessionModel}`);
+                    console.log(`[Dashboard] Session ${sessionKey} using per-agent model from API: ${sessionModel} (agent: ${agentId})`);
                 }
             }
         } catch (e) {
@@ -792,9 +831,10 @@ async function applySessionModelOverride(sessionKey) {
     if (sessionModel) {
         sessionModel = resolveFullModelId(sessionModel);
         const provider = sessionModel.includes('/') ? sessionModel.split('/')[0] : currentProvider;
+        console.log(`[Dashboard] applySessionModelOverride: Setting model to ${sessionModel} for session ${sessionKey}`);
         syncModelDisplay(sessionModel, provider);
     } else {
-        console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
+        console.log(`[Dashboard] applySessionModelOverride: No override for ${sessionKey}, keeping current display`);
     }
 }
 
@@ -835,11 +875,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         let provider = null;
         
         try {
-            const response = await fetch('/api/models/current');
+            // Extract agentId from session key - this is more reliable than currentAgentId which may not be set yet
+            const sessionKey = localStorage.getItem('gateway_session') || 'agent:main:main';
+            const agentIdMatch = sessionKey.match(/^agent:([^:]+):/);
+            const agentId = agentIdMatch ? agentIdMatch[1] : 'main';
+            
+            const response = await fetch(`/api/models/current?agentId=${encodeURIComponent(agentId)}`);
             const modelInfo = await response.json();
             modelId = modelInfo?.modelId;
             provider = modelInfo?.provider;
-            console.log(`[Dashboard] Model from API: ${modelId} (provider: ${provider})`);
+            console.log(`[Dashboard] Model from API: ${modelId} (provider: ${provider}, agent: ${agentId})`);
         } catch (e) {
             console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
             // Fall back to localStorage only if API fails

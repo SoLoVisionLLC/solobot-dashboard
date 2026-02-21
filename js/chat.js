@@ -1,129 +1,64 @@
-// js/chat.js — Chat event handling, message rendering, voice input, image handling, chat page
+// js/chat.js — Chat event handling, message rendering, voice input, image handling
 
+// Make chatLog globally available
 const CHAT_DEBUG = false;
+window.chatLog = function(...args) { if (CHAT_DEBUG) console.log(...args); }
 function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
 
-/**
- * Converts plain text to HTML with clickable links.
- * - Escapes HTML to prevent XSS
- * - Converts markdown links [text](url) to <a> tags
- * - Auto-links bare http/https URLs
- * - Preserves newlines as <br>
- * - Skips URLs inside code blocks (``` ... ```)
- */
 function linkifyText(text) {
     if (!text) return '';
-
-    // Split on code blocks to avoid linkifying inside them
     const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-
     return parts.map((part, i) => {
-        // Odd indices are code blocks — escape only, no linkify
         if (i % 2 === 1) {
             return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
-
-        // Escape HTML
         let safe = part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-        // Convert markdown links [text](url)
-        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-        // Auto-link bare URLs (not already inside an href)
-        safe = safe.replace(/(^|[^"'>])(https?:\/\/[^\s<]+)/g,
-            '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
-
-        // Preserve newlines
-        safe = safe.replace(/\n/g, '<br>');
-
-        return safe;
+        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        safe = safe.replace(/(^|["'>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+        return safe.replace(/\n/g, '<br>');
     }).join('');
 }
-
-// ===================
-// CHAT FUNCTIONS (Gateway WebSocket)
-// ===================
 
 // ===================
 // VOICE INPUT (Web Speech API)
 // ===================
 
 let voiceRecognition = null;
-let voiceInputState = 'idle'; // idle, listening, processing
-let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-send after speech
-let lastVoiceTranscript = ''; // Store last transcript for auto-send
-let accumulatedTranscript = ''; // Store accumulated text across pause/resume cycles
-
-// Live transcript indicator functions (disabled - transcript shows directly in input field)
-function showLiveTranscriptIndicator() { }
-function hideLiveTranscriptIndicator() { }
-function updateLiveTranscriptIndicator(text, isInterim) { }
+let voiceInputState = 'idle';
+let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true';
+let lastVoiceTranscript = '';
+let accumulatedTranscript = '';
 
 function initVoiceInput() {
-    // Check for Web Speech API support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    // Update both voice buttons
-    const btns = [
-        document.getElementById('voice-input-btn'),
-        document.getElementById('voice-input-btn-chatpage')
-    ];
-    
+    const btns = [document.getElementById('voice-input-btn'), document.getElementById('voice-input-btn-chatpage')];
+
     if (!SpeechRecognition) {
-        for (const btn of btns) {
-            if (btn) {
-                btn.disabled = true;
-                btn.title = 'Voice input not supported in this browser';
-                btn.innerHTML = '<span class="voice-unsupported">🎤✗</span>';
-            }
-        }
-        chatLog('[Voice] Web Speech API not supported');
+        btns.forEach(btn => {
+            if (btn) { btn.disabled = true; btn.title = 'Voice input not supported'; btn.innerHTML = '🎤✗'; }
+        });
         return;
     }
-    
+
     if (btns.every(b => !b)) return;
 
     voiceRecognition = new SpeechRecognition();
-    voiceRecognition.continuous = true; // Keep listening until manually stopped
+    voiceRecognition.continuous = true;
     voiceRecognition.interimResults = true;
     voiceRecognition.lang = 'en-US';
     voiceRecognition.maxAlternatives = 1;
 
     voiceRecognition.onstart = () => {
-        chatLog('[Voice] Started listening, target input:', activeVoiceTarget);
-        // Don't reset transcript - keep accumulated text for pause/resume
         setVoiceState('listening');
-        
-        // Show live transcript indicator
-        showLiveTranscriptIndicator();
-        
-        // Focus the target input
         const input = document.getElementById(activeVoiceTarget);
-        if (input) {
-            input.focus();
-            input.placeholder = 'Listening... (speak now)';
-            // Keep existing accumulated text in the field
-            if (accumulatedTranscript) {
-                input.value = accumulatedTranscript;
-            }
-        }
+        if (input) { input.focus(); input.placeholder = 'Listening...'; if (accumulatedTranscript) input.value = accumulatedTranscript; }
     };
-    
-    voiceRecognition.onaudiostart = () => {
-        chatLog('[Voice] Audio capture started - microphone is working');
-    };
-    
-    voiceRecognition.onsoundstart = () => {
-        chatLog('[Voice] Sound detected');
-    };
-    
+
+    voiceRecognition.onaudiostart = () => { };
+    voiceRecognition.onsoundstart = () => { };
     voiceRecognition.onspeechstart = () => {
-        chatLog('[Voice] Speech detected - processing...');
         const input = document.getElementById(activeVoiceTarget);
-        if (input) {
-            input.placeholder = 'Hearing you...';
-        }
+        if (input) input.placeholder = 'Hearing you...';
     };
 
     voiceRecognition.onresult = (event) => {
@@ -166,106 +101,43 @@ function initVoiceInput() {
             }
             accumulatedTranscript += finalTranscript;
         }
-        
-        // Display accumulated + interim
+
         const displayText = accumulatedTranscript + interimTranscript;
-        chatLog('[Voice] Display text:', displayText, '(accumulated:', accumulatedTranscript.length, 'interim:', interimTranscript.length, ')');
-
-        // Update live transcript indicator (banner)
-        updateLiveTranscriptIndicator(displayText, !!interimTranscript);
-
-        // Always update the input with current text (even if empty during pauses)
-        chatLog('[Voice] Setting targetInput.value to:', displayText);
-        targetInput.value = displayText;
-        
-        // Style based on whether we have final or interim
-        if (interimTranscript) {
-            // Has interim - show as in-progress with subtle indicator
-            targetInput.style.fontStyle = 'italic';
-            targetInput.style.color = 'var(--text-secondary)';
-        } else if (finalTranscript) {
-            // Only final content - solid style
-            targetInput.style.fontStyle = 'normal';
-            targetInput.style.color = 'var(--text-primary)';
+        if (targetInput) {
+            targetInput.value = displayText;
+            if (interimTranscript) { targetInput.style.fontStyle = 'italic'; targetInput.style.color = 'var(--text-secondary)'; }
+            else if (finalTranscript) { targetInput.style.fontStyle = 'normal'; targetInput.style.color = 'var(--text-primary)'; }
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+            targetInput.focus();
+            if (targetInput.setSelectionRange) targetInput.setSelectionRange(targetInput.value.length, targetInput.value.length);
         }
-        
-        // Trigger input event to handle auto-resize and any listeners
-        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        
-        // Keep input focused and cursor at end
-        targetInput.focus();
-        if (targetInput.setSelectionRange) {
-            targetInput.setSelectionRange(targetInput.value.length, targetInput.value.length);
-        }
-
-        // Store final transcript for auto-send
-        if (finalTranscript) {
-            lastVoiceTranscript = finalTranscript;
-            chatLog('[Voice] Final transcript stored:', finalTranscript);
-        }
+        if (finalTranscript) lastVoiceTranscript = finalTranscript;
     };
 
     voiceRecognition.onerror = (event) => {
-        console.error('[Voice] Error:', event.error, event.message || '');
-        
-        if (event.error === 'not-allowed') {
-            setVoiceState('idle');
-            showToast('Microphone access denied. Click the lock icon in your browser address bar to allow.', 'error');
-        } else if (event.error === 'no-speech') {
-            // Don't stop on no-speech if continuous mode - just keep listening
-            chatLog('[Voice] No speech detected yet, still listening...');
-            // Only show toast if we're ending
-            if (!voiceRecognition || voiceInputState !== 'listening') {
-                showToast('No speech detected. Make sure your microphone is working.', 'info');
-            }
-        } else if (event.error === 'audio-capture') {
-            setVoiceState('idle');
-            showToast('No microphone found. Please connect a microphone and try again.', 'error');
-        } else if (event.error === 'network') {
-            setVoiceState('idle');
-            showToast('Network error. Speech recognition requires internet connection.', 'error');
-        } else if (event.error !== 'aborted') {
-            setVoiceState('idle');
-            showToast(`Voice error: ${event.error}`, 'error');
-        }
+        console.error('[Voice] Error:', event.error);
+        if (event.error === 'not-allowed') { setVoiceState('idle'); showToast('Microphone access denied.', 'error'); }
+        else if (event.error === 'no-speech') { chatLog('[Voice] No speech detected'); }
+        else if (event.error === 'audio-capture') { setVoiceState('idle'); showToast('No microphone found.', 'error'); }
+        else if (event.error === 'network') { setVoiceState('idle'); showToast('Network error.', 'error'); }
+        else if (event.error !== 'aborted') { setVoiceState('idle'); showToast(`Voice error: ${event.error}`, 'error'); }
     };
 
     voiceRecognition.onend = () => {
-        chatLog('[Voice] Ended, accumulated transcript:', accumulatedTranscript);
-        // Note: hideLiveTranscriptIndicator is called by setVoiceState('idle') below
-        
-        // Reset styling on both inputs
-        for (const inputId of ['chat-input', 'chat-page-input']) {
+        ['chat-input', 'chat-page-input'].forEach(inputId => {
             const input = document.getElementById(inputId);
-            if (input) {
-                input.style.fontStyle = 'normal';
-                input.style.color = 'var(--text-primary)';
-                // Reset placeholder
-                if (inputId === 'chat-input') {
-                    input.placeholder = 'Type a message...';
-                } else {
-                    input.placeholder = 'Message SoLoBot...';
-                }
-            }
-        }
-        
-        // Auto-send if enabled and we have a transcript
+            if (input) { input.style.fontStyle = 'normal'; input.style.color = 'var(--text-primary)'; input.placeholder = inputId === 'chat-input' ? 'Type a message...' : 'Message SoLoBot...'; }
+        });
+
         if (voiceAutoSend && accumulatedTranscript.trim()) {
-            chatLog('[Voice] Auto-sending:', accumulatedTranscript);
-            // Determine which send function to use based on target
-            if (activeVoiceTarget === 'chat-page-input') {
-                sendChatPageMessage();
-            } else {
-                sendChatMessage();
-            }
-            // Clear accumulated text after auto-send
+            if (activeVoiceTarget === 'chat-page-input') sendChatPageMessage();
+            else sendChatMessage();
             accumulatedTranscript = '';
             const input = document.getElementById(activeVoiceTarget);
             if (input) input.value = '';
         }
-        
         setVoiceState('idle');
-        activeVoiceTarget = 'chat-input'; // Reset target
+        activeVoiceTarget = 'chat-input';
     };
 
     chatLog('[Voice] Initialized successfully');
@@ -286,7 +158,7 @@ function toggleVoiceInput() {
 
 function startVoiceInput() {
     if (!voiceRecognition) return;
-    
+
     try {
         voiceRecognition.start();
         chatLog('[Voice] Starting...');
@@ -301,7 +173,7 @@ function startVoiceInput() {
 
 function stopVoiceInput() {
     if (!voiceRecognition) return;
-    
+
     try {
         voiceRecognition.stop();
         chatLog('[Voice] Stopping...');
@@ -312,23 +184,23 @@ function stopVoiceInput() {
 
 function setVoiceState(state, targetInput = 'chat-input') {
     voiceInputState = state;
-    
+
     // Hide live transcript indicator when going idle
     if (state === 'idle') {
         hideLiveTranscriptIndicator();
     }
-    
+
     // Update both buttons to stay in sync
     const btns = [
         { btn: document.getElementById('voice-input-btn'), mic: document.getElementById('voice-icon-mic'), stop: document.getElementById('voice-icon-stop') },
         { btn: document.getElementById('voice-input-btn-chatpage'), mic: document.getElementById('voice-icon-mic-chatpage'), stop: document.getElementById('voice-icon-stop-chatpage') }
     ];
-    
+
     for (const { btn, mic, stop } of btns) {
         if (!btn) continue;
-        
+
         btn.classList.remove('listening', 'processing');
-        
+
         switch (state) {
             case 'listening':
                 btn.classList.add('listening');
@@ -365,7 +237,7 @@ function toggleVoiceInput() {
     if (activeVoiceTarget !== 'chat-page-input' && voiceInputState !== 'listening') {
         activeVoiceTarget = 'chat-input';
     }
-    
+
     if (!voiceRecognition) {
         showToast('Voice input not available', 'error');
         return;
@@ -376,81 +248,26 @@ function toggleVoiceInput() {
     } else {
         startVoiceInput();
     }
-    
+
     // Don't reset target here - it should persist until onend resets it
-}
-
-// Toggle auto-send setting
-function toggleVoiceAutoSend() {
-    voiceAutoSend = !voiceAutoSend;
-    localStorage.setItem('voice_auto_send', voiceAutoSend);
-    updateVoiceAutoSendUI();
-    showToast(voiceAutoSend ? 'Voice auto-send enabled' : 'Voice auto-send disabled', 'info');
-}
-
-function updateVoiceAutoSendUI() {
-    const toggles = document.querySelectorAll('.voice-auto-send-toggle');
-    toggles.forEach(toggle => {
-        toggle.classList.toggle('active', voiceAutoSend);
-        toggle.title = voiceAutoSend ? 'Auto-send ON (click to disable)' : 'Auto-send OFF (click to enable)';
-    });
-}
-
-// Alt+Space toggle: Press once to start, press again to stop
-function initPushToTalk() {
-    document.addEventListener('keydown', (e) => {
-        // Toggle on Alt+Space (works even in input fields)
-        if (e.code === 'Space' && e.altKey) {
-            e.preventDefault();
-            
-            if (voiceInputState === 'listening') {
-                // Already listening - stop
-                chatLog('[Voice] Alt+Space toggle: stopping');
-                stopVoiceInput();
-            } else {
-                // Not listening - start
-                // Determine which input to target based on current page
-                const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
-                activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
-                
-                chatLog('[Voice] Alt+Space toggle: starting, target:', activeVoiceTarget);
-                startVoiceInput();
-            }
-        }
-    });
-    
-    chatLog('[Voice] Alt+Space toggle initialized (press to start/stop recording)');
-}
-
-// Check if user is typing in an input field
-function isTypingInInput(element) {
-    if (!element) return false;
-    const tagName = element.tagName.toLowerCase();
-    const isEditable = element.isContentEditable;
-    const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
-    return isInput || isEditable;
 }
 
 // ===================
 // IMAGE HANDLING
 // ===================
 
-// Image handling - supports multiple images
 let pendingImages = [];
 
 function handleImageSelect(event) {
     const files = event.target.files;
     for (const file of files) {
-        if (file.type.startsWith('image/')) {
-            processImageFile(file);
-        }
+        if (file.type.startsWith('image/')) processImageFile(file);
     }
 }
 
 function handlePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -466,24 +283,13 @@ let chatInputSelection = { start: 0, end: 0 };
 function handleChatInputKeydown(event) {
     const input = event.target;
     if (event.key !== 'Enter' || !input) return;
-
-    if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        sendChatMessage();
-        return;
-    }
-
+    if (event.ctrlKey || event.metaKey) { event.preventDefault(); sendChatMessage(); return; }
     if (event.shiftKey) {
         event.preventDefault();
         const start = input.selectionStart;
-        const end = input.selectionEnd;
         const value = input.value;
-        const before = value.slice(0, start);
-        const after = value.slice(end);
-        const newValue = `${before}\n${after}`;
-        input.value = newValue;
-        const cursor = start + 1;
-        input.setSelectionRange(cursor, cursor);
+        input.value = `${value.slice(0, start)}\n${value.slice(start)}`;
+        input.setSelectionRange(start + 1, start + 1);
         adjustChatInputHeight(input);
         return;
     }
@@ -497,17 +303,14 @@ function cacheChatInputSelection(input) {
 
 function restoreChatInputSelection(input) {
     if (!input) return;
-    const length = input.value.length;
-    const start = Math.min(chatInputSelection.start ?? length, length);
-    const end = Math.min(chatInputSelection.end ?? length, length);
-    input.setSelectionRange(start, end);
+    const len = input.value.length;
+    input.setSelectionRange(Math.min(chatInputSelection.start ?? len, len), Math.min(chatInputSelection.end ?? len, len));
 }
 
 function adjustChatInputHeight(input) {
     if (!input) return;
     input.style.height = 'auto';
-    const height = Math.min(input.scrollHeight, 160);
-    input.style.height = `${Math.max(height, 36)}px`;
+    input.style.height = `${Math.min(Math.max(input.scrollHeight, 36), 160)}px`;
 }
 
 function attachChatInputHandlers() {
@@ -515,10 +318,7 @@ function attachChatInputHandlers() {
     if (!input) return;
     input.addEventListener('keydown', handleChatInputKeydown);
     input.addEventListener('blur', () => cacheChatInputSelection(input));
-    input.addEventListener('focus', () => {
-        restoreChatInputSelection(input);
-        adjustChatInputHeight(input);
-    });
+    input.addEventListener('focus', () => { restoreChatInputSelection(input); adjustChatInputHeight(input); });
     input.addEventListener('input', () => adjustChatInputHeight(input));
     adjustChatInputHeight(input);
 }
@@ -531,19 +331,19 @@ async function compressImage(dataUrl, maxWidth = 1200, quality = 0.8) {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            
+
             // Scale down if too large
             if (width > maxWidth) {
                 height = (height * maxWidth) / width;
                 width = maxWidth;
             }
-            
+
             canvas.width = width;
             canvas.height = height;
-            
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
+
             // Convert to JPEG for better compression (unless PNG transparency needed)
             const compressed = canvas.toDataURL('image/jpeg', quality);
             resolve(compressed);
@@ -560,7 +360,7 @@ function processImageFile(file) {
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
         }
-        
+
         pendingImages.push({
             id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
@@ -575,13 +375,13 @@ function processImageFile(file) {
 function renderImagePreviews() {
     const container = document.getElementById('image-preview-container');
     if (!container) return;
-    
+
     if (pendingImages.length === 0) {
         container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
-    
+
     container.classList.add('visible');
     container.innerHTML = pendingImages.map((img, idx) => `
         <div class="image-preview-wrapper">
@@ -613,7 +413,7 @@ async function sendChatMessage() {
         chatLog('[Voice] Stopping recording before send');
         stopVoiceInput();
     }
-    
+
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text && pendingImages.length === 0) return;
@@ -626,7 +426,7 @@ async function sendChatMessage() {
     // Get images to send
     const imagesToSend = [...pendingImages];
     const hasImages = imagesToSend.length > 0;
-    
+
     // Add to local display
     if (hasImages) {
         // Show all images in local preview
@@ -637,7 +437,7 @@ async function sendChatMessage() {
     } else {
         addLocalChatMessage(text, 'user');
     }
-    
+
     input.value = '';
     accumulatedTranscript = ''; // Clear voice accumulated text
     clearImagePreviews();
@@ -670,15 +470,15 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
     // Check if this message already has a session tag from outside
     const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
     const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
-    
+
     if (incomingSession && currentSession && incomingSession !== currentSession) {
         chatLog(`[Chat] BLOCKED addLocalChatMessage: incoming session=${incomingSession}, current=${currentSession}`);
         return null;
     }
-    
+
     if (!state.chat) state.chat = { messages: [] };
     if (!state.system) state.system = { messages: [] };
-    
+
     // Handle multiple parameter signatures:
     // (text, from)
     // (text, from, image) - single image data URI
@@ -687,7 +487,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
     // (text, from, image, model)
     let images = [];
     let messageModel = model;
-    
+
     if (imageOrModel) {
         if (Array.isArray(imageOrModel)) {
             // Array of images
@@ -702,7 +502,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
             }
         }
     }
-    
+
     chatLog(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
@@ -741,10 +541,10 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
 
         // Persist chat to localStorage (workaround for Gateway bug #5735)
         persistChatMessages();
-        
+
         // Also sync chat to VPS for cross-computer access
         syncChatToVPS();
-        
+
         renderChat();
         renderChatPage();
     }
@@ -827,7 +627,7 @@ function renderChat() {
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
-    
+
     // Show typing indicator when processing but no streaming text yet
     if (isProcessing && !streamingText) {
         const typingIndicator = document.createElement('div');
@@ -908,17 +708,6 @@ function createChatMessageElement(msg) {
         const displayName = getAgentDisplayName(currentAgentId);
         nameSpan.textContent = msg.isStreaming ? `${displayName} (typing...)` : displayName;
     }
-    
-    // Model badge for bot messages (shows which AI model generated the response)
-    if (!isUser && !isSystem && msg.model) {
-        const modelBadge = document.createElement('span');
-        modelBadge.style.cssText = 'font-size: 10px; padding: 1px 5px; background: var(--surface-3); border-radius: 3px; color: var(--text-muted); margin-left: 4px;';
-        // Show short model name (e.g., 'claude-3-5-sonnet' instead of 'anthropic/claude-3-5-sonnet-latest')
-        const shortModel = msg.model.split('/').pop().replace(/-latest$/, '');
-        modelBadge.textContent = shortModel;
-        modelBadge.title = msg.model; // Full model name on hover
-        header.appendChild(modelBadge);
-    }
 
     const timeSpan = document.createElement('span');
     timeSpan.style.color = 'var(--text-muted)';
@@ -926,6 +715,15 @@ function createChatMessageElement(msg) {
 
     header.appendChild(nameSpan);
     header.appendChild(timeSpan);
+
+    // Provider/Model badge - shows full provider/model (e.g., "ollama/qwen2.5:14b", "openai/gpt-4o")
+    if (!isUser && !isSystem && msg.model) {
+        const providerModelSpan = document.createElement('span');
+        providerModelSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); font-family: monospace; background: var(--surface-3); padding: 1px 4px; border-radius: 3px; margin-left: 4px;';
+        providerModelSpan.textContent = msg.model;
+        providerModelSpan.title = msg.model;
+        header.appendChild(providerModelSpan);
+    }
 
     // Message content
     const content = document.createElement('div');
@@ -943,7 +741,7 @@ function createChatMessageElement(msg) {
         imageContainer.style.flexWrap = 'wrap';
         imageContainer.style.gap = '8px';
         imageContainer.style.marginBottom = 'var(--space-2)';
-        
+
         images.forEach((imgSrc, idx) => {
             const img = document.createElement('img');
             img.src = imgSrc;
@@ -957,7 +755,7 @@ function createChatMessageElement(msg) {
             img.onclick = () => openImageModal(imgSrc);
             imageContainer.appendChild(img);
         });
-        
+
         bubble.appendChild(imageContainer);
     }
 
@@ -1037,10 +835,10 @@ function saveChatScrollPosition() {
 function restoreChatScrollPosition() {
     const container = document.getElementById('chat-page-messages');
     if (!container) return;
-    
+
     const savedPosition = sessionStorage.getItem('chatScrollPosition');
     const savedHeight = sessionStorage.getItem('chatScrollHeight');
-    
+
     if (savedPosition && savedHeight) {
         // Calculate relative position and apply
         const ratio = parseFloat(savedPosition) / parseFloat(savedHeight);
@@ -1081,10 +879,10 @@ function scrollChatToBottom() {
 function updateNewMessageIndicator() {
     const indicator = document.getElementById('chat-page-new-indicator');
     if (!indicator) return;
-    
+
     const container = document.getElementById('chat-page-messages');
     const notAtBottom = container && !isAtBottom(container);
-    
+
     if (notAtBottom && chatPageNewMessageCount > 0) {
         indicator.textContent = `↓ ${chatPageNewMessageCount} new message${chatPageNewMessageCount > 1 ? 's' : ''}`;
         indicator.classList.remove('hidden');
@@ -1100,18 +898,18 @@ function updateNewMessageIndicator() {
 function setupChatPageScrollListener() {
     const container = document.getElementById('chat-page-messages');
     if (!container || container.dataset.scrollListenerAttached) return;
-    
+
     container.addEventListener('scroll', () => {
         // Update indicator based on scroll position
         updateNewMessageIndicator();
-        
+
         // Show/hide floating scroll button
         updateScrollToBottomButton();
-        
+
         // Save position periodically
         saveChatScrollPosition();
     });
-    
+
     container.dataset.scrollListenerAttached = 'true';
 }
 
@@ -1119,7 +917,7 @@ function updateScrollToBottomButton() {
     const container = document.getElementById('chat-page-messages');
     const btn = document.getElementById('scroll-to-bottom-btn');
     if (!container || !btn) return;
-    
+
     // Show button if scrolled up more than 200px from bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distanceFromBottom > 200) {
@@ -1188,12 +986,12 @@ function renderChatPage() {
         return;
     }
     chatPageLastRenderKey = renderKey;
-    
+
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
     // Save distance from bottom (how far up the user has scrolled)
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    
+
     // === Incremental rendering — only touch DOM for changes ===
 
     // Show empty state if no messages
@@ -1203,9 +1001,9 @@ function renderChatPage() {
             <div class="chat-page-empty">
                 <div class="chat-page-empty-icon">💬</div>
                 <div class="chat-page-empty-text">
-                    ${isConnected 
-                        ? `Start a conversation with ${displayName}` 
-                        : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
+                    ${isConnected
+                ? `Start a conversation with ${displayName}`
+                : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
                 </div>
             </div>
         `;
@@ -1266,7 +1064,7 @@ function renderChatPage() {
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
-    
+
     // Show typing indicator when processing but no streaming text yet
     if (isProcessing && !streamingText) {
         const typingIndicator = document.createElement('div');
@@ -1280,7 +1078,7 @@ function renderChatPage() {
         `;
         container.appendChild(typingIndicator);
     }
-    
+
     // Smart scroll behavior - only auto-scroll if user was truly at the bottom
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
@@ -1293,21 +1091,21 @@ function renderChatPage() {
 function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
-    
+
     const isUser = msg.from === 'user';
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
-    
+
     // Message wrapper
     const wrapper = document.createElement('div');
     wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
     wrapper.setAttribute('data-msg-id', msg.id || '');
-    
+
     // Avatar (for bot and user messages, not system)
     if (!isSystem) {
         const avatar = document.createElement('div');
         avatar.className = 'chat-page-avatar';
-        
+
         if (isUser) {
             // User avatar - initials circle
             avatar.classList.add('user-avatar');
@@ -1316,28 +1114,28 @@ function createChatPageMessage(msg) {
             // Bot avatar - agent-specific image and color
             const agentId = currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
-            
+
             // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm'].includes(agentId) 
+            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm'].includes(agentId)
                 ? `/avatars/${agentId === 'main' ? 'solobot' : agentId}.png`
-                : (agentId === 'tax' || agentId === 'sec') 
+                : (agentId === 'tax' || agentId === 'sec')
                     ? `/avatars/${agentId}.svg`
                     : '/avatars/solobot.png';
-            
+
             const avatarImg = document.createElement('img');
             avatarImg.src = avatarPath;
             avatarImg.alt = getAgentDisplayName(agentId);
             avatarImg.onerror = () => { avatarImg.style.display = 'none'; avatar.textContent = '🤖'; };
             avatar.appendChild(avatarImg);
         }
-        
+
         wrapper.appendChild(avatar);
     }
-    
+
     // Bubble
     const bubble = document.createElement('div');
     bubble.className = 'chat-page-bubble';
-    
+
     // Images if present - show thumbnails
     const images = msg.images || (msg.image ? [msg.image] : []);
     if (images.length > 0) {
@@ -1346,7 +1144,7 @@ function createChatPageMessage(msg) {
         imageContainer.style.flexWrap = 'wrap';
         imageContainer.style.gap = '8px';
         imageContainer.style.marginBottom = '8px';
-        
+
         images.forEach((imgSrc, idx) => {
             const img = document.createElement('img');
             img.src = imgSrc;
@@ -1359,14 +1157,14 @@ function createChatPageMessage(msg) {
             img.onclick = () => openImageModal(imgSrc);
             imageContainer.appendChild(img);
         });
-        
+
         bubble.appendChild(imageContainer);
     }
-    
+
     // Header with sender and time
     const header = document.createElement('div');
     header.className = 'chat-page-bubble-header';
-    
+
     const sender = document.createElement('span');
     sender.className = 'chat-page-sender';
     if (isUser) {
@@ -1377,27 +1175,37 @@ function createChatPageMessage(msg) {
         const displayName = getAgentDisplayName(currentAgentId);
         sender.textContent = msg.isStreaming ? `${displayName} is typing...` : displayName;
     }
-    
+
     const time = document.createElement('span');
     time.className = 'chat-page-bubble-time';
     time.textContent = formatSmartTime(msg.time);
     time.title = formatTime(msg.time); // Show exact time on hover
-    
+
     header.appendChild(sender);
     header.appendChild(time);
+
+    // Provider/Model badge for bot messages - shows full provider/model ID
+    if (isBot && msg.model) {
+        const providerModelSpan = document.createElement('span');
+        providerModelSpan.className = 'chat-page-provider-model';
+        providerModelSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); font-family: monospace; background: var(--surface-3); padding: 1px 5px; border-radius: 3px; margin-left: 4px;';
+        providerModelSpan.textContent = msg.model;
+        providerModelSpan.title = msg.model;
+        header.appendChild(providerModelSpan);
+    }
     bubble.appendChild(header);
-    
+
     // Content
     const content = document.createElement('div');
     content.className = 'chat-page-bubble-content';
     content.innerHTML = linkifyText(msg.text);
     bubble.appendChild(content);
-    
+
     // Action buttons (copy, etc.) - show on hover
     if (!msg.isStreaming) {
         const actions = document.createElement('div');
         actions.className = 'chat-page-bubble-actions';
-        
+
         // Copy button
         const copyBtn = document.createElement('button');
         copyBtn.className = 'chat-action-btn';
@@ -1414,10 +1222,10 @@ function createChatPageMessage(msg) {
             }, 1500);
         };
         actions.appendChild(copyBtn);
-        
+
         bubble.appendChild(actions);
     }
-    
+
     wrapper.appendChild(bubble);
     return wrapper;
 }
@@ -1461,7 +1269,7 @@ function handleChatPageImageSelect(event) {
 function handleChatPagePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
+
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -1480,7 +1288,7 @@ function processChatPageImageFile(file) {
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
         }
-        
+
         chatPagePendingImages.push({
             id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
@@ -1495,14 +1303,14 @@ function processChatPageImageFile(file) {
 function renderChatPageImagePreviews() {
     const container = document.getElementById('chat-page-image-preview');
     if (!container) return;
-    
+
     if (chatPagePendingImages.length === 0) {
         container.classList.add('hidden');
         container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
-    
+
     container.classList.remove('hidden');
     container.classList.add('visible');
     container.innerHTML = chatPagePendingImages.map((img, idx) => `
@@ -1563,18 +1371,18 @@ function setActiveSidebarAgent(agentId) {
             el.classList.remove('active');
         }
     });
-    
+
     // Update currentAgentId and refresh dropdown to show this agent's sessions
     if (agentId) {
         const wasChanged = agentId !== currentAgentId;
         currentAgentId = agentId;
-        
+
         // Update agent name display in chat header
         const agentNameEl = document.getElementById('chat-page-agent-name');
         if (agentNameEl) {
             agentNameEl.textContent = getAgentLabel(agentId);
         }
-        
+
         if (wasChanged) {
             populateSessionDropdown();
         }
@@ -1592,7 +1400,7 @@ function forceSyncActiveAgent(agentId) {
             el.classList.remove('active');
         }
     });
-    
+
     currentAgentId = agentId;
     const agentNameEl = document.getElementById('chat-page-agent-name');
     if (agentNameEl) {
@@ -1613,7 +1421,7 @@ function saveLastAgentSession(agentId, sessionKey) {
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
         map[agentId] = sessionKey;
         localStorage.setItem('agent_last_sessions', JSON.stringify(map));
-    } catch {}
+    } catch { }
 }
 
 function setupSidebarAgents() {
@@ -1635,7 +1443,7 @@ function setupSidebarAgents() {
         showPage('chat');
 
         // Fire-and-forget switch (queue in sessions.js handles ordering)
-        switchToSession(sessionKey).catch(() => {});
+        switchToSession(sessionKey).catch(() => { });
     };
 
     agentEls.forEach(el => {
@@ -1651,20 +1459,20 @@ function setupSidebarAgents() {
         // This ensures sidebar clicks work even when chat text is highlighted
         el.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return;  // Left click only
-            
+
             // Clear any text selection to prevent interference
             const selection = window.getSelection();
             if (selection && !selection.isCollapsed) {
-                try { selection.removeAllRanges(); } catch {}
+                try { selection.removeAllRanges(); } catch { }
             }
-            
+
             // Always prevent default to avoid any selection-related interference
             e.preventDefault();
             e.stopPropagation();
-            
+
             // Mark as handled so click doesn't double-fire
             el._handledByMousedown = true;
-            
+
             // Execute switch
             activateAgentFromEl(el);
         });
@@ -1694,19 +1502,19 @@ async function sendChatPageMessage() {
         chatLog('[Voice] Stopping recording before send');
         stopVoiceInput();
     }
-    
+
     const input = document.getElementById('chat-page-input');
     const text = input.value.trim();
     if (!text && chatPagePendingImages.length === 0) return;
-    
+
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to Gateway. Please connect first in Settings.', 'warning');
         return;
     }
-    
+
     const imagesToSend = [...chatPagePendingImages];
     const hasImages = imagesToSend.length > 0;
-    
+
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
@@ -1715,23 +1523,23 @@ async function sendChatPageMessage() {
     } else {
         addLocalChatMessage(text, 'user');
     }
-    
+
     input.value = '';
     accumulatedTranscript = ''; // Clear voice accumulated text
     resizeChatPageInput();
     input.focus();
     clearChatPageImagePreviews();
-    
+
     // Force scroll to bottom when user sends
     chatPageUserScrolled = false;
-    
+
     // Show typing indicator immediately
     isProcessing = true;
-    
+
     // Render both areas
     renderChat();
     renderChatPage();
-    
+
     // Send via Gateway
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
