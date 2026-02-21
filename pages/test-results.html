@@ -1,0 +1,821 @@
+<!-- =================== TEST RESULTS PAGE =================== -->
+<div id="page-test-results" class="page">
+    <style>
+        #page-test-results {
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .tr-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .tr-header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tr-header-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .tr-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .tr-stat-card {
+            background: var(--glass-bg, rgba(30, 41, 59, 0.7));
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border-radius: 16px;
+            padding: 20px;
+            transition: transform 0.2s ease;
+        }
+
+        .tr-stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .tr-stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .tr-stat-value.pass { color: #10b981; }
+        .tr-stat-value.fail { color: #ef4444; }
+        .tr-stat-value.rate-limited { color: #f59e0b; }
+        .tr-stat-value.total { color: #60a5fa; }
+
+        .tr-stat-label {
+            font-size: 13px;
+            color: var(--text-muted, #94a3b8);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tr-filters {
+            background: var(--glass-bg, rgba(30, 41, 59, 0.7));
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .tr-filters input,
+        .tr-filters select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text-main, #f8fafc);
+            font-size: 13px;
+            min-width: 140px;
+        }
+
+        .tr-filters input::placeholder {
+            color: var(--text-muted, #94a3b8);
+        }
+
+        .tr-filters input:focus,
+        .tr-filters select:focus {
+            outline: none;
+            border-color: var(--accent, #3b82f6);
+        }
+
+        .tr-table-container {
+            background: var(--glass-bg, rgba(30, 41, 59, 0.7));
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .tr-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .tr-table th {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-muted, #94a3b8);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .tr-table th:hover {
+            color: var(--text-main, #f8fafc);
+        }
+
+        .tr-table th .sort-indicator {
+            margin-left: 4px;
+            opacity: 0.5;
+        }
+
+        .tr-table th.sort-asc .sort-indicator::after { content: '↑'; }
+        .tr-table th.sort-desc .sort-indicator::after { content: '↓'; }
+
+        .tr-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--text-main, #f8fafc);
+        }
+
+        .tr-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .tr-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .tr-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .tr-badge.pass {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+
+        .tr-badge.fail {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .tr-badge.timeout {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+
+        .tr-badge.rate-limited {
+            background: rgba(251, 191, 36, 0.15);
+            color: #fbbf24;
+        }
+
+        .tr-badge .icon {
+            font-size: 11px;
+        }
+
+        .tr-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tr-action-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: var(--text-muted, #94a3b8);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tr-action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main, #f8fafc);
+        }
+
+        .tr-empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-muted, #94a3b8);
+        }
+
+        .tr-empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .tr-empty-state h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: var(--text-main, #f8fafc);
+        }
+
+        /* Modal Styles */
+        .tr-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .tr-modal-overlay.visible {
+            display: flex;
+        }
+
+        .tr-modal {
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .tr-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tr-modal-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #f8fafc;
+        }
+
+        .tr-modal-close {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .tr-modal-close:hover {
+            color: #f8fafc;
+        }
+
+        .tr-modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .tr-detail-section {
+            margin-bottom: 24px;
+        }
+
+        .tr-detail-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .tr-detail-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .tr-detail-value {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #f8fafc;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .tr-rate-limit-info {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+
+        .tr-rate-limit-info .rl-title {
+            font-weight: 600;
+            color: #fbbf24;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tr-rate-limit-info .rl-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 13px;
+        }
+
+        .tr-rate-limit-info .rl-label {
+            color: #94a3b8;
+        }
+
+        .tr-rate-limit-info .rl-value {
+            color: #f8fafc;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        @media (max-width: 768px) {
+            .tr-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .tr-table th,
+            .tr-table td {
+                padding: 10px 12px;
+            }
+
+            .tr-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+
+    <div class="tr-header">
+        <h1>🧪 Test Results</h1>
+        <div class="tr-header-actions">
+            <button class="btn btn-primary" onclick="TestResultsDashboard.runNewTest()">
+                <span>▶️</span> Run New Test
+            </button>
+            <button class="btn btn-secondary" onclick="TestResultsDashboard.exportAll()">
+                <span>📥</span> Export All
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="tr-stats-grid">
+        <div class="tr-stat-card">
+            <div class="tr-stat-value total" id="tr-stat-total">0</div>
+            <div class="tr-stat-label">Total Tests</div>
+        </div>
+        <div class="tr-stat-card">
+            <div class="tr-stat-value pass" id="tr-stat-pass">0</div>
+            <div class="tr-stat-label">Passed</div>
+        </div>
+        <div class="tr-stat-card">
+            <div class="tr-stat-value fail" id="tr-stat-fail">0</div>
+            <div class="tr-stat-label">Failed</div>
+        </div>
+        <div class="tr-stat-card">
+            <div class="tr-stat-value rate-limited" id="tr-stat-rate-limited">0</div>
+            <div class="tr-stat-label">Rate Limited</div>
+        </div>
+        <div class="tr-stat-card">
+            <div class="tr-stat-value" id="tr-stat-success-rate" style="color: #60a5fa;">0%</div>
+            <div class="tr-stat-label">Success Rate</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="tr-filters">
+        <input type="text" id="tr-filter-search" placeholder="🔍 Search by agent or session..." oninput="TestResultsDashboard.applyFilters()">
+        <select id="tr-filter-status" onchange="TestResultsDashboard.applyFilters()">
+            <option value="all">All Statuses</option>
+            <option value="pass">✅ Pass</option>
+            <option value="fail">❌ Fail</option>
+            <option value="timeout">⏱️ Timeout</option>
+            <option value="rate-limited">⏳ Rate Limited</option>
+        </select>
+        <select id="tr-filter-type" onchange="TestResultsDashboard.applyFilters()">
+            <option value="all">All Types</option>
+            <option value="gateway-connect">Gateway Connect</option>
+            <option value="agent-message">Agent Message</option>
+            <option value="latency">Latency</option>
+            <option value="session-persist">Session Persist</option>
+            <option value="model-test">Model Test</option>
+        </select>
+        <select id="tr-filter-date" onchange="TestResultsDashboard.applyFilters()">
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="week">Last 7 Days</option>
+            <option value="month">Last 30 Days</option>
+        </select>
+    </div>
+
+    <!-- Results Table -->
+    <div class="tr-table-container">
+        <table class="tr-table">
+            <thead>
+                <tr>
+                    <th onclick="TestResultsDashboard.sort('timestamp')">Timestamp <span class="sort-indicator">↕</span></th>
+                    <th onclick="TestResultsDashboard.sort('testType')">Type <span class="sort-indicator">↕</span></th>
+                    <th onclick="TestResultsDashboard.sort('status')">Status <span class="sort-indicator">↕</span></th>
+                    <th onclick="TestResultsDashboard.sort('durationMs')">Duration <span class="sort-indicator">↕</span></th>
+                    <th>Target Agent</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tr-results-tbody">
+                <tr>
+                    <td colspan="6">
+                        <div class="tr-empty-state">
+                            <div class="tr-empty-state-icon">🧪</div>
+                            <h3>No Test Results Yet</h3>
+                            <p>Run your first test to see results here</p>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="tr-detail-modal" class="tr-modal-overlay" onclick="TestResultsDashboard.closeModal(event)">
+        <div class="tr-modal" onclick="event.stopPropagation()">
+            <div class="tr-modal-header">
+                <h2>Test Result Details</h2>
+                <button class="tr-modal-close" onclick="TestResultsDashboard.closeModal()">&times;</button>
+            </div>
+            <div class="tr-modal-body" id="tr-modal-content">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Polyfill for crypto.randomUUID if not available
+        if (!crypto.randomUUID) {
+            crypto.randomUUID = function() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            };
+        }
+
+        // Test Results Dashboard Module
+        const TestResultsDashboard = {
+            results: [],
+            filteredResults: [],
+            sortField: 'timestamp',
+            sortDirection: 'desc',
+            
+            async init() {
+                await this.loadResults();
+                this.render();
+            },
+
+            async loadResults() {
+                try {
+                    const response = await fetch('/api/test-results');
+                    if (response.ok) {
+                        this.results = await response.json();
+                        this.applyFilters(false);
+                    }
+                } catch (e) {
+                    console.error('Failed to load test results:', e);
+                    this.results = [];
+                }
+            },
+
+            applyFilters(render = true) {
+                const searchTerm = document.getElementById('tr-filter-search').value.toLowerCase();
+                const statusFilter = document.getElementById('tr-filter-status').value;
+                const typeFilter = document.getElementById('tr-filter-type').value;
+                const dateFilter = document.getElementById('tr-filter-date').value;
+
+                this.filteredResults = this.results.filter(result => {
+                    // Search filter
+                    if (searchTerm) {
+                        const searchFields = [
+                            result.targetAgent,
+                            result.sessionKey,
+                            result.testType,
+                            result.notes
+                        ].filter(Boolean).join(' ').toLowerCase();
+                        if (!searchFields.includes(searchTerm)) return false;
+                    }
+
+                    // Status filter
+                    if (statusFilter !== 'all' && result.status !== statusFilter) return false;
+
+                    // Type filter
+                    if (typeFilter !== 'all' && result.testType !== typeFilter) return false;
+
+                    // Date filter
+                    if (dateFilter !== 'all') {
+                        const resultDate = new Date(result.timestamp);
+                        const now = new Date();
+                        const diffMs = now - resultDate;
+                        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+                        if (dateFilter === 'today' && diffDays > 1) return false;
+                        if (dateFilter === 'week' && diffDays > 7) return false;
+                        if (dateFilter === 'month' && diffDays > 30) return false;
+                    }
+
+                    return true;
+                });
+
+                this.sort(this.sortField, false);
+                if (render) this.renderTable();
+            },
+
+            sort(field, render = true) {
+                if (this.sortField === field) {
+                    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortField = field;
+                    this.sortDirection = 'desc';
+                }
+
+                // Update header indicators
+                document.querySelectorAll('.tr-table th').forEach(th => {
+                    th.classList.remove('sort-asc', 'sort-desc');
+                });
+                const activeHeader = document.querySelector(`.tr-table th[onclick*="'${field}'"]`);
+                if (activeHeader) {
+                    activeHeader.classList.add(this.sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                }
+
+                this.filteredResults.sort((a, b) => {
+                    let aVal = a[field];
+                    let bVal = b[field];
+
+                    if (field === 'timestamp') {
+                        aVal = new Date(aVal).getTime();
+                        bVal = new Date(bVal).getTime();
+                    }
+
+                    if (typeof aVal === 'string') {
+                        aVal = aVal.toLowerCase();
+                        bVal = bVal.toLowerCase();
+                    }
+
+                    if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                if (render) this.renderTable();
+            },
+
+            render() {
+                this.renderStats();
+                this.renderTable();
+            },
+
+            renderStats() {
+                const total = this.results.length;
+                const pass = this.results.filter(r => r.status === 'pass').length;
+                const fail = this.results.filter(r => r.status === 'fail').length;
+                const rateLimited = this.results.filter(r => r.status === 'rate-limited').length;
+                const successRate = total > 0 ? Math.round((pass / total) * 100) : 0;
+
+                document.getElementById('tr-stat-total').textContent = total;
+                document.getElementById('tr-stat-pass').textContent = pass;
+                document.getElementById('tr-stat-fail').textContent = fail;
+                document.getElementById('tr-stat-rate-limited').textContent = rateLimited;
+                document.getElementById('tr-stat-success-rate').textContent = successRate + '%';
+            },
+
+            renderTable() {
+                const tbody = document.getElementById('tr-results-tbody');
+
+                if (this.filteredResults.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6">
+                                <div class="tr-empty-state">
+                                    <div class="tr-empty-state-icon">🧪</div>
+                                    <h3>No Results Found</h3>
+                                    <p>Try adjusting your filters</p>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = this.filteredResults.map(result => {
+                    const date = new Date(result.timestamp);
+                    const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    const statusBadge = this.getStatusBadge(result.status);
+                    const duration = result.durationMs ? `${result.durationMs}ms` : '-';
+                    const targetAgent = result.targetAgent || result.sessionKey || '-';
+
+                    return `
+                        <tr>
+                            <td>${formattedDate}</td>
+                            <td>${this.formatTestType(result.testType)}</td>
+                            <td>${statusBadge}</td>
+                            <td>${duration}</td>
+                            <td><code>${targetAgent}</code></td>
+                            <td>
+                                <div class="tr-actions">
+                                    <button class="tr-action-btn" onclick="TestResultsDashboard.viewDetail('${result.id}')" title="View Details">👁️</button>
+                                    <button class="tr-action-btn" onclick="TestResultsDashboard.copyJSON('${result.id}')" title="Copy JSON">📋</button>
+                                    <button class="tr-action-btn" onclick="TestResultsDashboard.downloadResult('${result.id}')" title="Download">💾</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            },
+
+            getStatusBadge(status) {
+                const badges = {
+                    'pass': '<span class="tr-badge pass"><span class="icon">✓</span> Pass</span>',
+                    'fail': '<span class="tr-badge fail"><span class="icon">✗</span> Fail</span>',
+                    'timeout': '<span class="tr-badge timeout"><span class="icon">⏱</span> Timeout</span>',
+                    'rate-limited': '<span class="tr-badge rate-limited"><span class="icon">⏳</span> Rate Limited</span>'
+                };
+                return badges[status] || `<span class="tr-badge">${status}</span>`;
+            },
+
+            formatTestType(type) {
+                const types = {
+                    'gateway-connect': '🔌 Gateway Connect',
+                    'agent-message': '💬 Agent Message',
+                    'latency': '⚡ Latency',
+                    'session-persist': '🔁 Session Persist',
+                    'model-test': '🤖 Model Test'
+                };
+                return types[type] || type;
+            },
+
+            viewDetail(id) {
+                const result = this.results.find(r => r.id === id);
+                if (!result) return;
+
+                const content = document.getElementById('tr-modal-content');
+                const date = new Date(result.timestamp);
+                
+                let rateLimitHtml = '';
+                if (result.rateLimitInfo && result.rateLimitInfo.hit) {
+                    const resetTime = result.rateLimitInfo.resetTime ? 
+                        new Date(result.rateLimitInfo.resetTime).toLocaleString() : 'Unknown';
+                    rateLimitHtml = `
+                        <div class="tr-rate-limit-info">
+                            <div class="rl-title">⚠️ Rate Limited</div>
+                            <div class="rl-row"><span class="rl-label">Retry After:</span><span class="rl-value">${result.rateLimitInfo.retryAfter || '-'}s</span></div>
+                            <div class="rl-row"><span class="rl-label">Limit:</span><span class="rl-value">${result.rateLimitInfo.limit || '-'}</span></div>
+                            <div class="rl-row"><span class="rl-label">Remaining:</span><span class="rl-value">${result.rateLimitInfo.remaining || 0}</span></div>
+                            <div class="rl-row"><span class="rl-label">Resets At:</span><span class="rl-value">${resetTime}</span></div>
+                        </div>
+                    `;
+                }
+
+                content.innerHTML = `
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Test ID</div>
+                        <div class="tr-detail-value">${result.id}</div>
+                    </div>
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Timestamp</div>
+                        <div class="tr-detail-value">${date.toLocaleString()}</div>
+                    </div>
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Status</div>
+                        <div class="tr-detail-value">${this.getStatusBadge(result.status)}</div>
+                    </div>
+                    ${result.notes ? `
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Notes</div>
+                        <div class="tr-detail-value">${result.notes}</div>
+                    </div>
+                    ` : ''}
+                    ${rateLimitHtml}
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Request</div>
+                        <div class="tr-detail-value">${JSON.stringify(result.request, null, 2)}</div>
+                    </div>
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Response</div>
+                        <div class="tr-detail-value">${JSON.stringify(result.response, null, 2)}</div>
+                    </div>
+                    <div class="tr-detail-section">
+                        <div class="tr-detail-label">Full JSON</div>
+                        <div class="tr-detail-value">${JSON.stringify(result, null, 2)}</div>
+                    </div>
+                `;
+
+                document.getElementById('tr-detail-modal').classList.add('visible');
+            },
+
+            closeModal(event) {
+                if (!event || event.target.id === 'tr-detail-modal') {
+                    document.getElementById('tr-detail-modal').classList.remove('visible');
+                }
+            },
+
+            async copyJSON(id) {
+                const result = this.results.find(r => r.id === id);
+                if (!result) return;
+
+                try {
+                    await navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+                    showToast('JSON copied to clipboard!', 'success');
+                } catch (e) {
+                    showToast('Failed to copy JSON', 'error');
+                }
+            },
+
+            downloadResult(id) {
+                const result = this.results.find(r => r.id === id);
+                if (!result) return;
+
+                const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `test-result-${result.id}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+
+            async exportAll() {
+                if (this.results.length === 0) {
+                    showToast('No results to export', 'warning');
+                    return;
+                }
+
+                const blob = new Blob([JSON.stringify(this.results, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `test-results-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showToast('All results exported!', 'success');
+            },
+
+            runNewTest() {
+                // Navigate to the Model Validator page
+                showPage('model-validator');
+            }
+        };
+
+        // Expose init function for page loader
+        window.initTestResultsRoutePage = () => TestResultsDashboard.init();
+
+        // Auto-init when page is shown
+        const trObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.target.classList.contains('active') && mutation.target.id === 'page-test-results') {
+                    TestResultsDashboard.init();
+                }
+            });
+        });
+        trObserver.observe(document.getElementById('page-test-results'), { attributes: true, attributeFilter: ['class'] });
+    </script>
+</div>
+<!-- END TEST RESULTS PAGE -->
