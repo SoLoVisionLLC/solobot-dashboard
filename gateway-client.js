@@ -14,11 +14,11 @@ class GatewayClient {
         this.desiredConnection = null;
 
         // Callbacks
-        this.onConnected = options.onConnected || (() => {});
-        this.onDisconnected = options.onDisconnected || (() => {});
-        this.onChatEvent = options.onChatEvent || (() => {});
-        this.onToolEvent = options.onToolEvent || (() => {});
-        this.onError = options.onError || (() => {});
+        this.onConnected = options.onConnected || (() => { });
+        this.onDisconnected = options.onDisconnected || (() => { });
+        this.onChatEvent = options.onChatEvent || (() => { });
+        this.onToolEvent = options.onToolEvent || (() => { });
+        this.onError = options.onError || (() => { });
     }
 
     connect(host, port, token, password = null) {
@@ -74,7 +74,7 @@ class GatewayClient {
 
     _sendConnect(token, password) {
         const clientInfo = {
-            id: 'gateway-client',
+            id: 'openclaw-control-ui',
             displayName: 'SoLoBot Dashboard',
             version: '3.1.0',
             platform: 'web',
@@ -102,7 +102,7 @@ class GatewayClient {
 
             const serverName = result?.server?.host || 'moltbot';
             console.log(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
-            
+
             // Check if provider/model info is available
             if (result?.provider || result?.model) {
                 console.log(`[Gateway] Server provider: ${result.provider || 'unknown'}, model: ${result.model || 'unknown'}`);
@@ -202,14 +202,14 @@ class GatewayClient {
 
     _handleAgentEvent(payload) {
         if (!payload) return;
-        
+
         // Only handle tool events
         if (payload.stream !== 'tool') return;
-        
+
         const phase = payload.data?.phase;
         const toolName = payload.data?.name;
         const args = payload.data?.args;
-        
+
         if (phase === 'start' && toolName) {
             // Format the tool call for display
             let summary = `🔧 ${toolName}`;
@@ -228,7 +228,7 @@ class GatewayClient {
                     summary = `🌐 Fetch: ${(args.url || '').substring(0, 40)}`;
                 }
             }
-            
+
             // Emit as tool event callback
             if (this.onToolEvent) {
                 this.onToolEvent({
@@ -277,7 +277,7 @@ class GatewayClient {
             const contentLen = contentText.length;
             const stopReason = message?.stopReason;
             const errorMsg = message?.errorMessage || payload.errorMessage;
-            
+
             if (errorMsg) {
                 console.error(`[Gateway] ❌ AI RESPONSE ERROR: ${errorMsg}`);
                 console.error(`[Gateway]    Provider: ${message?.provider || 'unknown'}, Model: ${message?.model || 'unknown'}`);
@@ -368,7 +368,7 @@ class GatewayClient {
             attachments: attachments
         };
 
-        console.log('[Gateway] Sending', attachments.length, 'image(s), total size:', 
+        console.log('[Gateway] Sending', attachments.length, 'image(s), total size:',
             Math.round(attachments.reduce((sum, a) => sum + a.content.length, 0) / 1024), 'KB');
 
         // Log model info if available
