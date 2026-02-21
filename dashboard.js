@@ -1618,7 +1618,6 @@ async function loadState() {
     }
 }
 
-const SYNC_API = '/api/sync';
 
 async function saveState(changeDescription = null) {
     state.localModified = Date.now();
