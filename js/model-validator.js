@@ -8,7 +8,7 @@ const ModelValidator = {
     recentTests: [],
     rateLimitTimers: {},
     testResults: [],
-    
+
     // Test prompt - simple message to validate model response
     TEST_PROMPT: 'Hello! Please respond with exactly: "Model validation successful."',
 
@@ -22,7 +22,7 @@ const ModelValidator = {
 
     async loadModels() {
         try {
-            const res = await fetch('/api/tester/models');
+            const res = await fetch('/api/models/list');
             this.models = await res.json();
             this.filteredModels = { ...this.models };
             console.log('[ModelValidator] Loaded', Object.values(this.models).flat().length, 'models');
@@ -62,11 +62,11 @@ const ModelValidator = {
             status,
             timestamp: Date.now()
         };
-        
-        this.recentTests = [test, ...this.recentTests.filter(t => 
+
+        this.recentTests = [test, ...this.recentTests.filter(t =>
             !(t.provider === provider && t.modelId === modelId)
         )].slice(0, 10);
-        
+
         try {
             localStorage.setItem('mv_recent_tests', JSON.stringify(this.recentTests));
         } catch (e) {
@@ -78,13 +78,13 @@ const ModelValidator = {
         this.testResults.unshift(result);
         // Keep only last 100 tests
         this.testResults = this.testResults.slice(0, 100);
-        
+
         try {
             localStorage.setItem('mv_test_history', JSON.stringify(this.testResults));
         } catch (e) {
             console.warn('[ModelValidator] Failed to save test history:', e);
         }
-        
+
         // Also save to server API
         this.saveToServer(result);
     },
@@ -103,27 +103,27 @@ const ModelValidator = {
 
     filterModels() {
         const search = document.getElementById('mv-search-input')?.value.toLowerCase() || '';
-        
+
         this.filteredModels = {};
         for (const [provider, models] of Object.entries(this.models)) {
-            const filtered = models.filter(m => 
-                m.id.toLowerCase().includes(search) || 
+            const filtered = models.filter(m =>
+                m.id.toLowerCase().includes(search) ||
                 (m.name && m.name.toLowerCase().includes(search))
             );
             if (filtered.length > 0) {
                 this.filteredModels[provider] = filtered;
             }
         }
-        
+
         this.render();
     },
 
     render() {
         const container = document.getElementById('mv-models-list');
         if (!container) return;
-        
+
         let totalModels = 0;
-        
+
         const html = Object.entries(this.filteredModels).map(([provider, models]) => {
             totalModels += models.length;
             return `
@@ -139,32 +139,32 @@ const ModelValidator = {
                 </div>
             `;
         }).join('');
-        
+
         container.innerHTML = html || `
             <div style="padding: 40px; text-align: center; color: var(--text-muted);">
                 <div style="font-size: 32px; margin-bottom: 12px;">🔍</div>
                 <div>No models found</div>
             </div>
         `;
-        
+
         const countEl = document.getElementById('mv-model-count');
         if (countEl) {
             countEl.textContent = `${totalModels} model${totalModels !== 1 ? 's' : ''} available`;
         }
-        
+
         this.renderRecentTests();
     },
 
     renderModelItem(provider, model) {
-        const isTesting = this.currentTest && 
-            this.currentTest.provider === provider && 
+        const isTesting = this.currentTest &&
+            this.currentTest.provider === provider &&
             this.currentTest.modelId === model.id;
-        
+
         // Find last test result for this model
         const lastTest = this.testResults.find(t => t.modelId === model.id);
-        const statusBadge = lastTest ? 
+        const statusBadge = lastTest ?
             `<span class="mv-status-badge ${lastTest.status}">${lastTest.status}</span>` : '';
-        
+
         return `
             <div class="mv-model-item ${isTesting ? 'testing' : ''}" data-provider="${provider}" data-model="${model.id}">
                 <div class="mv-model-info">
@@ -184,18 +184,18 @@ const ModelValidator = {
     renderRecentTests() {
         const container = document.getElementById('mv-recent-tests');
         const list = document.getElementById('mv-recent-list');
-        
+
         if (!container || !list) return;
-        
+
         if (this.recentTests.length === 0) {
             container.style.display = 'none';
             return;
         }
-        
+
         container.style.display = 'block';
         list.innerHTML = this.recentTests.map(t => {
-            const statusIcon = t.status === 'pass' ? '✓' : 
-                              t.status === 'fail' ? '✗' : '⏳';
+            const statusIcon = t.status === 'pass' ? '✓' :
+                t.status === 'fail' ? '✗' : '⏳';
             const statusClass = t.status;
             return `
                 <div class="mv-recent-chip" onclick="ModelValidator.runTest('${t.provider}', '${t.modelId}')">
@@ -224,7 +224,7 @@ const ModelValidator = {
      */
     async runTest(provider, modelId) {
         console.log(`[ModelValidator] Starting test for ${provider}/${modelId}`);
-        
+
         // Check rate limit
         const rlKey = `${provider}:${modelId}`;
         if (this.rateLimitTimers[rlKey]) {
@@ -237,7 +237,7 @@ const ModelValidator = {
 
         this.currentTest = { provider, modelId };
         this.render(); // Update UI
-        
+
         // Show loading state
         this.setUIState('loading');
         document.getElementById('mv-loading-model').textContent = `${provider} / ${modelId}`;
@@ -246,31 +246,31 @@ const ModelValidator = {
         const startTime = Date.now();
         let resultData = null;
         let errorData = null;
-        
+
         // Save current model to restore later
         const previousModel = localStorage.getItem('selected_model');
-        
+
         try {
             // ===== EXACT SAME PIPELINE AS CHAT =====
             // 1. Set the model we want to test
             localStorage.setItem('selected_model', modelId);
             console.log(`[ModelValidator] Set model to: ${modelId}`);
-            
+
             // 2. Check gateway connection (same as chat)
             if (!window.gateway || !window.gateway.isConnected()) {
                 throw new Error('Not connected to Gateway. Please connect first in Settings.');
             }
-            
+
             // 3. Use EXACT same send method as chat
             // chat.js: await gateway.sendMessage(text)
             console.log(`[ModelValidator] Sending test message via gateway.sendMessage...`);
-            
+
             const sendResult = await window.gateway.sendMessage(this.TEST_PROMPT);
-            
+
             const duration = Date.now() - startTime;
-            
+
             console.log(`[ModelValidator] Test completed in ${duration}ms`, sendResult);
-            
+
             // Extract response text (same logic as chat)
             let responseText = '';
             if (sendResult && sendResult.message && sendResult.message.content) {
@@ -285,7 +285,7 @@ const ModelValidator = {
             } else {
                 responseText = JSON.stringify(sendResult, null, 2);
             }
-            
+
             // Build result data structure
             resultData = {
                 status: 'pass',
@@ -298,7 +298,7 @@ const ModelValidator = {
                 request: {
                     message: this.TEST_PROMPT,
                     model: modelId,
-                    sessionKey: window.GATEWAY_CONFIG?.sessionKey || 'agent:main:main'
+                    sessionKey: window.currentSessionName || window.GATEWAY_CONFIG?.sessionKey || 'agent:main:main'
                 },
                 response: {
                     text: responseText,
@@ -310,16 +310,16 @@ const ModelValidator = {
                     'X-Model': modelId
                 }
             };
-            
+
             // Display success
             this.displayResults(resultData);
             this.saveRecentTest(provider, modelId, 'pass');
             this.saveTestResult(resultData);
-            
+
         } catch (error) {
             const duration = Date.now() - startTime;
             console.error(`[ModelValidator] Test failed:`, error);
-            
+
             errorData = {
                 status: 'fail',
                 durationMs: duration,
@@ -329,7 +329,7 @@ const ModelValidator = {
                 request: {
                     message: this.TEST_PROMPT,
                     model: modelId,
-                    sessionKey: window.GATEWAY_CONFIG?.sessionKey || 'agent:main:main'
+                    sessionKey: window.currentSessionName || window.GATEWAY_CONFIG?.sessionKey || 'agent:main:main'
                 },
                 error: {
                     message: error.message,
@@ -340,7 +340,7 @@ const ModelValidator = {
                 // Extract rate limit info if present
                 rateLimitInfo: this.extractRateLimitInfo(error)
             };
-            
+
             // Check if this is a rate limit error
             if (this.isRateLimitError(error)) {
                 errorData.status = 'rate-limited';
@@ -348,12 +348,12 @@ const ModelValidator = {
                 this.rateLimitTimers[rlKey] = Date.now() + (retryAfter * 1000);
                 this.showRateLimitBanner(retryAfter);
             }
-            
+
             // Display error
             this.displayError(errorData);
             this.saveRecentTest(provider, modelId, errorData.status);
             this.saveTestResult(errorData);
-            
+
         } finally {
             // ===== RESTORE PREVIOUS MODEL =====
             if (previousModel) {
@@ -362,7 +362,7 @@ const ModelValidator = {
             } else {
                 localStorage.removeItem('selected_model');
             }
-            
+
             this.currentTest = null;
             this.render();
         }
@@ -379,29 +379,29 @@ const ModelValidator = {
             remaining: null,
             resetTime: null
         };
-        
+
         if (!error) return info;
-        
+
         const message = error.message || '';
-        
+
         // Check for rate limit indicators in message
-        if (message.includes('rate limit') || 
+        if (message.includes('rate limit') ||
             message.includes('too many requests') ||
             message.includes('429')) {
             info.hit = true;
         }
-        
+
         // Try to extract retry-after from message
         const retryMatch = message.match(/retry[\s-]?after[:\s]*(\d+)/i);
         if (retryMatch) {
             info.retryAfter = parseInt(retryMatch[1]);
         }
-        
+
         // Extract from error object if available
         if (error.retryAfter) {
             info.retryAfter = error.retryAfter;
         }
-        
+
         return info;
     },
 
@@ -410,12 +410,12 @@ const ModelValidator = {
      */
     isRateLimitError(error) {
         if (!error) return false;
-        
+
         const message = (error.message || '').toLowerCase();
-        return message.includes('rate limit') || 
-               message.includes('too many requests') ||
-               message.includes('429') ||
-               error.code === 429;
+        return message.includes('rate limit') ||
+            message.includes('too many requests') ||
+            message.includes('429') ||
+            error.code === 429;
     },
 
     /**
@@ -431,29 +431,29 @@ const ModelValidator = {
      */
     displayResults(resultData) {
         this.setUIState('results');
-        
+
         // Update title
         document.getElementById('mv-result-title').textContent = '✅ Test Complete';
-        
+
         // Status bar
         document.getElementById('mv-status-value').textContent = 'PASS';
         document.getElementById('mv-status-value').className = 'mv-status-value success';
         document.getElementById('mv-latency-value').textContent = `${resultData.durationMs}ms`;
         document.getElementById('mv-model-value').textContent = resultData.modelId;
         document.getElementById('mv-provider-value').textContent = resultData.provider;
-        
+
         // Response
         const responseBlock = document.getElementById('mv-response-block');
         responseBlock.className = 'mv-code-block success';
         responseBlock.textContent = resultData.response.text || 'No response text';
-        
+
         // Headers
         const headers = resultData.headers || {};
         const headerStr = Object.entries(headers)
             .map(([k, v]) => `${k}: ${v}`)
             .join('\n') || 'No headers available';
         document.getElementById('mv-headers-block').textContent = headerStr;
-        
+
         // Raw JSON
         document.getElementById('mv-raw-block').textContent = JSON.stringify(resultData, null, 2);
     },
@@ -463,36 +463,36 @@ const ModelValidator = {
      */
     displayError(errorData) {
         this.setUIState('results');
-        
+
         // Update title based on error type
         const isRateLimited = errorData.status === 'rate-limited';
         document.getElementById('mv-result-title').textContent = isRateLimited ? '⏳ Rate Limited' : '❌ Test Failed';
-        
+
         // Status bar
         document.getElementById('mv-status-value').textContent = errorData.status.toUpperCase();
         document.getElementById('mv-status-value').className = `mv-status-value ${isRateLimited ? 'pending' : 'error'}`;
         document.getElementById('mv-latency-value').textContent = `${errorData.durationMs}ms`;
         document.getElementById('mv-model-value').textContent = errorData.modelId;
         document.getElementById('mv-provider-value').textContent = errorData.provider;
-        
+
         // Response (error details)
         const responseBlock = document.getElementById('mv-response-block');
         responseBlock.className = `mv-code-block ${isRateLimited ? 'pending' : 'error'}`;
-        
+
         let errorText = `Error: ${errorData.error.message}\n\n`;
         errorText += `Type: ${errorData.error.type}\n`;
         errorText += `Code: ${errorData.error.code}\n`;
-        
+
         if (isRateLimited && errorData.rateLimitInfo) {
             errorText += `\nRate Limit Info:\n`;
             errorText += `  Retry After: ${errorData.rateLimitInfo.retryAfter || 'unknown'} seconds\n`;
         }
-        
+
         responseBlock.textContent = errorText;
-        
+
         // Headers
         document.getElementById('mv-headers-block').textContent = 'No headers available (error occurred)';
-        
+
         // Raw JSON
         document.getElementById('mv-raw-block').textContent = JSON.stringify(errorData, null, 2);
     },
@@ -505,13 +505,13 @@ const ModelValidator = {
         const loadingState = document.getElementById('mv-loading-state');
         const resultsContent = document.getElementById('mv-results-content');
         const rateLimitBanner = document.getElementById('mv-rate-limit-banner');
-        
+
         // Hide all first
         if (emptyState) emptyState.style.display = 'none';
         if (loadingState) loadingState.classList.remove('visible');
         if (resultsContent) resultsContent.classList.remove('visible');
         if (rateLimitBanner) rateLimitBanner.style.display = 'none';
-        
+
         // Show requested state
         switch (state) {
             case 'empty':
@@ -532,16 +532,16 @@ const ModelValidator = {
     showRateLimitBanner(seconds) {
         const banner = document.getElementById('mv-rate-limit-banner');
         const timer = document.getElementById('mv-rl-timer');
-        
+
         if (!banner || !timer) return;
-        
+
         banner.style.display = 'flex';
-        
+
         const updateTimer = () => {
             const mins = Math.floor(seconds / 60);
             const secs = seconds % 60;
             timer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-            
+
             if (seconds > 0) {
                 seconds--;
                 setTimeout(updateTimer, 1000);
@@ -549,7 +549,7 @@ const ModelValidator = {
                 banner.style.display = 'none';
             }
         };
-        
+
         updateTimer();
     },
 
