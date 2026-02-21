@@ -1,0 +1,15 @@
+availableSessions
+chatPageNewMessageCount
+chatPagePendingImages
+chatPageScrollPosition
+chatPageUserScrolled
+confirmModalCallback
+currentMemoryFile
+currentSessionName
+draggedFromColumn
+draggedTaskId
+healthTestInProgress
+healthTestResults
+lastActivitySync
+originalShowPage
+pendingImages
