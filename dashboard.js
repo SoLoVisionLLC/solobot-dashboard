@@ -266,7 +266,7 @@ function getFriendlySessionName(key) {
     return match ? match[1] : key;
 }
 
-let currentSessionName = 'main';
+// currentSessionName handled by js/sessions.js
 
 window.toggleSessionMenu = function () {
     const menu = document.getElementById('session-menu');
@@ -314,7 +314,7 @@ window.toggleChatPageSessionMenu = function () {
 }
 
 // Session Management
-let availableSessions = [];
+// availableSessions handled by js/sessions.js
 
 async function fetchSessions() {
     // Try gateway first if connected (direct RPC call)
@@ -1302,7 +1302,7 @@ function initSampleData() {
 // ===================
 
 // Image handling - supports multiple images
-let pendingImages = [];
+// pendingImages handled by modular scripts
 
 function handleImageSelect(event) {
     const files = event.target.files;
@@ -1735,10 +1735,8 @@ function openImageModal(src) {
 // ===================
 
 // Chat page state
-let chatPagePendingImages = [];
-let chatPageScrollPosition = null;
-let chatPageUserScrolled = false;
-let chatPageNewMessageCount = 0;
+// chatPage variables handled by js/chat.js
+// chatPagePendingImages, chatPageScrollPosition, chatPageUserScrolled, chatPageNewMessageCount handled in js/chat.js
 
 // Save scroll position to sessionStorage
 function saveChatScrollPosition() {
@@ -2120,7 +2118,7 @@ async function sendChatPageMessage() {
 // THEMED CONFIRM MODAL (replaces browser confirm)
 // ===================
 
-let confirmModalCallback = null;
+// confirmModalCallback handled by js/ui.js
 
 function showConfirm(title, message, okText = 'OK', cancelText = 'Cancel', isDanger = false) {
     return new Promise((resolve) => {
@@ -3090,7 +3088,7 @@ function addTerminalLog(text, type = 'info', timestamp = null) {
 }
 
 // Auto-sync activities from transcript file
-let lastActivitySync = 0;
+// lastActivitySync handled by js/ui-handlers.js
 async function syncActivitiesFromFile() {
     try {
         const response = await fetch('/api/memory/memory/recent-activity.json');
@@ -3198,8 +3196,7 @@ async function clearAllData() {
 }
 
 // Drag and drop handlers
-let draggedTaskId = null;
-let draggedFromColumn = null;
+// dragged variables handled by modular scripts
 
 function handleDragStart(event, taskId, column) {
     draggedTaskId = taskId;
@@ -3320,7 +3317,7 @@ window.dashboardAPI = {
 // ===================
 
 // Current file being edited
-let currentMemoryFile = null;
+// currentMemoryFile handled by modular scripts
 
 // View a memory file in the modal
 window.viewMemoryFile = async function (filePath) {
@@ -3441,8 +3438,7 @@ window.closeMemoryModal = function () {
 // SYSTEM HEALTH FUNCTIONS
 // ===================
 
-let healthTestResults = {};
-let healthTestInProgress = false;
+// healthTest variables handled by js/health.js
 
 // Initialize health page when shown
 function initHealthPage() {
@@ -3712,7 +3708,7 @@ window.testSingleModelUI = async function (modelId) {
 };
 
 // Hook into page navigation to init health page
-const originalShowPage = window.showPage;
+// originalShowPage handled by js/health.js or js/phase14-polish.js
 if (typeof originalShowPage === 'function') {
     window.showPage = function (pageName, updateURL = true) {
         originalShowPage(pageName, updateURL);
