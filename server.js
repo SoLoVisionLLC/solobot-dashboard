@@ -703,7 +703,7 @@ function readPage(name) {
   }
 }
 
-const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products', 'business', 'cron', 'security', 'skills', 'model-validator'];
+const PAGE_NAMES = ['dashboard', 'memory', 'chat', 'system', 'products', 'business', 'cron', 'security', 'skills'];
 
 function assemblePage(activePage) {
   // Build all pages, marking the active one
@@ -2368,8 +2368,6 @@ const server = http.createServer((req, res) => {
     '/cron': 'cron',
     '/security': 'security',
     '/skills': 'skills',
-    '/model-validator': 'model-validator',
-    '/validator': 'model-validator',
   };
 
   const pageName = pageRoutes[url.pathname];

@@ -178,7 +178,8 @@ function syncChatToServer(messages) {
 // Load persisted messages immediately
 loadPersistedMessages();
 
-// Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
+// Gateway connection configuration - load from localStorage first, server state as fallback
+
 const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
@@ -187,23 +188,41 @@ const GATEWAY_CONFIG = {
     maxMessages: 500
 };
 
-// Function to save gateway settings to localStorage only
+// Function to save gateway settings to both localStorage AND server state
 function saveGatewaySettings(host, port, token, sessionKey) {
     const normalizedSessionKey = normalizeSessionKey(sessionKey);
-    
-    // Save to localStorage only (sessionKey is browser/localStorage concern)
+
+    // Save to localStorage
     localStorage.setItem('gateway_host', host);
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
     localStorage.setItem('gateway_session', normalizedSessionKey);
     
-    // Update config
-    GATEWAY_CONFIG.host = host;
-    GATEWAY_CONFIG.port = port;
-    GATEWAY_CONFIG.token = token;
-    GATEWAY_CONFIG.sessionKey = normalizedSessionKey;
+    // Also save to server state for persistence across deploys
+    state.gatewayConfig = { host, port, token, sessionKey: normalizedSessionKey };
+    saveState('Gateway settings updated');
+}
+
+// Function to load gateway settings from server state (called after loadState)
+function loadGatewaySettingsFromServer() {
+    // console.log('[Dashboard] loadGatewaySettingsFromServer called'); // Keep quiet
     
-    console.log('[saveGatewaySettings] Saved sessionKey:', normalizedSessionKey);
+    if (state.gatewayConfig && state.gatewayConfig.host) {
+        // Always prefer server settings if they exist (server is source of truth)
+        GATEWAY_CONFIG.host = state.gatewayConfig.host;
+        GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
+        GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
+        GATEWAY_CONFIG.sessionKey = normalizeSessionKey(state.gatewayConfig.sessionKey || 'agent:main:main');
+        
+        // Also save to localStorage for faster loading next time
+        localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
+        localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
+        localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
+        localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
+        
+        // console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host); // Keep quiet
+    }
+    // No gateway config in server state - that's fine
 }
 
 // Gateway client instance
