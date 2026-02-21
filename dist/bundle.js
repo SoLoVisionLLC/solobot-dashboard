@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-21T22:06:54Z
+// Generated: 2026-02-21T22:22:16Z
 // Modules: 25
 
 
@@ -505,7 +505,7 @@ function closeConfirmModal(result) {
 function showToast(message, type = 'info', duration = 4000) {
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
     const toast = document.createElement('div');
     toast.style.cssText = `
         padding: 12px 20px;
@@ -517,18 +517,18 @@ function showToast(message, type = 'info', duration = 4000) {
         max-width: 350px;
         word-wrap: break-word;
     `;
-    
+
     // Set color based on type
-    switch(type) {
+    switch (type) {
         case 'success': toast.style.background = 'var(--success)'; break;
         case 'error': toast.style.background = 'var(--error)'; break;
         case 'warning': toast.style.background = '#f59e0b'; break;
         default: toast.style.background = 'var(--accent)'; break;
     }
-    
+
     toast.textContent = message;
     container.appendChild(toast);
-    
+
     // Auto-remove after duration
     setTimeout(() => {
         toast.style.animation = 'fadeOut 0.3s ease';
@@ -543,25 +543,25 @@ window.showToast = showToast;
 
 // === OVERRIDE NATIVE alert/confirm ===
 // Intercept ALL browser dialogs and use our custom UI instead
-window.alert = function(message) {
+window.alert = function (message) {
     showToast(message, 'info', 5000);
 };
 
 // Store original confirm for emergency use
-const _originalConfirm = window.confirm;
+const _solobotOriginalConfirm = window.confirm;
 
-window.confirm = function(message) {
+window.confirm = function (message) {
     // Show our custom confirm modal
     // Since confirm() is synchronous, we show the modal but return false
     // to block the action. Code should be refactored to use showConfirm().
     console.warn('[Dashboard] Native confirm() intercepted. Use showConfirm() for proper async handling.');
-    
+
     // Show toast explaining what happened
     showToast('Action blocked - please try again', 'warning');
-    
+
     // Show the confirm modal (user can see the message)
     showConfirm(message, 'Confirm');
-    
+
     // Return false to block the synchronous action
     return false;
 };
@@ -580,7 +580,7 @@ function showConfirm(title, message, okText = 'OK', cancelText = 'Cancel', isDan
         const messageEl = document.getElementById('confirm-modal-message');
         const okBtn = document.getElementById('confirm-modal-ok');
         const cancelBtn = document.getElementById('confirm-modal-cancel');
-        
+
         if (titleEl) titleEl.textContent = title;
         if (messageEl) messageEl.textContent = message;
         if (okBtn) {
@@ -588,7 +588,7 @@ function showConfirm(title, message, okText = 'OK', cancelText = 'Cancel', isDan
             okBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
         }
         if (cancelBtn) cancelBtn.textContent = cancelText;
-        
+
         confirmModalCallback = resolve;
         showModal('confirm-modal');
     });
