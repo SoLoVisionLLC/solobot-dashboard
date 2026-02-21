@@ -24,3 +24,7 @@ data/file-mod-times.json
 data/file-meta.json
 data/backups/
 data/versions/
+
+# Memory files (mounted from OpenClaw workspace)
+memory/
+memory
