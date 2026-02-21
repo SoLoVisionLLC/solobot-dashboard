@@ -11,9 +11,8 @@ const { exec } = require('child_process');
 
 // Path to mounted OpenClaw config (from Coolify volume mount)
 // We mount the whole .openclaw directory to avoid Docker EISDIR issues with single files
-const OPENCLAW_CONFIG_PATH = './openclaw/openclaw.json';
-// Fallback path (direct access if running on same machine)
-const OPENCLAW_CONFIG_FALLBACK = '/home/node/.openclaw/openclaw.json';
+const OPENCLAW_CONFIG_PATH = '/home/solo/.openclaw/openclaw.json';
+const OPENCLAW_CONFIG_FALLBACK = './openclaw/openclaw.json';
 
 // Cache for models list (refreshed every 5 minutes)
 let cachedModels = null;
@@ -833,6 +832,17 @@ const server = http.createServer((req, res) => {
 
     try {
       if (!fs.existsSync(filePath)) {
+        // Special case: recent-activity.json might not exist yet; return empty instead of 404 to avoid console spam
+        if (filename.endsWith('recent-activity.json')) {
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({
+            name: filename,
+            content: JSON.stringify({ activities: [], updatedMs: Date.now() }),
+            modified: new Date().toISOString(),
+            size: 0
+          }));
+        }
+
         res.writeHead(404);
         return res.end(JSON.stringify({ error: 'File not found' }));
       }
@@ -967,59 +977,56 @@ const server = http.createServer((req, res) => {
   // Change AI Model endpoint
   // Get available models list (for dropdowns)
   if (url.pathname === '/api/models/list' && req.method === 'GET') {
-    res.setHeader('Content-Type', 'application/json');
-
-    // Primary: fetch from mounted OpenClaw config file (works across containers)
-    fetchModelsFromConfig().then(configModels => {
-      if (configModels && Object.keys(configModels).length > 0) {
-        res.end(JSON.stringify(configModels));
-        return;
-      }
-
-      // Fallback 1: try CLI (only works if solobot is installed locally)
-      return fetchModelsFromCLI();
-    }).then(cliModels => {
-      if (cliModels && Object.keys(cliModels).length > 0) {
-        res.end(JSON.stringify(cliModels));
-        return;
-      }
-
-      // Fallback 2: check state file for cached models
+    const handleModelsList = async () => {
       try {
-        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-        if (state.availableModels) {
-          res.end(JSON.stringify(state.availableModels));
-          return;
+        res.setHeader('Content-Type', 'application/json');
+
+        // 1. Try config file (primary)
+        let models = await fetchModelsFromConfig();
+
+        // 2. Try CLI (fallback 1)
+        if (!models || Object.keys(models).length === 0) {
+          models = await fetchModelsFromCLI();
         }
-      } catch (e) { /* use defaults */ }
 
-      // Final fallback: hardcoded defaults
-      const models = {
-        'openai-codex': [
-          { id: 'openai-codex/gpt-5.2-codex', name: 'GPT-5.2 Codex ⭐', tier: 'flagship' }
-        ],
-        anthropic: [
-          { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' }
-        ],
-        'google-antigravity': [
-          { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking', tier: 'flagship' }
-        ],
-        moonshot: [
-          { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }
-        ],
-        openrouter: [
-          { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
-        ]
-      };
+        // 3. Try cached models in state file (fallback 2)
+        if (!models || Object.keys(models).length === 0) {
+          try {
+            if (fs.existsSync(STATE_FILE)) {
+              const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+              if (state.availableModels) {
+                models = state.availableModels;
+              }
+            }
+          } catch (e) { /* ignore */ }
+        }
 
-      res.end(JSON.stringify(models));
-    }).catch(err => {
-      console.error('[Models] Error fetching models:', err);
-      // Return minimal fallback on error
-      res.end(JSON.stringify({
-        'openrouter': [{ id: 'openrouter/auto', name: 'Auto', tier: 'auto' }]
-      }));
-    });
+        // 4. Hardcoded defaults (final fallback)
+        if (!models || Object.keys(models).length === 0) {
+          models = {
+            'anthropic': [
+              { id: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', tier: 'flagship' },
+              { id: 'anthropic/claude-3-opus-latest', name: 'Claude 3 Opus', tier: 'flagship' }
+            ],
+            'google-antigravity': [
+              { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking', tier: 'flagship' }
+            ],
+            'openrouter': [
+              { id: 'openrouter/auto', name: 'Auto', tier: 'auto' }
+            ]
+          };
+        }
+
+        return res.end(JSON.stringify(models));
+      } catch (err) {
+        console.error('[Models] Error fetching models:', err);
+        return res.end(JSON.stringify({
+          'openrouter': [{ id: 'openrouter/auto', name: 'Auto', tier: 'auto' }]
+        }));
+      }
+    };
+
+    handleModelsList();
     return;
   }
 
