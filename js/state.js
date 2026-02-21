@@ -5,61 +5,30 @@ let state = {
     model: 'opus 4.5',
     currentTask: null,
     subagent: null,
-    tasks: {
-        todo: [],
-        progress: [],
-        done: [],
-        archive: []
-    },
+    tasks: { todo: [], progress: [], done: [], archive: [] },
     notes: [],
     activity: [],
     docs: [],
     pendingNotify: null,
-    live: {
-        status: 'idle',
-        task: null,
-        taskStarted: null,
-        thoughts: [],
-        lastActive: null,
-        tasksToday: 0
-    },
-    console: {
-        logs: [],
-        expanded: false
-    },
-    chat: {
-        messages: []  // User and SoLoBot messages only
-    },
-    system: {
-        messages: []  // System messages, heartbeats, errors, etc.
-    }
+    live: { status: 'idle', task: null, taskStarted: null, thoughts: [], lastActive: null, tasksToday: 0 },
+    console: { logs: [], expanded: false },
+    chat: { messages: [] },
+    system: { messages: [] }
 };
 
+// ===================
+// CHAT PERSISTENCE
+// ===================
 
-// Global agent color map — reads from CSS variables (--agent-*) defined in themes.css
-// Used by phase10-taskboard.js, phase11-agents.js, phase12-analytics.js
-const AGENT_COLORS = new Proxy({}, {
-    get(target, prop) {
-        if (typeof prop !== 'string') return undefined;
-        const cached = target[prop];
-        if (cached) return cached;
-        const val = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${prop}`).trim();
-        if (val) target[prop] = val;
-        return val || '';
-    }
-});
-
-function normalizeSessionKey(sessionKey) {
-    if (!sessionKey || sessionKey === 'main') return 'agent:main:main';
-    return sessionKey;
-}
+const CHAT_KEY_PREFIX = 'solobot-chat-';
+const SYSTEM_KEY = 'solobot-system-messages';
 
 function chatStorageKey(sessionKey) {
-    const key = normalizeSessionKey(sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
-    return 'solobot-chat-' + key;
+    const key = sessionKey || (typeof window !== 'undefined' ? window.currentSessionName : null) || localStorage.getItem('gateway_session') || 'agent:main:main';
+    return CHAT_KEY_PREFIX + key;
 }
 
-// In-memory session message cache (avoids full reload on agent switch)
+// In-memory session message cache for fast agent switching
 const _sessionMessageCache = new Map();
 
 function cacheSessionMessages(sessionKey, messages) {
@@ -71,11 +40,10 @@ function getCachedSessionMessages(sessionKey) {
     return _sessionMessageCache.get(sessionKey) || null;
 }
 
-// Load persisted system messages from localStorage (chat from localStorage + server fallback)
 function loadPersistedMessages() {
+    // System messages (local-only)
     try {
-        // System messages are local-only (UI noise)
-        const savedSystem = localStorage.getItem('solobot-system-messages');
+        const savedSystem = localStorage.getItem(SYSTEM_KEY);
         if (savedSystem) {
             const parsed = JSON.parse(savedSystem);
             if (Array.isArray(parsed)) {
@@ -83,82 +51,58 @@ function loadPersistedMessages() {
                 state.system.messages = parsed.filter(m => m.time > cutoff);
             }
         }
+    } catch (e) { /* ignore */ }
 
-        // Chat messages - use session-scoped key
-        const currentKey = chatStorageKey();
-        const savedChat = localStorage.getItem(currentKey);
-        // Also try legacy global key as fallback (one-time migration)
-        const legacyChat = !savedChat ? localStorage.getItem('solobot-chat-messages') : null;
-        const chatData = savedChat || legacyChat;
-        
-        if (chatData) {
-            const parsed = JSON.parse(chatData);
+    // Chat messages
+    const key = chatStorageKey();
+    try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+            const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 state.chat.messages = parsed;
-                // Migrate legacy key to session-scoped
-                if (legacyChat && !savedChat) {
-                    localStorage.setItem(currentKey, chatData);
-                }
                 return;
             }
         }
-        
-        // No local messages - fetch from server
-        loadChatFromServer();
-    } catch (e) {
-        loadChatFromServer();
-    }
+    } catch (e) { /* ignore */ }
+
+    loadChatFromServer();
 }
 
 // Load chat messages from server (fallback when localStorage is empty)
 async function loadChatFromServer() {
     try {
         const response = await fetch('/api/state');
+        if (!response.ok) return;
         const serverState = await response.json();
         if (serverState.chat?.messages?.length > 0) {
             state.chat.messages = serverState.chat.messages;
             localStorage.setItem(chatStorageKey(), JSON.stringify(state.chat.messages));
-            // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
-            // Re-render if on chat page
             if (typeof renderChatMessages === 'function') renderChatMessages();
             if (typeof renderChatPage === 'function') renderChatPage();
         }
-    } catch (e) {
-        // Silently fail - not critical
-    }
+    } catch (e) { /* ignore */ }
 }
 
-// Save system messages to localStorage (chat is synced via Gateway)
 function persistSystemMessages() {
     try {
-        // Only persist system messages - they're local UI noise (limit to 30 to save space)
         const systemToSave = state.system.messages.slice(-30);
-        localStorage.setItem('solobot-system-messages', JSON.stringify(systemToSave));
-    } catch (e) {
-        // Silently fail - not critical
-    }
+        localStorage.setItem(SYSTEM_KEY, JSON.stringify(systemToSave));
+    } catch (e) { /* ignore */ }
 }
 
-// Save chat messages to localStorage AND server
-// Ensures persistence across browser sessions and deploys
+// Save chat messages to localStorage + server
 function persistChatMessages() {
     try {
-        // Limit to 50 messages to prevent localStorage quota exceeded
         const chatToSave = state.chat.messages.slice(-200);
-        // Use session-scoped key so each agent's chat is stored separately
         const key = chatStorageKey();
         localStorage.setItem(key, JSON.stringify(chatToSave));
-        // Also update in-memory cache
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
-        
-        // Also sync to server for persistence across deploys
+        cacheSessionMessages(currentSessionName || window.currentSessionName, chatToSave);
         syncChatToServer(chatToSave);
-    } catch (e) {
-        // Silently fail - not critical
-    }
+    } catch (e) { /* ignore */ }
 }
 
-// Sync chat messages to server (debounced)
+// Debounced server sync
 let chatSyncTimeout = null;
 function syncChatToServer(messages) {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
@@ -169,52 +113,42 @@ function syncChatToServer(messages) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages })
             });
-        } catch (e) {
-            // Silently fail - not critical
-        }
-    }, 2000); // Debounce 2 seconds
+        } catch (e) { /* ignore */ }
+    }, 2000);
 }
 
-// Load persisted messages immediately
 loadPersistedMessages();
 
-// Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
+// Gateway config - localStorage only
 const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
     token: localStorage.getItem('gateway_token') || '',
-    sessionKey: normalizeSessionKey(localStorage.getItem('gateway_session') || 'agent:main:main'),
+    sessionKey: localStorage.getItem('gateway_session') || 'agent:main:main',
     maxMessages: 500
 };
 
-// Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
-    const normalizedSessionKey = normalizeSessionKey(sessionKey);
-    
-    // Save to localStorage only (sessionKey is browser/localStorage concern)
+    const normalized = sessionKey || 'agent:main:main';
     localStorage.setItem('gateway_host', host);
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
-    localStorage.setItem('gateway_session', normalizedSessionKey);
-    
-    // Update config
+    localStorage.setItem('gateway_session', normalized);
     GATEWAY_CONFIG.host = host;
     GATEWAY_CONFIG.port = port;
     GATEWAY_CONFIG.token = token;
-    GATEWAY_CONFIG.sessionKey = normalizedSessionKey;
-    
-    console.log('[saveGatewaySettings] Saved sessionKey:', normalizedSessionKey);
+    GATEWAY_CONFIG.sessionKey = normalized;
+    console.log('[saveGatewaySettings] Saved sessionKey:', normalized);
 }
 
 // Gateway client instance
-
 let gateway = null;
 let streamingText = '';
-let _streamingSessionKey = '';  // Session key that owns the current streamingText
+let _streamingSessionKey = '';
 let isProcessing = false;
-let lastProcessingEndTime = 0; // Track when processing ended to avoid poll conflicts
+let lastProcessingEndTime = 0;
 let historyPollInterval = null;
-let sessionVersion = 0; // Incremented on session switch to ignore stale history data
+let sessionVersion = 0;
 
 let newTaskPriority = 1;
 let newTaskColumn = 'todo';
@@ -223,9 +157,8 @@ let editingTaskId = null;
 let currentModalTask = null;
 let currentModalColumn = null;
 let refreshIntervalId = null;
-let taskModalOpen = false; // Flag to pause auto-refresh while editing tasks
+let taskModalOpen = false;
 
-// DEBUG: Set to true to disable all filtering and show EVERYTHING in chat
 const DISABLE_SYSTEM_FILTER = false;
 
 // ===================
@@ -233,66 +166,26 @@ const DISABLE_SYSTEM_FILTER = false;
 // ===================
 
 async function loadState() {
-    // Preserve current messages and logs
     const currentChat = state.chat;
     const currentSystem = state.system;
-    const currentConsole = state.console;
-
-    // Count tasks helper
-    const countTasks = (s) => {
-        if (!s || !s.tasks) return 0;
-        const t = s.tasks;
-        return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0) + (t.archive?.length || 0);
-    };
-
-    // Load localStorage tasks as a safety net (in case server state is empty)
-    let localTasks = null;
-    try {
-        const localSaved = localStorage.getItem('solovision-dashboard');
-        if (localSaved) {
-            const parsed = JSON.parse(localSaved);
-            if (parsed.tasks && countTasks(parsed) > 0) {
-                localTasks = JSON.parse(JSON.stringify(parsed.tasks));
-            }
-        }
-    } catch (e) { /* ignore */ }
-
-    // Also check in-memory tasks
-    if (!localTasks && countTasks(state) > 0) {
-        localTasks = JSON.parse(JSON.stringify(state.tasks));
-    }
 
     // Load from VPS
     try {
         const response = await fetch('/api/state', { cache: 'no-store' });
         if (response.ok) {
             const vpsState = await response.json();
-            if (!vpsState.tasks) vpsState.tasks = { todo: [], progress: [], done: [], archive: [] };
-            if (!vpsState.tasks.archive) vpsState.tasks.archive = [];
-
+            vpsState.tasks = vpsState.tasks || { todo: [], progress: [], done: [], archive: [] };
+            vpsState.tasks.archive = vpsState.tasks.archive || [];
             delete vpsState.pendingChat;
             delete vpsState.chat;
 
-            // SERVER IS ALWAYS AUTHORITATIVE for tasks and activity.
-            // Never let stale localStorage overwrite server state.
-            state = {
-                ...state,
-                ...vpsState,
-                tasks: vpsState.tasks,
-                activity: vpsState.activity || [],
-                _taskVersion: vpsState._taskVersion || 0,
-                chat: currentChat,
-                system: currentSystem,
-                console: currentConsole
-            };
-
-            console.log(`[loadState] Loaded from server: ${countTasks(vpsState)} tasks, ${(vpsState.activity || []).length} activity, v${vpsState._taskVersion || 0}`);
+            state = { ...state, ...vpsState, tasks: vpsState.tasks, activity: vpsState.activity || [], _taskVersion: vpsState._taskVersion || 0, chat: currentChat, system: currentSystem };
+            const taskCount = (vpsState.tasks.todo?.length || 0) + (vpsState.tasks.progress?.length || 0) + (vpsState.tasks.done?.length || 0);
+            console.log(`[loadState] Loaded: ${taskCount} tasks, v${vpsState._taskVersion || 0}`);
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
             return;
         }
-    } catch (e) {
-        // VPS not available, will use localStorage fallback
-    }
+    } catch (e) { /* VPS not available */ }
 
     // Fallback: localStorage
     const localSaved = localStorage.getItem('solovision-dashboard');
@@ -300,7 +193,7 @@ async function loadState() {
         const parsed = JSON.parse(localSaved);
         delete parsed.system;
         delete parsed.console;
-        state = { ...state, ...parsed, chat: currentChat, system: currentSystem, console: currentConsole };
+        state = { ...state, ...parsed, chat: currentChat, system: currentSystem };
     } else {
         initSampleData();
     }
@@ -349,40 +242,27 @@ async function saveState(changeDescription = null) {
 
 async function syncToServer() {
     try {
-        // PROTECTION: Fetch server state first — check version and counts
-        let serverTaskCount = 0;
-        let serverActivityCount = 0;
-        let serverTaskVersion = 0;
+        // Check server version
         try {
             const checkResp = await fetch('/api/state', { cache: 'no-store' });
             if (checkResp.ok) {
                 const serverState = await checkResp.json();
-                const st = serverState.tasks || {};
-                serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0) + (st.archive?.length || 0);
-                serverActivityCount = Array.isArray(serverState.activity) ? serverState.activity.length : 0;
-                serverTaskVersion = serverState._taskVersion || 0;
-                
-                // If server has newer task version, pull server tasks into local state
+                const serverTaskVersion = serverState._taskVersion || 0;
                 if (serverTaskVersion > (state._taskVersion || 0)) {
-                    console.log(`[Sync] Server tasks are newer (v${serverTaskVersion} > v${state._taskVersion || 0}) — adopting server tasks`);
-                    state.tasks = serverState.tasks;
+                    console.log(`[Sync] Server tasks newer (v${serverTaskVersion} > v${state._taskVersion || 0})`);
+                    state.tasks = serverState.tasks || state.tasks;
                     state._taskVersion = serverTaskVersion;
-                    // Update localStorage with server tasks
-                    try { localStorage.setItem('solovision-dashboard', JSON.stringify(state)); } catch(e) {}
+                    localStorage.setItem('solovision-dashboard', JSON.stringify(state));
                     renderTasks();
                 }
             }
-        } catch (e) { /* continue with sync */ }
+        } catch (e) { /* continue */ }
 
-        // Build sync payload — NEVER push tasks or activity from browser.
-        // Server is source of truth for tasks (managed by dashboard-sync script)
-        // and activity (managed by agents). Browser is read-only for these.
+        // Build sync payload - don't sync tasks/activity (server is authoritative)
         const syncPayload = JSON.parse(JSON.stringify(state));
         delete syncPayload.tasks;
         delete syncPayload._taskVersion;
         delete syncPayload.activity;
-
-        // Don't sync transient local-only data
         delete syncPayload.chat;
         delete syncPayload.system;
         delete syncPayload.console;
@@ -393,22 +273,10 @@ async function syncToServer() {
             body: JSON.stringify(syncPayload)
         });
         
-        if (response.ok) {
-            const result = await response.json();
-            if (result.protected?.tasks || result.protected?.activity) {
-                console.log('[Sync] Server protected data:', result.protected);
-            }
-            if (state.console && state.console.logs) {
-                state.console.logs.push({
-                    text: 'State synced to server',
-                    type: 'info',
-                    time: Date.now()
-                });
-                if (state.console.logs.length > 500) {
-                    state.console.logs = state.console.logs.slice(-500);
-                }
-                renderConsole();
-            }
+        if (response.ok && state.console?.logs) {
+            state.console.logs.push({ text: 'State synced to server', type: 'info', time: Date.now() });
+            if (state.console.logs.length > 500) state.console.logs = state.console.logs.slice(-500);
+            renderConsole();
         }
     } catch (err) {
         console.error('Sync error:', err);
@@ -416,25 +284,13 @@ async function syncToServer() {
 }
 
 function initSampleData() {
-    state.tasks = {
-        todo: [],
-        progress: [],
-        done: [],
-        archive: []
-    };
+    state.tasks = { todo: [], progress: [], done: [], archive: [] };
     state.notes = [];
     state.activity = [];
     state.docs = [];
-    // Don't initialize chat - it's managed by Gateway WebSocket
     saveState();
 }
 
-
-// ===================
-// DASHBOARD TASKS INITIALIZATION
-// ===================
-
-// Tasks are managed server-side via dashboard-sync API — no client-side task generation
 function initDashboardTasks() {
     console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
