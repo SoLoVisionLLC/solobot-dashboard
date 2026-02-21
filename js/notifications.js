@@ -652,7 +652,8 @@ function loadHistoryMessages(messages) {
             text: content.text,
             image: content.images[0] || null, // First image as thumbnail
             images: content.images, // All images
-            time: msg.timestamp || Date.now()
+            time: msg.timestamp || Date.now(),
+            model: msg.model // Preserve model from gateway history
         };
 
         // Classify and route
