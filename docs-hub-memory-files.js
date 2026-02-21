@@ -12,40 +12,6 @@ function escapeHtmlLocal(str) {
         .replace(/'/g, '&#39;');
 }
 
-// Restore newlines in markdown files that got squished to a single line
-function fixSingleLineMarkdown(text) {
-    // Step 1: Add newlines before markdown headers (# ## ### etc.)
-    // But not inside words like C# — require space or start-of-string before #
-    text = text.replace(/ (#{1,6} )/g, '\n\n$1');
-    
-    // Step 2: Add newlines around horizontal rules (--- or ***)
-    text = text.replace(/ (---+) /g, '\n\n$1\n\n');
-    
-    // Step 3: Add newlines before code fences
-    text = text.replace(/ (```)/g, '\n\n$1');
-    text = text.replace(/(```)(\S*) /g, '$1$2\n');
-    
-    // Step 4: Add newlines before list items (- item or * item or 1. item)
-    // Match: space + dash/asterisk + space + word char (list marker)
-    text = text.replace(/ (- \*\*)/g, '\n$1');        // - **bold key:**
-    text = text.replace(/ (- \[[ x]\])/g, '\n$1');    // - [ ] checkbox
-    text = text.replace(/ (\d+\. )/g, '\n$1');         // 1. numbered list
-    // Generic bullet: "text. - next" or "text - Next" (capital after dash)
-    text = text.replace(/([.!?:]) (- [A-Z])/g, '$1\n$2');
-    text = text.replace(/([.!?:]) (\* [A-Z])/g, '$1\n$2');
-    
-    // Step 5: Add newlines before bold section markers like **Key:** at start of line context
-    text = text.replace(/ (\*\*[A-Z][^*]+:\*\*)/g, '\n$1');
-    
-    // Step 6: Clean up — collapse 3+ newlines to 2
-    text = text.replace(/\n{3,}/g, '\n\n');
-    
-    // Step 7: Trim leading whitespace on lines
-    text = text.replace(/\n +/g, '\n');
-    
-    return text.trim();
-}
-
 // Cache for memory files list
 let memoryFilesCache = [];
 let lastFetchTime = 0;
@@ -56,95 +22,41 @@ window.currentMemoryFile = null;
 
 // Categorize files based on name
 function categorizeFile(filename) {
-    const name = filename.replace(/^memory\//, '');
+    const coreDocs = ['SOUL.md', 'USER.md', 'AGENTS.md', 'MEMORY.md', 'TOOLS.md', 'HEARTBEAT.md', 'IDENTITY.md'];
+    const guideDocs = ['SOLOBOT-GUIDE.md', 'LESSONS-LEARNED.md', 'DEPLOY_INSTRUCTIONS.md'];
     
-    // Core identity files
-    const coreDocs = ['SOUL.md', 'USER.md', 'AGENTS.md', 'MEMORY.md', 'TOOLS.md', 'HEARTBEAT.md', 
-                      'IDENTITY.md', 'BOOTSTRAP.md'];
-    if (coreDocs.includes(name)) return '🧠 Core Identity';
-    
-    // Daily logs (YYYY-MM-DD.md or memory-YYYY-MM-DD.md)
-    if (name.match(/^\d{4}-\d{2}-\d{2}\.md$/) || name.match(/^memory-\d{4}-\d{2}-\d{2}\.md$/))
-        return '📅 Daily Logs';
-    if (filename.startsWith('memory/')) return '📅 Daily Logs';
-    
-    // Planning & PRDs
-    if (name.match(/^PRD|^PLAN|^ROADMAP|DASHBOARD-PLAN|PROJECTS-OVERVIEW/i))
-        return '📋 Planning & PRDs';
-    
-    // System & Operations
-    const sysDocs = ['CHANGELOG.md', 'SECURITY.md', 'DEBUG.md', 'CREDITS.md', 'LICENSE.md',
-                     'COOLIFY-CHEATSHEET.md', 'DEPLOY_INSTRUCTIONS.md', 'STATE-PERSISTENCE-ISSUE.md',
-                     'NOTES-SESSION-SYNC.md', 'CHAT_SYSTEM.md'];
-    if (sysDocs.includes(name)) return '⚙️ System & Operations';
-    
-    // Guides & Reference
-    const guideDocs = ['SOLOBOT-GUIDE.md', 'LESSONS-LEARNED.md', 'CLAWBOT-TIPS.md', 'PERSONAS.md',
-                       'SoLoStandBy.md', 'TASKS.md', 'RUNNING-CONTEXT.md'];
-    if (guideDocs.includes(name)) return '📖 Guides & Reference';
-    
-    // Business & Finance
-    if (name.match(/^Taxes|COMPETITOR/i)) return '💼 Business';
-    
-    // README files
-    if (name.match(/^readme/i)) return '📖 Guides & Reference';
-    
-    // Code examples / technical docs  
-    if (name.match(/Example\.md$|^PR-|^system\.md$|^index\.md$|^license\.md$/))
-        return '💻 Code & Technical';
-
-    // Memory context files
-    if (name.match(/^memory-/)) return '📅 Daily Logs';
-    
-    return '📁 Other';
+    if (filename.startsWith('memory/') || filename.match(/^\d{4}-\d{2}-\d{2}\.md$/)) {
+        return 'Daily Logs';
+    } else if (coreDocs.includes(filename)) {
+        return 'Core Identity';
+    } else if (guideDocs.includes(filename)) {
+        return 'Guides & Reference';
+    } else {
+        return 'Other Documents';
+    }
 }
 
+// Get file description based on name
 function getFileDescription(filename) {
     const descriptions = {
-        'SOUL.md': 'Core personality, beliefs, and operational guidelines',
-        'USER.md': 'About SoLo — goals, preferences, work style',
-        'AGENTS.md': 'Workspace rules, memory management, procedures',
-        'MEMORY.md': 'Long-term curated memories and decisions',
-        'TOOLS.md': 'Tool configs, credentials, technical setup',
-        'HEARTBEAT.md': 'Proactive checks, task scheduling, maintenance',
-        'IDENTITY.md': 'Bot identity and avatar info',
-        'BOOTSTRAP.md': 'First-run initialization instructions',
-        'SOLOBOT-GUIDE.md': 'Comprehensive SoLoBot user guide',
-        'LESSONS-LEARNED.md': 'Past mistakes and lessons learned',
-        'RUNNING-CONTEXT.md': 'Current work context and active projects',
-        'CHANGELOG.md': 'Version history and changes',
-        'SECURITY.md': 'Security policies and access control',
-        'DEBUG.md': 'Debugging notes and troubleshooting',
-        'TASKS.md': 'Task tracking and management',
-        'COOLIFY-CHEATSHEET.md': 'Coolify deployment reference',
-        'DEPLOY_INSTRUCTIONS.md': 'Deployment procedures',
-        'CHAT_SYSTEM.md': 'Chat system architecture',
-        'PERSONAS.md': 'Bot persona configurations',
-        'PROJECTS-OVERVIEW.md': 'All projects overview',
-        'ROADMAP.md': 'Product roadmap',
-        'CLAWBOT-TIPS.md': 'Tips for working with OpenClaw',
-        'CREDITS.md': 'Credits and acknowledgments',
-        'SoLoStandBy.md': 'Standby mode configuration',
-        'COMPETITOR-TRACKING.md': 'Competitor analysis and tracking',
-        'NOTES-SESSION-SYNC.md': 'Session sync implementation notes'
+        'SOUL.md': 'Who SoLoBot is, core beliefs, personality, and operational guidelines',
+        'USER.md': 'Information about SoLo (Jeremy Smith) - goals, work style, preferences',
+        'AGENTS.md': 'Workspace guidelines, memory management rules, and procedures',
+        'MEMORY.md': 'Long-term curated memories, decisions, and important context',
+        'TOOLS.md': 'Tool configurations, credentials, and technical setup notes',
+        'HEARTBEAT.md': 'Proactive check schedule, task management, and maintenance',
+        'IDENTITY.md': 'Bot identity summary and avatar information',
+        'SOLOBOT-GUIDE.md': 'Comprehensive guide for working with SoLoBot',
+        'LESSONS-LEARNED.md': 'Documented mistakes and lessons for future reference',
+        'RUNNING-CONTEXT.md': 'Current work context and active project status'
     };
     
-    const name = filename.replace(/^memory\//, '');
-    
-    if (name.match(/^\d{4}-\d{2}-\d{2}\.md$/)) {
-        return `Activity log for ${name.replace('.md', '')}`;
+    if (filename.startsWith('memory/')) {
+        const date = filename.replace('memory/', '').replace('.md', '');
+        return `Daily activity log for ${date}`;
     }
-    if (name.match(/^memory-\d{4}-\d{2}-\d{2}\.md$/)) {
-        return `Memory log for ${name.replace('memory-', '').replace('.md', '')}`;
-    }
-    if (name.match(/^PRD/)) return 'Product requirements document';
-    if (name.match(/^PLAN/)) return 'Project plan';
-    if (name.match(/^Taxes/)) return 'Tax & financial records';
-    if (name.match(/^README/i)) return 'Project documentation';
-    if (name.match(/Example\.md$/)) return 'Code example';
-    if (name.match(/^PR-/)) return 'Pull request documentation';
     
-    return descriptions[name] || '';
+    return descriptions[filename] || 'Documentation file';
 }
 
 // Fetch memory files list from server
@@ -154,33 +66,6 @@ async function fetchMemoryFiles() {
         return memoryFilesCache;
     }
     
-    // Try gateway RPC first (works for remote Coolify deployments)
-    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
-        try {
-            console.log('[Memory] Fetching files via gateway RPC...');
-            const result = await window.gateway._request('memory.list', { recursive: true });
-            
-            if (result && Array.isArray(result)) {
-                // Map gateway response to expected format
-                memoryFilesCache = result.map(file => ({
-                    name: file.name || file.path.split('/').pop(),
-                    path: file.path,
-                    size: file.size,
-                    modified: file.modified || file.mtime,
-                    type: 'file',
-                    category: categorizeFile(file.name || file.path),
-                    description: getFileDescription(file.name || file.path)
-                }));
-                lastFetchTime = now;
-                console.log(`[Memory] ✓ Loaded ${memoryFilesCache.length} files via gateway RPC`);
-                return memoryFilesCache;
-            }
-        } catch (e) {
-            console.warn('[Memory] Gateway RPC failed, falling back to REST API:', e.message);
-        }
-    }
-    
-    // Fallback to REST API
     try {
         const response = await fetch('/api/memory');
         const data = await response.json();
@@ -241,31 +126,18 @@ async function renderMemoryFiles(filter = '') {
     }, {});
     
     // Sort categories
-    const categoryOrder = ['🧠 Core Identity', '📖 Guides & Reference', '📋 Planning & PRDs', 
-                           '⚙️ System & Operations', '💼 Business', '💻 Code & Technical',
-                           '📅 Daily Logs', '📁 Other'];
+    const categoryOrder = ['Core Identity', 'Guides & Reference', 'Daily Logs', 'Other Documents'];
     const sortedCategories = Object.keys(grouped).sort((a, b) => {
-        const ai = categoryOrder.indexOf(a), bi = categoryOrder.indexOf(b);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        return categoryOrder.indexOf(a) - categoryOrder.indexOf(b);
     });
-    
-    // Load collapsed state from localStorage
-    const collapsedCats = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
     
     const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
     let html = '';
     
     sortedCategories.forEach(category => {
-        const count = grouped[category].length;
-        const isCollapsed = collapsedCats[category] === true;
-        html += `<div class="docs-category" data-category="${escape(category)}">`;
-        html += `<h3 class="category-title category-collapsible${isCollapsed ? ' collapsed' : ''}" 
-                     onclick="toggleMemoryCategory(this)">
-                    <span class="category-chevron">${isCollapsed ? '▶' : '▼'}</span>
-                    ${escape(category)} 
-                    <span class="category-count">${count}</span>
-                 </h3>`;
-        html += `<div class="docs-category-grid" style="${isCollapsed ? 'display:none;' : ''}">`;
+        html += `<div class="docs-category">`;
+        html += `<h3 class="category-title">${escape(category)}</h3>`;
+        html += `<div class="docs-category-grid">`;
         
         const sortedFiles = grouped[category].sort((a, b) => {
             if (category === 'Daily Logs') return b.name.localeCompare(a.name);
@@ -276,8 +148,6 @@ async function renderMemoryFiles(filter = '') {
             const modifiedDate = new Date(file.modified).toLocaleDateString();
             const botBadge = file.botUpdated && !file.acknowledged 
                 ? `<span class="badge badge-warning bot-updated-badge" title="Updated by SoLoBot - click to acknowledge">🤖 Updated</span>` 
-                : file.acknowledged
-                ? `<span class="badge badge-success" title="Reviewed">✓ Read</span>`
                 : '';
             
             html += `
@@ -307,9 +177,6 @@ async function renderMemoryFiles(filter = '') {
     }
     
     container.innerHTML = html;
-    
-    // Load sub-agent files (appended below main files)
-    renderAgentSection(container);
 }
 
 // View a memory file - fetch content and show in modal
@@ -328,111 +195,47 @@ async function viewMemoryFile(filepath) {
     console.log('[Memory] Showing modal...');
     showModal('memory-file-modal');
     
-    let data = null;
-    
-    // Try gateway RPC first
-    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
-        try {
-            console.log('[Memory] Reading file via gateway RPC...');
-            const result = await window.gateway._request('memory.read', { path: filepath });
-            
-            if (result && result.content !== undefined) {
-                data = {
-                    name: filepath.split('/').pop(),
-                    content: result.content,
-                    botUpdated: result.botUpdated
-                };
-                console.log('[Memory] ✓ Loaded file via gateway RPC');
-            }
-        } catch (e) {
-            console.warn('[Memory] Gateway RPC read failed, falling back to REST API:', e.message);
-        }
-    }
-    
-    // Fallback to REST API
-    if (!data) {
-        try {
-            const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`);
-            data = await response.json();
-            
-            if (data.error) {
-                contentEl.value = `Error: ${data.error}`;
-                return;
-            }
-        } catch (e) {
-            contentEl.value = `Failed to load file: ${e.message}`;
+    try {
+        // Fetch file content
+        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            contentEl.value = `Error: ${data.error}`;
             return;
         }
-    }
-    
-    if (titleEl) titleEl.textContent = data.name;
-    
-    // Fix single-line markdown files (newlines stripped by some agents)
-    let content = data.content || '';
-    const lineCount = content.split('\n').length;
-    if (content.length > 200 && lineCount <= 3) {
-        content = fixSingleLineMarkdown(content);
-    }
-    
-    if (contentEl) contentEl.value = content;
-    
-    // Store current file for editing (with fixed content)
-    window.currentMemoryFile = {
-        path: filepath,
-        content: content,
-        botUpdated: data.botUpdated
-    };
-    
-    // Load version history
-    loadVersionHistory(filepath);
-    
-    // Show bot-update status in title
-    const file = memoryFilesCache.find(f => f.path === filepath);
-    if (file && file.botUpdated && !file.acknowledged) {
-        titleEl.innerHTML = `
-            ${escapeHtmlLocal(data.name)}
-            <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
-            <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" 
-                    class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
-                ✓ Mark as Read
-            </button>
-        `;
-    } else if (file && file.acknowledged) {
-        titleEl.innerHTML = `
-            ${escapeHtmlLocal(data.name)}
-            <span class="badge badge-success" style="margin-left: 8px;">✓ Read</span>
-        `;
+        
+        if (titleEl) titleEl.textContent = data.name;
+        if (contentEl) contentEl.value = data.content;
+        
+        // Store current file for editing
+        window.currentMemoryFile = {
+            path: filepath,
+            content: data.content,
+            botUpdated: data.botUpdated
+        };
+        
+        // Load version history
+        loadVersionHistory(filepath);
+        
+        // If bot-updated, show acknowledge option in title
+        const file = memoryFilesCache.find(f => f.path === filepath);
+        if (file && file.botUpdated && !file.acknowledged) {
+            titleEl.innerHTML = `
+                ${escapeHtmlLocal(data.name)}
+                <span class="badge badge-warning" style="margin-left: 8px;">🤖 Updated by SoLoBot</span>
+                <button onclick="acknowledgeUpdate('${escapeHtmlLocal(filepath)}')" 
+                        class="btn btn-ghost" style="margin-left: 8px; font-size: 12px;">
+                    ✓ Mark as Read
+                </button>
+            `;
+        }
+    } catch (e) {
+        contentEl.value = `Failed to load file: ${e.message}`;
     }
 }
 
 // Acknowledge bot update
-function getFileCardSelector(filepath) {
-    if (!filepath) return null;
-    const escapeSelector = (str) => {
-        if (typeof CSS !== 'undefined' && CSS.escape) {
-            return CSS.escape(str);
-        }
-        return str.replace(/([\\#\.\[\]:\/,\+\*=\^\$@!\(\)<>])/g, '\\$1');
-    };
-    return `[data-filepath="${escapeSelector(filepath)}"]`;
-}
-
-function markFileCardAsRead(filepath) {
-    try {
-        if (!filepath) return;
-        const selector = getFileCardSelector(filepath);
-        const card = document.querySelector(selector);
-        if (!card) return;
-        card.classList.remove('bot-updated');
-        const badge = card.querySelector('.bot-updated-badge');
-        if (badge) {
-            badge.remove();
-        }
-    } catch (err) {
-        console.warn('[Memory] Failed to mark card as read:', err);
-    }
-}
-
 async function acknowledgeUpdate(filepath) {
     try {
         await fetch('/api/memory-meta/acknowledge', {
@@ -448,23 +251,13 @@ async function acknowledgeUpdate(filepath) {
             file.acknowledged = true;
         }
         
-        // Adjust UI directly
-        markFileCardAsRead(filepath);
-        
-        // Reset cached list so we fetch fresh data next time
-        memoryFilesCache = [];
-        lastFetchTime = 0;
-        
-        // Update title to show ✓ Read badge
+        // Update title
         const titleEl = document.getElementById('memory-file-title');
         if (titleEl && window.currentMemoryFile) {
-            titleEl.innerHTML = `
-                ${escapeHtmlLocal(window.currentMemoryFile.path)}
-                <span class="badge badge-success" style="margin-left: 8px;">✓ Read</span>
-            `;
+            titleEl.textContent = window.currentMemoryFile.path;
         }
         
-        // Refresh file list with newest metadata
+        // Refresh file list
         renderMemoryFiles(document.getElementById('memory-search')?.value || '');
     } catch (e) {
         console.error('Failed to acknowledge:', e);
@@ -576,133 +369,71 @@ async function previewVersion(filepath, timestamp) {
     }
 }
 
-// === IDE-STYLE DIFF RENDERER ===
-
+// Simple line-by-line diff renderer
 function renderDiff(currentText, historicalText) {
-    const curLines = currentText.split('\n');
-    const hisLines = historicalText.split('\n');
-    const curPane = document.getElementById('diff-current');
-    const hisPane = document.getElementById('diff-historical');
-    const statsEl = document.getElementById('diff-stats');
+    const currentLines = currentText.split('\n');
+    const historicalLines = historicalText.split('\n');
     
-    // Compute LCS-based diff
-    const ops = diffLines(hisLines, curLines);
+    const currentContainer = document.getElementById('diff-current');
+    const historicalContainer = document.getElementById('diff-historical');
     
-    let curHtml = '', hisHtml = '';
-    let curNum = 0, hisNum = 0;
-    let added = 0, removed = 0, modified = 0;
+    // Build a simple LCS-based diff
+    const diff = computeLineDiff(historicalLines, currentLines);
     
-    ops.forEach(op => {
-        const esc = (s) => escapeHtmlLocal(s);
-        if (op.type === 'equal') {
-            curNum++; hisNum++;
-            curHtml += diffLine(curNum, esc(op.cur), '');
-            hisHtml += diffLine(hisNum, esc(op.his), '');
-        } else if (op.type === 'added') {
-            curNum++;
-            added++;
-            curHtml += diffLine(curNum, esc(op.cur), 'added');
-            hisHtml += diffLine('', '', 'empty');
-        } else if (op.type === 'removed') {
-            hisNum++;
-            removed++;
-            curHtml += diffLine('', '', 'empty');
-            hisHtml += diffLine(hisNum, esc(op.his), 'removed');
-        } else if (op.type === 'modified') {
-            curNum++; hisNum++;
-            modified++;
-            curHtml += diffLine(curNum, esc(op.cur), 'added');
-            hisHtml += diffLine(hisNum, esc(op.his), 'removed');
+    let currentHtml = '';
+    let historicalHtml = '';
+    
+    diff.forEach(item => {
+        const escapedLine = escapeHtmlLocal(item.line);
+        if (item.type === 'same') {
+            currentHtml += `<div style="padding: 2px 4px;">${escapedLine || '&nbsp;'}</div>`;
+            historicalHtml += `<div style="padding: 2px 4px;">${escapedLine || '&nbsp;'}</div>`;
+        } else if (item.type === 'added') {
+            currentHtml += `<div style="padding: 2px 4px; background: rgba(46, 160, 67, 0.3); border-left: 3px solid var(--success);">${escapedLine || '&nbsp;'}</div>`;
+            historicalHtml += `<div style="padding: 2px 4px; opacity: 0.3;">&nbsp;</div>`;
+        } else if (item.type === 'removed') {
+            currentHtml += `<div style="padding: 2px 4px; opacity: 0.3;">&nbsp;</div>`;
+            historicalHtml += `<div style="padding: 2px 4px; background: rgba(248, 81, 73, 0.3); border-left: 3px solid var(--error);">${escapedLine || '&nbsp;'}</div>`;
         }
     });
     
-    curPane.innerHTML = curHtml;
-    hisPane.innerHTML = hisHtml;
-    
-    // Stats
-    if (statsEl) {
-        const parts = [];
-        if (added) parts.push(`<span style="color: #3fb950;">+${added}</span>`);
-        if (removed) parts.push(`<span style="color: #f85149;">-${removed}</span>`);
-        if (modified) parts.push(`<span style="color: #d29922;">~${modified}</span>`);
-        statsEl.innerHTML = parts.length ? parts.join(' &nbsp;') : '<span>No changes</span>';
-    }
-    
-    // Sync scrolling between panes
-    setupDiffScrollSync(curPane, hisPane);
+    currentContainer.innerHTML = currentHtml;
+    historicalContainer.innerHTML = historicalHtml;
 }
 
-function diffLine(num, content, type) {
-    const cls = type ? ` ${type}` : '';
-    const txt = content || '&nbsp;';
-    return `<div class="diff-line${cls}"><span class="diff-line-num">${num}</span><span class="diff-line-content">${txt}</span></div>`;
-}
-
-// Synchronized scrolling for both diff panes
-function setupDiffScrollSync(paneA, paneB) {
-    let syncing = false;
-    function sync(src, tgt) {
-        if (syncing) return;
-        syncing = true;
-        tgt.scrollTop = src.scrollTop;
-        tgt.scrollLeft = src.scrollLeft;
-        syncing = false;
-    }
-    paneA.onscroll = () => sync(paneA, paneB);
-    paneB.onscroll = () => sync(paneB, paneA);
-}
-
-// Diff algorithm: LCS-based line diff with modify detection
-function diffLines(oldLines, newLines) {
-    const N = oldLines.length, M = newLines.length;
+// Compute line-by-line diff using simple algorithm
+function computeLineDiff(oldLines, newLines) {
+    const result = [];
+    const oldSet = new Set(oldLines);
+    const newSet = new Set(newLines);
     
-    // For very large files, use simple O(n) approach
-    if (N + M > 5000) return diffSimple(oldLines, newLines);
+    let oldIdx = 0, newIdx = 0;
     
-    // Build LCS table
-    const dp = Array.from({ length: N + 1 }, () => new Uint16Array(M + 1));
-    for (let i = N - 1; i >= 0; i--) {
-        for (let j = M - 1; j >= 0; j--) {
-            if (oldLines[i] === newLines[j]) dp[i][j] = dp[i+1][j+1] + 1;
-            else dp[i][j] = Math.max(dp[i+1][j], dp[i][j+1]);
-        }
-    }
-    
-    // Trace back to produce operations
-    const ops = [];
-    let i = 0, j = 0;
-    while (i < N || j < M) {
-        if (i < N && j < M && oldLines[i] === newLines[j]) {
-            ops.push({ type: 'equal', cur: newLines[j], his: oldLines[i] });
-            i++; j++;
-        } else if (j < M && (i >= N || dp[i][j+1] >= dp[i+1][j])) {
-            // Check if this is a modification (next old line is also not equal)
-            if (i < N && i + 1 <= N && j + 1 <= M && dp[i+1][j+1] >= dp[i+1][j] && dp[i+1][j+1] >= dp[i][j+1]) {
-                ops.push({ type: 'modified', cur: newLines[j], his: oldLines[i] });
-                i++; j++;
-            } else {
-                ops.push({ type: 'added', cur: newLines[j] });
-                j++;
-            }
+    while (oldIdx < oldLines.length || newIdx < newLines.length) {
+        if (oldIdx >= oldLines.length) {
+            // Remaining new lines are additions
+            result.push({ type: 'added', line: newLines[newIdx++] });
+        } else if (newIdx >= newLines.length) {
+            // Remaining old lines are deletions
+            result.push({ type: 'removed', line: oldLines[oldIdx++] });
+        } else if (oldLines[oldIdx] === newLines[newIdx]) {
+            // Lines match
+            result.push({ type: 'same', line: oldLines[oldIdx] });
+            oldIdx++;
+            newIdx++;
+        } else if (!newSet.has(oldLines[oldIdx])) {
+            // Old line not in new - it was removed
+            result.push({ type: 'removed', line: oldLines[oldIdx++] });
+        } else if (!oldSet.has(newLines[newIdx])) {
+            // New line not in old - it was added
+            result.push({ type: 'added', line: newLines[newIdx++] });
         } else {
-            ops.push({ type: 'removed', his: oldLines[i] });
-            i++;
+            // Both exist elsewhere - treat as remove then add
+            result.push({ type: 'removed', line: oldLines[oldIdx++] });
         }
     }
-    return ops;
-}
-
-// Simple fallback for very large files
-function diffSimple(oldLines, newLines) {
-    const ops = [];
-    let oi = 0, ni = 0;
-    while (oi < oldLines.length || ni < newLines.length) {
-        if (oi >= oldLines.length) { ops.push({ type: 'added', cur: newLines[ni++] }); }
-        else if (ni >= newLines.length) { ops.push({ type: 'removed', his: oldLines[oi++] }); }
-        else if (oldLines[oi] === newLines[ni]) { ops.push({ type: 'equal', cur: newLines[ni], his: oldLines[oi] }); oi++; ni++; }
-        else { ops.push({ type: 'modified', cur: newLines[ni], his: oldLines[oi] }); oi++; ni++; }
-    }
-    return ops;
+    
+    return result;
 }
 
 // Close diff modal
@@ -789,51 +520,24 @@ async function saveMemoryFile() {
     
     if (saveBtn) saveBtn.textContent = '⏳ Saving...';
     
-    let success = false;
-    
-    // Try gateway RPC first
-    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
-        try {
-            console.log('[Memory] Saving file via gateway RPC...');
-            await window.gateway._request('memory.write', { 
-                path: filepath, 
-                content: newContent 
-            });
-            success = true;
-            console.log('[Memory] ✓ Saved file via gateway RPC');
-        } catch (e) {
-            console.warn('[Memory] Gateway RPC write failed, falling back to REST API:', e.message);
-        }
-    }
-    
-    // Fallback to REST API
-    if (!success) {
-        try {
-            const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    content: newContent,
-                    updatedBy: 'user'  // Track that user made this edit
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                showToast(`Failed to save: ${data.error}`, 'error');
-                if (saveBtn) saveBtn.textContent = '💾 Save';
-                return;
-            }
-            success = true;
-        } catch (e) {
-            showToast(`Failed to save: ${e.message}`, 'error');
+    try {
+        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                content: newContent,
+                updatedBy: 'user'  // Track that user made this edit
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showToast(`Failed to save: ${data.error}`, 'error');
             if (saveBtn) saveBtn.textContent = '💾 Save';
             return;
         }
-    }
-    
-    if (success) {
+        
         if (saveBtn) saveBtn.textContent = '✓ Saved!';
         setTimeout(() => {
             if (saveBtn) saveBtn.textContent = '💾 Save';
@@ -851,120 +555,10 @@ async function saveMemoryFile() {
         
         // Refresh file list in background
         renderMemoryFiles(document.getElementById('memory-search')?.value || '');
-    }
-}
-
-// === SUB-AGENT FILES ===
-
-async function fetchAgentFiles() {
-    try {
-        const resp = await fetch('/api/agents');
-        const data = await resp.json();
-        return data.agents || [];
     } catch (e) {
-        console.error('Failed to fetch agents:', e);
-        return [];
+        showToast(`Failed to save: ${e.message}`, 'error');
+        if (saveBtn) saveBtn.textContent = '💾 Save';
     }
-}
-
-async function renderAgentSection(container) {
-    const agents = await fetchAgentFiles();
-    if (agents.length === 0) return; // No sub-agents, nothing to show
-    
-    const escape = typeof escapeHtml === 'function' ? escapeHtml : escapeHtmlLocal;
-    const collapsedCats = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
-    
-    let html = '';
-    agents.forEach(agent => {
-        if (agent.files.length === 0) return;
-        const catKey = `🤖 ${agent.id}`;
-        const isCollapsed = collapsedCats[catKey] !== false; // Collapsed by default
-        
-        html += `<div class="docs-category" data-category="${escape(catKey)}">`;
-        html += `<h3 class="category-title category-collapsible${isCollapsed ? ' collapsed' : ''}" 
-                     onclick="toggleMemoryCategory(this)">
-                    <span class="category-chevron">${isCollapsed ? '▶' : '▼'}</span>
-                    🤖 Agent: ${escape(agent.id)}
-                    <span class="category-count">${agent.files.length}</span>
-                 </h3>`;
-        html += `<div class="docs-category-grid" style="${isCollapsed ? 'display:none;' : ''}">`;
-        
-        agent.files.sort((a, b) => a.name.localeCompare(b.name)).forEach(file => {
-            const modDate = file.modified ? new Date(file.modified).toLocaleDateString() : '';
-            html += `
-                <div class="doc-card memory-file" onclick="viewAgentFile('${escape(agent.id)}', '${escape(file.name)}')"
-                     data-filepath="${escape(agent.id)}/${escape(file.name)}">
-                    <div style="display: flex; align-items: center; gap: var(--space-3);">
-                        <div class="doc-icon icon-md">🤖</div>
-                        <div style="min-width: 0; flex: 1;">
-                            <div class="doc-title">${escape(file.name)}</div>
-                            <div class="doc-description" style="font-size: 11px; color: var(--text-muted);">Agent: ${escape(agent.id)}</div>
-                            ${modDate ? `<div class="doc-meta">Modified: ${modDate}</div>` : ''}
-                        </div>
-                    </div>
-                </div>`;
-        });
-        html += '</div></div>';
-    });
-    
-    if (html) container.insertAdjacentHTML('beforeend', html);
-}
-
-async function viewAgentFile(agentId, filename) {
-    const titleEl = document.getElementById('memory-file-title');
-    const contentEl = document.getElementById('memory-file-content');
-    const saveBtn = document.getElementById('memory-save-btn');
-    
-    if (titleEl) titleEl.textContent = `${agentId}/${filename}`;
-    if (contentEl) contentEl.value = 'Loading...';
-    if (saveBtn) saveBtn.style.display = 'none'; // Read-only for sub-agent files
-    
-    showModal('memory-file-modal');
-    
-    try {
-        const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}`);
-        const data = await resp.json();
-        
-        if (data.error) {
-            contentEl.value = `Error: ${data.error}`;
-            return;
-        }
-        
-        // Fix single-line markdown
-        let content = data.content || '';
-        const lineCount = content.split('\n').length;
-        if (content.length > 200 && lineCount <= 3) {
-            content = fixSingleLineMarkdown(content);
-        }
-        
-        if (titleEl) titleEl.innerHTML = `${escapeHtmlLocal(data.name)} <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">— Agent: ${escapeHtmlLocal(agentId)}</span>`;
-        if (contentEl) contentEl.value = content;
-        
-        window.currentMemoryFile = null; // Not editable
-    } catch (e) {
-        contentEl.value = `Failed to load: ${e.message}`;
-    }
-}
-
-// Toggle category collapse
-function toggleMemoryCategory(el) {
-    const grid = el.nextElementSibling;
-    const chevron = el.querySelector('.category-chevron');
-    const category = el.closest('.docs-category').dataset.category;
-    const collapsed = JSON.parse(localStorage.getItem('solobot-memory-collapsed') || '{}');
-    
-    if (grid.style.display === 'none') {
-        grid.style.display = '';
-        el.classList.remove('collapsed');
-        if (chevron) chevron.textContent = '▼';
-        delete collapsed[category];
-    } else {
-        grid.style.display = 'none';
-        el.classList.add('collapsed');
-        if (chevron) chevron.textContent = '▶';
-        collapsed[category] = true;
-    }
-    localStorage.setItem('solobot-memory-collapsed', JSON.stringify(collapsed));
 }
 
 // Make functions globally available
@@ -979,5 +573,3 @@ window.previewVersion = previewVersion;
 window.restoreVersion = restoreVersion;
 window.closeDiffModal = closeDiffModal;
 window.restoreFromDiff = restoreFromDiff;
-window.toggleMemoryCategory = toggleMemoryCategory;
-window.viewAgentFile = viewAgentFile;
