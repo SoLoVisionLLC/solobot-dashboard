@@ -594,26 +594,23 @@ const server = http.createServer((req, res) => {
   }
 
   if (url.pathname === '/api/sync' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleSync = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const update = JSON.parse(body);
 
         // PROTECT tasks and notes from being wiped by empty client state!
-        // Only update tasks/notes if client has actual content, or if server is empty
         const serverHasTasks = countTasks(state) > 0;
         const serverHasNotes = (state.notes?.length || 0) > 0;
         const clientHasTasks = countTasks(update) > 0;
         const clientHasNotes = (update.notes?.length || 0) > 0;
 
-        // If server has tasks but client doesn't, preserve server tasks
         if (serverHasTasks && !clientHasTasks) {
           console.log('[Sync] Protecting tasks - server has', countTasks(state), 'tasks, client has 0');
           delete update.tasks;
         }
 
-        // If server has notes but client doesn't, preserve server notes
         if (serverHasNotes && !clientHasNotes) {
           console.log('[Sync] Protecting notes - server has', state.notes.length, 'notes, client has 0');
           delete update.notes;
@@ -622,67 +619,73 @@ const server = http.createServer((req, res) => {
         state = { ...state, ...update, lastSync: Date.now() };
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, protected: { tasks: serverHasTasks && !clientHasTasks, notes: serverHasNotes && !clientHasNotes } }));
+        return res.end(JSON.stringify({
+          ok: true,
+          protected: {
+            tasks: serverHasTasks && !clientHasTasks,
+            notes: serverHasNotes && !clientHasNotes
+          }
+        }));
       } catch (e) {
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleSync();
     return;
   }
 
   // Append chat messages (doesn't replace existing)
   if (url.pathname === '/api/chat' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleChat = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const { messages } = JSON.parse(body);
         if (!state.chat) state.chat = { messages: [] };
         if (Array.isArray(messages)) {
-          // Append new messages, avoid duplicates by id
           const existingIds = new Set(state.chat.messages.map(m => m.id));
           const newMsgs = messages.filter(m => !existingIds.has(m.id));
           state.chat.messages.push(...newMsgs);
-          // Keep last 200 messages
           if (state.chat.messages.length > 200) {
             state.chat.messages = state.chat.messages.slice(-200);
           }
         }
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, added: messages?.length || 0 }));
+        return res.end(JSON.stringify({ ok: true, added: messages?.length || 0 }));
       } catch (e) {
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleChat();
     return;
   }
 
   // Append activity logs
   if (url.pathname === '/api/activity' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleActivity = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const { logs } = JSON.parse(body);
         if (!state.activity) state.activity = { logs: [] };
         if (Array.isArray(logs)) {
           state.activity.logs.unshift(...logs);
-          // Keep last 100 activity logs
           if (state.activity.logs.length > 100) {
             state.activity.logs = state.activity.logs.slice(0, 100);
           }
         }
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true }));
+        return res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleActivity();
     return;
   }
 
