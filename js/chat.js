@@ -823,7 +823,8 @@ function renderChat() {
             from: 'solobot',
             text: streamingText,
             time: Date.now(),
-            isStreaming: true
+            isStreaming: true,
+            model: window._lastResponseModel || window.currentModel
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
@@ -1262,7 +1263,8 @@ function renderChatPage() {
             from: 'solobot',
             text: streamingText,
             time: Date.now(),
-            isStreaming: true
+            isStreaming: true,
+            model: window._lastResponseModel || window.currentModel
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
@@ -1385,6 +1387,17 @@ function createChatPageMessage(msg) {
     
     header.appendChild(sender);
     header.appendChild(time);
+
+    // Provider/Model badge for bot messages - shows which AI model generated the response
+    if (isBot && msg.model) {
+        const providerModelSpan = document.createElement('span');
+        providerModelSpan.className = 'chat-page-provider-model';
+        providerModelSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); font-family: monospace; background: var(--surface-3); padding: 1px 5px; border-radius: 3px; margin-left: 4px;';
+        providerModelSpan.textContent = msg.model;
+        providerModelSpan.title = msg.model;
+        header.appendChild(providerModelSpan);
+    }
+
     bubble.appendChild(header);
     
     // Content
