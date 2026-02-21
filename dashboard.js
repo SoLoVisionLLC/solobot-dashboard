@@ -92,14 +92,7 @@ function persistChatMessages() {
 // Load persisted messages immediately
 loadPersistedMessages();
 
-// Gateway connection configuration - load from localStorage first, server state as fallback
-const GATEWAY_CONFIG = {
-    host: localStorage.getItem('gateway_host') || '',
-    port: parseInt(localStorage.getItem('gateway_port')) || 443,
-    token: localStorage.getItem('gateway_token') || '',
-    sessionKey: localStorage.getItem('gateway_session') || 'main',
-    maxMessages: 100
-};
+// GATEWAY_CONFIG declared in js/state.js
 
 // Function to save gateway settings to both localStorage AND server state
 function saveGatewaySettings(host, port, token, sessionKey) {

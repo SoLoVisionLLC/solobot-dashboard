@@ -145,7 +145,7 @@ const GATEWAY_CONFIG = {
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
     token: localStorage.getItem('gateway_token') || '',
     sessionKey: localStorage.getItem('gateway_session') || 'agent:main:main',
-    maxMessages: 500
+    maxMessages: 100
 };
 
 function saveGatewaySettings(host, port, token, sessionKey) {
