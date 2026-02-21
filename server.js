@@ -1105,16 +1105,18 @@ const server = http.createServer((req, res) => {
 
   // Change model (updates OpenClaw config directly)
   if (url.pathname === '/api/models/set' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleModelSet = async () => {
+      let body = '';
       try {
-        const { modelId } = JSON.parse(body);
+        // Collect body
+        for await (const chunk of req) {
+          body += chunk;
+        }
 
+        const { modelId } = JSON.parse(body);
         if (!modelId) {
           res.writeHead(400);
-          res.end(JSON.stringify({ error: 'modelId is required' }));
-          return;
+          return res.end(JSON.stringify({ error: 'modelId is required' }));
         }
 
         console.log(`[Server] Model change requested: ${modelId}`);
@@ -1127,61 +1129,117 @@ const server = http.createServer((req, res) => {
         };
 
         // Update OpenClaw config file directly
-        const openclawConfigPath = '/home/node/.openclaw/openclaw.json';
         let configUpdated = false;
-
         try {
-          if (fs.existsSync(openclawConfigPath)) {
-            const ocConfig = JSON.parse(fs.readFileSync(openclawConfigPath, 'utf8'));
-
-            // Update the primary model in config
+          if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
+            const ocConfig = JSON.parse(fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf8'));
             if (!ocConfig.agents) ocConfig.agents = {};
             if (!ocConfig.agents.defaults) ocConfig.agents.defaults = {};
             if (!ocConfig.agents.defaults.model) ocConfig.agents.defaults.model = {};
 
             ocConfig.agents.defaults.model.primary = modelId;
-
-            fs.writeFileSync(openclawConfigPath, JSON.stringify(ocConfig, null, 2));
-            console.log(`[Server] Updated OpenClaw config with model: ${modelId}`);
+            fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(ocConfig, null, 2));
             configUpdated = true;
-          } else {
-            console.warn('[Server] OpenClaw config not found at:', openclawConfigPath);
           }
         } catch (ocErr) {
           console.error('[Server] Failed to update OpenClaw config:', ocErr.message);
         }
 
-        // Update dashboard state with current model
-        const fileState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-        fileState.currentModel = modelInfo;
-        fileState.requestedModel = modelInfo;
-        fileState.lastSync = Date.now();
-        fs.writeFileSync(STATE_FILE, JSON.stringify(fileState, null, 2));
+        // Update dashboard state
+        try {
+          const fileState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+          fileState.currentModel = modelInfo;
+          fileState.requestedModel = modelInfo;
+          fileState.lastSync = Date.now();
+          fs.writeFileSync(STATE_FILE, JSON.stringify(fileState, null, 2));
 
-        // Update global in-memory state
-        state.currentModel = modelInfo;
-        state.requestedModel = modelInfo;
-        state.lastSync = fileState.lastSync;
+          state.currentModel = modelInfo;
+          state.requestedModel = modelInfo;
+          state.lastSync = fileState.lastSync;
+        } catch (sErr) {
+          console.error('[Server] Failed to update state file:', sErr.message);
+        }
 
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({
+        return res.end(JSON.stringify({
           ok: true,
-          message: configUpdated
-            ? 'Model changed. Restart gateway to apply.'
-            : 'Model saved locally. OpenClaw config not found - may need manual update.',
-          modelId: modelId,
-          configUpdated: configUpdated
+          message: configUpdated ? 'Model changed. Restart gateway to apply.' : 'Model saved locally only.',
+          modelId,
+          configUpdated
         }));
-
-      } catch (e) {
-        console.error('[Server] Failed to change model:', e.message);
+      } catch (err) {
+        console.error('[Server] Failed to change model:', err.message);
         res.writeHead(500);
-        res.end(JSON.stringify({
-          error: 'Failed to change model',
-          details: e.message
-        }));
+        return res.end(JSON.stringify({ error: 'Failed to change model', details: err.message }));
       }
-    });
+    };
+
+    handleModelSet();
+    return;
+  }
+
+  if (url.pathname === '/api/models/set-agent' && req.method === 'POST') {
+    const handleAgentModelSet = async () => {
+      let body = '';
+      try {
+        for await (const chunk of req) {
+          body += chunk;
+        }
+
+        const { agentId, modelId } = JSON.parse(body);
+        if (!agentId || !modelId) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'agentId and modelId are required' }));
+        }
+
+        console.log(`[Server] Agent model change requested: ${agentId} -> ${modelId}`);
+
+        let configUpdated = false;
+        try {
+          if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
+            const ocConfig = JSON.parse(fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf8'));
+
+            // 1. Update the specific agent in the list
+            if (ocConfig.agents && ocConfig.agents.list) {
+              const agent = ocConfig.agents.list.find(a => a.id === agentId);
+              if (agent) {
+                agent.model = modelId;
+                configUpdated = true;
+              }
+            }
+
+            // 2. If it's the main agent or we want to update global default too
+            if (agentId === 'main' || agentId === 'default') {
+              if (!ocConfig.agents.defaults) ocConfig.agents.defaults = {};
+              if (!ocConfig.agents.defaults.model) ocConfig.agents.defaults.model = {};
+              ocConfig.agents.defaults.model.primary = modelId;
+              configUpdated = true;
+            }
+
+            if (configUpdated) {
+              fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(ocConfig, null, 2));
+            }
+          }
+        } catch (ocErr) {
+          console.error('[Server] Failed to update OpenClaw config for agent:', ocErr.message);
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({
+          ok: true,
+          message: configUpdated ? `Model set for agent ${agentId}.` : 'Agent not found in config.',
+          agentId,
+          modelId,
+          configUpdated
+        }));
+      } catch (err) {
+        console.error('[Server] Failed to set agent model:', err.message);
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: 'Failed to set agent model', details: err.message }));
+      }
+    };
+
+    handleAgentModelSet();
     return;
   }
 
@@ -1195,72 +1253,73 @@ const server = http.createServer((req, res) => {
       // Fallback: if missing, try reading OpenClaw config primary model
       if (!modelInfo) {
         try {
-          const oc = JSON.parse(fs.readFileSync('/home/node/.openclaw/openclaw.json', 'utf8'));
-          const primary = oc?.agents?.defaults?.model?.primary;
-          if (primary) {
-            modelInfo = {
-              modelId: primary,
-              provider: primary.split('/')[0],
-              name: primary.split('/').pop()
-            };
+          if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
+            const oc = JSON.parse(fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf8'));
+            const primary = oc?.agents?.defaults?.model?.primary;
+            if (primary) {
+              modelInfo = {
+                modelId: primary,
+                provider: primary.split('/')[0],
+                name: primary.split('/').pop()
+              };
+            }
           }
-        } catch (e) {
-          // ignore fallback errors
-        }
+        } catch (e) { /* ignore fallback errors */ }
       }
 
       if (!modelInfo) {
         modelInfo = {
-          modelId: 'anthropic/claude-opus-4-5',
+          modelId: 'anthropic/claude-3-5-sonnet-latest',
           provider: 'anthropic',
-          name: 'claude-opus-4-5'
+          name: 'Claude 3.5 Sonnet'
         };
       }
 
-      // Normalize bad modelId like "anthropic/anthropic/claude-opus-4-5"
+      // Normalize bad modelId 
       if (modelInfo?.modelId) {
         const parts = modelInfo.modelId.split('/');
         if (parts.length >= 3 && parts[0] === parts[1]) {
           modelInfo.modelId = parts.slice(1).join('/');
         }
-        // Ensure provider/name are consistent with modelId
         modelInfo.provider = modelInfo.modelId.split('/')[0];
         modelInfo.name = modelInfo.modelId.split('/').pop();
       }
 
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(modelInfo));
+      return res.end(JSON.stringify(modelInfo));
     } catch (e) {
-      console.error('[Server] Failed to get current model from state:', e.message);
+      console.error('[Server] Failed to get current model:', e.message);
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        modelId: 'anthropic/claude-opus-4-5',
+      return res.end(JSON.stringify({
+        modelId: 'anthropic/claude-3-5-sonnet-latest',
         provider: 'anthropic',
-        name: 'claude-opus-4-5'
+        name: 'Claude 3.5 Sonnet'
       }));
     }
-    return;
   }
 
   // Update current model (called by OpenClaw agent)
   if (url.pathname === '/api/models/current' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    const handleModelCurrentPost = async () => {
+      let body = '';
       try {
+        for await (const chunk of req) { body += chunk; }
         const modelInfo = JSON.parse(body);
-        const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        const stateFileContent = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        stateFileContent.currentModel = modelInfo;
+        stateFileContent.lastSync = Date.now();
+        fs.writeFileSync(STATE_FILE, JSON.stringify(stateFileContent, null, 2));
+
         state.currentModel = modelInfo;
-        state.lastSync = Date.now();
-        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, model: modelInfo }));
+        return res.end(JSON.stringify({ ok: true, model: modelInfo }));
       } catch (e) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: e.message }));
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    };
+    handleModelCurrentPost();
     return;
   }
 
