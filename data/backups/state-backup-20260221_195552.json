@@ -3364,6 +3364,14 @@
   "chat": {
     "messages": [
       {
+        "id": "m17717035249730.7884712677101546",
+        "from": "solobot",
+        "text": "**Done.** Here's what I implemented:\n\n**Immediate Fix — Active Now:**\n- Cron job `eng-team-keepalive` running every 10 minutes\n- Pings Dev, Chip, Forge, Quill to keep sessions alive\n- Attempts to wake any offline agents\n- First run in ~1 minute\n\n**Policy Document Created:**\n- `ENG_AVAILABILITY_POLICY.md` — team standards for availability\n- Fallback routing (if Dev offline → Chip → queue)\n- Success metrics: 99% uptime, <2 min wake response\n\n**Next Runs:**\n- Every 10 minutes automatically\n- Logs status to memory\n\nYou should see the engineering team stay online now. If anyone drops, the cron job will catch it within 10 minutes and attempt recovery.\n\n— Orion",
+        "image": null,
+        "images": [],
+        "time": 1771692542271
+      },
+      {
         "id": "m17717035249730.4483435858825272",
         "from": "user",
         "text": "did you do the status dashboard? Maybe we can incorporate it in the org chart/memory screen?",
@@ -4958,16 +4966,6 @@
         "image": null,
         "images": [],
         "time": 1771702957355
-      },
-      {
-        "id": "m1771703756361",
-        "from": "user",
-        "text": "????",
-        "time": 1771703756361,
-        "image": null,
-        "images": [],
-        "model": null,
-        "_sessionKey": "agent:forge:main"
       }
     ]
   },
