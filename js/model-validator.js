@@ -8,7 +8,7 @@ const ModelValidator = {
     recentTests: [],
     rateLimitTimers: {},
     testResults: [],
-    pendingTestResolvers: new Map(),
+    pendingTestResolvers: new Map(), // For waiting on responses
     allProvidersTest: {
         running: false,
         queue: [],
@@ -28,174 +28,6 @@ const ModelValidator = {
         'moonshot': { id: 'moonshot/kimi-k2.5', name: 'Kimi K2.5' },
         'minimax': { id: 'minimax/m2.5', name: 'Minimax m2.5' },
         'deepseek': { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' }
-    },
-
-    getProviderTestModels() {
-        const testModels = [];
-        // First check providers we have explicit models for
-        for (const [provider, def] of Object.entries(this.PROVIDER_TEST_MODELS)) {
-            if (Array.isArray(def)) {
-                def.forEach(m => testModels.push({ provider, ...m }));
-            } else {
-                testModels.push({ provider, ...def });
-            }
-        }
-        
-        // Then add any other providers found in the models list that aren't covered
-        for (const provider of Object.keys(this.models)) {
-            if (!this.PROVIDER_TEST_MODELS[provider]) {
-                const firstModel = this.models[provider][0];
-                if (firstModel) {
-                    testModels.push({ 
-                        provider, 
-                        id: firstModel.id, 
-                        name: firstModel.name || firstModel.id 
-                    });
-                }
-            }
-        }
-        return testModels;
-    },
-
-    async runAllProvidersTest() {
-        if (this.allProvidersTest.running) return;
-        
-        const testModels = this.getProviderTestModels();
-        this.allProvidersTest = {
-            running: true,
-            queue: testModels,
-            results: [],
-            currentIndex: 0
-        };
-
-        this.renderAllResults();
-        
-        for (let i = 0; i < testModels.length; i++) {
-            this.allProvidersTest.currentIndex = i;
-            const test = testModels[i];
-            
-            this.renderAllResults();
-            
-            const startTime = Date.now();
-            let result;
-            
-            try {
-                // Set the model in localStorage so gateway uses it
-                localStorage.setItem('selected_model', test.id);
-                
-                // Create promise for response
-                const responsePromise = new Promise((resolve) => {
-                    this.currentTest = { provider: test.provider, modelId: test.id, resolver: resolve };
-                });
-                
-                const timeoutPromise = new Promise((resolve) => {
-                    setTimeout(() => resolve({ type: 'timeout' }), 30000); // 30s timeout for bulk test
-                });
-                
-                await gateway.sendMessage('Hello! Please respond with exactly: "OK"');
-                
-                result = await Promise.race([responsePromise, timeoutPromise]);
-            } catch (e) {
-                result = { type: 'error', error: e.message };
-            }
-            
-            const duration = Date.now() - startTime;
-            const finalResult = {
-                ...test,
-                duration,
-                status: result.type === 'success' ? 'pass' : (result.rateLimit ? 'rate-limited' : 'fail'),
-                error: result.error || (result.type === 'timeout' ? 'Timeout' : null),
-                rateLimit: result.rateLimit
-            };
-            
-            this.allProvidersTest.results.push(finalResult);
-            this.saveTestResult({
-                status: finalResult.status,
-                durationMs: duration,
-                provider: test.provider,
-                modelId: test.id,
-                timestamp: new Date().toISOString(),
-                isBulk: true
-            });
-        }
-        
-        this.allProvidersTest.running = false;
-        this.currentTest = null;
-        this.renderAllResults();
-    },
-
-    renderAllResults() {
-        const container = document.getElementById('mv-all-results-container');
-        if (!container) return;
-        
-        container.classList.add('visible');
-        
-        const progress = this.allProvidersTest.queue.length > 0 ? 
-            Math.round((this.allProvidersTest.results.length / this.allProvidersTest.queue.length) * 100) : 0;
-            
-        let html = `
-            <div class="mv-all-header">
-                <h3>Provider Health Dashboard</h3>
-                <div class="mv-progress-bar">
-                    <div class="mv-progress-fill" style="width: ${progress}%"></div>
-                </div>
-                <div class="mv-progress-text">
-                    ${this.allProvidersTest.running ? `Testing ${this.allProvidersTest.queue[this.allProvidersTest.currentIndex]?.provider || ''}...` : 'Test Complete'} 
-                    (${this.allProvidersTest.results.length}/${this.allProvidersTest.queue.length})
-                </div>
-            </div>
-            <table class="mv-all-table">
-                <thead>
-                    <tr>
-                        <th>Provider</th>
-                        <th>Model</th>
-                        <th>Status</th>
-                        <th>Latency</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        
-        // Show completed results
-        this.allProvidersTest.results.forEach(res => {
-            html += `
-                <tr class="${res.status}">
-                    <td><strong>${res.provider}</strong></td>
-                    <td><span class="mv-mini-id">${res.id}</span></td>
-                    <td><span class="mv-status-badge ${res.status}">${res.status.toUpperCase()}</span></td>
-                    <td>${res.duration}ms</td>
-                    <td class="mv-error-cell">${res.error || (res.rateLimit ? `Retry in ${res.rateLimit.retryAfter || '?'}s` : '-')}</td>
-                </tr>
-            `;
-        });
-        
-        // Show current test if running
-        if (this.allProvidersTest.running && this.allProvidersTest.currentIndex < this.allProvidersTest.queue.length) {
-            const current = this.allProvidersTest.queue[this.allProvidersTest.currentIndex];
-            html += `
-                <tr class="pending">
-                    <td><strong>${current.provider}</strong></td>
-                    <td><span class="mv-mini-id">${current.id}</span></td>
-                    <td><span class="mv-status-badge pending">TESTING...</span></td>
-                    <td>-</td>
-                    <td>In progress...</td>
-                </tr>
-            `;
-        }
-        
-        html += `</tbody></table>`;
-        
-        if (!this.allProvidersTest.running) {
-            html += `
-                <div class="mv-all-footer">
-                    <button class="mv-run-btn" onclick="ModelValidator.runAllProvidersTest()">Rerun All Tests</button>
-                    <button class="mv-run-btn secondary" onclick="document.getElementById('mv-all-results-container').classList.remove('visible')">Close Summary</button>
-                </div>
-            `;
-        }
-        
-        container.innerHTML = html;
     },
 
     async init() {
@@ -396,6 +228,187 @@ const ModelValidator = {
                 document.head.appendChild(style);
             }
         }
+    },
+
+    getProviderTestModels() {
+        const testModels = [];
+        // First check providers we have explicit models for
+        for (const [provider, def] of Object.entries(this.PROVIDER_TEST_MODELS)) {
+            if (Array.isArray(def)) {
+                def.forEach(m => testModels.push({ provider, ...m }));
+            } else {
+                testModels.push({ provider, ...def });
+            }
+        }
+        
+        // Then add any other providers found in the models list that aren't covered
+        for (const provider of Object.keys(this.models)) {
+            if (!this.PROVIDER_TEST_MODELS[provider]) {
+                const firstModel = this.models[provider][0];
+                if (firstModel) {
+                    testModels.push({ 
+                        provider, 
+                        id: firstModel.id, 
+                        name: firstModel.name || firstModel.id 
+                    });
+                }
+            }
+        }
+        return testModels;
+    },
+
+    async runAllProvidersTest() {
+        if (this.allProvidersTest.running) return;
+        
+        const testModels = this.getProviderTestModels();
+        this.allProvidersTest = {
+            running: true,
+            queue: testModels,
+            results: [],
+            currentIndex: 0
+        };
+
+        this.renderAllResults();
+        
+        for (let i = 0; i < testModels.length; i++) {
+            this.allProvidersTest.currentIndex = i;
+            const test = testModels[i];
+            
+            this.renderAllResults();
+            
+            const startTime = Date.now();
+            let result;
+            
+            try {
+                // Set the model in localStorage so gateway uses it
+                localStorage.setItem('selected_model', test.id);
+                
+                // Create promise for response
+                const responsePromise = new Promise((resolve) => {
+                    this.currentTest = { provider: test.provider, modelId: test.id, resolver: resolve };
+                });
+                
+                const timeoutPromise = new Promise((resolve) => {
+                    setTimeout(() => resolve({ type: 'timeout' }), 30000); // 30s timeout for bulk test
+                });
+                
+                await gateway.sendMessage('Hello! Please respond with exactly: "OK"');
+                
+                result = await Promise.race([responsePromise, timeoutPromise]);
+            } catch (e) {
+                result = { type: 'error', error: e.message };
+            }
+            
+            const duration = Date.now() - startTime;
+            const finalResult = {
+                ...test,
+                duration,
+                status: result.type === 'success' ? 'pass' : (result.rateLimit ? 'rate-limited' : 'fail'),
+                error: result.error || (result.type === 'timeout' ? 'Timeout' : null),
+                rateLimit: result.rateLimit
+            };
+            
+            this.allProvidersTest.results.push(finalResult);
+            this.saveTestResult({
+                status: finalResult.status,
+                durationMs: duration,
+                provider: test.provider,
+                modelId: test.id,
+                timestamp: new Date().toISOString(),
+                isBulk: true
+            });
+        }
+        
+        this.allProvidersTest.running = false;
+        this.currentTest = null;
+        this.renderAllResults();
+    },
+
+    renderAllResults() {
+        const container = document.getElementById('mv-all-results-container');
+        if (!container) return;
+        
+        container.classList.add('visible');
+        
+        const progress = this.allProvidersTest.queue.length > 0 ? 
+            Math.round((this.allProvidersTest.results.length / this.allProvidersTest.queue.length) * 100) : 0;
+            
+        let html = `
+            <div class="mv-all-header">
+                <h3>Provider Health Dashboard</h3>
+                <div class="mv-progress-bar">
+                    <div class="mv-progress-fill" style="width: ${progress}%"></div>
+                </div>
+                <div class="mv-progress-text">
+                    ${this.allProvidersTest.running ? `Testing ${this.allProvidersTest.queue[this.allProvidersTest.currentIndex]?.provider || ''}...` : 'Test Complete'} 
+                    (${this.allProvidersTest.results.length}/${this.allProvidersTest.queue.length})
+                </div>
+            </div>
+            <table class="mv-all-table">
+                <thead>
+                    <tr>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Status</th>
+                        <th>Latency</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        // Show completed results
+        this.allProvidersTest.results.forEach(res => {
+            html += `
+                <tr class="${res.status}">
+                    <td><strong>${res.provider}</strong></td>
+                    <td><span class="mv-mini-id">${res.id}</span></td>
+                    <td><span class="mv-status-badge ${res.status}">${res.status.toUpperCase()}</span></td>
+                    <td>${res.duration}ms</td>
+                    <td class="mv-error-cell">${res.error || (res.rateLimit ? `Retry in ${res.rateLimit.retryAfter || '?'}s` : '-')}</td>
+                </tr>
+            `;
+        });
+        
+        // Show current test if running
+        if (this.allProvidersTest.running && this.allProvidersTest.currentIndex < this.allProvidersTest.queue.length) {
+            const current = this.allProvidersTest.queue[this.allProvidersTest.currentIndex];
+            html += `
+                <tr class="pending">
+                    <td><strong>${current.provider}</strong></td>
+                    <td><span class="mv-mini-id">${current.id}</span></td>
+                    <td><span class="mv-status-badge pending">TESTING...</span></td>
+                    <td>-</td>
+                    <td>In progress...</td>
+                </tr>
+            `;
+        }
+        
+        html += `</tbody></table>`;
+        
+        if (!this.allProvidersTest.running) {
+            html += `
+                <div class="mv-all-footer">
+                    <button class="mv-run-btn" onclick="ModelValidator.runAllProvidersTest()">Rerun All Tests</button>
+                    <button class="mv-run-btn secondary" onclick="document.getElementById('mv-all-results-container').classList.remove('visible')">Close Summary</button>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    },
+
+    filterModels() {
+        const search = document.getElementById('mv-search-input')?.value.toLowerCase() || '';
+        this.filteredModels = {};
+        for (const [provider, models] of Object.entries(this.models)) {
+            const filtered = models.filter(m => 
+                m.id.toLowerCase().includes(search) || 
+                (m.name && m.name.toLowerCase().includes(search))
+            );
+            if (filtered.length > 0) this.filteredModels[provider] = filtered;
+        }
+        this.render();
     },
 
     render() {
