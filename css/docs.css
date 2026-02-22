@@ -1173,6 +1173,9 @@ body.space-panning {
 }
 
 /* ── Agents Page Sticky Toolbar ── */
+/* The toolbar is a direct child of #page-agents (outside .memory-page).
+   #page-agents has padding: var(--space-6) from chat.css.
+   We use negative margins to bleed edge-to-edge, then re-add horizontal padding. */
 .agents-toolbar {
     position: sticky;
     top: 0;
@@ -1180,11 +1183,17 @@ body.space-panning {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 0 10px;
+    /* Bleed out of #page-agents padding on all three sides */
+    margin-top: calc(-1 * var(--space-6));
+    margin-left: calc(-1 * var(--space-6));
+    margin-right: calc(-1 * var(--space-6));
+    margin-bottom: 16px;
+    /* Re-add horizontal padding + vertical breathing room */
+    padding: 10px var(--space-6);
     background: var(--surface-0);
     border-bottom: 1px solid var(--border-subtle);
-    margin-bottom: 16px;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .agents-toolbar-search {
@@ -1192,13 +1201,4 @@ body.space-panning {
     min-width: 0;
     max-width: 320px;
     font-size: 13px;
-}
-
-/* Suppress the old memory-search-bar style if leftover */
-#page-agents .memory-search-bar {
-    display: none !important;
-}
-
-#page-agents .page-header {
-    display: none !important;
 }

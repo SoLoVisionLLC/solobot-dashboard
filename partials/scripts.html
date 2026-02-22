@@ -276,11 +276,12 @@
         // Apply layout toggle on render
         if (window._memoryCards) {
             window._memoryCards.applyLayout();
-            if (window._memoryCards.getLayout() === 'cards') {
-                window._memoryCards.renderAgentCardsView(filter);
+            // org-tree and cards both render via _memoryCards — don't fall through to classic render
+            if (window._memoryCards.getLayout() !== 'classic') {
                 return;
             }
         }
+
 
         const container = document.getElementById(
             "memory-files-grid",

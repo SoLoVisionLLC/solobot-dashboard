@@ -1,24 +1,26 @@
 <!-- =================== AGENTS PAGE =================== -->
 <div id="page-agents" class="page">
-    <div class="memory-page">
 
-        <!-- Sticky agents toolbar -->
-        <div class="agents-toolbar">
-            <input type="text" id="memory-search" class="input agents-toolbar-search"
-                placeholder="🔍 Search agents or files…"
-                oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)}">
-            <button class="btn btn-secondary btn-sm" onclick="syncMemoryFilesNow()">🔄 Sync</button>
-            <div id="sync-status" class="sync-status" style="white-space:nowrap;">
-                <span class="status-dot success"></span>
-                <span id="last-memory-sync" style="font-size:11px; color:var(--text-muted);">--</span>
-            </div>
-            <div class="memory-layout-toggle" style="margin-left:auto;">
-                <button id="memory-toggle-grid" title="Org Chart"
-                    onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
-                <button id="memory-toggle-list" title="List View"
-                    onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
-            </div>
+    <!-- Sticky toolbar: full-bleed, outside the padded memory-page -->
+    <div class="agents-toolbar">
+        <input type="text" id="memory-search" class="input agents-toolbar-search"
+            placeholder="🔍  Search agents or files…"
+            oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)}">
+        <button class="btn btn-secondary btn-sm" onclick="syncMemoryFilesNow()">🔄 Sync</button>
+        <div id="sync-status" class="sync-status" style="white-space:nowrap; flex-shrink:0;">
+            <span class="status-dot success"></span>
+            <span id="last-memory-sync" style="font-size:11px; color:var(--text-muted);">--</span>
         </div>
+        <div class="memory-layout-toggle" style="margin-left:auto; flex-shrink:0;">
+            <button id="memory-toggle-grid" title="Org Chart"
+                onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
+            <button id="memory-toggle-list" title="List View"
+                onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
+        </div>
+    </div>
+
+    <!-- Scrollable content: padded below the toolbar -->
+    <div class="memory-page">
 
         <!-- Org Tree / Cards View -->
         <div id="memory-cards-view" style="display: none;"></div>
