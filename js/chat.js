@@ -52,16 +52,38 @@ function linkifyText(text) {
  * - "anthropic/claude-3-5-sonnet"       → "anthropic/claude-3-5-sonnet"
  * - "moonshotai/kimi-k2.5" (no prefix) → "openrouter moonshotai/kimi-k2.5"
  */
+/**
+ * Get the best available model for a message, with fallback chain:
+ *   msg.model → window._lastResponseModel → window.currentModel
+ * Always skip generic gateway placeholders like "openrouter/free" or "unknown".
+ */
+function getBestModel(msg) {
+    const isGeneric = (m) => !m || m === 'unknown' || m === 'openrouter/free' || m === 'free';
+    if (!isGeneric(msg?.model)) return { model: msg.model, provider: msg.provider };
+    if (!isGeneric(window._lastResponseModel)) return { model: window._lastResponseModel, provider: window._lastResponseProvider };
+    return { model: window.currentModel, provider: window.currentProvider };
+}
+
+/**
+ * Format a model + provider for display in chat bubbles.
+ * - provider "openrouter" + model "moonshotai/kimi-k2.5" → "openrouter moonshotai/kimi-k2.5"
+ * - model "openrouter/moonshotai/kimi-k2.5"              → "openrouter moonshotai/kimi-k2.5"
+ * - provider "google" + model "gemini-flash-latest"       → "google/gemini-flash-latest"
+ */
 function formatModelDisplay(model, provider) {
     if (!model) return '';
-    // If model already has openrouter prefix, just replace / with space
+    // Already has openrouter prefix — replace slash with space
     if (model.startsWith('openrouter/')) {
         return model.replace('openrouter/', 'openrouter ');
     }
-    // If provider is openrouter but model doesn't have prefix, add it
-    if (provider === 'openrouter' && !model.startsWith('openrouter/')) {
+    // Provider is openrouter but model lacks prefix
+    if (provider === 'openrouter') {
         return 'openrouter ' + model;
     }
+    // Has any provider prefix already
+    if (model.includes('/')) return model;
+    // No prefix — prepend provider if known
+    if (provider) return `${provider}/${model}`;
     return model;
 }
 
@@ -939,14 +961,16 @@ function createChatMessageElement(msg) {
     header.appendChild(nameSpan);
 
     // Model badge for bot messages - same style as time
-    if (!isUser && !isSystem && msg.model) {
-        const modelBadge = document.createElement('span');
-        modelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
-        const displayModel = formatModelDisplay(msg.model, msg.provider);
-        // Bold during streaming (unconfirmed), plain once confirmed
-        modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
-        modelBadge.title = msg.model;
-        header.appendChild(modelBadge);
+    if (!isUser && !isSystem) {
+        const { model: bestModel, provider: bestProvider } = getBestModel(msg);
+        if (bestModel) {
+            const modelBadge = document.createElement('span');
+            modelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
+            const displayModel = formatModelDisplay(bestModel, bestProvider);
+            modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
+            modelBadge.title = bestModel;
+            header.appendChild(modelBadge);
+        }
     }
 
     // Message content
@@ -1410,15 +1434,17 @@ function createChatPageMessage(msg) {
     header.appendChild(time);
 
     // Model badge for bot messages - same style as time, relative timestamp preserved
-    if (isBot && msg.model) {
-        const modelBadge = document.createElement('span');
-        modelBadge.className = 'chat-page-bubble-time';
-        modelBadge.style.marginLeft = '4px';
-        const displayModel = formatModelDisplay(msg.model, msg.provider);
-        // Bold during streaming (unconfirmed), plain once confirmed
-        modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
-        modelBadge.title = msg.model;
-        header.appendChild(modelBadge);
+    if (isBot) {
+        const { model: bestModel, provider: bestProvider } = getBestModel(msg);
+        if (bestModel) {
+            const modelBadge = document.createElement('span');
+            modelBadge.className = 'chat-page-bubble-time';
+            modelBadge.style.marginLeft = '4px';
+            const displayModel = formatModelDisplay(bestModel, bestProvider);
+            modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
+            modelBadge.title = bestModel;
+            header.appendChild(modelBadge);
+        }
     }
 
     bubble.appendChild(header);
