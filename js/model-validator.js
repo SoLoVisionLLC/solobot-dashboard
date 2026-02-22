@@ -173,6 +173,26 @@ const ModelValidator = {
         } catch (e) {}
     },
 
+    ensureStressTestToggle() {
+        const headerAction = document.querySelector('.mv-header-actions');
+        if (headerAction && !document.getElementById('mv-stress-test-wrapper')) {
+            const wrapper = document.createElement('div');
+            wrapper.id = 'mv-stress-test-wrapper';
+            wrapper.style.display = 'flex';
+            wrapper.style.alignItems = 'center';
+            wrapper.style.marginLeft = '16px';
+            wrapper.style.fontSize = '12px';
+            wrapper.style.gap = '8px';
+            wrapper.style.color = 'var(--text-muted)';
+            
+            wrapper.innerHTML = `
+                <input type="checkbox" id="mv-stress-test" style="cursor:pointer">
+                <label for="mv-stress-test" style="cursor:pointer">Stress Test (Large Payload)</label>
+            `;
+            headerAction.insertBefore(wrapper, document.getElementById('mv-test-all-btn'));
+        }
+    },
+
     ensureTestAllButton() {
         const headerAction = document.querySelector('.mv-header-actions');
         if (headerAction && !document.getElementById('mv-test-all-btn')) {
@@ -289,10 +309,16 @@ const ModelValidator = {
                 });
                 
                 const timeoutPromise = new Promise((resolve) => {
-                    setTimeout(() => resolve({ type: 'timeout' }), 30000); // 30s timeout for bulk test
+                    setTimeout(() => resolve({ type: 'timeout' }), 45000); // 45s timeout for stress/bulk
                 });
                 
-                await gateway.sendMessage('Hello! Please respond with exactly: "OK"');
+                const isStressTest = document.getElementById('mv-stress-test')?.checked;
+                let testPayload = 'Hello! Please respond with exactly: "OK"';
+                if (isStressTest) {
+                    testPayload += "\n\n[STRESS TEST]\n" + "History simulation ".repeat(300);
+                }
+
+                await gateway.sendMessage(testPayload);
                 
                 result = await Promise.race([responsePromise, timeoutPromise]);
             } catch (e) {
@@ -415,8 +441,11 @@ const ModelValidator = {
         const container = document.getElementById('mv-models-list');
         if (!container) return;
         
-        // Add "Test All" button to the header if it doesn't exist
+        // Add "Test All" button and Stress Test toggle to the header
         this.ensureTestAllButton();
+
+        // Ensure Stress Test Toggle exists
+        this.ensureStressTestToggle();
 
         let totalModels = 0;
         const html = Object.entries(this.filteredModels).map(([provider, models]) => {
@@ -504,18 +533,27 @@ const ModelValidator = {
             return;
         }
 
-        this.currentTest = { provider, modelId, startTime: Date.now() };
+        const isStressTest = document.getElementById('mv-stress-test')?.checked;
+        this.currentTest = { provider, modelId, startTime: Date.now(), isStressTest };
         this.render();
         
         // Show loading
         document.getElementById('mv-empty-state').style.display = 'none';
         document.getElementById('mv-results-content').classList.remove('visible');
         document.getElementById('mv-loading-state').classList.add('visible');
-        document.getElementById('mv-loading-model').textContent = modelId;
+        document.getElementById('mv-loading-model').textContent = `${modelId}${isStressTest ? ' (STRESS TEST)' : ''}`;
 
         const previousModel = localStorage.getItem('selected_model');
-        const TEST_PROMPT = 'Hello! Please respond with exactly: "Model validation successful."';
         
+        // Base prompt
+        let testPrompt = 'Hello! Please respond with exactly: "Model validation successful."';
+        
+        // If stress test, append a large synthetic context payload (approx 4k tokens)
+        if (isStressTest) {
+            const largeContext = "\n\n[STRESS TEST CONTEXT SIMULATION]\n" + "This is a synthetic payload to simulate a large chat history. ".repeat(200);
+            testPrompt += largeContext;
+        }
+
         // Create promise to wait for response
         const responsePromise = new Promise((resolve) => {
             this.currentTest.resolver = resolve;
