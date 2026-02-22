@@ -618,7 +618,7 @@ class GatewayClient {
         };
 
         // Log model and session info
-        const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
+        const model = localStorage.getItem('selected_model') || '(not set)';
         gwLog(`[Gateway] ⬆️ Sending message to session "${this.sessionKey}"`);
         gwLog(`[Gateway]    Model: ${model}`);
         gwLog(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
@@ -684,7 +684,7 @@ class GatewayClient {
             Math.round(attachments.reduce((sum, a) => sum + a.content.length, 0) / 1024), 'KB');
 
         // Log model info if available
-        const model = localStorage.getItem('selected_model') || 'anthropic/claude-3-opus';
+        const model = localStorage.getItem('selected_model') || '(not set)';
         gwLog(`[Gateway] Sending with ${model}`);
 
         try {

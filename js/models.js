@@ -439,9 +439,9 @@ window.changeModel = window.changeSessionModel;
  * Load the saved model for a specific agent
  * Fetches from server and updates the UI dropdowns
  */
-window.loadAgentModel = async function(agentId) {
+window.loadAgentModel = async function (agentId) {
     if (!agentId) return;
-    
+
     try {
         // Fetch agent's model from server
         const response = await fetch(`/api/models/agent/${agentId}`);
@@ -450,29 +450,29 @@ window.loadAgentModel = async function(agentId) {
             console.log(`[Dashboard] No custom model for ${agentId}, using global default`);
             return;
         }
-        
+
         const agentModel = await response.json();
         if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
             console.log(`[Dashboard] Loaded model for ${agentId}: ${agentModel.modelId}`);
-            
+
             // Update current model vars
             currentModel = agentModel.modelId;
             currentProvider = agentModel.provider || agentModel.modelId.split('/')[0];
-            
+
             // Update localStorage for persistence
             localStorage.setItem('selected_model', currentModel);
             localStorage.setItem('selected_provider', currentProvider);
-            
+
             // Update UI
             syncModelDisplay(currentModel, currentProvider);
-            
+
             // Update dropdowns
             const providerSelect = document.getElementById('provider-select');
             if (providerSelect) {
                 providerSelect.value = currentProvider;
                 await updateHeaderModelDropdown(currentProvider);
             }
-            
+
             const modelSelect = document.getElementById('model-select');
             if (modelSelect) {
                 modelSelect.value = currentModel;
@@ -699,8 +699,8 @@ function getConfiguredModels() {
 
 // Current model state
 // Initialize provider and model variables on window for global access
-window.currentProvider = window.currentProvider || 'anthropic';
-window.currentModel = window.currentModel || 'anthropic/claude-opus-4-5';
+window.currentProvider = window.currentProvider || null;
+window.currentModel = window.currentModel || null;
 
 /**
  * Resolve a bare model name (e.g. "claude-opus-4-6") to its full "provider/model" ID.
@@ -709,7 +709,7 @@ window.currentModel = window.currentModel || 'anthropic/claude-opus-4-5';
  */
 function resolveFullModelId(modelStr) {
     if (!modelStr) return modelStr;
-    
+
     // Special handling for OpenRouter which often uses double slashes or gets stripped
     if (modelStr.includes('moonshotai/') || modelStr.includes('minimax/') || modelStr.includes('deepseek/')) {
         if (!modelStr.startsWith('openrouter/')) {
@@ -848,7 +848,7 @@ async function applySessionModelOverride(sessionKey) {
                     window._configModelLocks[sessionKey] = sessionModel;
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     // === 2. SECOND: Check global default in openclaw.json ===
@@ -863,7 +863,7 @@ async function applySessionModelOverride(sessionKey) {
                     window._configModelLocks[sessionKey] = sessionModel;
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     if (sessionModel) {
@@ -924,9 +924,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             provider = localStorage.getItem('selected_provider');
         }
 
-        // Final fallback
-        if (!modelId) modelId = 'anthropic/claude-opus-4-5';
-        if (!provider) provider = modelId.split('/')[0];
+        // No fallback — leave null and let the gateway/config provide the model
+        if (!modelId) modelId = null;
+        if (!provider && modelId) provider = modelId.split('/')[0];
 
         window.currentProvider = provider;
         window.currentModel = modelId;

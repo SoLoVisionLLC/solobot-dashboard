@@ -2096,13 +2096,9 @@ const server = http.createServer((req, res) => {
         } catch (e) { /* continue */ }
       }
 
-      // 4. Hardcoded fallback
+      // No config, cache, or state found — return null so client defers to gateway
       if (!modelInfo) {
-        modelInfo = {
-          modelId: 'anthropic/claude-opus-4-5',
-          provider: 'anthropic',
-          name: 'claude-opus-4-5'
-        };
+        modelInfo = { modelId: null, provider: null, name: null };
       }
 
       // Normalize bad modelId like "anthropic/anthropic/claude-opus-4-5"
@@ -2120,11 +2116,7 @@ const server = http.createServer((req, res) => {
     } catch (e) {
       console.error('[Server] Failed to get current model:', e.message);
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        modelId: 'anthropic/claude-opus-4-5',
-        provider: 'anthropic',
-        name: 'claude-opus-4-5'
-      }));
+      res.end(JSON.stringify({ modelId: null, provider: null, name: null }));
     }
     return;
   }
