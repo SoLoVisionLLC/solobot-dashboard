@@ -1980,7 +1980,11 @@ const server = http.createServer((req, res) => {
       if (!configPath) { res.writeHead(404); res.end(JSON.stringify({ error: 'No config file found' })); return; }
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const agent = config.agents?.list?.find(a => a.id === agentId);
-      if (!agent || !agent.model) { res.writeHead(404); res.end(JSON.stringify({ error: 'No model override for agent' })); return; }
+      if (!agent || !agent.model) {
+        // No override — agent uses the global default
+        res.end(JSON.stringify({ agentId, modelId: 'global/default', provider: null }));
+        return;
+      }
       const modelId = agent.model;
       res.end(JSON.stringify({ agentId, modelId, provider: modelId.split('/')[0] }));
     } catch (e) {

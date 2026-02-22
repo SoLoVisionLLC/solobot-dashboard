@@ -445,38 +445,36 @@ window.loadAgentModel = async function (agentId) {
     try {
         // Fetch agent's model from server
         const response = await fetch(`/api/models/agent/${agentId}`);
-        if (!response.ok) {
-            // Agent may not have a custom model, use global default
-            console.log(`[Dashboard] No custom model for ${agentId}, using global default`);
+        const agentModel = await response.json();
+
+        if (!agentModel?.modelId || agentModel.modelId === 'global/default') {
+            console.log(`[Dashboard] Agent ${agentId} has no model override — using global default`);
             return;
         }
 
-        const agentModel = await response.json();
-        if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
-            console.log(`[Dashboard] Loaded model for ${agentId}: ${agentModel.modelId}`);
+        console.log(`[Dashboard] Loaded model for ${agentId}: ${agentModel.modelId}`);
 
-            // Update current model vars
-            currentModel = agentModel.modelId;
-            currentProvider = agentModel.provider || agentModel.modelId.split('/')[0];
+        // Update current model vars
+        currentModel = agentModel.modelId;
+        currentProvider = agentModel.provider || agentModel.modelId.split('/')[0];
 
-            // Update localStorage for persistence
-            localStorage.setItem('selected_model', currentModel);
-            localStorage.setItem('selected_provider', currentProvider);
+        // Update localStorage for persistence
+        localStorage.setItem('selected_model', currentModel);
+        localStorage.setItem('selected_provider', currentProvider);
 
-            // Update UI
-            syncModelDisplay(currentModel, currentProvider);
+        // Update UI
+        syncModelDisplay(currentModel, currentProvider);
 
-            // Update dropdowns
-            const providerSelect = document.getElementById('provider-select');
-            if (providerSelect) {
-                providerSelect.value = currentProvider;
-                await updateHeaderModelDropdown(currentProvider);
-            }
+        // Update dropdowns
+        const providerSelect = document.getElementById('provider-select');
+        if (providerSelect) {
+            providerSelect.value = currentProvider;
+            await updateHeaderModelDropdown(currentProvider);
+        }
 
-            const modelSelect = document.getElementById('model-select');
-            if (modelSelect) {
-                modelSelect.value = currentModel;
-            }
+        const modelSelect = document.getElementById('model-select');
+        if (modelSelect) {
+            modelSelect.value = currentModel;
         }
     } catch (e) {
         console.warn(`[Dashboard] Failed to load model for ${agentId}:`, e.message);
