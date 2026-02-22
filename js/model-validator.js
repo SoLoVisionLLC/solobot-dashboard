@@ -300,6 +300,22 @@ const ModelValidator = {
         try {
             // Set test model
             localStorage.setItem('selected_model', modelId);
+
+            // === SHOW EXPECTED VALUES IMMEDIATELY (with ** = unconfirmed) ===
+            document.getElementById('mv-empty-state').style.display = 'none';
+            document.getElementById('mv-loading-state').classList.remove('visible');
+            document.getElementById('mv-results-content').classList.add('visible');
+            document.getElementById('mv-result-title').textContent = '🧪 Waiting for response...';
+            document.getElementById('mv-result-subtitle').textContent = `${provider} / ${modelId}`;
+            document.getElementById('mv-status-value').textContent = 'PENDING';
+            document.getElementById('mv-status-value').className = 'mv-status-value pending';
+            document.getElementById('mv-latency-value').textContent = '...';
+            document.getElementById('mv-model-value').textContent = `**${modelId}**`;
+            document.getElementById('mv-provider-value').textContent = `**${provider}**`;
+            document.getElementById('mv-response-block').className = 'mv-code-block';
+            document.getElementById('mv-response-block').textContent = 'Waiting for model response...';
+            document.getElementById('mv-headers-block').textContent = 'Waiting...';
+            document.getElementById('mv-raw-block').textContent = '{}';
             
             // Send message (this returns immediately with runId)
             const sendResult = await gateway.sendMessage(TEST_PROMPT);
@@ -343,19 +359,24 @@ const ModelValidator = {
         document.getElementById('mv-loading-state').classList.remove('visible');
         document.getElementById('mv-results-content').classList.add('visible');
         
+        // Confirmed values — remove ** now that gateway responded
+        const confirmedModel = result.model || modelId;
+        const confirmedProvider = result.provider || provider;
+        
         document.getElementById('mv-result-title').textContent = '✅ Test Complete';
         document.getElementById('mv-status-value').textContent = 'PASS';
         document.getElementById('mv-status-value').className = 'mv-status-value success';
         document.getElementById('mv-latency-value').textContent = `${duration}ms`;
-        document.getElementById('mv-model-value').textContent = modelId;
-        document.getElementById('mv-provider-value').textContent = provider;
+        // Show confirmed model — no asterisks
+        document.getElementById('mv-model-value').textContent = confirmedModel;
+        document.getElementById('mv-provider-value').textContent = confirmedProvider;
         
         const responseBlock = document.getElementById('mv-response-block');
         responseBlock.className = 'mv-code-block success';
         responseBlock.textContent = result.text || 'No text response';
         
         document.getElementById('mv-headers-block').textContent = 
-            `Model: ${result.model || 'unknown'}\nProvider: ${result.provider || 'unknown'}\nProtocol: WebSocket`;
+            `Confirmed Model: ${confirmedModel}\nConfirmed Provider: ${confirmedProvider}\nExpected Model: ${modelId}\nExpected Provider: ${provider}\nProtocol: WebSocket`;
         
         const resultData = {
             status: 'pass',

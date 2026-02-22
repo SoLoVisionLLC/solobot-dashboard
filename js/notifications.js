@@ -862,7 +862,9 @@ function mergeHistoryMessages(messages) {
                     id: msgId,
                     from: msg.role === 'user' ? 'user' : 'solobot',
                     text: textContent,
-                    time: msg.timestamp || Date.now()
+                    time: msg.timestamp || Date.now(),
+                    model: msg.model || null,
+                    provider: msg.provider || null
                 };
 
                 // Classify and route
