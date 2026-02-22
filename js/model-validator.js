@@ -312,10 +312,11 @@ const ModelValidator = {
                     setTimeout(() => resolve({ type: 'timeout' }), 45000); // 45s timeout for stress/bulk
                 });
                 
-                const isStressTest = document.getElementById('mv-stress-test')?.checked;
+                const isStressTest = !!document.getElementById('mv-stress-test')?.checked;
                 let testPayload = 'Hello! Please respond with exactly: "OK"';
                 if (isStressTest) {
-                    testPayload += "\n\n[STRESS TEST]\n" + "History simulation ".repeat(300);
+                    testPayload += "\n\n[STRESS TEST CONTEXT SIMULATION - HIGH TOKEN WEIGHT]\n" + 
+                                  "The quick brown fox jumps over the lazy dog. ".repeat(1000); // ~10k tokens
                 }
 
                 await gateway.sendMessage(testPayload);
@@ -533,8 +534,10 @@ const ModelValidator = {
             return;
         }
 
-        const isStressTest = document.getElementById('mv-stress-test')?.checked;
+        const isStressTest = !!document.getElementById('mv-stress-test')?.checked;
         this.currentTest = { provider, modelId, startTime: Date.now(), isStressTest };
+        console.log(`[ModelValidator] Starting test for ${modelId} (Stress Test: ${isStressTest})`);
+        
         this.render();
         
         // Show loading
@@ -548,10 +551,12 @@ const ModelValidator = {
         // Base prompt
         let testPrompt = 'Hello! Please respond with exactly: "Model validation successful."';
         
-        // If stress test, append a large synthetic context payload (approx 4k tokens)
+        // If stress test, append a large synthetic context payload (approx 8k-10k tokens)
         if (isStressTest) {
-            const largeContext = "\n\n[STRESS TEST CONTEXT SIMULATION]\n" + "This is a synthetic payload to simulate a large chat history. ".repeat(200);
+            const largeContext = "\n\n[STRESS TEST CONTEXT SIMULATION - HIGH TOKEN WEIGHT]\n" + 
+                               "The quick brown fox jumps over the lazy dog. ".repeat(1000); // ~10k tokens
             testPrompt += largeContext;
+            console.log(`[ModelValidator] Stress test enabled. Payload size: ${testPrompt.length} chars`);
         }
 
         // Create promise to wait for response
@@ -629,13 +634,14 @@ const ModelValidator = {
         // Confirmed values — remove ** now that gateway responded
         const confirmedModel = result.model || modelId;
         const confirmedProvider = result.provider || provider;
+        const isStress = this.currentTest?.isStressTest;
         
-        document.getElementById('mv-result-title').textContent = '✅ Test Complete';
+        document.getElementById('mv-result-title').textContent = isStress ? '✅ Stress Test Complete' : '✅ Test Complete';
         document.getElementById('mv-status-value').textContent = 'PASS';
         document.getElementById('mv-status-value').className = 'mv-status-value success';
         document.getElementById('mv-latency-value').textContent = `${duration}ms`;
         // Show confirmed model — no asterisks
-        document.getElementById('mv-model-value').textContent = confirmedModel;
+        document.getElementById('mv-model-value').textContent = confirmedModel + (isStress ? ' (STRESS)' : '');
         document.getElementById('mv-provider-value').textContent = confirmedProvider;
         
         const responseBlock = document.getElementById('mv-response-block');
