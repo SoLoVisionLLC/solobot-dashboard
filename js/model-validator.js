@@ -11,74 +11,43 @@ const ModelValidator = {
     pendingTestResolvers: new Map(), // For waiting on responses
 
     async init() {
-        // Hook into gateway events to capture responses (wait for gateway if needed)
-        await this.hookGatewayEvents();
         await this.loadModels();
         this.loadRecentTests();
         this.render();
         this.loadTestHistory();
     },
 
-    async hookGatewayEvents() {
-        // Wait for gateway to be available
-        let attempts = 0;
-        while (!window.gateway && attempts < 50) {
-            await new Promise(r => setTimeout(r, 100));
-            attempts++;
-        }
+    handleGatewayEvent(event) {
+        if (!event || !this.currentTest) return;
         
-        if (!window.gateway) {
-            console.warn('[ModelValidator] Gateway not available after 5s');
-            return;
-        }
+        const { state, content, role, errorMessage, model, provider } = event;
         
-        // Store original handler
-        const originalHandler = window.gateway.onChatEvent;
-        
-        // Wrap to capture responses for our tests
-        window.gateway.onChatEvent = (payload) => {
-            this.handleGatewayEvent(payload);
-            // Call original handler
-            if (originalHandler) originalHandler(payload);
-        };
-    },
-
-    handleGatewayEvent(payload) {
-        if (!payload || !this.currentTest) return;
-        
-        const state = payload.state;
-        const message = payload.message;
-        
-        // Check for rate limit in the payload
-        if (state === 'error' || payload.error) {
-            const errorInfo = this.parseErrorForRateLimit(payload.error || message);
+        // Check for error state or errorMessage
+        if (state === 'error' || errorMessage) {
+            const errorInfo = this.parseErrorForRateLimit(errorMessage || event);
             if (errorInfo.isRateLimit && this.currentTest.resolver) {
                 this.currentTest.resolver({
                     type: 'error',
                     rateLimit: errorInfo,
-                    error: payload.error || message
+                    error: errorMessage || event
                 });
             } else if (this.currentTest.resolver) {
                 this.currentTest.resolver({
                     type: 'error',
-                    error: payload.error || message
+                    error: errorMessage || event
                 });
             }
             return;
         }
         
         // Capture final response
-        if (state === 'final' && message?.role === 'assistant') {
+        if (state === 'final' && (role === 'assistant' || role === 'model')) {
             let contentText = '';
-            let model = message.model;
-            let provider = message.provider;
             
-            if (message.content) {
-                for (const part of message.content) {
-                    if (part.type === 'text') {
-                        contentText += part.text || '';
-                    }
-                }
+            if (Array.isArray(content)) {
+                contentText = content.map(c => c.text || '').join('');
+            } else {
+                contentText = String(content || '');
             }
             
             if (this.currentTest.resolver) {
@@ -87,7 +56,7 @@ const ModelValidator = {
                     text: contentText,
                     model: model,
                     provider: provider,
-                    raw: message
+                    raw: event
                 });
             }
         }
@@ -330,7 +299,7 @@ const ModelValidator = {
             document.getElementById('mv-raw-block').textContent = '{}';
             
             // Send message (this returns immediately with runId)
-            const sendResult = await gateway.sendMessage(TEST_PROMPT);
+            await gateway.sendMessage(TEST_PROMPT);
             
             // Wait for actual response or timeout
             const result = await Promise.race([responsePromise, timeoutPromise]);

@@ -441,6 +441,9 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
+    if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
+        window.ModelValidator.handleGatewayEvent(event);
+    }
     const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
 
     // HARD GATE: only render events for the active session. Period.
