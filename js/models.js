@@ -269,6 +269,12 @@ window.changeSessionModel = async function () {
         const agentId = window.currentAgentId || 'main'; // Use global currentAgentId
         console.log(`[Dashboard] Applying model change for agent: ${agentId}, model: ${selectedModel}`);
 
+        // Update the lock immediately so the sync logic doesn't revert it
+        if (window._configModelLocks) {
+            window._configModelLocks[window.currentSessionName] = selectedModel;
+            console.log(`[Dashboard] Updated lock for ${window.currentSessionName} to ${selectedModel}`);
+        }
+
         // 1. Update gateway session if applicable
         if (gateway && gateway.isConnected()) {
             gateway.request('sessions.patch', {
