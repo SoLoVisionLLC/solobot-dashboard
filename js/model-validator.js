@@ -11,17 +11,29 @@ const ModelValidator = {
     pendingTestResolvers: new Map(), // For waiting on responses
 
     async init() {
-        // Hook into gateway events to capture responses
-        this.hookGatewayEvents();
+        // Hook into gateway events to capture responses (wait for gateway if needed)
+        await this.hookGatewayEvents();
         await this.loadModels();
         this.loadRecentTests();
         this.render();
         this.loadTestHistory();
     },
 
-    hookGatewayEvents() {
+    async hookGatewayEvents() {
+        // Wait for gateway to be available
+        let attempts = 0;
+        while (!window.gateway && attempts < 50) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
+        }
+        
+        if (!window.gateway) {
+            console.warn('[ModelValidator] Gateway not available after 5s');
+            return;
+        }
+        
         // Store original handler
-        const originalHandler = window.gateway?.onChatEvent;
+        const originalHandler = window.gateway.onChatEvent;
         
         // Wrap to capture responses for our tests
         window.gateway.onChatEvent = (payload) => {
