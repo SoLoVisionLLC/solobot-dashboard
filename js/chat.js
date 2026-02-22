@@ -45,6 +45,21 @@ function linkifyText(text) {
 // CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
 
+/**
+ * Format a model string for display in chat bubbles.
+ * - "openrouter/moonshotai/kimi-k2.5"  → "openrouter moonshotai/kimi-k2.5"
+ * - "google/gemini-flash-latest"        → "google/gemini-flash-latest"
+ * - "anthropic/claude-3-5-sonnet"       → "anthropic/claude-3-5-sonnet"
+ */
+function formatModelDisplay(model) {
+    if (!model) return '';
+    if (model.startsWith('openrouter/')) {
+        // openrouter/moonshotai/kimi-k2.5 → openrouter moonshotai/kimi-k2.5
+        return model.replace('openrouter/', 'openrouter ');
+    }
+    return model;
+}
+
 // ===================
 // VOICE INPUT (Web Speech API)
 // ===================
@@ -922,17 +937,9 @@ function createChatMessageElement(msg) {
     if (!isUser && !isSystem && msg.model) {
         const modelBadge = document.createElement('span');
         modelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
-        // For OpenRouter, show full path like "openrouter moonshotai/kimi-k2.5"
-        // For others like "google/gemini-flash-latest", show just "gemini-flash-latest"
-        let displayModel;
-        if (msg.model.startsWith('openrouter/')) {
-            displayModel = msg.model.replace('openrouter/', 'openrouter ');
-        } else if (msg.model.includes('/')) {
-            displayModel = msg.model.split('/').pop().replace(/-latest$/, '');
-        } else {
-            displayModel = msg.model;
-        }
-        modelBadge.textContent = `· ${displayModel}`;
+        const displayModel = formatModelDisplay(msg.model);
+        // Bold during streaming (unconfirmed), plain once confirmed
+        modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
         modelBadge.title = msg.model;
         header.appendChild(modelBadge);
     }
@@ -1401,10 +1408,11 @@ function createChatPageMessage(msg) {
     if (isBot && msg.model) {
         const modelBadge = document.createElement('span');
         modelBadge.className = 'chat-page-bubble-time';
-        const shortModel = msg.model.split('/').pop().replace(/-latest$/, '');
-        modelBadge.textContent = `· ${shortModel}`;
-        modelBadge.title = msg.model;
         modelBadge.style.marginLeft = '4px';
+        const displayModel = formatModelDisplay(msg.model);
+        // Bold during streaming (unconfirmed), plain once confirmed
+        modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
+        modelBadge.title = msg.model;
         header.appendChild(modelBadge);
     }
 
