@@ -1,8 +1,8 @@
 const GATEWAY_DEBUG = true;
 const GATEWAY_DEBUG_EVENTS = true;
-function gwLog(...args){ if (GATEWAY_DEBUG) console.log(...args); }
-function gwEventLog(...args){ if (GATEWAY_DEBUG_EVENTS) console.log(...args); }
-function gwWarn(...args){ if (GATEWAY_DEBUG) console.warn(...args); }
+function gwLog(...args) { if (GATEWAY_DEBUG) console.log(...args); }
+function gwEventLog(...args) { if (GATEWAY_DEBUG_EVENTS) console.log(...args); }
+function gwWarn(...args) { if (GATEWAY_DEBUG) console.warn(...args); }
 // Gateway WebSocket Client v3
 // Connects to OpenClaw Gateway for shared session chat
 
@@ -137,13 +137,13 @@ class GatewayClient {
         this._identityRecoveryAttempted = false;
 
         // Callbacks
-        this.onConnected = options.onConnected || (() => {});
-        this.onDisconnected = options.onDisconnected || (() => {});
-        this.onChatEvent = options.onChatEvent || (() => {});
-        this.onToolEvent = options.onToolEvent || (() => {});
-        this.onError = options.onError || (() => {});
-        this.onCrossSessionMessage = options.onCrossSessionMessage || (() => {});
-        
+        this.onConnected = options.onConnected || (() => { });
+        this.onDisconnected = options.onDisconnected || (() => { });
+        this.onChatEvent = options.onChatEvent || (() => { });
+        this.onToolEvent = options.onToolEvent || (() => { });
+        this.onError = options.onError || (() => { });
+        this.onCrossSessionMessage = options.onCrossSessionMessage || (() => { });
+
         // Track all subscribed sessions for cross-session notifications
         this._subscribedSessions = new Set();
     }
@@ -154,7 +154,7 @@ class GatewayClient {
             try {
                 this.desiredConnection = null; // prevent reconnect from onclose
                 this.socket.close();
-            } catch {}
+            } catch { }
             this.socket = null;
             this.connected = false;
         }
@@ -213,7 +213,7 @@ class GatewayClient {
                         this._connectSent = true;
                         return;
                     }
-                } catch {}
+                } catch { }
             }
             this._handleMessage(event.data);
         };
@@ -305,7 +305,7 @@ class GatewayClient {
 
             const serverName = result?.server?.host || 'moltbot';
             gwLog(`[Gateway] Connected to ${serverName}, session: ${this.sessionKey}`);
-            
+
             // Log granted scopes/auth info
             if (result?.auth?.scopes) {
                 gwLog(`[Gateway] Granted scopes: ${result.auth.scopes.join(', ')}`);
@@ -329,7 +329,7 @@ class GatewayClient {
             // Recover once from stale identity/token state observed as "User not found"
             if (!this._identityRecoveryAttempted && /user not found/i.test(errMsg)) {
                 this._identityRecoveryAttempted = true;
-                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch {}
+                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch { }
                 this.onError('Auth user missing; regenerating device identity and reconnecting...');
                 this.socket?.close();
                 this._scheduleReconnect();
@@ -355,6 +355,11 @@ class GatewayClient {
                 this._subscribeToSession(key);
             }
         }
+    }
+
+    // Public API for making requests (restores compatibility with older dashboard scripts)
+    async request(method, params, timeoutMs = 15000) {
+        return this._request(method, params, timeoutMs);
     }
 
     async _request(method, params, timeoutMs = 15000) {
@@ -438,14 +443,14 @@ class GatewayClient {
 
     _handleAgentEvent(payload) {
         if (!payload) return;
-        
+
         // Only handle tool events
         if (payload.stream !== 'tool') return;
-        
+
         const phase = payload.data?.phase;
         const toolName = payload.data?.name;
         const args = payload.data?.args;
-        
+
         if (phase === 'start' && toolName) {
             // Format the tool call for display
             let summary = `🔧 ${toolName}`;
@@ -464,7 +469,7 @@ class GatewayClient {
                     summary = `🌐 Fetch: ${(args.url || '').substring(0, 40)}`;
                 }
             }
-            
+
             // Emit as tool event callback
             if (this.onToolEvent) {
                 this.onToolEvent({
@@ -484,15 +489,15 @@ class GatewayClient {
         const eventSessionKey = payload.sessionKey || 'main';
         const currentKey = this.sessionKey.toLowerCase();
         const eventKey = eventSessionKey.toLowerCase();
-        
+
         if (eventKey !== currentKey) {
             // Cross-session message — route to notification callback
             const state = payload.state;
             const message = payload.message;
             const role = message?.role || '';
-            
+
             // Only log cross-session notifications, not every delta/tick (too noisy)
-            
+
             if (state === 'final' && role === 'assistant') {
                 let contentText = '';
                 let images = [];
@@ -571,7 +576,7 @@ class GatewayClient {
             const contentLen = contentText.length;
             const stopReason = message?.stopReason;
             const errorMsg = message?.errorMessage || payload.errorMessage;
-            
+
             if (errorMsg) {
                 console.error(`[Gateway] ❌ AI RESPONSE ERROR: ${errorMsg}`);
                 console.error(`[Gateway]    Provider: ${message?.provider || 'unknown'}, Model: ${message?.model || 'unknown'}`);
@@ -626,7 +631,7 @@ class GatewayClient {
             const msg = String(err?.message || '');
             if (!this._identityRecoveryAttempted && /user not found/i.test(msg)) {
                 this._identityRecoveryAttempted = true;
-                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch {}
+                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch { }
                 this.connected = false;
                 this.socket?.close();
                 this._scheduleReconnect();
@@ -675,7 +680,7 @@ class GatewayClient {
             attachments: attachments
         };
 
-        gwLog('[Gateway] Sending', attachments.length, 'image(s), total size:', 
+        gwLog('[Gateway] Sending', attachments.length, 'image(s), total size:',
             Math.round(attachments.reduce((sum, a) => sum + a.content.length, 0) / 1024), 'KB');
 
         // Log model info if available
@@ -688,7 +693,7 @@ class GatewayClient {
             const msg = String(err?.message || '');
             if (!this._identityRecoveryAttempted && /user not found/i.test(msg)) {
                 this._identityRecoveryAttempted = true;
-                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch {}
+                try { localStorage.removeItem(DEVICE_IDENTITY_KEY); } catch { }
                 this.connected = false;
                 this.socket?.close();
                 this._scheduleReconnect();

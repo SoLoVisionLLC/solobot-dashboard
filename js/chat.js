@@ -916,18 +916,26 @@ function createChatMessageElement(msg) {
     timeSpan.textContent = formatTime(msg.time);
     header.appendChild(timeSpan);
 
-    // Provider/Model badge for bot messages - same style as time
-    if (!isUser && !isSystem && msg.model) {
-        const providerModelBadge = document.createElement('span');
-        providerModelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
-        const provider = msg.provider || msg.model.split('/')[0] || 'unknown';
-        const model = msg.model.split('/').pop() || msg.model;
-        providerModelBadge.textContent = `· ${provider}/${model}`;
-        providerModelBadge.title = `Provider: ${provider}\nModel: ${msg.model}`;
-        header.appendChild(providerModelBadge);
-    }
-
     header.appendChild(nameSpan);
+
+    // Model badge for bot messages - same style as time
+    if (!isUser && !isSystem && msg.model) {
+        const modelBadge = document.createElement('span');
+        modelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
+        // For OpenRouter, show full path like "openrouter moonshotai/kimi-k2.5"
+        // For others like "google/gemini-flash-latest", show just "gemini-flash-latest"
+        let displayModel;
+        if (msg.model.startsWith('openrouter/')) {
+            displayModel = msg.model.replace('openrouter/', 'openrouter ');
+        } else if (msg.model.includes('/')) {
+            displayModel = msg.model.split('/').pop().replace(/-latest$/, '');
+        } else {
+            displayModel = msg.model;
+        }
+        modelBadge.textContent = `· ${displayModel}`;
+        modelBadge.title = msg.model;
+        header.appendChild(modelBadge);
+    }
 
     // Message content
     const content = document.createElement('div');
