@@ -1,6 +1,6 @@
 // js/memory-cards.js — True Org-Chart Tree Layout with Pan/Zoom Navigation
 
-(function() {
+(function () {
     'use strict';
 
     // Guard against early inline handler access before full API registration.
@@ -166,7 +166,7 @@
             disablePanOnZoom: false,
             disableZoomOnPan: false,
             exclude: ['.org-node-card'],
-            onTouch: function(e) {
+            onTouch: function (e) {
                 // Allow touch on nodes for click
                 return !e.target.closest('.org-node-card');
             }
@@ -497,7 +497,7 @@
         if (layout === 'org-tree') {
             return renderOrgTree(filter);
         }
-        return renderOrgTree(filter); // Use tree by default
+        return renderOrgTree(filter);
     }
 
     function drillInto(agentId) {
@@ -511,52 +511,337 @@
         renderAgentCardsView();
     }
 
+    // ── Full Agent Dashboard (replaces simple file list) ──
     function renderDrilledView(container) {
         const agent = currentDrilledAgent;
         const org = ORG_TREE[agent.id] || {};
         const files = agent.files || [];
-        const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name));
 
+        // Determine live status from available sessions
+        const sessions = window.availableSessions || [];
+        const agentSessions = sessions.filter(s => s.key?.startsWith(`agent:${agent.id}:`));
+        const lastActivity = agentSessions.reduce((max, s) => {
+            const ts = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
+            return ts > max ? ts : max;
+        }, 0);
+        const isActive = lastActivity && (Date.now() - lastActivity < 5 * 60 * 1000);
+        const isRecent = lastActivity && (Date.now() - lastActivity < 60 * 60 * 1000);
+        const statusLabel = isActive ? 'Active' : isRecent ? 'Recent' : 'Idle';
+        const statusClass = isActive ? 'success' : isRecent ? 'warning' : '';
+        const lastSession = agentSessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0];
+
+        // Compute token/cost summary from activity log
+        const activityLog = window.state?.activityLog || [];
+        const agentPrefix = `agent:${agent.id}:`;
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        const todayEvents = activityLog.filter(e => {
+            const ts = e.timestamp ? new Date(e.timestamp).getTime() : 0;
+            return ts >= todayStart.getTime() && (e.session?.startsWith(agentPrefix) || e.agentId === agent.id);
+        });
+        const msgCount = todayEvents.filter(e => e.type === 'message' || e.type === 'chat').length;
+        const estCost = (todayEvents.reduce((sum, e) => sum + (e.tokens || 0), 0) * 0.000003).toFixed(4);
+
+        // File summary
+        const sortedFiles = [...files].sort((a, b) => {
+            if (!a.modified) return 1;
+            if (!b.modified) return -1;
+            return new Date(b.modified) - new Date(a.modified);
+        });
         const rootFiles = sortedFiles.filter(f => !f.name.includes('/'));
-        const memoryFiles = sortedFiles.filter(f => f.name.startsWith('memory/'));
+        const memFiles = sortedFiles.filter(f => f.name.startsWith('memory/'));
 
-        let fileListHtml = '';
-        const renderFile = (f) => {
-            return `<div class="agent-file-item" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
-                <span class="agent-file-icon">📄</span>
-                <span class="agent-file-name">${escapeHtml(f.name)}</span>
-                <span class="agent-file-date">${f.modified ? timeAgo(f.modified) : ''}</span>
-            </div>`;
-        };
-
-        if (rootFiles.length) {
-            fileListHtml += '<div class="agent-file-group-title">Root Files</div>';
-            fileListHtml += rootFiles.map(renderFile).join('');
-        }
-        if (memoryFiles.length) {
-            fileListHtml += '<div class="agent-file-group-title">Memory</div>';
-            fileListHtml += memoryFiles.map(renderFile).join('');
-        }
+        // Recent 5 sessions for this agent
+        const recentSessions = agentSessions
+            .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+            .slice(0, 5);
 
         container.innerHTML = `
+            <!-- Back Nav -->
             <div class="agent-drill-header">
-                <button class="btn btn-ghost" onclick="window._memoryCards.backToGrid()">← Back to Org Chart</button>
+                <button class="btn btn-ghost" onclick="window._memoryCards.backToGrid()">← Org Chart</button>
                 <div class="agent-drill-title">
-                    <span class="org-node-avatar" style="font-size: 24px; width: 36px; height: 36px;">${org.emoji || '🤖'}</span>
-                    <span>${escapeHtml(org.name || agent.name)}</span>
-                    ${org.role ? `<span class="agent-card-role-badge">${escapeHtml(org.role)}</span>` : ''}
+                    <span class="org-node-avatar" style="font-size: 28px; width: 42px; height: 42px; line-height:42px; text-align:center; display:inline-block;">${org.emoji || '🤖'}</span>
+                    <div>
+                        <div style="font-size:18px; font-weight:700;">${escapeHtml(org.name || agent.name)}</div>
+                        <div style="font-size:12px; color:var(--text-muted);">${org.role ? escapeHtml(org.role) + ' · ' : ''}${escapeHtml(org.description || '')}</div>
+                    </div>
+                    <span class="agent-status-badge ${statusClass}" style="margin-left:auto;">${statusLabel}</span>
+                </div>
+                <!-- Quick Actions -->
+                <div class="agent-quick-actions">
+                    <button class="btn btn-primary btn-sm" onclick="window._memoryCards.switchToAgentChat('${agent.id}')">💬 Chat</button>
+                    <button class="btn btn-secondary btn-sm" onclick="window._memoryCards.openAgentMemory('${agent.id}')">🧠 Memory</button>
+                    <button class="btn btn-secondary btn-sm" id="agent-ping-btn-${agent.id}" onclick="window._memoryCards.pingAgent('${agent.id}')">⚡ Ping</button>
                 </div>
             </div>
-            <div class="agent-drill-layout">
-                <div class="agent-drill-files">
-                    <div class="agent-drill-files-header">Files (${files.length})</div>
-                    ${fileListHtml || '<div class="empty-state" style="padding: var(--space-4);">No files</div>'}
+
+            <!-- Dashboard Grid -->
+            <div class="agent-dashboard-grid">
+
+                <!-- Status Card -->
+                <div class="agent-dash-card">
+                    <div class="agent-dash-card-title">📊 Status & Activity</div>
+                    <div class="agent-dash-stats">
+                        <div class="agent-dash-stat"><span class="agent-dash-stat-val">${agentSessions.length}</span><span class="agent-dash-stat-label">Sessions</span></div>
+                        <div class="agent-dash-stat"><span class="agent-dash-stat-val">${lastActivity ? timeAgo(lastActivity) : '—'}</span><span class="agent-dash-stat-label">Last Active</span></div>
+                        <div class="agent-dash-stat"><span class="agent-dash-stat-val">${msgCount}</span><span class="agent-dash-stat-label">Msgs Today</span></div>
+                        <div class="agent-dash-stat"><span class="agent-dash-stat-val">$${estCost}</span><span class="agent-dash-stat-label">Est. Cost Today</span></div>
+                    </div>
+                    ${lastSession ? `<div class="agent-last-session">Last session: <strong>${escapeHtml(lastSession.displayName || lastSession.key)}</strong></div>` : ''}
                 </div>
-                <div class="agent-drill-preview" id="agent-drill-preview">
-                    <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px;">Select a file to preview</div>
+
+                <!-- Model Config Card -->
+                <div class="agent-dash-card">
+                    <div class="agent-dash-card-title">🤖 Model Configuration</div>
+                    <div id="agent-model-config-${agent.id}" class="agent-model-config-body">
+                        <div style="color:var(--text-muted); font-size:12px;">Loading...</div>
+                    </div>
                 </div>
+
+                <!-- Recent Sessions Card -->
+                <div class="agent-dash-card">
+                    <div class="agent-dash-card-title">🕐 Recent Sessions</div>
+                    ${recentSessions.length ? recentSessions.map(s => `
+                        <div class="agent-session-row" onclick="window._memoryCards.switchToSession('${escapeHtml(s.key)}')">
+                            <span class="agent-session-name">${escapeHtml(s.displayName || s.key.replace(`agent:${agent.id}:`, ''))}</span>
+                            <span class="agent-session-time">${timeAgo(new Date(s.updatedAt || 0).getTime())}</span>
+                        </div>
+                    `).join('') : '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No sessions yet</div>'}
+                </div>
+
+                <!-- Memory Files Card -->
+                <div class="agent-dash-card agent-dash-card-wide">
+                    <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>📁 Memory Files (${files.length})</span>
+                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemory('${agent.id}')">View All →</button>
+                    </div>
+                    <div class="agent-files-compact">
+                        ${sortedFiles.slice(0, 8).map(f => `
+                            <div class="agent-file-compact-row" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
+                                <span class="agent-file-compact-icon">${f.name.endsWith('.md') ? '📝' : '📄'}</span>
+                                <span class="agent-file-compact-name">${escapeHtml(f.name)}</span>
+                                <span class="agent-file-compact-date">${f.modified ? timeAgo(f.modified) : ''}</span>
+                            </div>
+                        `).join('') || '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No files found</div>'}
+                        ${files.length > 8 ? `<div style="color:var(--text-muted); font-size:11px; padding:6px 0;">+${files.length - 8} more — click "View All"</div>` : ''}
+                    </div>
+                </div>
+
+                <!-- System Prompt Card -->
+                <div class="agent-dash-card agent-dash-card-wide" id="agent-identity-card-${agent.id}">
+                    <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>📋 System Prompt</span>
+                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.toggleIdentityExpand('${agent.id}')">Expand</button>
+                    </div>
+                    <div class="agent-identity-preview" id="agent-identity-preview-${agent.id}">
+                        <div style="color:var(--text-muted); font-size:12px;">Loading...</div>
+                    </div>
+                </div>
+
             </div>
+
+            <!-- File Preview Panel (hidden until file selected) -->
+            <div class="agent-drill-preview" id="agent-drill-preview" style="display:none;"></div>
         `;
+
+        // Load model config async
+        loadAgentModelConfig(agent.id);
+        // Load identity preview async
+        loadAgentIdentityPreview(agent.id, agent, org);
+    }
+
+    async function loadAgentModelConfig(agentId) {
+        const el = document.getElementById(`agent-model-config-${agentId}`);
+        if (!el) return;
+
+        try {
+            const [agentModelRes, allModelsRes] = await Promise.all([
+                fetch(`/api/models/agent/${agentId}`).then(r => r.json()),
+                fetch('/api/models/list').then(r => r.json())
+            ]);
+
+            const currentModelId = (agentModelRes?.modelId && agentModelRes.modelId !== 'global/default')
+                ? agentModelRes.modelId : null;
+
+            // Flatten all models for the dropdown
+            const allModels = [];
+            for (const [provider, models] of Object.entries(allModelsRes || {})) {
+                for (const m of models) {
+                    allModels.push({ id: m.id, name: m.name || m.id.split('/').pop(), provider });
+                }
+            }
+
+            el.innerHTML = `
+                <div class="agent-model-row">
+                    <label class="agent-model-label">Primary Model</label>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <select id="agent-primary-model-${agentId}" class="input agent-model-select">
+                            <option value="global/default" ${!currentModelId ? 'selected' : ''}>🌐 Global Default</option>
+                            ${allModels.map(m => `<option value="${escapeHtml(m.id)}" ${currentModelId === m.id ? 'selected' : ''}>${escapeHtml(m.name)} (${escapeHtml(m.provider)})</option>`).join('')}
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="window._memoryCards.saveAgentModel('${agentId}')">Save</button>
+                    </div>
+                    <div id="agent-model-save-status-${agentId}" style="font-size:11px; color:var(--text-muted); margin-top:4px; min-height:16px;"></div>
+                </div>
+                <div class="agent-model-row" style="margin-top:8px;">
+                    <label class="agent-model-label" style="color:var(--text-muted);">Current Active: <strong style="color:var(--text-primary);">${escapeHtml(currentModelId || 'Global Default')}</strong></label>
+                </div>
+            `;
+        } catch (e) {
+            el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Failed to load model config</div>`;
+        }
+    }
+
+    async function saveAgentModel(agentId) {
+        const select = document.getElementById(`agent-primary-model-${agentId}`);
+        const status = document.getElementById(`agent-model-save-status-${agentId}`);
+        if (!select) return;
+
+        const modelId = select.value;
+        status.textContent = 'Saving...';
+        status.style.color = 'var(--text-muted)';
+
+        try {
+            const res = await fetch('/api/models/set-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId, modelId })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                status.textContent = '✅ Saved successfully';
+                status.style.color = 'var(--success)';
+                // Reload model config to show updated state
+                setTimeout(() => loadAgentModelConfig(agentId), 1000);
+            } else {
+                status.textContent = `❌ ${data.error || 'Failed to save'}`;
+                status.style.color = 'var(--brand-red)';
+            }
+        } catch (e) {
+            status.textContent = `❌ Network error`;
+            status.style.color = 'var(--brand-red)';
+        }
+    }
+
+    async function pingAgent(agentId) {
+        const btn = document.getElementById(`agent-ping-btn-${agentId}`);
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = '⏳ Pinging...';
+
+        try {
+            // Get this agent's configured model
+            const agentModelRes = await fetch(`/api/models/agent/${agentId}`).then(r => r.json());
+            const modelId = (agentModelRes?.modelId && agentModelRes.modelId !== 'global/default')
+                ? agentModelRes.modelId
+                : (window.currentModel || 'openrouter/auto');
+
+            const start = Date.now();
+            const res = await fetch('/api/models/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: modelId, prompt: 'Ping' })
+            });
+            const data = await res.json();
+            const latency = data.latencyMs || (Date.now() - start);
+
+            if (data.success) {
+                btn.textContent = `✅ ${latency}ms`;
+                btn.style.color = 'var(--success)';
+            } else {
+                btn.textContent = `❌ Error`;
+                btn.style.color = 'var(--brand-red)';
+                btn.title = data.error || 'Ping failed';
+            }
+        } catch (e) {
+            btn.textContent = '❌ Failed';
+            btn.style.color = 'var(--brand-red)';
+        }
+
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = '⚡ Ping';
+            btn.style.color = '';
+        }, 5000);
+    }
+
+    async function loadAgentIdentityPreview(agentId, agent, org) {
+        const el = document.getElementById(`agent-identity-preview-${agentId}`);
+        if (!el) return;
+
+        try {
+            let content = null;
+            // Try to load IDENTITY.md
+            const identityFile = agent.files?.find(f => f.name === 'IDENTITY.md' || f.name === 'identity.md');
+            if (identityFile) {
+                const endpoint = agent.isDefault
+                    ? `/api/memory/${encodeURIComponent(identityFile.name)}`
+                    : `/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(identityFile.name)}`;
+                const res = await fetch(endpoint);
+                const data = await res.json();
+                content = data.content || null;
+            }
+
+            if (content) {
+                // Show first 300 chars collapsed, expand on button click
+                const preview = content.slice(0, 300);
+                const hasMore = content.length > 300;
+                el.innerHTML = `
+                    <div id="agent-identity-text-${agentId}" class="agent-identity-text collapsed">
+                        <pre style="white-space:pre-wrap; font-size:11px; color:var(--text-secondary); margin:0;">${escapeHtml(preview)}${hasMore ? '...' : ''}</pre>
+                    </div>
+                    ${hasMore ? `<div id="agent-identity-full-${agentId}" class="agent-identity-text" style="display:none;"><pre style="white-space:pre-wrap; font-size:11px; color:var(--text-secondary); margin:0;">${escapeHtml(content)}</pre></div>` : ''}
+                    <div style="margin-top:8px; display:flex; gap:8px;">
+                        ${identityFile ? `<button class="btn btn-ghost btn-xs" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(identityFile.name)}')` : `viewAgentFile('${escapeHtml(agentId)}', '${escapeHtml(identityFile.name)}')`}">✏️ Edit</button>` : ''}
+                    </div>
+                `;
+            } else {
+                el.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:4px 0;">No IDENTITY.md found. <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemory('${agentId}')">Browse files →</button></div>`;
+            }
+        } catch (e) {
+            el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Could not load identity</div>`;
+        }
+    }
+
+    function toggleIdentityExpand(agentId) {
+        const collapsed = document.getElementById(`agent-identity-text-${agentId}`);
+        const full = document.getElementById(`agent-identity-full-${agentId}`);
+        const btn = document.querySelector(`#agent-identity-card-${agentId} .btn-ghost`);
+        if (!collapsed) return;
+        const isCollapsed = collapsed.style.display !== 'none';
+        if (isCollapsed) {
+            collapsed.style.display = 'none';
+            if (full) full.style.display = '';
+            if (btn) btn.textContent = 'Collapse';
+        } else {
+            collapsed.style.display = '';
+            if (full) full.style.display = 'none';
+            if (btn) btn.textContent = 'Expand';
+        }
+    }
+
+    function switchToAgentChat(agentId) {
+        if (typeof switchToAgent === 'function') switchToAgent(agentId);
+        else if (typeof showPage === 'function') showPage('chat');
+    }
+
+    function switchToSession(sessionKey) {
+        if (typeof window.switchToSession === 'function') {
+            window.switchToSession(sessionKey);
+            if (typeof showPage === 'function') showPage('chat');
+        }
+    }
+
+    function openAgentMemory(agentId) {
+        // Switch to classic view filtered to this agent's files
+        if (window._memoryCards) window._memoryCards.setLayout('classic');
+        const searchEl = document.getElementById('memory-search');
+        if (searchEl) {
+            searchEl.value = agentId;
+            if (typeof renderMemoryFiles === 'function') renderMemoryFiles(agentId);
+        }
+        // Back out of drill-down
+        currentDrilledAgent = null;
     }
 
     async function previewFile(filename) {
@@ -601,7 +886,7 @@
     function initKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
             // Only active when on memory page
-            const memPage = document.getElementById('page-memory');
+            const memPage = document.getElementById('page-agents');
             if (!memPage || memPage.style.display === 'none') return;
 
             // Space + drag = pan
@@ -654,7 +939,13 @@
         zoomOut,
         resetView,
         fitToContent,
-        toggleMinimap: function() {
+        saveAgentModel,
+        pingAgent,
+        switchToAgentChat,
+        switchToSession,
+        openAgentMemory,
+        toggleIdentityExpand,
+        toggleMinimap: function () {
             const minimap = document.getElementById('org-minimap');
             if (minimap) {
                 minimap.classList.toggle('collapsed');
@@ -662,7 +953,7 @@
             }
         }
     });
-    
+
     // Restore minimap state
     document.addEventListener('DOMContentLoaded', () => {
         const collapsed = localStorage.getItem('solobot-minimap-collapsed') === 'true';

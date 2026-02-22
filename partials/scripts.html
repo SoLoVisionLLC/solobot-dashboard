@@ -80,7 +80,7 @@
     // Valid page names
     const VALID_PAGES = [
         "dashboard",
-        "memory",
+        "agents",
         "chat",
         "system",
         "products",
@@ -195,8 +195,8 @@
             }
         }
 
-        // If showing memory page, load files
-        if (pageName === "memory") {
+        // If showing agents page, load files and init layout
+        if (pageName === "agents") {
             renderMemoryFilesForPage();
         }
 

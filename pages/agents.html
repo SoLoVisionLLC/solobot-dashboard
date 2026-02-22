@@ -1,0 +1,58 @@
+<!-- =================== AGENTS PAGE =================== -->
+<div id="page-agents" class="page">
+    <div class="memory-page">
+        <div class="page-header" style="display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-3);">
+            <div>
+                <h1 class="page-title">🤖 Agents</h1>
+                <p class="page-subtitle">Your AI team — org chart, agent status, model config, and memory files.</p>
+            </div>
+            <div class="memory-layout-toggle" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <button id="memory-toggle-grid" title="Org Chart"
+                    onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
+                <button id="memory-toggle-list" title="Classic View"
+                    onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
+            </div>
+        </div>
+
+        <div class="memory-search-bar">
+            <input type="text" id="memory-search" class="input" placeholder="Search agents or files..."
+                oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards.renderAgentCardsView(this.value)}">
+            <button class="btn btn-secondary" onclick="syncMemoryFilesNow()">🔄 Sync</button>
+            <div id="sync-status" class="sync-status">
+                <span class="status-dot success"></span>
+                Last synced: <span id="last-memory-sync">--</span>
+            </div>
+        </div>
+
+        <!-- Org Tree / Cards View -->
+        <div id="memory-cards-view" style="display: none;"></div>
+
+        <!-- Classic / File Browser View -->
+        <div id="memory-classic-view">
+            <div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-bottom: 16px;">
+                <!-- File Tree Browser -->
+                <div
+                    style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 12px; max-height: 600px; overflow-y: auto;">
+                    <div
+                        style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase;">
+                        File Tree</div>
+                    <div style="margin-bottom: 8px;">
+                        <input type="text" id="memory-browser-search" class="input" placeholder="Search files..."
+                            oninput="searchMemoryFiles()" style="font-size: 12px; padding: 4px 8px; width: 100%;">
+                    </div>
+                    <div id="memory-tree" style="font-size: 12px;"></div>
+                </div>
+                <!-- File Preview -->
+                <div id="memory-file-preview"
+                    style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); min-height: 200px;">
+                    <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px;">Select a
+                        file to preview</div>
+                </div>
+            </div>
+            <div id="memory-files-grid" class="docs-grid">
+                <!-- Memory files rendered here -->
+            </div>
+        </div>
+    </div>
+</div>
+<!-- END AGENTS PAGE -->

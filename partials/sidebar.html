@@ -1,118 +1,70 @@
-            <aside class="sidebar" id="sidebar">
-                <button
-                    class="sidebar-toggle"
-                    onclick="toggleSidebarPin()"
-                    title="Pin sidebar"
-                >
-                    <span id="sidebar-pin-icon">🔓</span>
+<aside class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" onclick="toggleSidebarPin()" title="Pin sidebar">
+        <span id="sidebar-pin-icon">🔓</span>
+    </button>
+    <div class="sidebar-logo">
+        <img src="/solobot-avatar.png" alt="SoLoBot" class="sidebar-logo-img">
+    </div>
+
+    <nav class="sidebar-nav">
+        <a class="sidebar-item active" onclick="showPage('dashboard')" data-page="dashboard">
+            <span class="sidebar-item-icon">🏠</span>
+            <span class="sidebar-item-text">Dashboard</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('agents')" data-page="agents">
+            <span class="sidebar-item-icon">🤖</span>
+            <span class="sidebar-item-text">Agents</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('chat')" data-page="chat">
+            <span class="sidebar-item-icon">💬</span>
+            <span class="sidebar-item-text">Chat</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('system')" data-page="system">
+            <span class="sidebar-item-icon">📟</span>
+            <span class="sidebar-item-text">System</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('products')" data-page="products">
+            <span class="sidebar-item-icon">📦</span>
+            <span class="sidebar-item-text">Products</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('business')" data-page="business">
+            <span class="sidebar-item-icon">💼</span>
+            <span class="sidebar-item-text">Business</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('cron')" data-page="cron">
+            <span class="sidebar-item-icon">⏰</span>
+            <span class="sidebar-item-text">Cron</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('security')" data-page="security">
+            <span class="sidebar-item-icon">🛡️</span>
+            <span class="sidebar-item-text">Security</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('skills')" data-page="skills">
+            <span class="sidebar-item-icon">🧩</span>
+            <span class="sidebar-item-text">Skills</span>
+        </a>
+        <a class="sidebar-item" onclick="showPage('model-validator')" data-page="model-validator">
+            <span class="sidebar-item-icon">🧪</span>
+            <span class="sidebar-item-text">Model Validator</span>
+        </a>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title sidebar-section-title-row">
+                <span>Agents</span>
+                <button id="sidebar-agents-manage-btn" class="sidebar-section-action" title="Manage agents">
+                    ⚙️
                 </button>
-                <div class="sidebar-logo">
-                    <img
-                        src="/solobot-avatar.png"
-                        alt="SoLoBot"
-                        class="sidebar-logo-img"
-                    >
-                </div>
+            </div>
+            <div id="sidebar-agents-list">
+                <!-- Dynamically populated from /api/agents -->
+            </div>
+        </div>
+    </nav>
 
-                <nav class="sidebar-nav">
-                    <a
-                        class="sidebar-item active"
-                        onclick="showPage('dashboard')"
-                        data-page="dashboard"
-                    >
-                        <span class="sidebar-item-icon">🏠</span>
-                        <span class="sidebar-item-text">Dashboard</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('memory')"
-                        data-page="memory"
-                    >
-                        <span class="sidebar-item-icon">🧠</span>
-                        <span class="sidebar-item-text">Memory</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('chat')"
-                        data-page="chat"
-                    >
-                        <span class="sidebar-item-icon">💬</span>
-                        <span class="sidebar-item-text">Chat</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('system')"
-                        data-page="system"
-                    >
-                        <span class="sidebar-item-icon">📟</span>
-                        <span class="sidebar-item-text">System</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('products')"
-                        data-page="products"
-                    >
-                        <span class="sidebar-item-icon">📦</span>
-                        <span class="sidebar-item-text">Products</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('business')"
-                        data-page="business"
-                    >
-                        <span class="sidebar-item-icon">💼</span>
-                        <span class="sidebar-item-text">Business</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('cron')"
-                        data-page="cron"
-                    >
-                        <span class="sidebar-item-icon">⏰</span>
-                        <span class="sidebar-item-text">Cron</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('security')"
-                        data-page="security"
-                    >
-                        <span class="sidebar-item-icon">🛡️</span>
-                        <span class="sidebar-item-text">Security</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('skills')"
-                        data-page="skills"
-                    >
-                        <span class="sidebar-item-icon">🧩</span>
-                        <span class="sidebar-item-text">Skills</span>
-                    </a>
-                    <a
-                        class="sidebar-item"
-                        onclick="showPage('model-validator')"
-                        data-page="model-validator"
-                    >
-                        <span class="sidebar-item-icon">🧪</span>
-                        <span class="sidebar-item-text">Model Validator</span>
-                    </a>
-
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title sidebar-section-title-row">
-                            <span>Agents</span>
-                            <button id="sidebar-agents-manage-btn" class="sidebar-section-action" title="Manage agents">
-                                ⚙️
-                            </button>
-                        </div>
-                        <div id="sidebar-agents-list">
-                            <!-- Dynamically populated from /api/agents -->
-                        </div>
-                    </div>
-                </nav>
-
-                <div class="sidebar-footer">
-                    <a class="sidebar-item" onclick="openSettingsModal()">
-                        <span class="sidebar-item-icon">🔧</span>
-                        <span class="sidebar-item-text">Settings</span>
-                    </a>
-                </div>
-            </aside>
+    <div class="sidebar-footer">
+        <a class="sidebar-item" onclick="openSettingsModal()">
+            <span class="sidebar-item-icon">🔧</span>
+            <span class="sidebar-item-text">Settings</span>
+        </a>
+    </div>
+</aside>
