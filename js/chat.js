@@ -1389,16 +1389,15 @@ function createChatPageMessage(msg) {
     header.appendChild(sender);
     header.appendChild(time);
 
-    // Provider/Model badge for bot messages - same style as time
+    // Model badge for bot messages - same style as time, relative timestamp preserved
     if (isBot && msg.model) {
-        const providerModelBadge = document.createElement('span');
-        providerModelBadge.className = 'chat-page-bubble-time';
-        const provider = msg.provider || msg.model.split('/')[0] || 'unknown';
-        const model = msg.model.split('/').pop() || msg.model;
-        providerModelBadge.textContent = `· ${provider}/${model}`;
-        providerModelBadge.title = `Provider: ${provider}\nModel: ${msg.model}`;
-        providerModelBadge.style.marginLeft = '4px';
-        header.appendChild(providerModelBadge);
+        const modelBadge = document.createElement('span');
+        modelBadge.className = 'chat-page-bubble-time';
+        const shortModel = msg.model.split('/').pop().replace(/-latest$/, '');
+        modelBadge.textContent = `· ${shortModel}`;
+        modelBadge.title = msg.model;
+        modelBadge.style.marginLeft = '4px';
+        header.appendChild(modelBadge);
     }
 
     bubble.appendChild(header);
