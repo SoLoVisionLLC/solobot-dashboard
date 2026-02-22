@@ -20,6 +20,46 @@ function normalizeMessageText(text) {
     return String(text || '').replace(/\r\n/g, '\n');
 }
 
+function extractHistoryTextFromPart(part) {
+    if (!part || typeof part !== 'object') return '';
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.input_text === 'string') return part.input_text;
+    if (typeof part.output_text === 'string') return part.output_text;
+    if (typeof part.content === 'string' && part.type !== 'image') return part.content;
+    return '';
+}
+
+function extractHistoryText(container) {
+    if (!container) return '';
+    let text = '';
+
+    if (Array.isArray(container.content)) {
+        for (const part of container.content) {
+            text += extractHistoryTextFromPart(part);
+        }
+    } else if (typeof container.content === 'string') {
+        text += container.content;
+    }
+
+    // Some providers return output blocks with nested content parts.
+    if (Array.isArray(container.output)) {
+        for (const block of container.output) {
+            if (!block || typeof block !== 'object') continue;
+            if (typeof block.text === 'string') text += block.text;
+            if (typeof block.output_text === 'string') text += block.output_text;
+            if (Array.isArray(block.content)) {
+                for (const part of block.content) {
+                    text += extractHistoryTextFromPart(part);
+                }
+            }
+        }
+    }
+
+    if (!text && typeof container.output_text === 'string') text = container.output_text;
+    if (!text && typeof container.text === 'string') text = container.text;
+    return (text || '').trim();
+}
+
 function mergeStreamingDelta(previousText, incomingText) {
     const prev = normalizeMessageText(previousText);
     const next = normalizeMessageText(incomingText);
@@ -191,14 +231,14 @@ function showNotificationToast(title, body, sessionKey, onClick = null, duration
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-toast-container';
-        container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
+        container.style.cssText = 'position: fixed; bottom: 96px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
         document.body.appendChild(container);
     }
 
     // Keep all notification toasts in the same visible corner.
     if (container.id === 'toast-container') {
         container.style.position = 'fixed';
-        container.style.bottom = '20px';
+        container.style.bottom = '96px';
         container.style.right = '20px';
         container.style.flexDirection = 'column';
     }
@@ -706,10 +746,8 @@ function loadHistoryMessages(messages) {
 
         if (Array.isArray(container.content)) {
             for (const part of container.content) {
-                if (part.type === 'text') {
-                    text += part.text || '';
-                } else if (part.type === 'input_text') {
-                    text += part.text || part.input_text || '';
+                if (part.type === 'text' || part.type === 'input_text' || part.type === 'output_text') {
+                    text += extractHistoryTextFromPart(part);
                 } else if (part.type === 'image') {
                     // Image attachment - reconstruct data URI
                     if (part.content && part.mimeType) {
@@ -727,9 +765,8 @@ function loadHistoryMessages(messages) {
                     images.push(part.image_url.url);
                 }
             }
-        } else if (typeof container.content === 'string') {
-            text = container.content;
         }
+        if (!text) text = extractHistoryText(container);
 
         // Check for attachments array (our send format)
         if (Array.isArray(container.attachments)) {
@@ -740,7 +777,6 @@ function loadHistoryMessages(messages) {
             }
         }
 
-        if (!text && typeof container.text === 'string') text = container.text;
         return { text: (text || '').trim(), images };
     };
 
@@ -921,20 +957,7 @@ function mergeHistoryMessages(messages) {
     let newChatCount = 0;
     let newSystemCount = 0;
 
-    const extractContentText = (container) => {
-        if (!container) return '';
-        let text = '';
-        if (Array.isArray(container.content)) {
-            for (const part of container.content) {
-                if (part.type === 'text') text += part.text || '';
-                if (part.type === 'input_text') text += part.text || part.input_text || '';
-            }
-        } else if (typeof container.content === 'string') {
-            text = container.content;
-        }
-        if (!text && typeof container.text === 'string') text = container.text;
-        return (text || '').trim();
-    };
+    const extractContentText = (container) => extractHistoryText(container);
 
     for (const msg of messages) {
         const msgId = msg.id || 'm' + msg.timestamp;
