@@ -272,8 +272,8 @@ window.changeSessionModel = async function () {
         // 1. Update gateway session if applicable
         if (gateway && gateway.isConnected()) {
             gateway.request('sessions.patch', {
-                sessionKey: window.currentSessionName, // Use global currentSessionName
-                updates: { model: selectedModel }
+                key: window.currentSessionName,
+                model: selectedModel
             });
         }
 
