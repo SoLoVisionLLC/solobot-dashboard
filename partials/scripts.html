@@ -92,16 +92,20 @@
         "test-results",
     ];
 
-    // Get page from URL path
+    // Get page name and optional agent ID from URL path
     function getPageFromURL() {
-        const path = window.location.pathname.replace(
-            /^\/+|\/+$/g,
-            "",
-        ); // trim slashes
-        if (path && VALID_PAGES.includes(path)) {
-            return path;
+        const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+
+        // /agents/:id deep link
+        const agentMatch = rawPath.match(/^agents\/([^/]+)$/);
+        if (agentMatch) {
+            window._deepLinkAgentId = agentMatch[1]; // stash for auto-drill
+            return 'agents';
         }
-        return "dashboard"; // default
+        window._deepLinkAgentId = null;
+
+        if (rawPath && VALID_PAGES.includes(rawPath)) return rawPath;
+        return 'dashboard';
     }
 
     // Sidebar pin toggle
@@ -183,15 +187,9 @@
 
         // Update URL without reload
         if (updateURL) {
-            const newPath = pageName === "dashboard"
-                ? "/"
-                : "/" + pageName;
+            const newPath = pageName === 'dashboard' ? '/' : '/' + pageName;
             if (window.location.pathname !== newPath) {
-                history.pushState(
-                    { page: pageName },
-                    "",
-                    newPath,
-                );
+                history.pushState({ page: pageName, agentId: null }, '', newPath);
             }
         }
 
@@ -236,20 +234,40 @@
     }
 
     // Handle browser back/forward buttons
-    window.addEventListener("popstate", (event) => {
-        const pageName = event.state?.page ||
-            getPageFromURL();
-        showPage(pageName, false); // Don't update URL on popstate
+    window.addEventListener('popstate', (event) => {
+        const state = event.state;
+        const pageName = state?.page || getPageFromURL();
+        showPage(pageName, false);
+        // If popping back to an agent deep link, auto-drill
+        if (pageName === 'agents' && state?.agentId && window._memoryCards) {
+            setTimeout(() => window._memoryCards.drillInto(state.agentId), 100);
+        } else if (pageName === 'agents' && window._memoryCards) {
+            window._memoryCards.backToGrid();
+        }
     });
 
     // Initialize page from URL on load
-    document.addEventListener(
-        "DOMContentLoaded",
-        () => {
-            const initialPage = getPageFromURL();
-            showPage(initialPage, false); // Don't push state on initial load
-        },
-    );
+    document.addEventListener('DOMContentLoaded', () => {
+        // Check for server-injected deep link (from /agents/:id URL)
+        const metaDeepLink = document.querySelector('meta[name="x-agent-deep-link"]');
+        const deepLinkId = metaDeepLink?.content || window._deepLinkAgentId || null;
+
+        const initialPage = getPageFromURL();
+        showPage(initialPage, false);
+
+        // Auto-drill into the agent after memory-cards has loaded agents
+        if (deepLinkId) {
+            const tryDrill = (attempts = 0) => {
+                if (window._memoryCards && typeof window._memoryCards.drillInto === 'function') {
+                    window._memoryCards.drillInto(deepLinkId);
+                } else if (attempts < 20) {
+                    setTimeout(() => tryDrill(attempts + 1), 200);
+                }
+            };
+            // Give the org chart time to fetch agents data first
+            setTimeout(() => tryDrill(), 600);
+        }
+    });
 
     // Render memory files for the Memory page
     async function renderMemoryFilesForPage(

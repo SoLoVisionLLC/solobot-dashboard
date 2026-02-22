@@ -2411,7 +2411,8 @@ const server = http.createServer((req, res) => {
   const pageRoutes = {
     '/': 'dashboard',
     '/dashboard': 'dashboard',
-    '/memory': 'memory',
+    '/agents': 'agents',
+    '/memory': 'agents',      // legacy redirect
     '/chat': 'chat',
     '/system': 'system',
     '/products': 'products',
@@ -2423,13 +2424,28 @@ const server = http.createServer((req, res) => {
     '/validator': 'model-validator',
   };
 
-  const pageName = pageRoutes[url.pathname];
+  // Handle /agents/:id deep links
+  let deepLinkAgentId = null;
+  const agentDeepLinkMatch = url.pathname.match(/^\/agents\/([^/]+)$/);
+  if (agentDeepLinkMatch) {
+    deepLinkAgentId = agentDeepLinkMatch[1];
+  }
+
+  const pageName = pageRoutes[url.pathname] || (agentDeepLinkMatch ? 'agents' : null);
   if (!pageName && !url.pathname.startsWith('/api/')) {
     // Unknown non-API route — default to dashboard
   }
 
-  const resolvedPage = pageName || 'dashboard';
-  const pageContent = assemblePage(resolvedPage);
+  let resolvedPage = pageName || 'dashboard';
+  let pageContent = assemblePage(resolvedPage);
+
+  // Inject agent deep-link meta tag so the client can auto-drill on load
+  if (deepLinkAgentId) {
+    pageContent = pageContent.replace(
+      '<meta charset="UTF-8">',
+      `<meta charset="UTF-8">\n<meta name="x-agent-deep-link" content="${deepLinkAgentId.replace(/"/g, '')}">`,
+    );
+  }
   const pageHash = crypto.createHash('md5').update(pageContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');

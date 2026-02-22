@@ -501,13 +501,30 @@
     }
 
     function drillInto(agentId) {
+        // If agentsData not yet loaded, wait for it
+        if (!agentsData || !agentsData.length) {
+            setTimeout(() => drillInto(agentId), 200);
+            return;
+        }
         currentDrilledAgent = agentsData.find(a => a.id === agentId);
-        if (!currentDrilledAgent) return;
+        if (!currentDrilledAgent) {
+            console.warn('[Agents] drillInto: agent not found:', agentId);
+            return;
+        }
+        // Push deep-link URL
+        const newPath = `/agents/${agentId}`;
+        if (window.location.pathname !== newPath) {
+            history.pushState({ page: 'agents', agentId }, '', newPath);
+        }
         renderAgentCardsView();
     }
 
     function backToGrid() {
         currentDrilledAgent = null;
+        // Restore /agents URL
+        if (window.location.pathname !== '/agents') {
+            history.pushState({ page: 'agents', agentId: null }, '', '/agents');
+        }
         renderAgentCardsView();
     }
 
