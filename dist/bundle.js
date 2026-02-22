@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-22T14:24:59Z
+// Generated: 2026-02-22T14:33:50Z
 // Modules: 25
 
 
@@ -3575,7 +3575,15 @@ window.changeSessionModel = async function () {
     window._lastManualModelChange = Date.now();
 
     try {
-        const agentId = window.currentAgentId || 'main'; // Use global currentAgentId
+        // Smartly determine which agent we're changing: 
+        // If we're on the Agents page and drilled into an agent, use that agent. Otherwise, use the active chat agent.
+        let targetAgentId = window.currentAgentId || 'main';
+        if (typeof window._activePage === 'function' && window._activePage() === 'agents' && window._memoryCards && window._memoryCards.getCurrentDrilledAgent) {
+            const drilled = window._memoryCards.getCurrentDrilledAgent();
+            if (drilled) targetAgentId = drilled.id;
+        }
+
+        const agentId = targetAgentId;
         console.log(`[Dashboard] Applying model change for agent: ${agentId}, model: ${selectedModel}`);
 
         // Update the lock immediately so the sync logic doesn't revert it
@@ -3667,6 +3675,11 @@ window.changeSessionModel = async function () {
             }
 
             showToast(`Model set to ${selectedModel.split('/').pop()}`, 'success');
+
+            // Dispatch event so other UI elements (like Agents dashboard) can sync instantly
+            document.dispatchEvent(new CustomEvent('modelChanged', {
+                detail: { agentId, modelId: selectedModel, source: 'header-dropdown' }
+            }));
         }
     } catch (error) {
         console.error('[Dashboard] Failed to change model:', error);
@@ -3789,6 +3802,29 @@ window.loadAgentModel = async function (agentId) {
         console.warn(`[Dashboard] Failed to load model for ${agentId}:`, e.message);
     }
 };
+
+// Global listener for cross-dashboard model synchronization
+document.addEventListener('modelChanged', async (e) => {
+    const { agentId, modelId, source } = e.detail;
+
+    // Reverse Sync 1: If user saves model in Agents dashboard, the central header should update aggressively to reflect their latest action
+    if (source === 'agents-dashboard') {
+        console.log(`[Dashboard] Model changed in agents dashboard for ${agentId} to ${modelId}, forcing header update`);
+        window.currentAgentId = agentId;
+        await window.loadAgentModel(agentId);
+    }
+
+    // Reverse Sync 2: If the event came from the header or settings, and the agent dashboard is open, update the dashboard panel
+    if (source === 'header-dropdown' || source === 'settings-modal') {
+        if (typeof window._activePage === 'function' && window._activePage() === 'agents' && window._memoryCards && typeof window._memoryCards.getCurrentDrilledAgent === 'function') {
+            const drilledAgent = window._memoryCards.getCurrentDrilledAgent();
+            if (drilledAgent && (drilledAgent.id === agentId || source === 'settings-modal' || agentId === 'main')) {
+                console.log(`[Dashboard] Model changed in header for ${agentId}, reloading agents dashboard config`);
+                setTimeout(() => window._memoryCards.loadAgentModelConfig(drilledAgent.id), 100);
+            }
+        }
+    }
+});
 
 async function updateHeaderModelDropdown(provider) {
     const models = await getModelsForProvider(provider);
@@ -4226,22 +4262,35 @@ function selectModelInDropdowns(model) {
 // Initialize provider/model display on page load
 document.addEventListener('DOMContentLoaded', async function () {
     try {
-        // First fetch current model from server API (reads openclaw.json — source of truth)
-        // Don't trust localStorage as it can get stale across sessions/deploys
-        let modelId = null;
-        let provider = null;
+        // Optimistically load from localStorage first to prevent UI flashes (e.g. "openrouter/free" flash)
+        let modelId = localStorage.getItem('selected_model');
+        let provider = localStorage.getItem('selected_provider');
+
+        if (modelId) {
+            provider = provider || window.getProviderFromModelId(modelId);
+            window.currentModel = modelId;
+            window.currentProvider = provider;
+
+            // Quickly update DOM elements without waiting for API
+            const tempModelDisplay = document.getElementById('current-model-display');
+            if (tempModelDisplay) tempModelDisplay.textContent = modelId;
+            const tempProviderDisplay = document.getElementById('current-provider-display');
+            if (tempProviderDisplay) tempProviderDisplay.textContent = provider;
+        }
 
         try {
+            // Then fetch current model from server API (reads openclaw.json — source of truth)
             const response = await fetch('/api/models/current');
             const modelInfo = await response.json();
-            modelId = modelInfo?.modelId;
-            provider = modelInfo?.provider;
-            console.log(`[Dashboard] Model from API: ${modelId} (provider: ${provider})`);
+
+            // Only update if the server gives us a valid response and we aren't already set up by a session override
+            if (modelInfo?.modelId) {
+                modelId = modelInfo.modelId;
+                provider = modelInfo.provider || window.getProviderFromModelId(modelId);
+                console.log(`[Dashboard] Model from API global default: ${modelId} (provider: ${provider})`);
+            }
         } catch (e) {
             console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
-            // Fall back to localStorage only if API fails
-            modelId = localStorage.getItem('selected_model');
-            provider = localStorage.getItem('selected_provider');
         }
 
         // No fallback — leave null and let the gateway/config provide the model

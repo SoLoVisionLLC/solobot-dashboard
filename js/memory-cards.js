@@ -963,6 +963,9 @@
             if (data.ok) {
                 status.textContent = '✅ Saved';
                 status.style.color = 'var(--success)';
+                document.dispatchEvent(new CustomEvent('modelChanged', {
+                    detail: { agentId, modelId, source: 'agents-dashboard' }
+                }));
                 setTimeout(() => loadAgentModelConfig(agentId), 800);
             } else {
                 status.textContent = `❌ ${data.error || 'Failed to save'}`;
@@ -986,6 +989,9 @@
             const data = await res.json();
             if (data.ok) {
                 if (status) { status.textContent = '✅ Reset to global'; status.style.color = 'var(--success)'; }
+                document.dispatchEvent(new CustomEvent('modelChanged', {
+                    detail: { agentId, modelId: 'global/default', source: 'agents-dashboard' }
+                }));
                 setTimeout(() => loadAgentModelConfig(agentId), 800);
             }
         } catch (e) {
