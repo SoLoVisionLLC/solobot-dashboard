@@ -796,6 +796,27 @@ function syncModelDisplay(model, provider) {
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
 
+    // === PER-AGENT OVERRIDE TAKES PRIORITY ===
+    // If the user has manually set a model for this agent, use that and skip
+    // the session/gateway model which may contain stale data.
+    const agentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
+    if (agentId) {
+        const agentSavedModel = localStorage.getItem(`agent_model_${agentId}`);
+        if (agentSavedModel) {
+            console.log(`[Dashboard] Using per-agent saved model for ${agentId}: ${agentSavedModel}`);
+            const resolved = resolveFullModelId(agentSavedModel);
+            const provider = resolved.includes('/') ? resolved.split('/')[0] : currentProvider;
+            syncModelDisplay(resolved, provider);
+            // Also patch the session to keep gateway in sync
+            try {
+                if (gateway?.isConnected()) {
+                    gateway.request('sessions.patch', { key: sessionKey, model: resolved });
+                }
+            } catch (_) {}
+            return;
+        }
+    }
+
     let sessionModel = null;
 
     // 1. Check local availableSessions cache (model = last used model from sessions.list)
