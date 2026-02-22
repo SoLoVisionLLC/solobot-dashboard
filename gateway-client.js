@@ -444,6 +444,29 @@ class GatewayClient {
     _handleAgentEvent(payload) {
         if (!payload) return;
 
+        // Catch lifecycle events (e.g. for model fallbacks)
+        if (payload.stream === 'lifecycle') {
+            const data = payload.data;
+            if (data?.phase === 'fallback') {
+                console.warn(`[Gateway] ⚠️ Model fallback triggered for session ${payload.sessionKey}`);
+                console.warn(`[Gateway]    Original model: ${data.selectedProvider}/${data.selectedModel}`);
+                console.warn(`[Gateway]    Fallback chosen: ${data.activeProvider}/${data.activeModel}`);
+                console.warn(`[Gateway]    Reason: ${data.reasonSummary}`);
+
+                if (Array.isArray(data.attempts) && data.attempts.length > 0) {
+                    console.warn(`[Gateway] 🔄 Fallback Attempt History:`);
+                    data.attempts.forEach((attempt, idx) => {
+                        const status = attempt.success ? "✅ Success" : "❌ Failed";
+                        console.warn(`             ${idx + 1}. [${status}] ${attempt.provider}/${attempt.model}`);
+                        if (attempt.error) {
+                            console.warn(`                ↳ Error: ${attempt.error}`);
+                        }
+                    });
+                }
+            }
+            return;
+        }
+
         // Only handle tool events
         if (payload.stream !== 'tool') return;
 
@@ -564,6 +587,15 @@ class GatewayClient {
             }
         }
 
+        let errorMsg = message?.errorMessage || payload.errorMessage;
+
+        // OpenClaw's embedded agent SDK strips underlying error info in favor of a standard Rate Limit response
+        // Re-inject the model so the dashboard user knows which fallback triggered it
+        if (errorMsg === "⚠️ API rate limit reached. Please try again later.") {
+            const problemModel = message?.model || payload.model || 'unknown';
+            errorMsg = `⚠️ Rate limit reached (Model: ${problemModel}). Please try again.`;
+        }
+
         // Log chat events with model info for debugging
         if (state === 'delta') {
             // Only log first delta to avoid spam
@@ -575,7 +607,6 @@ class GatewayClient {
             this._loggedDelta = false;
             const contentLen = contentText.length;
             const stopReason = message?.stopReason;
-            const errorMsg = message?.errorMessage || payload.errorMessage;
 
             if (errorMsg) {
                 console.error(`[Gateway] ❌ AI RESPONSE ERROR: ${errorMsg}`);
@@ -588,7 +619,7 @@ class GatewayClient {
             }
         } else if (state === 'error') {
             this._loggedDelta = false;
-            console.error(`[Gateway] ❌ Chat error state: ${payload.errorMessage || 'Unknown error'}`);
+            console.error(`[Gateway] ❌ Chat error state: ${errorMsg || 'Unknown error'}`);
         }
 
         this.onChatEvent({
@@ -597,10 +628,10 @@ class GatewayClient {
             images: images,
             role,
             sessionKey: eventSessionKey,
-            errorMessage: message?.errorMessage || payload.errorMessage,
+            errorMessage: errorMsg ? `${errorMsg} (Model: ${message?.model || payload.model || 'unknown'})` : null,
             // Pass through model info for dashboard to use
-            model: message?.model,
-            provider: message?.provider,
+            model: message?.model || payload.model,
+            provider: message?.provider || payload.provider,
             stopReason: message?.stopReason,
             runId: message?.runId || payload.runId
         });

@@ -32,7 +32,27 @@ const AGENT_PERSONAS = {
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function normalizeDashboardSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
-    return key;
+
+    // Auto-migrate legacy agent session keys (e.g. from before agent IDs were stabilized)
+    const legacyMigrateMap = {
+        'quill': 'ui',
+        'forge': 'devops',
+        'orion': 'cto',
+        'halo': 'main',
+        'atlas': 'coo'
+    };
+
+    let normalized = key;
+    const match = normalized.match(/^agent:([^:]+):(.+)$/);
+    if (match) {
+        const agentId = match[1];
+        if (legacyMigrateMap[agentId]) {
+            normalized = `agent:${legacyMigrateMap[agentId]}:${match[2]}`;
+            console.log(`[Sessions] Auto-migrated legacy session ${key} -> ${normalized}`);
+        }
+    }
+
+    return normalized;
 }
 
 function getFriendlySessionName(key) {
