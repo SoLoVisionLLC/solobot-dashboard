@@ -1,18 +1,18 @@
 // js/phase11-agents.js — Phase 11: Agent Status Panel
 // Traffic light indicators, sparklines, handoff button, resource usage display
 
-(function() {
+(function () {
     'use strict';
 
     // ==========================================
     // Agent Status State
     // ==========================================
-    
+
     const agentActivityHistory = {}; // agentId -> { timestamps: [], tokens: [], runtime: [] }
     const AGENT_HISTORY_LIMIT = 50;
-    
+
     const agentResourceUsage = {}; // agentId -> { tokensUsed, runtimeSeconds, lastReset }
-    
+
     const agentStatusConfig = {
         activeThreshold: 5 * 60 * 1000,    // 5 minutes = green
         recentThreshold: 30 * 60 * 1000,   // 30 minutes = yellow
@@ -25,9 +25,9 @@
 
     function getAgentStatusColor(lastActivity) {
         if (!lastActivity) return { color: 'gray', status: 'idle', text: 'Idle' };
-        
+
         const elapsed = Date.now() - lastActivity;
-        
+
         if (elapsed < agentStatusConfig.activeThreshold) {
             return { color: '#22c55e', status: 'active', text: 'Active' }; // Green
         } else if (elapsed < agentStatusConfig.recentThreshold) {
@@ -43,9 +43,9 @@
             recent: { bg: '#eab308', glow: 'rgba(234, 179, 8, 0.4)' },
             idle: { bg: '#ef4444', glow: 'rgba(239, 68, 68, 0.4)' }
         };
-        
+
         const c = colors[status.status] || colors.idle;
-        
+
         return `
             <div class="traffic-light" style="
                 width: 10px;
@@ -71,21 +71,21 @@
                 activity: [] // binary activity per minute
             };
         }
-        
+
         const history = agentActivityHistory[agentId];
         const now = Date.now();
-        
+
         history.timestamps.push(now);
         history.tokens.push(tokens);
         history.runtime.push(runtimeSeconds);
-        
+
         // Keep only recent history
         if (history.timestamps.length > AGENT_HISTORY_LIMIT) {
             history.timestamps.shift();
             history.tokens.shift();
             history.runtime.shift();
         }
-        
+
         // Track resource usage
         if (!agentResourceUsage[agentId]) {
             agentResourceUsage[agentId] = { tokensUsed: 0, runtimeSeconds: 0, lastReset: now };
@@ -97,20 +97,20 @@
     function generateSparkline(data, width = 60, height = 20, color = '#6366f1') {
         if (!data || data.length < 2) {
             return `<svg width="${width}" height="${height}" style="opacity: 0.3;">
-                <text x="${width/2}" y="${height/2}" text-anchor="middle" font-size="8" fill="currentColor">No data</text>
+                <text x="${width / 2}" y="${height / 2}" text-anchor="middle" font-size="8" fill="currentColor">No data</text>
             </svg>`;
         }
-        
+
         const max = Math.max(...data, 1);
         const min = Math.min(...data, 0);
         const range = max - min || 1;
-        
+
         const points = data.map((val, i) => {
             const x = (i / (data.length - 1)) * width;
             const y = height - ((val - min) / range) * height;
             return `${x},${y}`;
         }).join(' ');
-        
+
         return `
             <svg width="${width}" height="${height}" class="sparkline">
                 <polyline points="${points}" 
@@ -119,7 +119,7 @@
                           stroke-width="1.5"
                           stroke-linecap="round"
                           stroke-linejoin="round"/>
-                <circle cx="${width}" cy="${height - ((data[data.length-1] - min) / range) * height}" 
+                <circle cx="${width}" cy="${height - ((data[data.length - 1] - min) / range) * height}" 
                         r="2" fill="${color}"/>
             </svg>
         `;
@@ -130,11 +130,11 @@
         if (!history || history.activity.length < 2) {
             return generateSparkline([], 60, 20);
         }
-        
+
         // Use token usage for sparkline, or activity if no tokens
         const data = history.tokens.some(t => t > 0) ? history.tokens : history.activity;
         const color = AGENT_COLORS[agentId] || '#6366f1';
-        
+
         return generateSparkline(data.slice(-20), 60, 20, color);
     }
 
@@ -164,7 +164,7 @@
                 </div>
             `;
         }
-        
+
         return `
             <div class="resource-usage">
                 <span class="resource-stat" title="Tokens used">📝 ${formatTokenCount(usage.tokensUsed)}</span>
@@ -175,10 +175,10 @@
 
     function resetAgentResources(agentId) {
         if (agentResourceUsage[agentId]) {
-            agentResourceUsage[agentId] = { 
-                tokensUsed: 0, 
-                runtimeSeconds: 0, 
-                lastReset: Date.now() 
+            agentResourceUsage[agentId] = {
+                tokensUsed: 0,
+                runtimeSeconds: 0,
+                lastReset: Date.now()
             };
         }
     }
@@ -193,7 +193,7 @@
             todo: (state.tasks.todo || []).filter(t => getTaskAgent(t) === fromAgent),
             progress: (state.tasks.progress || []).filter(t => getTaskAgent(t) === fromAgent)
         };
-        
+
         // Create handoff message
         const handoffMsg = {
             id: 'sys-' + Date.now(),
@@ -201,33 +201,33 @@
             text: `🔄 Handoff from ${fromAgent.toUpperCase()} to ${toAgent.toUpperCase()}`,
             time: Date.now()
         };
-        
+
         state.system.messages.push(handoffMsg);
         persistSystemMessages();
-        
+
         // Switch to target agent
         if (typeof setActiveSidebarAgent === 'function') {
             setActiveSidebarAgent(toAgent);
         }
         currentAgentId = toAgent;
-        
+
         // Add activity
         addActivity(`🔄 Handoff: ${fromAgent.toUpperCase()} → ${toAgent.toUpperCase()}`, 'info');
-        
+
         // Send context summary
-        const context = agentTasks.progress.length > 0 
+        const context = agentTasks.progress.length > 0
             ? `Active task: ${agentTasks.progress[0].title}`
             : agentTasks.todo.length > 0
                 ? `Next up: ${agentTasks.todo[0].title}`
                 : 'No active tasks';
-        
+
         // If on chat page, add handoff message
         if (typeof sendToAgent === 'function') {
             sendToAgent(`[Handoff from ${fromAgent.toUpperCase()}] ${context}`);
         }
-        
+
         showToast(`Handed off to ${toAgent.toUpperCase()}`, 'success');
-        
+
         // Play audio cue if available
         if (typeof playAudioCue === 'function') {
             playAudioCue('info');
@@ -237,7 +237,7 @@
     function showHandoffDialog(fromAgent) {
         const agents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax']
             .filter(a => a !== fromAgent);
-        
+
         const buttons = agents.map(agent => {
             const color = AGENT_COLORS[agent] || '#888';
             return `
@@ -248,7 +248,7 @@
                 </button>
             `;
         }).join('');
-        
+
         const modal = document.createElement('div');
         modal.id = 'handoff-modal';
         modal.className = 'modal-overlay';
@@ -266,7 +266,7 @@
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(modal);
         setTimeout(() => modal.classList.add('visible'), 10);
     }
@@ -285,7 +285,7 @@
 
         for (const s of sessions) {
             const match = s.key?.match(/^agent:([^:]+):/);
-            const agentId = match ? match[1] : 'main';
+            const agentId = match ? (window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1]) : 'main';
             if (!agents[agentId]) {
                 agents[agentId] = { sessions: [], lastActivity: 0, lastPreview: '', tokens: 0 };
             }
@@ -318,7 +318,7 @@
             const timeSince = data.lastActivity ? timeAgo(data.lastActivity) : 'No activity';
             const status = getAgentStatusColor(data.lastActivity);
             const color = AGENT_COLORS[id] || '#888';
-            
+
             // Record activity for sparkline
             if (data.lastActivity) {
                 recordAgentActivity(id, data.tokens, 0);
@@ -365,7 +365,7 @@
 
     // Override loadAgentStatuses to use enhanced version
     const originalLoadAgentStatuses = window.loadAgentStatuses;
-    window.loadAgentStatuses = async function() {
+    window.loadAgentStatuses = async function () {
         const container = document.getElementById('agent-status-list');
         if (!container) return;
 
@@ -390,7 +390,7 @@
 
     function injectStyles() {
         if (document.getElementById('phase11-styles')) return;
-        
+
         const style = document.createElement('style');
         style.id = 'phase11-styles';
         style.textContent = `
@@ -507,7 +507,7 @@
     window.recordAgentActivity = recordAgentActivity;
 
     // Helper for closing modals
-    window.closeModal = function(modalId) {
+    window.closeModal = function (modalId) {
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.classList.remove('visible');

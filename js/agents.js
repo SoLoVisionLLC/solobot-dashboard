@@ -45,7 +45,7 @@ function renderAgentStatuses(sessions) {
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const agentId = match ? (window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1]) : 'main';
         if (!agents[agentId]) {
             agents[agentId] = { sessions: [], lastActivity: 0, lastPreview: '' };
         }

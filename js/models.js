@@ -831,7 +831,8 @@ window._configModelLocks = window._configModelLocks || {};
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
 
-    const agentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
+    const rawAgentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
+    const agentId = rawAgentId ? (window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId) : null;
     let sessionModel = null;
 
     // === 1. FIRST: Check openclaw.json for agent-specific model (source of truth) ===

@@ -2061,6 +2061,11 @@ const server = http.createServer((req, res) => {
                 }
               }
               fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+            } else {
+              console.warn(`[Server] Agent ${agentId} not found in config.agents.list`);
+              res.writeHead(404);
+              res.end(JSON.stringify({ error: `Agent "${agentId}" not found in config` }));
+              return;
             }
           }
         } else {

@@ -21,7 +21,7 @@ function getSidebarAgentsPrefs() {
 function setSidebarAgentsPrefs(prefs) {
     try {
         localStorage.setItem(SIDEBAR_AGENTS_PREFS_KEY, JSON.stringify(prefs || {}));
-    } catch {}
+    } catch { }
 }
 
 function getSidebarAgentsHiddenSet() {
@@ -36,7 +36,7 @@ function getSidebarAgentsHiddenSet() {
 function setSidebarAgentsHiddenSet(set) {
     try {
         localStorage.setItem(SIDEBAR_AGENTS_HIDDEN_KEY, JSON.stringify(Array.from(set || [])));
-    } catch {}
+    } catch { }
 }
 
 function getSidebarAgentsOrder() {
@@ -51,7 +51,7 @@ function getSidebarAgentsOrder() {
 function setSidebarAgentsOrder(order) {
     try {
         localStorage.setItem(SIDEBAR_AGENTS_ORDER_KEY, JSON.stringify(order || []));
-    } catch {}
+    } catch { }
 }
 
 function getSidebarAgentsContainer() {
@@ -106,7 +106,8 @@ function computeLastActivityByAgent(sessions) {
     const lastByAgent = {};
     for (const s of (sessions || [])) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const rawAgentId = match ? match[1] : 'main';
+        const agentId = window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId;
         const ts = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
         if (!lastByAgent[agentId] || ts > lastByAgent[agentId]) {
             lastByAgent[agentId] = ts;
@@ -294,7 +295,7 @@ function renderSidebarAgentsModal() {
 }
 
 function resetSidebarAgentsOrder() {
-    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch {}
+    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch { }
     // Reload page for clean order restore
     location.reload();
 }

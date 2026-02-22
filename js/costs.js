@@ -53,7 +53,7 @@ function renderCostData(sessions, statusInfo) {
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const agentId = match ? (window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1]) : 'main';
         if (!agentTokens[agentId]) agentTokens[agentId] = { input: 0, output: 0, total: 0 };
 
         const input = s.inputTokens || 0;
@@ -92,10 +92,10 @@ function renderCostData(sessions, statusInfo) {
         </div>
         <div style="space-y: 4px;">
             ${sorted.slice(0, 6).map(([id, data]) => {
-                const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
-                const pct = maxTokens > 0 ? (data.total / maxTokens * 100) : 0;
-                const label = (typeof getAgentLabel === 'function') ? getAgentLabel(id) : id.toUpperCase();
-                return `
+        const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
+        const pct = maxTokens > 0 ? (data.total / maxTokens * 100) : 0;
+        const label = (typeof getAgentLabel === 'function') ? getAgentLabel(id) : id.toUpperCase();
+        return `
                 <div style="margin-bottom: 6px;">
                     <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
                         <span style="color: ${color}; font-weight: 600;">${label}</span>
@@ -105,7 +105,7 @@ function renderCostData(sessions, statusInfo) {
                         <div style="height: 100%; width: ${pct}%; background: ${color}; border-radius: 2px;"></div>
                     </div>
                 </div>`;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 }

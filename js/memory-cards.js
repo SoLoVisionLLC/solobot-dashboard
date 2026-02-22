@@ -40,24 +40,25 @@
     const ORG_TREE = {
         'main': { name: 'Halo', role: 'PA', emoji: '🤖', reports: ['exec', 'cto', 'coo', 'cfo'], description: 'Orchestrator' },
         'exec': { name: 'Elon', role: 'CoS', emoji: '👔', reports: [], description: 'Chief of Staff' },
-        'cto': { name: 'Orion', role: 'CTO', emoji: '🧠', reports: ['dev', 'forge', 'sec'], description: 'Architecture & Standards' },
-        'coo': { name: 'Atlas', role: 'COO', emoji: '📋', reports: ['cmp', 'docs', 'creative'], description: 'Operations' },
+        'cto': { name: 'Orion', role: 'CTO', emoji: '🧠', reports: ['dev', 'devops', 'sec', 'net'], description: 'Architecture & Standards' },
+        'coo': { name: 'Atlas', role: 'COO', emoji: '📋', reports: ['cmp', 'docs', 'art'], description: 'Operations' },
         'cfo': { name: 'Sterling', role: 'CFO', emoji: '💰', reports: ['tax'], description: 'Finance & Tax' },
-        'dev': { name: 'Dev', role: 'ENG', emoji: '⚙️', reports: ['quill', 'chip'], description: 'Head of Engineering' },
-        'forge': { name: 'Forge', role: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' },
+        'dev': { name: 'Dev', role: 'ENG', emoji: '⚙️', reports: ['ui', 'swe'], description: 'Head of Engineering' },
+        'devops': { name: 'Forge', role: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' },
         'sec': { name: 'Knox', role: 'SEC', emoji: '🔒', reports: [], description: 'Security' },
-        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['smm', 'snip'], description: 'Marketing & Product' },
+        'net': { name: 'Sentinel', role: 'NET', emoji: '📡', reports: [], description: 'Networking & Infrastructure' },
+        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['smm', 'youtube'], description: 'Marketing & Product' },
         'docs': { name: 'Canon', role: 'DOC', emoji: '📚', reports: [], description: 'Knowledge & Docs' },
-        'creative': { name: 'Luma', role: 'ART', emoji: '🎨', reports: [], description: 'Creative Director' },
+        'art': { name: 'Luma', role: 'ART', emoji: '🎨', reports: [], description: 'Creative Director' },
         'tax': { name: 'Ledger', role: 'TAX', emoji: '📒', reports: [], description: 'Tax Compliance' },
-        'quill': { name: 'Quill', role: 'FE/UI', emoji: '✒️', reports: [], description: 'Frontend / UI' },
-        'chip': { name: 'Chip', role: 'SWE', emoji: '💻', reports: [], description: 'Software Engineer' },
+        'ui': { name: 'Quill', role: 'FE/UI', emoji: '✒️', reports: [], description: 'Frontend / UI' },
+        'swe': { name: 'Chip', role: 'SWE', emoji: '💻', reports: [], description: 'Software Engineer' },
         'smm': { name: 'Nova', role: 'SMM', emoji: '📱', reports: [], description: 'Social Media' },
-        'snip': { name: 'Snip', role: 'YT', emoji: '🎬', reports: [], description: 'Content' },
+        'youtube': { name: 'Snip', role: 'YT', emoji: '🎬', reports: [], description: 'Content' },
         'family': { name: 'Haven', role: 'FAM', emoji: '🏠', reports: [], description: 'Family & Household' }
     };
 
-    const ORG_ORDER = ['main', 'exec', 'cto', 'coo', 'cfo', 'dev', 'forge', 'sec', 'cmp', 'docs', 'creative', 'tax', 'quill', 'chip', 'smm', 'snip', 'family'];
+    const ORG_ORDER = ['main', 'exec', 'cto', 'coo', 'cfo', 'dev', 'devops', 'sec', 'net', 'cmp', 'docs', 'art', 'tax', 'ui', 'swe', 'smm', 'youtube', 'family'];
 
     function getMemoryLayout() {
         return localStorage.getItem('solobot-memory-layout') || 'org-tree';

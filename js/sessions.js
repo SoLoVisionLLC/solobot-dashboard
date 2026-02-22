@@ -16,15 +16,17 @@ const AGENT_PERSONAS = {
     'cfo': { name: 'Sterling', role: 'CFO' },
     'cmp': { name: 'Vector', role: 'CMP' },
     'dev': { name: 'Dev', role: 'ENG' },
-    'forge': { name: 'Forge', role: 'DEVOPS' },
-    'quill': { name: 'Quill', role: 'FE/UI' },
-    'chip': { name: 'Chip', role: 'SWE' },
-    'snip': { name: 'Snip', role: 'YT' },
+    'devops': { name: 'Forge', role: 'DEVOPS' },
+    'ui': { name: 'Quill', role: 'FE/UI' },
+    'swe': { name: 'Chip', role: 'SWE' },
+    'youtube': { name: 'Snip', role: 'YT' },
     'sec': { name: 'Knox', role: 'SEC' },
+    'net': { name: 'Sentinel', role: 'NET' },
     'smm': { name: 'Nova', role: 'SMM' },
     'family': { name: 'Haven', role: 'FAM' },
     'tax': { name: 'Ledger', role: 'TAX' },
-    'docs': { name: 'Canon', role: 'DOC' }
+    'docs': { name: 'Canon', role: 'DOC' },
+    'art': { name: 'Luma', role: 'ART' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
@@ -35,10 +37,9 @@ function normalizeDashboardSessionKey(key) {
 
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
-    // For agent sessions, show persona name + session suffix
     const match = key.match(/^agent:([^:]+):(.+)$/);
     if (match) {
-        const agentId = match[1];
+        const agentId = resolveAgentId(match[1]);
         const sessionSuffix = match[2];
         const persona = AGENT_PERSONAS[agentId];
         const name = persona ? persona.name : agentId.toUpperCase();
@@ -126,10 +127,26 @@ window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's 
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
 
+// Helper for legacy agent session keys (preserves chat history for old alias IDs)
+const LEGACY_AGENT_MAP = {
+    'chip': 'swe',
+    'quill': 'ui',
+    'forge': 'devops',
+    'snip': 'youtube',
+    'creative': 'art'
+};
+
+function resolveAgentId(id) {
+    if (!id) return 'main';
+    id = id.toLowerCase();
+    return LEGACY_AGENT_MAP[id] || id;
+}
+window.resolveAgentId = resolveAgentId;
+
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
     const match = sessionKey?.match(/^agent:([^:]+):/);
-    return match ? match[1] : 'main';
+    return match ? resolveAgentId(match[1]) : 'main';
 }
 
 // Filter sessions to only show those belonging to a specific agent
@@ -505,10 +522,10 @@ async function executeSessionSwitch(sessionKey) {
         // 3a. Update current agent ID from session key
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
-            currentAgentId = agentMatch[1];
+            currentAgentId = resolveAgentId(agentMatch[1]);
             // Force sync UI immediately (before async work)
             if (typeof forceSyncActiveAgent === 'function') {
-                forceSyncActiveAgent(agentMatch[1]);
+                forceSyncActiveAgent(currentAgentId);
             }
         }
 
@@ -736,7 +753,7 @@ function initGateway() {
 
             // Remember this session for the agent
             const agentMatch = intendedSession.match(/^agent:([^:]+):/);
-            if (agentMatch) saveLastAgentSession(agentMatch[1], intendedSession);
+            if (agentMatch) saveLastAgentSession(resolveAgentId(agentMatch[1]), intendedSession);
 
             checkRestartToast();
 

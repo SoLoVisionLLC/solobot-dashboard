@@ -219,7 +219,8 @@ Scripts are loaded in `partials/scripts.html` in this order:
 | `window.gateway` | `notifications.js` | `GatewayClient` | Active WebSocket connection |
 | `window.availableSessions` | `sessions.js` | Array | All gateway sessions |
 | `window.currentSessionName` | `sessions.js` | String | Active session key |
-| `window.currentAgentId` | `sessions.js` | String | Active agent ID (e.g. `"main"`) |
+| `window.currentAgentId` | `sessions.js` | String | Active agent ID (e.g. `"ui"`) |
+| `window.resolveAgentId` | `sessions.js` | Function | Maps legacy agent aliases (e.g. `quill`) to current config IDs (e.g. `ui`) |
 | `window.currentProvider` | `models.js` | String | Active AI provider |
 | `window.currentModel` | `models.js` | String | Active model ID |
 | `window._memoryCards` | `memory-cards.js` | Object | Agents org-chart API |
@@ -372,8 +373,10 @@ Session management and agent switching. **Most complex module.**
 
 **`AGENT_PERSONAS`** map: Maps agent IDs to `{ name, role }` pairs:
 ```js
-{ main: {name:'Halo', role:'PA'}, exec: {name:'Elon', role:'CoS'}, ... }
+{ main: {name:'Halo', role:'PA'}, exec: {name:'Elon', role:'CoS'}, ui: {name:'Quill', role:'UI'}, ... }
 ```
+
+**`LEGACY_AGENT_MAP`**: Maps old alias IDs (like `quill`) to backend config IDs (like `ui`) to maintain visual backward compatibility for old chat histories. Exposed globally via `window.resolveAgentId(id)`.
 
 **Session key format:** `agent:<agentId>:<sessionName>`  
 Example: `agent:main:main`, `agent:dev:feature-branch`, `agent:main:subagent:abc123`
@@ -388,7 +391,7 @@ Example: `agent:main:main`, `agent:dev:feature-branch`, `agent:main:subagent:abc
 - `populateSessionDropdown()` — Renders `#chat-page-session-menu` dropdown
 - `handleSubagentSessionAgent()` — For `agent:main:subagent:*` sessions, determines correct agent from session label
 
-**`window.currentAgentId`** is set here and read by `notifications.js`, `memory-cards.js`, and `sidebar-agents.js`.
+**`window.currentAgentId`** is set here (after passing through `window.resolveAgentId`) and read by `notifications.js`, `memory-cards.js`, and `sidebar-agents.js`.
 
 **Connected to:**
 - `notifications.js` — Calls `gateway.subscribeToAllSessions()` after fetch

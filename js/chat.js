@@ -1752,8 +1752,9 @@ function setupSidebarAgents() {
     const currentSession = GATEWAY_CONFIG?.sessionKey || 'main';
     const match = currentSession.match(/^agent:([^:]+):/);
     if (match) {
-        currentAgentId = match[1];
-        setActiveSidebarAgent(match[1]);
+        const resolvedId = window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1];
+        currentAgentId = resolvedId;
+        setActiveSidebarAgent(resolvedId);
     }
 }
 

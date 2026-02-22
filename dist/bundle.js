@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-22T11:32:39Z
+// Generated: 2026-02-22T13:53:49Z
 // Modules: 25
 
 
@@ -2080,7 +2080,7 @@ function renderAgentStatuses(sessions) {
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const agentId = match ? (window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1]) : 'main';
         if (!agents[agentId]) {
             agents[agentId] = { sessions: [], lastActivity: 0, lastPreview: '' };
         }
@@ -2321,7 +2321,7 @@ function renderCostData(sessions, statusInfo) {
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const agentId = match ? (window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1]) : 'main';
         if (!agentTokens[agentId]) agentTokens[agentId] = { input: 0, output: 0, total: 0 };
 
         const input = s.inputTokens || 0;
@@ -2360,10 +2360,10 @@ function renderCostData(sessions, statusInfo) {
         </div>
         <div style="space-y: 4px;">
             ${sorted.slice(0, 6).map(([id, data]) => {
-                const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
-                const pct = maxTokens > 0 ? (data.total / maxTokens * 100) : 0;
-                const label = (typeof getAgentLabel === 'function') ? getAgentLabel(id) : id.toUpperCase();
-                return `
+        const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
+        const pct = maxTokens > 0 ? (data.total / maxTokens * 100) : 0;
+        const label = (typeof getAgentLabel === 'function') ? getAgentLabel(id) : id.toUpperCase();
+        return `
                 <div style="margin-bottom: 6px;">
                     <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
                         <span style="color: ${color}; font-weight: 600;">${label}</span>
@@ -2373,7 +2373,7 @@ function renderCostData(sessions, statusInfo) {
                         <div style="height: 100%; width: ${pct}%; background: ${color}; border-radius: 2px;"></div>
                     </div>
                 </div>`;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 }
@@ -2436,7 +2436,7 @@ function renderAnalytics(sessions) {
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const agentId = match ? (window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1]) : 'main';
         const tokens = s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0);
         if (!agentMessages[agentId]) agentMessages[agentId] = 0;
         agentMessages[agentId] += tokens > 0 ? 1 : 0;
@@ -2466,39 +2466,39 @@ function renderAnalytics(sessions) {
         <div style="margin-bottom: 12px;">
             <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Sessions by Agent</div>
             ${Object.entries(agentMessages).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, count]) => {
-                const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
-                const pct = (count / maxAgent * 100);
-                return `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+        const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${id}`).trim() || '#888';
+        const pct = (count / maxAgent * 100);
+        return `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
                     <span style="width: 40px; font-size: 10px; color: ${color}; font-weight: 600; text-align: right;">${id.toUpperCase()}</span>
                     <div style="flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden;">
                         <div style="height: 100%; width: ${pct}%; background: ${color}; border-radius: 3px;"></div>
                     </div>
                     <span style="width: 24px; font-size: 10px; color: var(--text-muted);">${count}</span>
                 </div>`;
-            }).join('')}
+    }).join('')}
         </div>
         <div style="margin-bottom: 12px;">
             <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Activity (7 days)</div>
             <div style="display: flex; align-items: flex-end; gap: 4px; height: 40px;">
                 ${Object.entries(dayBuckets).slice(-7).map(([day, count]) => {
-                    const h = Math.max(4, (count / maxDay) * 36);
-                    return `<div style="flex: 1; text-align: center;">
+        const h = Math.max(4, (count / maxDay) * 36);
+        return `<div style="flex: 1; text-align: center;">
                         <div style="height: ${h}px; background: var(--brand-red); border-radius: 2px; margin: 0 auto; width: 80%;"></div>
                         <div style="font-size: 9px; color: var(--text-muted); margin-top: 2px;">${day}</div>
                     </div>`;
-                }).join('')}
+    }).join('')}
             </div>
         </div>
         <div>
             <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Most Active</div>
             ${activeSessions.map(s => {
-                const name = s.displayName || s.key?.replace(/^agent:[^:]+:/, '') || 'unnamed';
-                const ago = s.updatedAt ? timeAgo(new Date(s.updatedAt).getTime()) : '';
-                return `<div style="font-size: 11px; padding: 2px 0; display: flex; justify-content: space-between;">
+        const name = s.displayName || s.key?.replace(/^agent:[^:]+:/, '') || 'unnamed';
+        const ago = s.updatedAt ? timeAgo(new Date(s.updatedAt).getTime()) : '';
+        return `<div style="font-size: 11px; padding: 2px 0; display: flex; justify-content: space-between;">
                     <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(name)}</span>
                     <span style="color: var(--text-muted); flex-shrink: 0; margin-left: 8px;">${ago}</span>
                 </div>`;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 }
@@ -4140,7 +4140,8 @@ window._configModelLocks = window._configModelLocks || {};
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
 
-    const agentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
+    const rawAgentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
+    const agentId = rawAgentId ? (window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId) : null;
     let sessionModel = null;
 
     // === 1. FIRST: Check openclaw.json for agent-specific model (source of truth) ===
@@ -4411,7 +4412,8 @@ function navigateToSession(sessionKey) {
     if (typeof showPage === 'function') showPage('chat');
     const agentMatch = sessionKey.match(/^agent:([^:]+):/);
     if (agentMatch && typeof setActiveSidebarAgent === 'function') {
-        setActiveSidebarAgent(agentMatch[1]);
+        const agentId = window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1];
+        setActiveSidebarAgent(agentId);
     }
     if (typeof switchToSessionKey === 'function') {
         switchToSessionKey(sessionKey);
@@ -4434,7 +4436,12 @@ function showNotificationToast(title, body, sessionKey) {
 
     // Determine agent color from session key
     const agentMatch = sessionKey?.match(/^agent:([^:]+):/);
-    const agentId = agentMatch ? agentMatch[1] : 'main';
+    // Also update the agent's chat button on the Agents page
+    if (agentMatch) {
+        const agentId = window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1];
+        if (typeof updateAgentChatButton === 'function') updateAgentChatButton(agentId);
+    }
+    const agentId = agentMatch ? (window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1]) : 'main';
     const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
     const color = agentColors[agentId] || '#BC2026';
 
@@ -5423,15 +5430,17 @@ const AGENT_PERSONAS = {
     'cfo': { name: 'Sterling', role: 'CFO' },
     'cmp': { name: 'Vector', role: 'CMP' },
     'dev': { name: 'Dev', role: 'ENG' },
-    'forge': { name: 'Forge', role: 'DEVOPS' },
-    'quill': { name: 'Quill', role: 'FE/UI' },
-    'chip': { name: 'Chip', role: 'SWE' },
-    'snip': { name: 'Snip', role: 'YT' },
+    'devops': { name: 'Forge', role: 'DEVOPS' },
+    'ui': { name: 'Quill', role: 'FE/UI' },
+    'swe': { name: 'Chip', role: 'SWE' },
+    'youtube': { name: 'Snip', role: 'YT' },
     'sec': { name: 'Knox', role: 'SEC' },
+    'net': { name: 'Sentinel', role: 'NET' },
     'smm': { name: 'Nova', role: 'SMM' },
     'family': { name: 'Haven', role: 'FAM' },
     'tax': { name: 'Ledger', role: 'TAX' },
-    'docs': { name: 'Canon', role: 'DOC' }
+    'docs': { name: 'Canon', role: 'DOC' },
+    'art': { name: 'Luma', role: 'ART' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
@@ -5442,10 +5451,9 @@ function normalizeDashboardSessionKey(key) {
 
 function getFriendlySessionName(key) {
     if (!key) return 'Halo (PA)';
-    // For agent sessions, show persona name + session suffix
     const match = key.match(/^agent:([^:]+):(.+)$/);
     if (match) {
-        const agentId = match[1];
+        const agentId = resolveAgentId(match[1]);
         const sessionSuffix = match[2];
         const persona = AGENT_PERSONAS[agentId];
         const name = persona ? persona.name : agentId.toUpperCase();
@@ -5533,10 +5541,26 @@ window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's 
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
 
+// Helper for legacy agent session keys (preserves chat history for old alias IDs)
+const LEGACY_AGENT_MAP = {
+    'chip': 'swe',
+    'quill': 'ui',
+    'forge': 'devops',
+    'snip': 'youtube',
+    'creative': 'art'
+};
+
+function resolveAgentId(id) {
+    if (!id) return 'main';
+    id = id.toLowerCase();
+    return LEGACY_AGENT_MAP[id] || id;
+}
+window.resolveAgentId = resolveAgentId;
+
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
     const match = sessionKey?.match(/^agent:([^:]+):/);
-    return match ? match[1] : 'main';
+    return match ? resolveAgentId(match[1]) : 'main';
 }
 
 // Filter sessions to only show those belonging to a specific agent
@@ -5912,10 +5936,10 @@ async function executeSessionSwitch(sessionKey) {
         // 3a. Update current agent ID from session key
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
-            currentAgentId = agentMatch[1];
+            currentAgentId = resolveAgentId(agentMatch[1]);
             // Force sync UI immediately (before async work)
             if (typeof forceSyncActiveAgent === 'function') {
-                forceSyncActiveAgent(agentMatch[1]);
+                forceSyncActiveAgent(currentAgentId);
             }
         }
 
@@ -6143,7 +6167,7 @@ function initGateway() {
 
             // Remember this session for the agent
             const agentMatch = intendedSession.match(/^agent:([^:]+):/);
-            if (agentMatch) saveLastAgentSession(agentMatch[1], intendedSession);
+            if (agentMatch) saveLastAgentSession(resolveAgentId(agentMatch[1]), intendedSession);
 
             checkRestartToast();
 
@@ -6490,7 +6514,7 @@ function getSidebarAgentsPrefs() {
 function setSidebarAgentsPrefs(prefs) {
     try {
         localStorage.setItem(SIDEBAR_AGENTS_PREFS_KEY, JSON.stringify(prefs || {}));
-    } catch {}
+    } catch { }
 }
 
 function getSidebarAgentsHiddenSet() {
@@ -6505,7 +6529,7 @@ function getSidebarAgentsHiddenSet() {
 function setSidebarAgentsHiddenSet(set) {
     try {
         localStorage.setItem(SIDEBAR_AGENTS_HIDDEN_KEY, JSON.stringify(Array.from(set || [])));
-    } catch {}
+    } catch { }
 }
 
 function getSidebarAgentsOrder() {
@@ -6520,7 +6544,7 @@ function getSidebarAgentsOrder() {
 function setSidebarAgentsOrder(order) {
     try {
         localStorage.setItem(SIDEBAR_AGENTS_ORDER_KEY, JSON.stringify(order || []));
-    } catch {}
+    } catch { }
 }
 
 function getSidebarAgentsContainer() {
@@ -6575,7 +6599,8 @@ function computeLastActivityByAgent(sessions) {
     const lastByAgent = {};
     for (const s of (sessions || [])) {
         const match = s.key?.match(/^agent:([^:]+):/);
-        const agentId = match ? match[1] : 'main';
+        const rawAgentId = match ? match[1] : 'main';
+        const agentId = window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId;
         const ts = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
         if (!lastByAgent[agentId] || ts > lastByAgent[agentId]) {
             lastByAgent[agentId] = ts;
@@ -6763,7 +6788,7 @@ function renderSidebarAgentsModal() {
 }
 
 function resetSidebarAgentsOrder() {
-    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch {}
+    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch { }
     // Reload page for clean order restore
     location.reload();
 }
@@ -10580,8 +10605,9 @@ function setupSidebarAgents() {
     const currentSession = GATEWAY_CONFIG?.sessionKey || 'main';
     const match = currentSession.match(/^agent:([^:]+):/);
     if (match) {
-        currentAgentId = match[1];
-        setActiveSidebarAgent(match[1]);
+        const resolvedId = window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1];
+        currentAgentId = resolvedId;
+        setActiveSidebarAgent(resolvedId);
     }
 }
 

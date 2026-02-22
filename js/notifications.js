@@ -113,7 +113,8 @@ function navigateToSession(sessionKey) {
     if (typeof showPage === 'function') showPage('chat');
     const agentMatch = sessionKey.match(/^agent:([^:]+):/);
     if (agentMatch && typeof setActiveSidebarAgent === 'function') {
-        setActiveSidebarAgent(agentMatch[1]);
+        const agentId = window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1];
+        setActiveSidebarAgent(agentId);
     }
     if (typeof switchToSessionKey === 'function') {
         switchToSessionKey(sessionKey);
@@ -136,7 +137,12 @@ function showNotificationToast(title, body, sessionKey) {
 
     // Determine agent color from session key
     const agentMatch = sessionKey?.match(/^agent:([^:]+):/);
-    const agentId = agentMatch ? agentMatch[1] : 'main';
+    // Also update the agent's chat button on the Agents page
+    if (agentMatch) {
+        const agentId = window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1];
+        if (typeof updateAgentChatButton === 'function') updateAgentChatButton(agentId);
+    }
+    const agentId = agentMatch ? (window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1]) : 'main';
     const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
     const color = agentColors[agentId] || '#BC2026';
 

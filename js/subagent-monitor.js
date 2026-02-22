@@ -48,7 +48,9 @@ function renderSubagentMonitor() {
 
 function extractAgent(key) {
   const m = key.match(/^agent:([^:]+):/);
-  return m ? m[1].toUpperCase() : '?';
+  if (!m) return '?';
+  const id = window.resolveAgentId ? window.resolveAgentId(m[1]) : m[1];
+  return id.toUpperCase();
 }
 
 function extractLabel(key) {
@@ -71,7 +73,7 @@ function timeSince(ts) {
 }
 
 function escapeHtml(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // Auto-init and periodic refresh
