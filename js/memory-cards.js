@@ -745,7 +745,7 @@
             // Build fallback list display
             const displayFallbacks = usingGlobalFallbacks ? globalFallbacks : agentFallbacks;
             const fallbackListHtml = (displayFallbacks || []).map((fb, i) => `
-                <div class="agent-fallback-row" data-index="${i}" data-model="${escapeHtml(fb)}">
+                <div class="agent-fallback-row" data-index="${i}" data-model="${escapeHtml(fb)}" ${usingGlobalFallbacks ? '' : 'draggable="true"'}>
                     <span class="agent-fallback-grip">⠿</span>
                     <span class="agent-fallback-num">${i + 1}</span>
                     <span class="agent-fallback-name">${escapeHtml(fb.split('/').pop())}</span>
@@ -809,6 +809,10 @@
             el.dataset.globalFallbacks = JSON.stringify(globalFallbacks);
             el.dataset.allModels = JSON.stringify(allModels);
 
+            if (!usingGlobalFallbacks) {
+                setTimeout(() => setupFallbackDragAndDrop(agentId), 0);
+            }
+
         } catch (e) {
             el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Failed to load model config</div>`;
         }
@@ -827,7 +831,7 @@
         if (!listEl) return;
         const allModels = JSON.parse(el?.dataset.allModels || '[]');
         listEl.innerHTML = (list || []).map((fb, i) => `
-            <div class="agent-fallback-row" data-index="${i}" data-model="${escapeHtml(fb)}">
+            <div class="agent-fallback-row" data-index="${i}" data-model="${escapeHtml(fb)}" draggable="true">
                 <span class="agent-fallback-grip">⠿</span>
                 <span class="agent-fallback-num">${i + 1}</span>
                 <span class="agent-fallback-name">${escapeHtml(fb.split('/').pop())}</span>
@@ -835,6 +839,69 @@
                 <button class="agent-fallback-remove" onclick="window._memoryCards.removeFallback('${agentId}', ${i})" title="Remove">×</button>
             </div>
         `).join('') || `<div style="color:var(--text-muted); font-size:11px; padding:4px 0;">No fallbacks — add one below</div>`;
+
+        setupFallbackDragAndDrop(agentId);
+    }
+
+    function setupFallbackDragAndDrop(agentId) {
+        const listEl = document.getElementById(`agent-fallback-list-${agentId}`);
+        if (!listEl) return;
+
+        let dragSrcEl = null;
+        let dragSrcIndex = -1;
+        const rows = listEl.querySelectorAll('.agent-fallback-row[draggable="true"]');
+
+        rows.forEach(row => {
+            row.addEventListener('dragstart', function (e) {
+                dragSrcEl = this;
+                dragSrcIndex = parseInt(this.dataset.index);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', this.dataset.index);
+                this.style.opacity = '0.4';
+            });
+
+            row.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                return false;
+            });
+
+            row.addEventListener('dragenter', function (e) {
+                if (this !== dragSrcEl) {
+                    const targetIndex = parseInt(this.dataset.index);
+                    this.style.borderTop = targetIndex < dragSrcIndex ? '2px solid var(--accent)' : '';
+                    this.style.borderBottom = targetIndex > dragSrcIndex ? '2px solid var(--accent)' : '';
+                }
+            });
+
+            row.addEventListener('dragleave', function (e) {
+                this.style.borderTop = '';
+                this.style.borderBottom = '';
+            });
+
+            row.addEventListener('drop', function (e) {
+                e.stopPropagation();
+                this.style.borderTop = '';
+                this.style.borderBottom = '';
+
+                if (dragSrcEl !== this) {
+                    const toIndex = parseInt(this.dataset.index);
+                    const current = getFallbackList(agentId) || [];
+                    const movedItem = current.splice(dragSrcIndex, 1)[0];
+                    current.splice(toIndex, 0, movedItem);
+                    setFallbackList(agentId, current);
+                }
+                return false;
+            });
+
+            row.addEventListener('dragend', function (e) {
+                this.style.opacity = '1';
+                rows.forEach(r => {
+                    r.style.borderTop = '';
+                    r.style.borderBottom = '';
+                });
+            });
+        });
     }
 
     function customizeFallbacks(agentId) {
