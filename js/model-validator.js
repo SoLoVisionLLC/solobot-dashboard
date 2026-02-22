@@ -179,15 +179,21 @@ const ModelValidator = {
             const wrapper = document.createElement('div');
             wrapper.id = 'mv-stress-test-wrapper';
             wrapper.style.display = 'flex';
-            wrapper.style.alignItems = 'center';
+            wrapper.style.flexDirection = 'column';
             wrapper.style.marginLeft = '16px';
-            wrapper.style.fontSize = '12px';
-            wrapper.style.gap = '8px';
+            wrapper.style.fontSize = '11px';
+            wrapper.style.gap = '4px';
             wrapper.style.color = 'var(--text-muted)';
             
             wrapper.innerHTML = `
-                <input type="checkbox" id="mv-stress-test" style="cursor:pointer">
-                <label for="mv-stress-test" style="cursor:pointer">Stress Test (Large Payload)</label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="mv-stress-test" style="cursor:pointer">
+                    <label for="mv-stress-test" style="cursor:pointer">Mega-Stress (50k tokens)</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="mv-use-chat-context" style="cursor:pointer">
+                    <label for="mv-use-chat-context" style="cursor:pointer">Mirror Current Chat Context</label>
+                </div>
             `;
             headerAction.insertBefore(wrapper, document.getElementById('mv-test-all-btn'));
         }
@@ -551,10 +557,15 @@ const ModelValidator = {
         // Base prompt
         let testPrompt = 'Hello! Please respond with exactly: "Model validation successful."';
         
-        // If stress test, append a massive synthetic context payload (approx 50k tokens)
-        if (isStressTest) {
+        // Use current session context if requested to match chat 1:1
+        const useChatContext = document.getElementById('mv-use-chat-context')?.checked;
+        if (useChatContext && window.chatHistory) {
+            const historyText = window.chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+            testPrompt = historyText + '\n\nuser: ' + testPrompt;
+            console.log(`[ModelValidator] Using real chat context. Size: ${testPrompt.length} chars`);
+        } else if (isStressTest) {
             const largeContext = "\n\n[MEGA STRESS TEST - 50K TOKENS]\n" + 
-                               "The quick brown fox jumps over the lazy dog. ".repeat(5000); // ~50k tokens / 225k chars
+                               "The quick brown fox jumps over the lazy dog. ".repeat(5000);
             testPrompt += largeContext;
         }
         
