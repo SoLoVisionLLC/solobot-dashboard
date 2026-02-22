@@ -673,6 +673,18 @@ function loadHistoryMessages(messages) {
         return !historyIds.has(m.id) && !historyExactTexts.has(m.text);
     });
 
+    // Patch history messages: if we have a local copy with a real model, prefer it
+    // (history may return "openrouter/free" while local has the resolved model)
+    const localByText = {};
+    allLocalChatMessages.forEach(m => { if (m.text) localByText[m.text.trim()] = m; });
+    chatMessages.forEach(m => {
+        const local = localByText[m.text?.trim()];
+        if (local?.model && (!m.model || m.model === 'openrouter/free' || m.model === 'unknown')) {
+            m.model = local.model;
+            m.provider = local.provider;
+        }
+    });
+
     state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
     console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local)`);
 
