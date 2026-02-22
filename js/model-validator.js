@@ -585,7 +585,7 @@ const ModelValidator = {
             document.getElementById('mv-raw-block').textContent = '{}';
             
             // Send message (this returns immediately with runId)
-            await gateway.sendMessage(TEST_PROMPT);
+            await gateway.sendMessage(testPrompt);
             
             // Wait for actual response or timeout
             const result = await Promise.race([responsePromise, timeoutPromise]);
