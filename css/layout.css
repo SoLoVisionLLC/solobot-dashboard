@@ -372,9 +372,18 @@
                 height: 60px; /* Match sidebar-logo height */
                 display: flex;
                 align-items: center;
-                position: sticky;
+                position: fixed;
                 top: 0;
+                left: 64px;
+                right: 0;
                 z-index: 100;
+                transition: left 0.2s ease;
+            }
+
+            /* Adjust header width when sidebar is expanded */
+            .sidebar.pinned ~ .app-content .header,
+            .sidebar:hover ~ .app-content .header {
+                left: 240px;
             }
 
             .header-inner {
@@ -468,6 +477,7 @@
             /* Main content */
             .main {
                 padding: var(--space-4) 0;
+                padding-top: 76px; /* 60px header + 16px spacing */
             }
 
             /* Dashboard page doesn't use .main padding (has fixed layout) */
