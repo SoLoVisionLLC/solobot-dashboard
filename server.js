@@ -1128,34 +1128,49 @@ const server = http.createServer((req, res) => {
     try {
       const agents = [];
 
-      // Scan agents directory directly (config.agents.list was removed in recent OpenClaw versions)
-      const agentsBaseDir = path.join(OPENCLAW_HOME, 'agents');
-      let agentIds = [];
-      if (fs.existsSync(agentsBaseDir)) {
-        agentIds = fs.readdirSync(agentsBaseDir).filter(d => {
-          try { return fs.statSync(path.join(agentsBaseDir, d)).isDirectory(); }
-          catch { return false; }
-        });
+      // ── Workspace resolver ──
+      // Convention: workspace-<agentId>/ for each agent, workspace/ for main (Halo)
+      const resolveAgentWorkspace = (agentId) => {
+        if (agentId === 'main') {
+          // Halo's primary workspace is workspace/ (not workspace-main/)
+          const primary = path.join(OPENCLAW_HOME, 'workspace');
+          if (fs.existsSync(primary)) return primary;
+        }
+        // Standard: workspace-<agentId>
+        const standard = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+        if (fs.existsSync(standard)) return standard;
+        // Legacy fallback: agents/<agentId>/workspace
+        const legacy = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+        if (fs.existsSync(legacy)) return legacy;
+        return null;
+      };
+
+      // Discover all agents by scanning workspace-* directories
+      const siblings = fs.readdirSync(OPENCLAW_HOME);
+      const discoveredIds = new Set();
+
+      // Add 'main' first (Halo uses workspace/)
+      if (fs.existsSync(path.join(OPENCLAW_HOME, 'workspace'))) {
+        discoveredIds.add('main');
       }
 
-      for (const agentId of agentIds) {
-        // Each agent's workspace can be at:
-        // 1. agents/{id}/workspace (standard)
-        // 2. OPENCLAW_HOME/workspace-{id} (dedicated workspace)
-        // 3. OPENCLAW_HOME/workspace (main agent)
-        let agentDir;
-        if (agentId === 'main') {
-          agentDir = path.join(OPENCLAW_HOME, 'workspace');
-        } else {
-          agentDir = path.join(agentsBaseDir, agentId, 'workspace');
-          if (!fs.existsSync(agentDir)) {
-            agentDir = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
-          }
-        }
-        if (!fs.existsSync(agentDir)) continue;
+      // Scan workspace-<agentId> dirs
+      for (const entry of siblings) {
+        if (!entry.startsWith('workspace-')) continue;
+        const agentId = entry.replace('workspace-', '');
+        if (!agentId) continue;
+        try {
+          const stat = fs.statSync(path.join(OPENCLAW_HOME, entry));
+          if (stat.isDirectory()) discoveredIds.add(agentId);
+        } catch { /* skip */ }
+      }
+
+      // Build agent objects
+      for (const agentId of discoveredIds) {
+        const agentDir = resolveAgentWorkspace(agentId);
+        if (!agentDir) continue;
 
         const mdFiles = [];
-
         try {
           // List .md files in agent workspace root
           const agentFiles = fs.readdirSync(agentDir);
@@ -1166,23 +1181,22 @@ const server = http.createServer((req, res) => {
               if (fstat.isFile()) {
                 mdFiles.push({ name: f, size: fstat.size, modified: fstat.mtime.toISOString() });
               }
-            } catch (e) { /* skip */ }
+            } catch { /* skip */ }
           }
           // Also check memory/ subdirectory
           const memDir = path.join(agentDir, 'memory');
           if (fs.existsSync(memDir) && fs.statSync(memDir).isDirectory()) {
-            const memFiles = fs.readdirSync(memDir);
-            for (const f of memFiles) {
+            for (const f of fs.readdirSync(memDir)) {
               if (!f.endsWith('.md')) continue;
               try {
                 const fstat = fs.statSync(path.join(memDir, f));
                 if (fstat.isFile()) {
                   mdFiles.push({ name: `memory/${f}`, size: fstat.size, modified: fstat.mtime.toISOString() });
                 }
-              } catch (e) { /* skip */ }
+              } catch { /* skip */ }
             }
           }
-        } catch (e) { /* skip unreadable dirs */ }
+        } catch { /* skip unreadable dirs */ }
 
         // Parse identity from IDENTITY.md if it exists
         let name = agentId;
@@ -1196,7 +1210,7 @@ const server = http.createServer((req, res) => {
             if (nameMatch) name = nameMatch[1].trim();
             if (emojiMatch) emoji = emojiMatch[1].trim();
           }
-        } catch (e) { /* skip */ }
+        } catch { /* skip */ }
 
         agents.push({
           id: agentId,
@@ -1208,7 +1222,7 @@ const server = http.createServer((req, res) => {
         });
       }
 
-      // Sort: default agent first, then alphabetically
+      // Sort: main first, then alphabetically
       agents.sort((a, b) => {
         if (a.isDefault) return -1;
         if (b.isDefault) return 1;
@@ -1227,10 +1241,18 @@ const server = http.createServer((req, res) => {
     const agentId = decodeURIComponent(match[1]);
     const filename = decodeURIComponent(match[2]);
 
-    // Resolve workspace path from agents directory
-    const agentWorkspace = agentId === 'main'
-      ? path.join(OPENCLAW_HOME, 'workspace')
-      : path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+    // Resolve workspace path using the same convention as /api/agents
+    let agentWorkspace;
+    if (agentId === 'main') {
+      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+    } else {
+      agentWorkspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+      if (!fs.existsSync(agentWorkspace)) {
+        // Legacy fallback
+        agentWorkspace = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+      }
+    }
+
     const filePath = path.resolve(agentWorkspace, filename);
 
     // Security: ensure path is within workspace
@@ -1246,7 +1268,7 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ name: filename, content }));
     } catch (e) {
       res.writeHead(404);
-      return res.end(JSON.stringify({ error: 'File not found' }));
+      return res.end(JSON.stringify({ error: 'File not found', path: filePath }));
     }
   }
 
