@@ -544,7 +544,7 @@ function handleChatEvent(event) {
                     (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
                 if (!isDuplicate) {
-                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
                 }
