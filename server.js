@@ -1977,7 +1977,7 @@ const server = http.createServer((req, res) => {
     try {
       const configPaths = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK, OPENCLAW_CONFIG_FALLBACK2].filter(Boolean);
       const configPath = configPaths.find(p => { try { return fs.existsSync(p); } catch { return false; } });
-      if (!configPath) { res.writeHead(404); res.end(JSON.stringify({ error: 'No config file found' })); return; }
+      if (!configPath) { res.end(JSON.stringify({ agentId, modelId: 'global/default', provider: null })); return; }
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const agent = config.agents?.list?.find(a => a.id === agentId);
       if (!agent || !agent.model) {

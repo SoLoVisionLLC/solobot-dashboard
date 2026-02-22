@@ -1,12 +1,14 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-14T10:48:46Z
+// Generated: 2026-02-22T11:32:39Z
 // Modules: 25
 
 
 // === state.js ===
 // js/state.js — Global state, config constants, persistence, chat storage
 
-let state = {
+// Initialize global state on window object to prevent "Identifier already declared" errors
+// across modular script boundaries and ensure global accessibility.
+window.state = window.state || {
     status: 'idle',
     model: 'opus 4.5',
     currentTask: null,
@@ -42,8 +44,28 @@ let state = {
 };
 
 
+// Global agent color map — reads from CSS variables (--agent-*) defined in themes.css
+// Used by phase10-taskboard.js, phase11-agents.js, phase12-analytics.js
+window._lastManualModelChange = window._lastManualModelChange || null;
+
+const AGENT_COLORS = window.AGENT_COLORS = new Proxy({}, {
+    get(target, prop) {
+        if (typeof prop !== 'string') return undefined;
+        const cached = target[prop];
+        if (cached) return cached;
+        const val = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${prop}`).trim();
+        if (val) target[prop] = val;
+        return val || '';
+    }
+});
+
+function normalizeSessionKey(sessionKey) {
+    if (!sessionKey || sessionKey === 'main') return 'agent:main:main';
+    return sessionKey;
+}
+
 function chatStorageKey(sessionKey) {
-    const key = sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'main';
+    const key = normalizeSessionKey(sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
     return 'solobot-chat-' + key;
 }
 
@@ -78,19 +100,25 @@ function loadPersistedMessages() {
         // Also try legacy global key as fallback (one-time migration)
         const legacyChat = !savedChat ? localStorage.getItem('solobot-chat-messages') : null;
         const chatData = savedChat || legacyChat;
-        
+
         if (chatData) {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                state.chat.messages = parsed;
+                // Fix #1: Session-guard messages — drop any tagged with a different session
+                // This prevents stale messages from a previously-visited session appearing on hard refresh
+                const sessionTag = GATEWAY_CONFIG.sessionKey.toLowerCase();
+                state.chat.messages = parsed.filter(m => {
+                    if (!m._sessionKey) return true; // Legacy untagged — keep (conservative)
+                    return m._sessionKey.toLowerCase() === sessionTag;
+                });
                 // Migrate legacy key to session-scoped
                 if (legacyChat && !savedChat) {
                     localStorage.setItem(currentKey, chatData);
                 }
-                return;
+                if (state.chat.messages.length > 0) return;
             }
         }
-        
+
         // No local messages - fetch from server
         loadChatFromServer();
     } catch (e) {
@@ -138,7 +166,7 @@ function persistChatMessages() {
         localStorage.setItem(key, JSON.stringify(chatToSave));
         // Also update in-memory cache
         cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
-        
+
         // Also sync to server for persistence across deploys
         syncChatToServer(chatToSave);
     } catch (e) {
@@ -166,55 +194,39 @@ function syncChatToServer(messages) {
 // Load persisted messages immediately
 loadPersistedMessages();
 
-// Gateway connection configuration - load from localStorage first, server state as fallback
-
+// Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
 const GATEWAY_CONFIG = {
     host: localStorage.getItem('gateway_host') || '',
     port: parseInt(localStorage.getItem('gateway_port')) || 443,
     token: localStorage.getItem('gateway_token') || '',
-    sessionKey: localStorage.getItem('gateway_session') || 'main',
+    sessionKey: normalizeSessionKey(localStorage.getItem('gateway_session') || 'agent:main:main'),
     maxMessages: 500
 };
 
-// Function to save gateway settings to both localStorage AND server state
+// Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
-    // Save to localStorage
+    const normalizedSessionKey = normalizeSessionKey(sessionKey);
+
+    // Save to localStorage only (sessionKey is browser/localStorage concern)
     localStorage.setItem('gateway_host', host);
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
-    localStorage.setItem('gateway_session', sessionKey);
-    
-    // Also save to server state for persistence across deploys
-    state.gatewayConfig = { host, port, token, sessionKey };
-    saveState('Gateway settings updated');
-}
+    localStorage.setItem('gateway_session', normalizedSessionKey);
 
-// Function to load gateway settings from server state (called after loadState)
-function loadGatewaySettingsFromServer() {
-    // console.log('[Dashboard] loadGatewaySettingsFromServer called'); // Keep quiet
-    
-    if (state.gatewayConfig && state.gatewayConfig.host) {
-        // Always prefer server settings if they exist (server is source of truth)
-        GATEWAY_CONFIG.host = state.gatewayConfig.host;
-        GATEWAY_CONFIG.port = state.gatewayConfig.port || 443;
-        GATEWAY_CONFIG.token = state.gatewayConfig.token || '';
-        GATEWAY_CONFIG.sessionKey = state.gatewayConfig.sessionKey || 'main';
-        
-        // Also save to localStorage for faster loading next time
-        localStorage.setItem('gateway_host', GATEWAY_CONFIG.host);
-        localStorage.setItem('gateway_port', GATEWAY_CONFIG.port.toString());
-        localStorage.setItem('gateway_token', GATEWAY_CONFIG.token);
-        localStorage.setItem('gateway_session', GATEWAY_CONFIG.sessionKey);
-        
-        // console.log('[Dashboard] ✓ Loaded gateway settings from server:', GATEWAY_CONFIG.host); // Keep quiet
-    }
-    // No gateway config in server state - that's fine
+    // Update config
+    GATEWAY_CONFIG.host = host;
+    GATEWAY_CONFIG.port = port;
+    GATEWAY_CONFIG.token = token;
+    GATEWAY_CONFIG.sessionKey = normalizedSessionKey;
+
+    console.log('[saveGatewaySettings] Saved sessionKey:', normalizedSessionKey);
 }
 
 // Gateway client instance
 
 let gateway = null;
 let streamingText = '';
+let _streamingSessionKey = '';  // Session key that owns the current streamingText
 let isProcessing = false;
 let lastProcessingEndTime = 0; // Track when processing ended to avoid poll conflicts
 let historyPollInterval = null;
@@ -246,7 +258,7 @@ async function loadState() {
     const countTasks = (s) => {
         if (!s || !s.tasks) return 0;
         const t = s.tasks;
-        return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0);
+        return (t.todo?.length || 0) + (t.progress?.length || 0) + (t.done?.length || 0) + (t.archive?.length || 0);
     };
 
     // Load localStorage tasks as a safety net (in case server state is empty)
@@ -277,47 +289,20 @@ async function loadState() {
             delete vpsState.pendingChat;
             delete vpsState.chat;
 
-            // BULLETPROOF PROTECTION: Always keep whichever has MORE data
-            const serverTaskCount = countTasks(vpsState);
-            const localTaskCount = localTasks ? countTasks({ tasks: localTasks }) : 0;
-            const serverActivityCount = Array.isArray(vpsState.activity) ? vpsState.activity.length : 0;
-            const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
-
-            // Use whichever has more tasks
-            const tasksToUse = (localTaskCount > serverTaskCount && localTasks) ? localTasks : vpsState.tasks;
-            // Use whichever has more activity
-            const activityToUse = (localActivityCount > serverActivityCount) ? state.activity : vpsState.activity;
-
-            if (localTaskCount > serverTaskCount && localTasks) {
-                console.warn(`[loadState] Preserving local tasks (${localTaskCount}) over server (${serverTaskCount})`);
-            }
-            if (localActivityCount > serverActivityCount) {
-                console.warn(`[loadState] Preserving local activity (${localActivityCount}) over server (${serverActivityCount})`);
-            }
-
+            // SERVER IS ALWAYS AUTHORITATIVE for tasks and activity.
+            // Never let stale localStorage overwrite server state.
             state = {
                 ...state,
                 ...vpsState,
-                tasks: tasksToUse,
-                activity: activityToUse || [],
+                tasks: vpsState.tasks,
+                activity: vpsState.activity || [],
+                _taskVersion: vpsState._taskVersion || 0,
                 chat: currentChat,
                 system: currentSystem,
                 console: currentConsole
             };
 
-            // If local had more data, push it back to server
-            if (localTaskCount > serverTaskCount || localActivityCount > serverActivityCount) {
-                const pushData = {};
-                if (localTaskCount > serverTaskCount) pushData.tasks = tasksToUse;
-                if (localActivityCount > serverActivityCount) pushData.activity = activityToUse;
-                fetch('/api/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(pushData)
-                }).then(() => console.log('[loadState] Pushed preserved data back to server'))
-                  .catch(() => {});
-            }
-            delete state.localModified;
+            console.log(`[loadState] Loaded from server: ${countTasks(vpsState)} tasks, ${(vpsState.activity || []).length} activity, v${vpsState._taskVersion || 0}`);
             localStorage.setItem('solovision-dashboard', JSON.stringify(state));
             return;
         }
@@ -344,7 +329,7 @@ async function saveState(changeDescription = null) {
     if (changeDescription) {
         state.lastChange = changeDescription;
     }
-    
+
     // Create a trimmed copy for localStorage (limit messages to prevent quota exceeded)
     try {
         const stateForStorage = JSON.parse(JSON.stringify(state));
@@ -373,40 +358,45 @@ async function saveState(changeDescription = null) {
         }
     }
     updateLastSync();
-    
+
     // Sync to server
     await syncToServer();
 }
 
 async function syncToServer() {
     try {
-        // PROTECTION: Fetch server state first and never send fewer tasks/activity
+        // PROTECTION: Fetch server state first — check version and counts
         let serverTaskCount = 0;
         let serverActivityCount = 0;
+        let serverTaskVersion = 0;
         try {
             const checkResp = await fetch('/api/state', { cache: 'no-store' });
             if (checkResp.ok) {
                 const serverState = await checkResp.json();
                 const st = serverState.tasks || {};
-                serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0);
+                serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0) + (st.archive?.length || 0);
                 serverActivityCount = Array.isArray(serverState.activity) ? serverState.activity.length : 0;
+                serverTaskVersion = serverState._taskVersion || 0;
+
+                // If server has newer task version, pull server tasks into local state
+                if (serverTaskVersion > (state._taskVersion || 0)) {
+                    console.log(`[Sync] Server tasks are newer (v${serverTaskVersion} > v${state._taskVersion || 0}) — adopting server tasks`);
+                    state.tasks = serverState.tasks;
+                    state._taskVersion = serverTaskVersion;
+                    // Update localStorage with server tasks
+                    try { localStorage.setItem('solovision-dashboard', JSON.stringify(state)); } catch (e) { }
+                    renderTasks();
+                }
             }
         } catch (e) { /* continue with sync */ }
 
-        // Build sync payload — exclude tasks/activity if we'd wipe server data
+        // Build sync payload — NEVER push tasks or activity from browser.
+        // Server is source of truth for tasks (managed by dashboard-sync script)
+        // and activity (managed by agents). Browser is read-only for these.
         const syncPayload = JSON.parse(JSON.stringify(state));
-
-        const localTaskCount = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0);
-        const localActivityCount = Array.isArray(state.activity) ? state.activity.length : 0;
-
-        if (serverTaskCount > 0 && localTaskCount < serverTaskCount) {
-            console.warn(`[Sync] Skipping tasks — server has ${serverTaskCount}, local has ${localTaskCount}`);
-            delete syncPayload.tasks;
-        }
-        if (serverActivityCount > 0 && localActivityCount < serverActivityCount) {
-            console.warn(`[Sync] Skipping activity — server has ${serverActivityCount}, local has ${localActivityCount}`);
-            delete syncPayload.activity;
-        }
+        delete syncPayload.tasks;
+        delete syncPayload._taskVersion;
+        delete syncPayload.activity;
 
         // Don't sync transient local-only data
         delete syncPayload.chat;
@@ -418,7 +408,7 @@ async function syncToServer() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(syncPayload)
         });
-        
+
         if (response.ok) {
             const result = await response.json();
             if (result.protected?.tasks || result.protected?.activity) {
@@ -453,6 +443,16 @@ function initSampleData() {
     state.docs = [];
     // Don't initialize chat - it's managed by Gateway WebSocket
     saveState();
+}
+
+
+// ===================
+// DASHBOARD TASKS INITIALIZATION
+// ===================
+
+// Tasks are managed server-side via dashboard-sync API — no client-side task generation
+function initDashboardTasks() {
+    console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
 
 
@@ -760,6 +760,10 @@ async function clearChatHistory(skipConfirm = false, clearCache = false) {
     if (clearCache) {
         localStorage.removeItem(chatStorageKey());
     }
+
+    // Reset incremental render state
+    const chatContainer = document.getElementById('chat-page-messages');
+    if (chatContainer) { chatContainer._renderedCount = 0; chatContainer._sessionKey = null; }
 
     renderChat();
     renderChatPage();
@@ -1275,7 +1279,8 @@ let statsState = {
     history: {
         tasks: JSON.parse(localStorage.getItem('stats_history_tasks') || '[]'),
         messages: JSON.parse(localStorage.getItem('stats_history_messages') || '[]'),
-        focus: JSON.parse(localStorage.getItem('stats_history_focus') || '[]')
+        focus: JSON.parse(localStorage.getItem('stats_history_focus') || '[]'),
+        activity: JSON.parse(localStorage.getItem('stats_history_activity') || '[]')
     }
 };
 
@@ -1357,7 +1362,7 @@ function generateProgressRing(value, max, size = 50, strokeWidth = 4, color = nu
 }
 
 // ===================
-// HEATMAP GENERATORS (Real Data Only)
+// MINI HEATMAP
 // ===================
 
 function generateMiniHeatmap(data, rows = 4, cols = 7) {
@@ -1382,70 +1387,41 @@ function generateActivityHeatmap(hourlyData) {
     return `<div class="activity-heatmap">${cells}</div>`;
 }
 
-// Generate real activity data from state.activity (last 28 days)
-function getRealActivityData() {
-    const days = 28;
-    const now = Date.now();
-    const oneDayMs = 86400000;
-    const activityByDay = new Array(days).fill(0);
-    
-    if (!state.activity || state.activity.length === 0) {
-        return null; // No data yet
+// Generate sample activity data for the last 28 days
+function generateActivityData() {
+    const data = [];
+    for (let i = 0; i < 28; i++) {
+        // Random activity level 0-5, with higher probability of lower values
+        const rand = Math.random();
+        let level = 0;
+        if (rand > 0.6) level = 1;
+        if (rand > 0.75) level = 2;
+        if (rand > 0.85) level = 3;
+        if (rand > 0.93) level = 4;
+        if (rand > 0.98) level = 5;
+        data.push(level);
     }
-    
-    // Bucket activity by day
-    state.activity.forEach(item => {
-        const itemTime = item.time || 0;
-        const daysAgo = Math.floor((now - itemTime) / oneDayMs);
-        if (daysAgo >= 0 && daysAgo < days) {
-            activityByDay[days - 1 - daysAgo]++;
-        }
-    });
-    
-    // Convert counts to levels 0-5
-    const maxCount = Math.max(...activityByDay, 1);
-    return activityByDay.map(count => {
-        if (count === 0) return 0;
-        const ratio = count / maxCount;
-        if (ratio < 0.2) return 1;
-        if (ratio < 0.4) return 2;
-        if (ratio < 0.6) return 3;
-        if (ratio < 0.8) return 4;
-        return 5;
-    });
+    return data;
 }
 
-// Generate real hourly activity data (last 24 hours)
-function getRealHourlyActivityData() {
-    const hours = 24;
-    const now = Date.now();
-    const oneHourMs = 3600000;
-    const activityByHour = new Array(hours).fill(0);
-    
-    if (!state.activity || state.activity.length === 0) {
-        return null; // No data yet
+// Generate hourly activity data (24 hours)
+function generateHourlyActivityData() {
+    const data = [];
+    for (let i = 0; i < 24; i++) {
+        // More activity during working hours (9-17)
+        let base = 0;
+        if (i >= 9 && i <= 17) base = 2;
+        if (i >= 13 && i <= 15) base = 3;
+        
+        const rand = Math.random();
+        let level = base;
+        if (rand > 0.7) level = Math.min(base + 1, 5);
+        if (rand > 0.9) level = Math.min(base + 2, 5);
+        if (rand < 0.3 && base > 0) level = Math.max(base - 1, 0);
+        
+        data.push(level);
     }
-    
-    // Bucket activity by hour
-    state.activity.forEach(item => {
-        const itemTime = item.time || 0;
-        const hoursAgo = Math.floor((now - itemTime) / oneHourMs);
-        if (hoursAgo >= 0 && hoursAgo < hours) {
-            activityByHour[hours - 1 - hoursAgo]++;
-        }
-    });
-    
-    // Convert counts to levels 0-5
-    const maxCount = Math.max(...activityByHour, 1);
-    return activityByHour.map(count => {
-        if (count === 0) return 0;
-        const ratio = count / maxCount;
-        if (ratio < 0.2) return 1;
-        if (ratio < 0.4) return 2;
-        if (ratio < 0.6) return 3;
-        if (ratio < 0.8) return 4;
-        return 5;
-    });
+    return data;
 }
 
 // ===================
@@ -1458,6 +1434,7 @@ function updateQuickStats() {
     const tasksDoneEl = document.getElementById('stat-tasks-done');
     if (tasksDoneEl) {
         tasksDoneEl.textContent = tasksDone;
+        // Update history
         updateSparklineData('tasks', tasksDone);
     }
     
@@ -1498,81 +1475,79 @@ function updateQuickStats() {
         }
     }
     
-    // Render sparklines, progress rings, and heatmaps
+    // Update timestamp
+    const lastUpdatedEl = document.getElementById('stats-last-updated');
+    if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = 'Updated just now';
+    }
+    
+    // Render sparklines if containers exist
     renderSparklines();
-    renderProgressRings();
+    
+    // Render heatmaps if containers exist
     renderHeatmaps();
+    
+    // Render progress rings if containers exist
+    renderProgressRings();
 }
 
 function renderSparklines() {
-    // Tasks sparkline (smaller for stat chip)
+    // Tasks sparkline with trend
     const tasksSparklineEl = document.getElementById('sparkline-tasks');
     if (tasksSparklineEl) {
         const trend = statsState.history.tasks.length > 1 ? 
             statsState.history.tasks[statsState.history.tasks.length - 1] - statsState.history.tasks[statsState.history.tasks.length - 2] : 0;
         const type = trend > 0 ? 'positive' : trend < 0 ? 'negative' : 'neutral';
-        tasksSparklineEl.innerHTML = generateSparkline(statsState.history.tasks, 40, 20, type);
+        tasksSparklineEl.innerHTML = generateSparkline(statsState.history.tasks, 60, 24, type);
+        
+        const trendEl = document.getElementById('trend-tasks');
+        if (trendEl) {
+            trendEl.textContent = trend >= 0 ? `+${trend}` : trend;
+            trendEl.className = `stat-change ${trend > 0 ? 'positive' : trend < 0 ? 'negative' : ''}`;
+        }
     }
     
-    // Messages sparkline (smaller for stat chip)
+    // Messages sparkline
     const messagesSparklineEl = document.getElementById('sparkline-messages');
     if (messagesSparklineEl) {
-        messagesSparklineEl.innerHTML = generateSparkline(statsState.history.messages, 40, 20, 'neutral');
+        messagesSparklineEl.innerHTML = generateSparkline(statsState.history.messages, 60, 24, 'neutral');
     }
     
-    // Focus sparkline (smaller for stat chip)
+    // Focus sparkline
     const focusSparklineEl = document.getElementById('sparkline-focus');
     if (focusSparklineEl) {
-        focusSparklineEl.innerHTML = generateSparkline(statsState.history.focus, 40, 20, 'positive');
+        focusSparklineEl.innerHTML = generateSparkline(statsState.history.focus, 60, 24, 'positive');
     }
 }
 
 function renderHeatmaps() {
-    // Activity heatmap (last 28 days) - REAL DATA ONLY
+    // Activity heatmap
     const activityHeatmapEl = document.getElementById('activity-heatmap-container');
-    if (activityHeatmapEl) {
-        const activityData = getRealActivityData();
-        if (activityData) {
-            activityHeatmapEl.innerHTML = generateMiniHeatmap(activityData, 4, 7);
-        } else {
-            // Empty state
-            activityHeatmapEl.innerHTML = `
-                <div style="text-align: center; padding: var(--space-4); color: var(--text-muted);">
-                    <div style="font-size: 24px; margin-bottom: var(--space-2); opacity: 0.5;">📊</div>
-                    <div style="font-size: 11px;">Activity data builds over time</div>
-                </div>
-            `;
-        }
+    if (activityHeatmapEl && !activityHeatmapEl.dataset.initialized) {
+        const activityData = generateActivityData();
+        activityHeatmapEl.innerHTML = generateMiniHeatmap(activityData, 4, 7);
+        activityHeatmapEl.dataset.initialized = 'true';
     }
     
-    // Hourly activity heatmap (last 24 hours) - REAL DATA ONLY
+    // Hourly activity heatmap
     const hourlyHeatmapEl = document.getElementById('hourly-heatmap-container');
-    if (hourlyHeatmapEl) {
-        const hourlyData = getRealHourlyActivityData();
-        if (hourlyData) {
-            hourlyHeatmapEl.innerHTML = generateActivityHeatmap(hourlyData);
-        } else {
-            // Empty state
-            hourlyHeatmapEl.innerHTML = `
-                <div style="text-align: center; padding: var(--space-4); color: var(--text-muted);">
-                    <div style="font-size: 24px; margin-bottom: var(--space-2); opacity: 0.5;">⏱️</div>
-                    <div style="font-size: 11px;">Hourly activity will appear here</div>
-                </div>
-            `;
-        }
+    if (hourlyHeatmapEl && !hourlyHeatmapEl.dataset.initialized) {
+        const hourlyData = generateHourlyActivityData();
+        hourlyHeatmapEl.innerHTML = generateActivityHeatmap(hourlyData);
+        hourlyHeatmapEl.dataset.initialized = 'true';
     }
 }
 
 function renderProgressRings() {
-    // Task completion progress (smaller ring for stat bar)
+    // Task completion progress
     const taskProgressEl = document.getElementById('progress-ring-tasks');
     if (taskProgressEl) {
         const total = (state.tasks?.todo?.length || 0) + (state.tasks?.progress?.length || 0) + (state.tasks?.done?.length || 0);
         const done = state.tasks?.done?.length || 0;
-        taskProgressEl.innerHTML = generateProgressRing(done, total || 1, 40, 3, 'var(--success)');
+        taskProgressEl.innerHTML = generateProgressRing(done, total || 1, 36, 3, 'var(--success)');
     }
     
-    // Daily goal progress (smaller ring for stat bar)
+    // Daily goal progress (example: 10 tasks/day goal)
     const dailyGoalEl = document.getElementById('progress-ring-daily');
     if (dailyGoalEl) {
         const today = new Date().toDateString();
@@ -1580,7 +1555,7 @@ function renderProgressRings() {
             const completedDate = t.completedAt ? new Date(t.completedAt).toDateString() : null;
             return completedDate === today;
         }).length;
-        dailyGoalEl.innerHTML = generateProgressRing(doneToday, 10, 40, 3, 'var(--brand-red)');
+        dailyGoalEl.innerHTML = generateProgressRing(doneToday, 10, 36, 3, 'var(--brand-red)');
     }
 }
 
@@ -1606,13 +1581,17 @@ function updateStreak() {
 
 // Initialize sparkline data if empty
 function initSparklineData() {
-    const keys = ['tasks', 'messages', 'focus'];
+    const keys = ['tasks', 'messages', 'focus', 'activity'];
     keys.forEach(key => {
         const stored = localStorage.getItem(`stats_history_${key}`);
         if (!stored || stored === '[]') {
-            // Start with empty array - will build up naturally
-            localStorage.setItem(`stats_history_${key}`, JSON.stringify([]));
-            statsState.history[key] = [];
+            // Generate some sample historical data
+            const sampleData = [];
+            for (let i = 0; i < 7; i++) {
+                sampleData.push(Math.floor(Math.random() * 10) + 5);
+            }
+            localStorage.setItem(`stats_history_${key}`, JSON.stringify(sampleData));
+            statsState.history[key] = sampleData;
         }
     });
 }
@@ -2121,13 +2100,9 @@ function renderAgentStatuses(sessions) {
     // Sort by most recent activity
     const sorted = Object.entries(agents).sort((a, b) => b[1].lastActivity - a[1].lastActivity);
 
-    const agentLabels = {
-        main: 'SoLoBot', exec: 'EXEC', coo: 'COO', cfo: 'CFO',
-        cmp: 'CMP', dev: 'DEV', family: 'Family', tax: 'Tax', sec: 'SEC', smm: 'SMM'
-    };
-
     container.innerHTML = sorted.map(([id, data]) => {
-        const label = agentLabels[id] || id.toUpperCase();
+        const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
+        const label = persona ? `${persona.name} (${persona.role})` : id.toUpperCase();
         const sessionCount = data.sessions.length;
         const timeSince = data.lastActivity ? timeAgo(data.lastActivity) : 'No activity';
         const isActive = data.lastActivity && (Date.now() - data.lastActivity < 300000); // 5min
@@ -2161,12 +2136,36 @@ function timeAgo(timestamp) {
     return Math.floor(diff / 86400000) + 'd ago';
 }
 
+let _switchingAgent = false;
 function switchToAgent(agentId) {
-    // Navigate to chat page with this agent
+    if (_switchingAgent) return; // Debounce
+    _switchingAgent = true;
+    setTimeout(() => _switchingAgent = false, 500);
+
+    // Navigate to chat page immediately
     if (typeof showPage === 'function') showPage('chat');
     if (typeof setActiveSidebarAgent === 'function') setActiveSidebarAgent(agentId);
     currentAgentId = agentId;
-    if (typeof fetchSessions === 'function') fetchSessions();
+
+    // Determine target session: last used for this agent, or agent:ID:main
+    const lastSession = typeof getLastAgentSession === 'function' ? getLastAgentSession(agentId) : null;
+    const targetSession = lastSession || `agent:${agentId}:main`;
+
+    // If already on this session, just refresh the dropdown
+    if (targetSession === (currentSessionName || GATEWAY_CONFIG?.sessionKey)) {
+        if (typeof populateSessionDropdown === 'function') populateSessionDropdown();
+        return;
+    }
+
+    // Switch to the session directly (fast path — no fetchSessions needed)
+    if (typeof switchToSession === 'function') {
+        switchToSession(targetSession);
+    }
+
+    // Fetch sessions in background to update the dropdown
+    if (typeof fetchSessions === 'function') {
+        setTimeout(() => fetchSessions(), 100);
+    }
 }
 
 // Auto-init when gateway connects
@@ -3326,47 +3325,47 @@ function isSystemMessage(text, from) {
 
     // === TOOL OUTPUT FILTERING ===
     // Filter out obvious tool results that shouldn't appear in chat
-    
+
     // JSON outputs (API responses, fetch results)
     if (trimmed.startsWith('{') && trimmed.includes('"')) return true;
-    
+
     // Command outputs
     if (trimmed.startsWith('Successfully replaced text in')) return true;
     if (trimmed.startsWith('Successfully wrote')) return true;
     if (trimmed === '(no output)') return true;
     if (trimmed.startsWith('[main ') && trimmed.includes('file changed')) return true;
     if (trimmed.startsWith('To https://github.com')) return true;
-    
+
     // Git/file operation outputs  
     if (/^\[main [a-f0-9]+\]/.test(trimmed)) return true;
     if (trimmed.startsWith('Exported ') && trimmed.includes(' activities')) return true;
     if (trimmed.startsWith('Posted ') && trimmed.includes(' activities')) return true;
-    
+
     // Token/key outputs (security - never show these)
     if (/^ghp_[A-Za-z0-9]+$/.test(trimmed)) return true;
     if (/^sk_[A-Za-z0-9]+$/.test(trimmed)) return true;
-    
+
     // File content dumps (markdown files being read)
     if (trimmed.startsWith('# ') && trimmed.length > 500) return true;
-    
+
     // Grep/search output (line numbers with code)
     if (/^\d+:\s*(if|const|let|var|function|class|return|import|export)\s/.test(trimmed)) return true;
     if (/^\d+[-:].*\.(js|ts|py|md|json|html|css)/.test(trimmed)) return true;
-    
+
     // Multiple line number prefixes (grep output)
     const lineNumberPattern = /^\d+:/;
     const lines = trimmed.split('\n');
     if (lines.length > 2 && lines.filter(l => lineNumberPattern.test(l.trim())).length > lines.length / 2) return true;
-    
+
     // Code blocks with state/config references
     if (trimmed.includes('state.chat.messages') || trimmed.includes('GATEWAY_CONFIG')) return true;
     if (trimmed.includes('maxMessages:') && /\d+:/.test(trimmed)) return true;
-    
+
     // === HEARTBEAT FILTERING ===
-    
+
     // Exact heartbeat matches
     if (trimmed === 'HEARTBEAT_OK') return true;
-    
+
     // === INTERNAL CONTROL MESSAGES ===
     // OpenClaw internal signals that should never appear in chat
     if (trimmed === 'NO_REPLY') return true;
@@ -3375,12 +3374,19 @@ function isSystemMessage(text, from) {
     if (trimmed === 'REPLY_SKIP') return true;
     if (trimmed === 'ANNOUNCE_SKIP') return true;
     if (trimmed.startsWith('Agent-to-agent announce')) return true;
-    
+
+    // Gateway-injected read-sync / read_ack messages (internal notification signals)
+    if (trimmed === '[read-sync]') return true;
+    if (trimmed === '[[read_ack]]') return true;
+    if (trimmed.startsWith('[[read_ack]]')) return true;
+    if (trimmed === '[read-sync]\n\n[[read_ack]]') return true;
+    if (/^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(trimmed)) return true;
+
     // System timestamped messages
     if (trimmed.startsWith('System: [')) return true;
     if (trimmed.startsWith('System:')) return true;
     if (/^System:\s*\[/i.test(trimmed)) return true;
-    
+
     // HEARTBEAT messages (cron/scheduled)
     if (trimmed.includes('] HEARTBEAT:')) return true;
     if (trimmed.includes('] Cron:')) return true;
@@ -3408,22 +3414,31 @@ function isSystemMessage(text, from) {
     return false;
 }
 
-// Provider and Model selection functions (currently just for display)
-window.changeProvider = function() {
-    console.warn('[Dashboard] Provider selection not implemented - providers are configured at OpenClaw gateway level');
-    showToast('Providers must be configured at the OpenClaw gateway level', 'warning');
-};
-
-window.updateProviderDisplay = function() {
+// Provider and Model selection functions
+window.changeProvider = function () {
     const providerSelect = document.getElementById('provider-select');
     if (!providerSelect) return;
-    
+
     const selectedProvider = providerSelect.value;
-    
+
+    // Update display
+    const providerNameEl = document.getElementById('provider-name');
+    if (providerNameEl) providerNameEl.textContent = selectedProvider;
+
+    // Update model dropdown for this provider
+    updateModelDropdown(selectedProvider);
+};
+
+window.updateProviderDisplay = function () {
+    const providerSelect = document.getElementById('provider-select');
+    if (!providerSelect) return;
+
+    const selectedProvider = providerSelect.value;
+
     // Update display (with null check)
     const providerNameEl = document.getElementById('provider-name');
     if (providerNameEl) providerNameEl.textContent = selectedProvider;
-    
+
     // Update model dropdown for this provider
     updateModelDropdown(selectedProvider);
 };
@@ -3434,28 +3449,30 @@ async function populateProviderDropdown() {
         document.getElementById('provider-select'),
         document.getElementById('setting-provider')
     ].filter(Boolean);
-    
+
     if (selects.length === 0) {
         console.warn('[Dashboard] No provider-select elements found');
         return [];
     }
-    
+
     try {
         const response = await fetch('/api/models/list');
         if (!response.ok) throw new Error(`API returned ${response.status}`);
 
         const allModels = await response.json();
         const providers = Object.keys(allModels);
-        
+
         for (const select of selects) {
             select.innerHTML = '';
             providers.forEach(provider => {
                 const option = document.createElement('option');
                 option.value = provider;
-                option.textContent = provider.split('-').map(w => 
+                option.textContent = provider.split('-').map(w =>
                     w.charAt(0).toUpperCase() + w.slice(1)
                 ).join(' ');
-                if (provider === currentProvider) option.selected = true;
+                if (provider === currentProvider) {
+                    option.selected = true;
+                }
                 select.appendChild(option);
             });
         }
@@ -3468,14 +3485,14 @@ async function populateProviderDropdown() {
 }
 
 // Handler for settings page provider dropdown change
-window.onSettingsProviderChange = async function() {
+window.onSettingsProviderChange = async function () {
     const providerSelect = document.getElementById('setting-provider');
     const modelSelect = document.getElementById('setting-model');
     if (!providerSelect || !modelSelect) return;
-    
+
     const provider = providerSelect.value;
     const models = await getModelsForProvider(provider);
-    
+
     modelSelect.innerHTML = '';
     models.forEach(model => {
         const option = document.createElement('option');
@@ -3487,21 +3504,32 @@ window.onSettingsProviderChange = async function() {
 };
 
 // Refresh models from CLI (force cache invalidation)
-window.refreshModels = async function() {
+window.refreshModels = async function () {
     showToast('Refreshing models from CLI...', 'info');
-    
+
     try {
         const response = await fetch('/api/models/refresh', { method: 'POST' });
         const result = await response.json();
-        
+
         if (result.ok) {
             showToast(`${result.message}`, 'success');
             // Refresh the provider dropdown with new models
             await populateProviderDropdown();
             // Update model dropdown for current provider (use currentProvider variable as fallback)
             const providerSelect = document.getElementById('provider-select');
-            const provider = providerSelect?.value || currentProvider || 'openrouter';
+            const provider = providerSelect?.value || currentProvider || 'anthropic';
             await updateModelDropdown(provider);
+
+            // Also refresh current model info from server
+            try {
+                const modelResponse = await fetch('/api/models/current');
+                const modelInfo = await modelResponse.json();
+                if (modelInfo?.modelId && modelInfo?.provider) {
+                    syncModelDisplay(modelInfo.modelId, modelInfo.provider);
+                }
+            } catch (e) {
+                console.warn('[Dashboard] Failed to refresh current model info:', e.message);
+            }
         } else {
             showToast(result.message || 'Failed to refresh models', 'warning');
         }
@@ -3521,69 +3549,110 @@ window.refreshModels = async function() {
  * - Updates the agent's default configuration (via /api/models/set).
  * - "Global Default" reverts session to valid system default.
  */
-window.changeSessionModel = async function() {
+window.changeSessionModel = async function () {
     const modelSelect = document.getElementById('model-select');
     const selectedModel = modelSelect?.value;
-    
+
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
         return;
     }
-    
+
+    if (selectedModel === 'global/default') {
+        // This is valid - user wants to revert to global default
+        console.log('[Dashboard] User selected Global Default - will revert to system default');
+    } else if (!selectedModel.includes('/')) {
+        showToast('Invalid model format. Please select a valid model.', 'warning');
+        return;
+    }
+
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to gateway', 'warning');
         return;
     }
-    
+
     // Track manual change to prevent UI reversion
     window._lastManualModelChange = Date.now();
-    
+
     try {
-        const sessionKey = GATEWAY_CONFIG.sessionKey || 'main';
-        console.log(`[Dashboard] Changing model to: ${selectedModel} (session: ${sessionKey})`);
+        const agentId = window.currentAgentId || 'main'; // Use global currentAgentId
+        console.log(`[Dashboard] Applying model change for agent: ${agentId}, model: ${selectedModel}`);
+
+        // Update the lock immediately so the sync logic doesn't revert it
+        if (window._configModelLocks) {
+            window._configModelLocks[window.currentSessionName] = selectedModel;
+            console.log(`[Dashboard] Updated lock for ${window.currentSessionName} to ${selectedModel}`);
+        }
+
+        // 1. Update gateway session if applicable
+        if (gateway && gateway.isConnected()) {
+            gateway.request('sessions.patch', {
+                key: window.currentSessionName,
+                model: selectedModel
+            });
+        }
 
         if (selectedModel === 'global/default') {
-            // Revert session to use global default (remove override)
-            await gateway.patchSession(sessionKey, { model: null });
-            
+            // Remove per-agent model override — revert to global default
+            await fetch('/api/models/set-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId, modelId: 'global/default' })
+            });
+
+            // Also clear session override
+            try { await gateway.patchSession(window.currentSessionName, { model: null }); } catch (_) { }
+
             // Fetch current global default to update UI
             const response = await fetch('/api/models/current');
             const globalModel = await response.json();
-            
+
             if (globalModel?.modelId) {
                 currentModel = globalModel.modelId;
                 const provider = globalModel.provider || currentModel.split('/')[0];
                 currentProvider = provider;
-                
-                // Update UI to show the resolved global model
+
                 syncModelDisplay(currentModel, currentProvider);
                 showToast('Reverted to Global Default', 'success');
             }
         } else {
-            // 1. Update Current Session (Immediate)
-            await gateway.patchSession(sessionKey, { model: selectedModel });
-            
-            // 2. Update Agent/Global Default (Persist)
-            // This ensures new sessions or page reloads use this model
-            fetch('/api/models/set', {
+            // Update per-agent model in openclaw.json
+            const agentId = currentAgentId || 'main';
+            const setResult = await fetch('/api/models/set-agent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modelId: selectedModel })
-            }).catch(e => console.error('Failed to update global default:', e));
-            
+                body: JSON.stringify({ agentId, modelId: selectedModel })
+            });
+            const setData = await setResult.json();
+            if (!setResult.ok) {
+                throw new Error(setData.error || 'Failed to set agent model');
+            }
+
+            // Also patch current session so it takes effect immediately
+            try {
+                await gateway.patchSession(window.currentSessionName, { model: selectedModel });
+            } catch (e) {
+                console.warn('[Dashboard] sessions.patch model failed (may need gateway restart):', e.message);
+            }
+
             // Update local state
             currentModel = selectedModel;
             const provider = selectedModel.split('/')[0];
             currentProvider = provider;
             localStorage.setItem('selected_model', selectedModel);
             localStorage.setItem('selected_provider', provider);
-            
+
+            // Update lock so new manual choice is honored
+            if (window._configModelLocks) {
+                window._configModelLocks[window.currentSessionName] = selectedModel;
+            }
+
             // Update settings display
             const currentModelDisplay = document.getElementById('current-model-display');
             if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
             const currentProviderDisplay = document.getElementById('current-provider-display');
             if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
-            
+
             // Ensure provider dropdown matches
             const providerSelectEl = document.getElementById('provider-select');
             if (providerSelectEl) {
@@ -3596,7 +3665,7 @@ window.changeSessionModel = async function() {
                 }
                 providerSelectEl.value = provider;
             }
-            
+
             showToast(`Model set to ${selectedModel.split('/').pop()}`, 'success');
         }
     } catch (error) {
@@ -3609,49 +3678,59 @@ window.changeSessionModel = async function() {
  * Settings: change the GLOBAL DEFAULT model for all agents.
  * Patches openclaw.json via the server API and triggers gateway restart.
  */
-window.changeGlobalModel = async function() {
+window.changeGlobalModel = async function () {
     const modelSelect = document.getElementById('setting-model');
     const providerSelect = document.getElementById('setting-provider');
     const selectedModel = modelSelect?.value;
     const selectedProvider = providerSelect?.value;
-    
+
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
         return;
     }
-    
+
+    if (!selectedModel.includes('/')) {
+        showToast('Invalid model format. Please select a valid model.', 'warning');
+        return;
+    }
+
     if (selectedModel.includes('ERROR')) {
         showToast('Cannot change model - configuration error', 'error');
         return;
     }
-    
+
+    if (!selectedProvider) {
+        showToast('Please select a provider', 'warning');
+        return;
+    }
+
     try {
         console.log(`[Dashboard] Changing global default model to: ${selectedModel}`);
-        
+
         const response = await fetch('/api/models/set', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ modelId: selectedModel })
         });
-        
+
         const result = await response.json();
-        
+
         if (response.ok) {
             currentModel = selectedModel;
             const provider = selectedModel.split('/')[0];
             currentProvider = provider;
             localStorage.setItem('selected_provider', provider);
             localStorage.setItem('selected_model', selectedModel);
-            
+
             // Update all displays
             const currentModelDisplay = document.getElementById('current-model-display');
             const currentProviderDisplay = document.getElementById('current-provider-display');
             if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
             if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
-            
+
             // Sync header dropdown
             selectModelInDropdowns(selectedModel);
-            
+
             showToast(`Global default → ${selectedModel.split('/').pop()}. Gateway restarting...`, 'success');
         } else {
             showToast(`Failed: ${result.error || 'Unknown error'}`, 'error');
@@ -3665,46 +3744,108 @@ window.changeGlobalModel = async function() {
 // Legacy alias — keep for any old references
 window.changeModel = window.changeSessionModel;
 
-async function updateModelDropdown(provider) {
-    const models = await getModelsForProvider(provider);
-    
-    // Populate both dropdowns independently
-    const selects = [
-        document.getElementById('model-select'),
-        document.getElementById('setting-model')
-    ].filter(Boolean);
-    
-    for (const select of selects) {
-        select.innerHTML = '';
-        
-        // Add "Global Default" option first
-        const globalOption = document.createElement('option');
-        globalOption.value = 'global/default';
-        globalOption.textContent = 'Global Default 🌐';
-        globalOption.style.fontWeight = 'bold';
-        select.appendChild(globalOption);
-        
-        // Add separator
-        const separator = document.createElement('option');
-        separator.disabled = true;
-        separator.textContent = '──────────';
-        select.appendChild(separator);
-        
-        models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model.value;
-            option.textContent = model.name;
-            if (model.selected) option.selected = true;
-            select.appendChild(option);
-        });
-        
-        // If current model matches global default, select it? 
-        // Logic handled by selectModelInDropdowns or syncModelDisplay
+/**
+ * Load the saved model for a specific agent
+ * Fetches from server and updates the UI dropdowns
+ */
+window.loadAgentModel = async function (agentId) {
+    if (!agentId) return;
+
+    try {
+        // Fetch agent's model from server
+        const response = await fetch(`/api/models/agent/${agentId}`);
+        const agentModel = await response.json();
+
+        if (!agentModel?.modelId || agentModel.modelId === 'global/default') {
+            console.log(`[Dashboard] Agent ${agentId} has no model override — using global default`);
+            return;
+        }
+
+        console.log(`[Dashboard] Loaded model for ${agentId}: ${agentModel.modelId}`);
+
+        // Update current model vars
+        currentModel = agentModel.modelId;
+        currentProvider = agentModel.provider || agentModel.modelId.split('/')[0];
+
+        // Update localStorage for persistence
+        localStorage.setItem('selected_model', currentModel);
+        localStorage.setItem('selected_provider', currentProvider);
+
+        // Update UI
+        syncModelDisplay(currentModel, currentProvider);
+
+        // Update dropdowns
+        const providerSelect = document.getElementById('provider-select');
+        if (providerSelect) {
+            providerSelect.value = currentProvider;
+            await updateHeaderModelDropdown(currentProvider);
+        }
+
+        const modelSelect = document.getElementById('model-select');
+        if (modelSelect) {
+            modelSelect.value = currentModel;
+        }
+    } catch (e) {
+        console.warn(`[Dashboard] Failed to load model for ${agentId}:`, e.message);
     }
+};
+
+async function updateHeaderModelDropdown(provider) {
+    const models = await getModelsForProvider(provider);
+    const select = document.getElementById('model-select');
+    if (!select) return;
+
+    select.innerHTML = '';
+
+    // Add "Global Default" option first (header can revert to global default)
+    const globalOption = document.createElement('option');
+    globalOption.value = 'global/default';
+    globalOption.textContent = 'Global Default 🌐';
+    globalOption.style.fontWeight = 'bold';
+    select.appendChild(globalOption);
+
+    // Add separator
+    const separator = document.createElement('option');
+    separator.disabled = true;
+    separator.textContent = '──────────';
+    select.appendChild(separator);
+
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.name;
+        if (model.selected) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+async function updateSettingsModelDropdown(provider) {
+    const models = await getModelsForProvider(provider);
+    const select = document.getElementById('setting-model');
+    if (!select) return;
+
+    select.innerHTML = '';
+
+    // Settings dropdown should NOT have "Global Default" option since it's for setting the global default
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.name;
+        if (model.selected) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+// Legacy function for backward compatibility - calls both functions
+async function updateModelDropdown(provider) {
+    await Promise.all([
+        updateHeaderModelDropdown(provider),
+        updateSettingsModelDropdown(provider)
+    ]);
 }
 
 async function getModelsForProvider(provider) {
-    // Prefer gateway-sourced models (fetched via WebSocket — most reliable)
+    // Prefer live gateway models (most up-to-date — reads running config)
     if (window._gatewayModels && window._gatewayModels[provider]) {
         const providerModels = window._gatewayModels[provider];
         return providerModels.map(m => ({
@@ -3713,8 +3854,8 @@ async function getModelsForProvider(provider) {
             selected: (m.id === currentModel)
         }));
     }
-    
-    // Fallback: fetch from server API
+
+    // Fallback: fetch from server API (Docker config may be stale)
     try {
         const response = await fetch('/api/models/list');
         if (!response.ok) {
@@ -3740,21 +3881,115 @@ async function getModelsForProvider(provider) {
     }
 }
 
+/**
+ * Fetch model configuration directly from the gateway via WebSocket RPC.
+ * The live gateway config is the source of truth — the Docker-mounted config
+ * may be stale if openclaw.json was updated after the container started.
+ */
+async function fetchModelsFromGateway() {
+    if (!gateway || !gateway.isConnected()) return;
+
+    try {
+        const config = await gateway.getConfig();
+
+        let configData = config;
+        if (typeof config === 'string') configData = JSON.parse(config);
+        if (configData?.raw) configData = JSON.parse(configData.raw);
+
+        const modelConfig = configData?.agents?.defaults?.model;
+        if (!modelConfig) return;
+
+        const primary = modelConfig.primary;
+        const fallbacks = modelConfig.fallbacks || [];
+        const picker = modelConfig.picker || [];
+        const configuredModels = Object.keys(configData?.agents?.defaults?.models || {});
+
+        const allModelIds = [...new Set([
+            ...(primary ? [primary] : []),
+            ...picker,
+            ...fallbacks,
+            ...configuredModels
+        ])];
+
+        if (allModelIds.length === 0) return;
+
+        // Group by provider
+        const modelsByProvider = {};
+        for (const modelId of allModelIds) {
+            const slashIdx = modelId.indexOf('/');
+            if (slashIdx === -1) continue;
+
+            const provider = modelId.substring(0, slashIdx);
+            const modelName = modelId.substring(slashIdx + 1);
+
+            if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
+
+            const isPrimary = modelId === primary;
+            const displayName = modelName + (isPrimary ? ' ⭐' : '');
+
+            if (!modelsByProvider[provider].some(m => m.id === modelId)) {
+                modelsByProvider[provider].push({
+                    id: modelId,
+                    name: displayName,
+                    tier: isPrimary ? 'default' : 'fallback'
+                });
+            }
+        }
+
+        // Update the provider dropdown with gateway-sourced providers
+        const providerSelect = document.getElementById('provider-select');
+        if (providerSelect) {
+            const providers = Object.keys(modelsByProvider);
+            providerSelect.innerHTML = '';
+            providers.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                if (p === currentProvider) opt.selected = true;
+                providerSelect.appendChild(opt);
+            });
+        }
+
+        // Store for getModelsForProvider to prefer
+        window._gatewayModels = modelsByProvider;
+
+        // Refresh model dropdown for the active provider
+        const activeProvider = providerSelect?.value || currentProvider;
+        if (activeProvider) {
+            await updateModelDropdown(activeProvider);
+            if (currentModel) selectModelInDropdowns(currentModel);
+        }
+
+        console.log(`[Dashboard] Gateway models: ${allModelIds.length} models from ${Object.keys(modelsByProvider).length} providers`);
+
+        // Sync to server so /api/models/list works even without config file volume mount
+        try {
+            fetch('/api/models/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(modelsByProvider)
+            });
+        } catch (_) { }
+    } catch (e) {
+        console.warn('[Dashboard] Failed to fetch models from gateway:', e.message);
+    }
+}
+
 function getConfiguredModels() {
     // Fallback to configured models if command fails
     try {
         const exec = require('child_process').execSync;
         const result = exec('moltbot models list 2>/dev/null | tail -n +4', { encoding: 'utf8' });
-        
+
         const models = [];
         const lines = result.split('\n').filter(line => line.trim());
-        
+
         for (const line of lines) {
             const parts = line.trim().split(/\s+/);
             if (parts.length >= 2) {
                 const modelId = parts[0];
                 const tags = parts[parts.length - 1] || '';
-                
+
                 models.push({
                     value: modelId,
                     name: modelId.split('/').pop() || modelId,
@@ -3762,7 +3997,7 @@ function getConfiguredModels() {
                 });
             }
         }
-        
+
         return models;
     } catch (e) {
         return [];
@@ -3770,8 +4005,44 @@ function getConfiguredModels() {
 }
 
 // Current model state
-let currentProvider = 'anthropic';
-let currentModel = 'anthropic/claude-opus-4-5';
+// Initialize provider and model variables on window for global access
+window.currentProvider = window.currentProvider || null;
+window.currentModel = window.currentModel || null;
+
+/**
+ * Resolve a bare model name (e.g. "claude-opus-4-6") to its full "provider/model" ID.
+ * The gateway sessions.list often returns model names without the provider prefix.
+ * Uses known prefixes to resolve the model.
+ */
+function resolveFullModelId(modelStr) {
+    if (!modelStr) return modelStr;
+
+    // Special handling for OpenRouter which often uses double slashes or gets stripped
+    if (modelStr.includes('moonshotai/') || modelStr.includes('minimax/') || modelStr.includes('deepseek/')) {
+        if (!modelStr.startsWith('openrouter/')) {
+            return `openrouter/${modelStr}`;
+        }
+        return modelStr;
+    }
+
+    // Already has a provider prefix
+    if (modelStr.includes('/')) return modelStr;
+
+    // Well-known provider prefixes
+    const knownPrefixes = {
+        'claude': 'anthropic',
+        'gpt': 'openai-codex',
+        'o1': 'openai',
+        'o3': 'openai',
+        'gemini': 'google',
+        'kimi': 'moonshot',
+    };
+    for (const [prefix, provider] of Object.entries(knownPrefixes)) {
+        if (modelStr.startsWith(prefix)) return `${provider}/${modelStr}`;
+    }
+
+    return modelStr;
+}
 
 /**
  * Sync the model dropdown and display elements with the actual model in use.
@@ -3780,36 +4051,56 @@ let currentModel = 'anthropic/claude-opus-4-5';
  */
 function syncModelDisplay(model, provider) {
     if (!model) return;
-    
-    // Ignore updates if manual change happened recently (prevent reversion flicker)
-    if (window._lastManualModelChange && (Date.now() - window._lastManualModelChange < 3000)) {
+
+    // 1. Ignore updates if manual change happened recently (prevent reversion flicker)
+    const now = Date.now();
+    if (window._lastManualModelChange && (now - window._lastManualModelChange < 5000)) {
+        console.log('[Dashboard] Skipping model sync due to recent manual change');
         return;
     }
-    
+
+    // 2. STICKY CONFIG LOCK: If a model is set in openclaw.json, refuse to let gateway change it
+    const activeSession = window.currentSessionName || '';
+    if (window._configModelLocks && window._configModelLocks[activeSession]) {
+        const lockedModel = window._configModelLocks[activeSession];
+        if (model !== lockedModel) {
+            console.log(`[Dashboard] IGNORING gateway model override (${model}) — Session is locked to openclaw.json value: ${lockedModel}`);
+            return;
+        }
+    }
+
+    // Resolve bare model names to full provider/model IDs
+    model = resolveFullModelId(model);
+
     if (model === currentModel && provider === currentProvider) return;
-    
+
     console.log(`[Dashboard] Model sync: ${currentModel} → ${model} (provider: ${provider || currentProvider})`);
     currentModel = model;
-    
+
     // Extract provider from model ID if not provided
     if (!provider && model.includes('/')) {
-        provider = model.split('/')[0];
+        // If it's an OpenRouter model with double slash, provider is always openrouter
+        if (model.includes('moonshotai/') || model.includes('minimax/')) {
+            provider = 'openrouter';
+        } else {
+            provider = model.split('/')[0];
+        }
     }
     if (provider) currentProvider = provider;
-    
+
     // Update localStorage
     localStorage.setItem('selected_model', model);
     if (provider) localStorage.setItem('selected_provider', provider);
-    
+
     // Update settings modal displays
     const currentModelDisplay = document.getElementById('current-model-display');
     if (currentModelDisplay) currentModelDisplay.textContent = model;
-    
+
     // Update provider display & dropdown
     if (provider) {
         const currentProviderDisplay = document.getElementById('current-provider-display');
         if (currentProviderDisplay) currentProviderDisplay.textContent = provider;
-        
+
         const providerSelectEl = document.getElementById('provider-select');
         if (providerSelectEl) {
             // Make sure provider option exists
@@ -3822,9 +4113,19 @@ function syncModelDisplay(model, provider) {
             }
             providerSelectEl.value = provider;
         }
-        
-        // Refresh model dropdown for this provider, then select the right model
+
+        // Also update settings provider dropdown
+        const settingProviderEl = document.getElementById('setting-provider');
+        if (settingProviderEl) {
+            settingProviderEl.value = provider;
+        }
+
+        // Refresh model dropdowns for this provider, then select the right model
         updateModelDropdown(provider).then(() => {
+            selectModelInDropdowns(model);
+        }).catch(e => {
+            console.warn('[Dashboard] Failed to update model dropdowns:', e);
+            // Fallback: try to select model directly
             selectModelInDropdowns(model);
         });
     } else {
@@ -3832,62 +4133,45 @@ function syncModelDisplay(model, provider) {
     }
 }
 
-// Apply per-session model override from availableSessions (if present)
+// Track models loaded from config to prevent gateway overrides
+window._configModelLocks = window._configModelLocks || {};
+
+// Apply per-session model override — openclaw.json is SOURCE OF TRUTH
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
-    
+
+    const agentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
     let sessionModel = null;
-    
-    // 1. Check local availableSessions cache (model = last used model from sessions.list)
-    const session = availableSessions.find(s => s.key === sessionKey);
-    const cachedModel = session?.model && session.model !== 'unknown' ? session.model : null;
-    if (cachedModel) {
-        sessionModel = cachedModel;
-    }
-    
-    // 2. If not cached, refresh sessions list from gateway
-    if (!sessionModel) {
+
+    // === 1. FIRST: Check openclaw.json for agent-specific model (source of truth) ===
+    if (agentId) {
         try {
-            const result = await gateway?.listSessions?.({});
-            if (result?.sessions?.length) {
-                availableSessions = result.sessions.map(s => ({
-                    key: s.key,
-                    name: getFriendlySessionName(s.key),
-                    displayName: getFriendlySessionName(s.key),
-                    updatedAt: s.updatedAt,
-                    totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
-                    model: s.model || 'unknown',
-                    sessionId: s.sessionId
-                }));
-                const updated = availableSessions.find(s => s.key === sessionKey);
-                const updatedModel = updated?.model && updated.model !== 'unknown' ? updated.model : null;
-                if (updatedModel) sessionModel = updatedModel;
+            const agentModel = await fetch(`/api/models/agent/${agentId}`).then(r => r.json());
+            if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
+                sessionModel = agentModel.modelId;
+                console.log(`[Dashboard] LOCKING model for ${agentId} to config value: ${sessionModel}`);
+                window._configModelLocks[sessionKey] = sessionModel;
             }
-        } catch (e) {
-            console.warn('[Dashboard] Failed to refresh sessions for model override:', e.message);
-        }
+        } catch (e) { }
     }
-    
-    // 3. Fallback: use global default from openclaw.json via config.get
+
+    // === 2. SECOND: Check global default in openclaw.json ===
     if (!sessionModel) {
         try {
-            if (gateway && gateway.isConnected()) {
-                const config = await gateway.getConfig();
-                let configData = config;
-                if (typeof config === 'string') configData = JSON.parse(config);
-                if (configData?.raw) configData = JSON.parse(configData.raw);
-                const primary = configData?.agents?.defaults?.model?.primary;
-                if (primary) {
-                    sessionModel = primary;
-                    console.log(`[Dashboard] Session ${sessionKey} using global default: ${sessionModel}`);
+            const response = await fetch('/api/models/current');
+            if (response.ok) {
+                const modelInfo = await response.json();
+                if (modelInfo?.modelId) {
+                    sessionModel = modelInfo.modelId;
+                    console.log(`[Dashboard] LOCKING model to global default: ${sessionModel}`);
+                    window._configModelLocks[sessionKey] = sessionModel;
                 }
             }
-        } catch (e) {
-            console.warn('[Dashboard] Failed to fetch global default model:', e.message);
-        }
+        } catch (e) { }
     }
-    
+
     if (sessionModel) {
+        sessionModel = resolveFullModelId(sessionModel);
         const provider = sessionModel.includes('/') ? sessionModel.split('/')[0] : currentProvider;
         syncModelDisplay(sessionModel, provider);
     } else {
@@ -3895,95 +4179,6 @@ async function applySessionModelOverride(sessionKey) {
     }
 }
 
-/**
- * Fetch model configuration directly from the gateway via WebSocket RPC.
- * This is the most reliable source — it reads the live openclaw.json from the running gateway.
- */
-async function fetchModelsFromGateway() {
-    if (!gateway || !gateway.isConnected()) return;
-    
-    try {
-        const config = await gateway.getConfig();
-        
-        // Parse the config to find model info
-        let configData = config;
-        if (typeof config === 'string') {
-            configData = JSON.parse(config);
-        }
-        // config.get might return { raw: "...", hash: "..." }
-        if (configData?.raw) {
-            configData = JSON.parse(configData.raw);
-        }
-        
-        const modelConfig = configData?.agents?.defaults?.model;
-        if (!modelConfig) {
-            console.warn('[Dashboard] No model config in gateway response');
-            return;
-        }
-        
-        const primary = modelConfig.primary;
-        const fallbacks = modelConfig.fallbacks || [];
-        const picker = modelConfig.picker || [];
-        
-        // Combine all model IDs
-        const allModelIds = [...new Set([
-            ...(primary ? [primary] : []),
-            ...picker,
-            ...fallbacks
-        ])];
-        
-        if (allModelIds.length === 0) return;
-        
-        console.log(`[Dashboard] Got ${allModelIds.length} models from gateway config`);
-        
-        // Group by provider
-        const modelsByProvider = {};
-        for (const modelId of allModelIds) {
-            const slashIdx = modelId.indexOf('/');
-            if (slashIdx === -1) continue;
-            
-            const provider = modelId.substring(0, slashIdx);
-            const modelName = modelId.substring(slashIdx + 1);
-            
-            if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
-            
-            // Create a clean display name
-            const isPrimary = modelId === primary;
-            const displayName = modelName + (isPrimary ? ' ⭐' : '');
-            
-            if (!modelsByProvider[provider].some(m => m.id === modelId)) {
-                modelsByProvider[provider].push({
-                    id: modelId,
-                    name: displayName,
-                    tier: isPrimary ? 'default' : 'fallback'
-                });
-            }
-        }
-        
-        // Update the provider dropdown
-        const providerSelect = document.getElementById('provider-select');
-        if (providerSelect) {
-            const providers = Object.keys(modelsByProvider);
-            providerSelect.innerHTML = '';
-            providers.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p;
-                opt.textContent = p.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                providerSelect.appendChild(opt);
-            });
-        }
-        
-        // Store for getModelsForProvider to use
-        window._gatewayModels = modelsByProvider;
-        
-        // Do NOT call syncModelDisplay here — applySessionModelOverride is the
-        // authoritative source for the *active* model.  This function only
-        // populates the dropdown options.
-        
-    } catch (e) {
-        console.warn('[Dashboard] Failed to fetch models from gateway:', e.message);
-    }
-}
 
 /**
  * Select a model in both header and settings dropdowns.
@@ -3991,10 +4186,10 @@ async function fetchModelsFromGateway() {
  */
 function selectModelInDropdowns(model) {
     const shortName = model.split('/').pop() || model;
-    
+
     const modelSelect = document.getElementById('model-select');
     const settingModel = document.getElementById('setting-model');
-    
+
     [modelSelect, settingModel].forEach(select => {
         if (!select) return;
         const options = Array.from(select.options);
@@ -4013,16 +4208,13 @@ function selectModelInDropdowns(model) {
 }
 
 // Initialize provider/model display on page load
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     try {
-        // First populate the provider dropdown dynamically
-        await populateProviderDropdown();
-        
-        // Always fetch current model from server API (reads openclaw.json — source of truth)
+        // First fetch current model from server API (reads openclaw.json — source of truth)
         // Don't trust localStorage as it can get stale across sessions/deploys
         let modelId = null;
         let provider = null;
-        
+
         try {
             const response = await fetch('/api/models/current');
             const modelInfo = await response.json();
@@ -4035,33 +4227,53 @@ document.addEventListener('DOMContentLoaded', async function() {
             modelId = localStorage.getItem('selected_model');
             provider = localStorage.getItem('selected_provider');
         }
-        
-        // Final fallback
-        if (!modelId) modelId = 'anthropic/claude-opus-4-5';
-        if (!provider) provider = modelId.split('/')[0];
-        
-        currentProvider = provider;
-        currentModel = modelId;
 
-        console.log(`[Dashboard] Init model: ${currentModel} (provider: ${currentProvider})`);
-        
+        // No fallback — leave null and let the gateway/config provide the model
+        if (!modelId) modelId = null;
+        if (!provider && modelId) provider = modelId.split('/')[0];
+
+        window.currentProvider = provider;
+        window.currentModel = modelId;
+
+        console.log(`[Dashboard] Init model: ${window.currentModel} (provider: ${window.currentProvider})`);
+
+        // NOW populate the provider dropdown with currentProvider set
+        await populateProviderDropdown();
+
         // Update displays
         const currentProviderDisplay = document.getElementById('current-provider-display');
         const currentModelDisplay = document.getElementById('current-model-display');
         const providerSelectEl = document.getElementById('provider-select');
-        
-        if (currentProviderDisplay) currentProviderDisplay.textContent = currentProvider;
-        if (currentModelDisplay) currentModelDisplay.textContent = currentModel;
-        if (providerSelectEl) providerSelectEl.value = currentProvider;
-        
+
+        if (currentProviderDisplay) currentProviderDisplay.textContent = window.currentProvider;
+        if (currentModelDisplay) currentModelDisplay.textContent = window.currentModel;
+        if (providerSelectEl) providerSelectEl.value = window.currentProvider;
+
         // Also sync settings provider dropdown
         const settingProviderEl = document.getElementById('setting-provider');
-        if (settingProviderEl) settingProviderEl.value = currentProvider;
-        
+        if (settingProviderEl) settingProviderEl.value = window.currentProvider;
+
         // Populate model dropdown for current provider and select current model
-        await updateModelDropdown(currentProvider);
-        selectModelInDropdowns(currentModel);
-        
+
+        // Set up periodic model sync (every 5 minutes)
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/models/current');
+                const modelInfo = await response.json();
+                if (modelInfo?.modelId && modelInfo?.provider) {
+                    // Only update if different from current
+                    if (modelInfo.modelId !== window.currentModel || modelInfo.provider !== window.currentProvider) {
+                        console.log(`[Dashboard] Model changed on server: ${window.currentModel} → ${modelInfo.modelId}`);
+                        syncModelDisplay(modelInfo.modelId, modelInfo.provider);
+                    }
+                }
+            } catch (e) {
+                // Silent fail for periodic sync
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+        await updateModelDropdown(window.currentProvider);
+        selectModelInDropdowns(window.currentModel);
+
     } catch (error) {
         console.error('[Dashboard] Failed to initialize model display:', error);
     }
@@ -4091,8 +4303,8 @@ const defaultSettings = {
 // ===================
 const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
-const NOTIFICATION_DEBUG = true;
-function notifLog(...args){ if (NOTIFICATION_DEBUG) console.log(...args); }
+const NOTIFICATION_DEBUG = false;
+function notifLog(...args) { if (NOTIFICATION_DEBUG) console.log(...args); }
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -4104,16 +4316,22 @@ function requestNotificationPermission() {
 
 function subscribeToAllSessions() {
     if (!gateway || !gateway.isConnected()) return;
-    const keys = availableSessions.map(s => s.key).filter(k => k);
+    // Only subscribe to recent/active sessions, not all 200+
+    // Sort by updatedAt descending and take top 20
+    const sorted = [...availableSessions]
+        .filter(s => s.key && s.updatedAt)
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, 20);
+    const keys = sorted.map(s => s.key);
     if (keys.length > 0) {
         gateway.subscribeToAllSessions(keys);
-        console.log(`[Notifications] Subscribed to ${keys.length} sessions for cross-session notifications`);
+        console.log(`[Notifications] Subscribed to ${keys.length} recent sessions (of ${availableSessions.length} total)`);
     }
 }
 
 function handleCrossSessionNotification(msg) {
-    const { sessionKey, content } = msg;
-    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content||'').slice(0,80)}...`);
+    const { sessionKey, content, images } = msg;
+    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content || '').slice(0, 80)}..., images=${images?.length || 0}`);
 
     // Never count read-ack sync events as notifications.
     // These are internal signals used to clear unreads across clients.
@@ -4128,8 +4346,14 @@ function handleCrossSessionNotification(msg) {
     // These are used by cron/background jobs to indicate "no user-visible output".
     if (typeof content === 'string') {
         const t = content.trim();
-        if (t === 'NO_REPLY' || t === 'NO') {
+        if (t === 'NO_REPLY' || t === 'NO' || t === 'HEARTBEAT_OK' || t === 'ANNOUNCE_SKIP' || t === 'REPLY_SKIP') {
             notifLog(`[Notifications] Ignoring silent placeholder notification for ${sessionKey}: ${t}`);
+            return;
+        }
+        // Gateway-injected read-sync / read_ack signals
+        if (t === '[read-sync]' || t.startsWith('[[read_ack]]') || /^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(t)) {
+            notifLog(`[Notifications] Ignoring read-sync notification for ${sessionKey}`);
+            if (sessionKey) clearUnreadForSession(sessionKey);
             return;
         }
     }
@@ -4145,17 +4369,17 @@ function handleCrossSessionNotification(msg) {
 
     const friendlyName = getFriendlySessionName(sessionKey);
     const preview = content.length > 120 ? content.slice(0, 120) + '…' : content;
-    
+
     notifLog(`[Notifications] 🔔 Message from ${friendlyName}: ${preview.slice(0, 60)}`);
-    
+
     // Track unread count
     unreadSessions.set(sessionKey, (unreadSessions.get(sessionKey) || 0) + 1);
     updateUnreadBadges();
-    notifLog(`[Notifications] Unread total: ${Array.from(unreadSessions.values()).reduce((a,b)=>a+b,0)}`);
-    
+    notifLog(`[Notifications] Unread total: ${Array.from(unreadSessions.values()).reduce((a, b) => a + b, 0)}`);
+
     // Always show in-app toast (works regardless of browser notification permission)
     showNotificationToast(friendlyName, preview, sessionKey);
-    
+
     // Browser notification (best-effort — may not be permitted)
     if ('Notification' in window && Notification.permission === 'granted') {
         try {
@@ -4165,19 +4389,19 @@ function handleCrossSessionNotification(msg) {
                 tag: `session-${sessionKey}`,
                 silent: false
             });
-            
+
             notification.onclick = () => {
                 window.focus();
                 navigateToSession(sessionKey);
                 notification.close();
             };
-            
+
             setTimeout(() => notification.close(), 8000);
         } catch (e) {
             console.warn('[Notifications] Browser notification failed:', e);
         }
     }
-    
+
     // Play notification sound
     playNotificationSound();
 }
@@ -4207,13 +4431,13 @@ function showNotificationToast(title, body, sessionKey) {
         container.style.cssText = 'position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
         document.body.appendChild(container);
     }
-    
+
     // Determine agent color from session key
     const agentMatch = sessionKey?.match(/^agent:([^:]+):/);
     const agentId = agentMatch ? agentMatch[1] : 'main';
     const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
     const color = agentColors[agentId] || '#BC2026';
-    
+
     const toast = document.createElement('div');
     toast.className = 'notification-toast';
     toast.style.cssText = `
@@ -4235,7 +4459,7 @@ function showNotificationToast(title, body, sessionKey) {
         </div>
         <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
     `;
-    
+
     // Click toast → navigate to session
     toast.addEventListener('click', (e) => {
         if (e.target.classList?.contains('toast-close')) {
@@ -4245,20 +4469,20 @@ function showNotificationToast(title, body, sessionKey) {
         navigateToSession(sessionKey);
         dismissToast(toast);
     });
-    
+
     container.appendChild(toast);
     notifLog(`[Notifications] Toast rendered for ${title} (session=${sessionKey})`);
-    
+
     // Animate in
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateX(0)';
     });
-    
+
     // Auto-dismiss after 12 seconds
     const timer = setTimeout(() => dismissToast(toast), 12000);
     toast._dismissTimer = timer;
-    
+
     // Limit to 4 toasts max
     while (container.children.length > 4) {
         dismissToast(container.firstChild);
@@ -4286,13 +4510,13 @@ function toggleNotificationPanel() {
         }
         return;
     }
-    
+
     // Find session with most unreads
     let maxKey = null, maxCount = 0;
     for (const [key, count] of unreadSessions) {
         if (count > maxCount) { maxCount = count; maxKey = key; }
     }
-    
+
     if (maxKey) {
         navigateToSession(maxKey);
     }
@@ -4319,10 +4543,10 @@ function updateUnreadBadges() {
     document.querySelectorAll('.session-option, [data-session-key]').forEach(el => {
         const key = el.dataset?.sessionKey || el.getAttribute('data-session-key');
         if (!key) return;
-        
+
         let badge = el.querySelector('.unread-badge');
         const count = unreadSessions.get(key) || 0;
-        
+
         if (count > 0) {
             if (!badge) {
                 badge = document.createElement('span');
@@ -4340,7 +4564,7 @@ function updateUnreadBadges() {
     document.querySelectorAll('.sidebar-agent[data-agent]').forEach(el => {
         const agentId = el.getAttribute('data-agent');
         if (!agentId) return;
-        
+
         // Sum unread across all sessions for this agent
         let agentUnread = 0;
         for (const [key, count] of unreadSessions) {
@@ -4348,7 +4572,7 @@ function updateUnreadBadges() {
                 agentUnread += count;
             }
         }
-        
+
         let dot = el.querySelector('.agent-unread-dot');
         if (agentUnread > 0) {
             if (!dot) {
@@ -4404,10 +4628,17 @@ function connectToGateway() {
     const host = document.getElementById('gateway-host')?.value || GATEWAY_CONFIG.host;
     const port = parseInt(document.getElementById('gateway-port')?.value) || GATEWAY_CONFIG.port;
     const token = document.getElementById('gateway-token')?.value || GATEWAY_CONFIG.token;
-    const sessionKey = document.getElementById('gateway-session')?.value || GATEWAY_CONFIG.sessionKey || 'main';
+    const rawSessionKey = document.getElementById('gateway-session')?.value || GATEWAY_CONFIG.sessionKey || 'agent:main:main';
+    const sessionKey = (rawSessionKey === 'main') ? 'agent:main:main' : rawSessionKey;
 
     if (!host) {
         showToast('Please enter a gateway host in Settings', 'warning');
+        return;
+    }
+
+    // Don't reconnect if already connected to the same host with the right session
+    if (gateway && gateway.isConnected() && gateway.sessionKey === sessionKey) {
+        console.log('[Dashboard] Already connected with correct session, skipping reconnect');
         return;
     }
 
@@ -4436,7 +4667,7 @@ function disconnectFromGateway() {
 }
 
 // Restart gateway directly via WebSocket RPC (no bot involved)
-window.requestGatewayRestart = async function() {
+window.requestGatewayRestart = async function () {
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to gateway', 'warning');
         return;
@@ -4508,8 +4739,19 @@ function updateConnectionUI(status, message) {
 }
 
 function handleChatEvent(event) {
-    const { state: eventState, content, role, errorMessage, model, provider, stopReason, sessionKey } = event;
-    
+    if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
+        window.ModelValidator.handleGatewayEvent(event);
+    }
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
+
+    // HARD GATE: only render events for the active session. Period.
+    // Cross-session notifications are handled separately by onCrossSessionMessage.
+    const activeSession = currentSessionName?.toLowerCase();
+    const eventSession = sessionKey?.toLowerCase();
+    if (eventSession && activeSession && eventSession !== activeSession) {
+        return;
+    }
+
     // Ignore read-ack sync events
     if (content && content.startsWith(READ_ACK_PREFIX)) {
         if (sessionKey) clearUnreadForSession(sessionKey);
@@ -4536,19 +4778,34 @@ function handleChatEvent(event) {
         // Don't show health check events in the main chat UI
         return;
     }
-    
+
     // Track the current model being used for responses and sync UI
+    // BUT: Don't override if user just manually changed (respect openclaw.json settings)
     if (model) {
         window._lastResponseModel = model;
         window._lastResponseProvider = provider;
-        syncModelDisplay(model, provider);
+        // Skip sync if manual change happened recently — openclaw.json is source of truth
+        const now = Date.now();
+        if (!window._lastManualModelChange || (now - window._lastManualModelChange > 5000)) {
+            syncModelDisplay(model, provider);
+        } else {
+            notifLog(`[Notifications] Skipping model sync from gateway (manual change active)`);
+        }
     }
 
     // Handle user messages from other clients (WebUI, Telegram, etc.)
     if (role === 'user' && eventState === 'final' && content) {
+        // HARD GATE: Only accept user messages for the current session
+        const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+        const eventSession = sessionKey?.toLowerCase();
+        if (eventSession && activeSession && eventSession !== activeSession) {
+            notifLog(`[Notifications] Ignoring user message for session ${eventSession} (current: ${activeSession})`);
+            return;
+        }
+
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
-            m.from === 'user' && m.text === content && (Date.now() - m.time) < 5000
+            m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
         );
         if (!isDuplicate) {
             addLocalChatMessage(content, 'user');
@@ -4566,16 +4823,11 @@ function handleChatEvent(event) {
             renderChat();
             renderChatPage();
             break;
-            
+
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
-            // Safety: If we have significant streaming content and new content is much shorter,
-            // this might be a new response starting. Finalize the old one first.
-            if (streamingText && streamingText.length > 100 && content.length < streamingText.length * 0.5) {
-                addLocalChatMessage(streamingText, 'solobot');
-            }
-            
             streamingText = content;
+            _streamingSessionKey = sessionKey || currentSessionName || '';
             isProcessing = true;
             renderChat();
             renderChatPage();
@@ -4585,13 +4837,24 @@ function handleChatEvent(event) {
             // Final response from assistant
             // Prefer streamingText if available for consistency (avoid content mismatch)
             const finalContent = streamingText || content;
+            // Skip gateway-injected internal messages
+            if (finalContent && /^\s*\[read-sync\]\s*(\n\s*\[\[read_ack\]\])?\s*$/s.test(finalContent)) {
+                streamingText = '';
+                isProcessing = false;
+                lastProcessingEndTime = Date.now();
+                break;
+            }
             if (finalContent && role !== 'user') {
-                // Check for duplicate - same content within 10 seconds
+                // Check for duplicate - by runId first, then by trimmed text within 10 seconds
+                const trimmed = finalContent.trim();
                 const isDuplicate = state.chat.messages.some(m =>
-                    m.from === 'solobot' && m.text === finalContent && (Date.now() - m.time) < 10000
+                    (runId && m.runId === runId) ||
+                    (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
                 if (!isDuplicate) {
-                    addLocalChatMessage(finalContent, 'solobot', window._lastResponseModel);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider);
+                    // Tag with runId for dedup against history merge
+                    if (msg && runId) msg.runId = runId;
                 }
             }
             streamingText = '';
@@ -4615,10 +4878,17 @@ function handleChatEvent(event) {
 }
 
 function loadHistoryMessages(messages) {
-    // Removed verbose log - called frequently on history sync
     // Convert gateway history format and classify as chat vs system
-    // IMPORTANT: Preserve ALL local messages since Gateway doesn't save user messages (bug #5735)
-    const allLocalChatMessages = state.chat.messages.filter(m => m.id.startsWith('m'));
+    // Only preserve local messages that belong to the CURRENT session (prevent cross-session bleed)
+    const currentKey = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const allLocalChatMessages = state.chat.messages.filter(m => {
+        // Skip non-local messages (have real IDs from server)
+        if (!m.id?.startsWith('m')) return false;
+        // If the message was tagged with a session, only keep if it matches
+        // If NOT tagged, assume it's from current session (conservative - old messages)
+        if (m._sessionKey && m._sessionKey.toLowerCase() !== currentKey) return false;
+        return true;
+    });
 
     const chatMessages = [];
     const systemMessages = [];
@@ -4627,7 +4897,7 @@ function loadHistoryMessages(messages) {
         if (!container) return { text: '', images: [] };
         let text = '';
         let images = [];
-        
+
         if (Array.isArray(container.content)) {
             for (const part of container.content) {
                 if (part.type === 'text') {
@@ -4654,7 +4924,7 @@ function loadHistoryMessages(messages) {
         } else if (typeof container.content === 'string') {
             text = container.content;
         }
-        
+
         // Check for attachments array (our send format)
         if (Array.isArray(container.attachments)) {
             for (const att of container.attachments) {
@@ -4663,7 +4933,7 @@ function loadHistoryMessages(messages) {
                 }
             }
         }
-        
+
         if (!text && typeof container.text === 'string') text = container.text;
         return { text: (text || '').trim(), images };
     };
@@ -4673,7 +4943,12 @@ function loadHistoryMessages(messages) {
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
         }
-        
+
+        // Skip gateway-injected messages (read-sync, read_ack, etc.)
+        if (msg.model === 'gateway-injected' || msg.provider === 'openclaw') {
+            return;
+        }
+
         let content = extractContent(msg);
         if (!content.text && !content.images.length && msg.message) {
             content = extractContent(msg.message);
@@ -4685,7 +4960,11 @@ function loadHistoryMessages(messages) {
             text: content.text,
             image: content.images[0] || null, // First image as thumbnail
             images: content.images, // All images
-            time: msg.timestamp || Date.now()
+            time: msg.timestamp || Date.now(),
+            model: msg.model, // Preserve model from gateway history
+            // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
+            _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+            _agentId: window.currentAgentId || 'main'
         };
 
         // Classify and route
@@ -4703,6 +4982,18 @@ function loadHistoryMessages(messages) {
     const uniqueLocalMessages = allLocalChatMessages.filter(m => {
         // Keep local message if: different ID AND different exact text
         return !historyIds.has(m.id) && !historyExactTexts.has(m.text);
+    });
+
+    // Patch history messages: if we have a local copy with a real model, prefer it
+    // (history may return "openrouter/free" while local has the resolved model)
+    const localByText = {};
+    allLocalChatMessages.forEach(m => { if (m.text) localByText[m.text.trim()] = m; });
+    chatMessages.forEach(m => {
+        const local = localByText[m.text?.trim()];
+        if (local?.model && (!m.model || m.model === 'openrouter/free' || m.model === 'unknown')) {
+            m.model = local.model;
+            m.provider = local.provider;
+        }
     });
 
     state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
@@ -4735,7 +5026,7 @@ let _historyRefreshFn = null;
 let _historyVisibilityFn = null;
 let _historyRefreshInFlight = false;
 let _lastHistoryLoadTime = 0;
-const HISTORY_MIN_INTERVAL = 2000; // Minimum 2 seconds between loads
+const HISTORY_MIN_INTERVAL = 8000; // Minimum 8 seconds between loads
 
 function _doHistoryRefresh() {
     if (!gateway || !gateway.isConnected() || isProcessing) return;
@@ -4745,18 +5036,31 @@ function _doHistoryRefresh() {
     _historyRefreshInFlight = true;
     _lastHistoryLoadTime = Date.now();
     const pollVersion = sessionVersion;
+    const pollSessionKey = GATEWAY_CONFIG?.sessionKey || 'unknown';
+    notifLog(`[Notifications] _doHistoryRefresh: session=${pollSessionKey}, version=${pollVersion}`);
     gateway.loadHistory().then(result => {
         _historyRefreshInFlight = false;
-        if (pollVersion !== sessionVersion) return;
-        if (result?.messages) mergeHistoryMessages(result.messages);
-    }).catch(() => { _historyRefreshInFlight = false; });
+        if (pollVersion !== sessionVersion) {
+            notifLog(`[Notifications] _doHistoryRefresh: Skipped (version mismatch ${pollVersion} vs ${sessionVersion})`);
+            return;
+        }
+        if (result?.messages) {
+            notifLog(`[Notifications] _doHistoryRefresh: Got ${result.messages.length} messages for session=${pollSessionKey}`);
+            mergeHistoryMessages(result.messages);
+        } else {
+            notifLog(`[Notifications] _doHistoryRefresh: No messages returned`);
+        }
+    }).catch(err => {
+        _historyRefreshInFlight = false;
+        notifLog(`[Notifications] _doHistoryRefresh: Error - ${err.message}`);
+    });
 }
 
 function startHistoryPolling() {
     stopHistoryPolling(); // Clear any existing interval + listeners
 
-    // Poll every 3 seconds to catch user messages from other clients
-    historyPollInterval = setInterval(_doHistoryRefresh, 3000);
+    // Poll every 30 seconds to catch user messages from other clients (was 10s, reduced for perf)
+    historyPollInterval = setInterval(_doHistoryRefresh, 30000);
 
     // Only add focus/visibility listeners ONCE (remove old ones first)
     if (!_historyRefreshFn) {
@@ -4784,15 +5088,25 @@ function stopHistoryPolling() {
 }
 
 function mergeHistoryMessages(messages) {
+    // HARD GATE: Only merge messages for the current session
+    // This prevents cross-session bleed if history poll returns stale data
+    const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    if (!activeSession) {
+        notifLog('[Notifications] mergeHistoryMessages: No active session, skipping merge');
+        return;
+    }
+
     // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
     const existingIds = new Set(state.chat.messages.map(m => m.id));
     const existingSystemIds = new Set(state.system.messages.map(m => m.id));
-    // Also track existing text content to prevent duplicates when IDs differ
+    // Also track existing text content (trimmed) to prevent duplicates when IDs differ
     // (local messages use 'm' + Date.now(), history messages have server IDs)
-    const existingTexts = new Set(state.chat.messages.map(m => m.text));
-    const existingSystemTexts = new Set(state.system.messages.map(m => m.text));
+    const existingTexts = new Set(state.chat.messages.map(m => (m.text || '').trim()));
+    const existingSystemTexts = new Set(state.system.messages.map(m => (m.text || '').trim()));
+    // Track runIds from real-time messages for dedup
+    const existingRunIds = new Set(state.chat.messages.filter(m => m.runId).map(m => m.runId));
     let newChatCount = 0;
     let newSystemCount = 0;
 
@@ -4818,9 +5132,14 @@ function mergeHistoryMessages(messages) {
         if (existingIds.has(msgId) || existingSystemIds.has(msgId)) {
             continue;
         }
-        
+
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
+            continue;
+        }
+
+        // Skip gateway-injected messages (read-sync, read_ack, etc.)
+        if (msg.model === 'gateway-injected' || msg.provider === 'openclaw') {
             continue;
         }
 
@@ -4830,11 +5149,16 @@ function mergeHistoryMessages(messages) {
                 textContent = extractContentText(msg.message);
             }
 
-            // Only add if we have content and it's not a duplicate by text
+            // Only add if we have content and it's not a duplicate
             if (textContent) {
                 const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot');
 
-                // Skip if we already have this exact text content (prevents duplicates when IDs differ)
+                // Skip if runId matches a real-time message we already have
+                if (msg.runId && existingRunIds.has(msg.runId)) {
+                    continue;
+                }
+
+                // Skip if we already have this exact text content (trimmed, prevents duplicates when IDs differ)
                 if (isSystemMsg && existingSystemTexts.has(textContent)) {
                     continue;
                 }
@@ -4842,22 +5166,39 @@ function mergeHistoryMessages(messages) {
                     continue;
                 }
 
+                // Time guard: skip non-user assistant messages if we have any local message added within the last 5 seconds
+                // Uses client-side time (m.time) to avoid clock skew with server timestamps
+                if (msg.role !== 'user') {
+                    const hasRecentLocal = state.chat.messages.some(m =>
+                        m.from === 'solobot' && (Date.now() - m.time) < 5000
+                    );
+                    if (hasRecentLocal && !existingIds.has(msgId)) {
+                        // Check if this message's text matches a recent local one (likely the same)
+                        const recentMatch = state.chat.messages.some(m =>
+                            m.from === 'solobot' && (Date.now() - m.time) < 5000 && m.text?.trim() === textContent
+                        );
+                        if (recentMatch) continue;
+                    }
+                }
+
                 const message = {
                     id: msgId,
                     from: msg.role === 'user' ? 'user' : 'solobot',
                     text: textContent,
-                    time: msg.timestamp || Date.now()
+                    time: msg.timestamp || Date.now(),
+                    model: msg.model || null,
+                    provider: msg.provider || null
                 };
 
                 // Classify and route
                 if (isSystemMsg) {
                     state.system.messages.push(message);
-                    existingSystemTexts.add(textContent);
+                    existingSystemTexts.add(textContent); // already trimmed by extractContentText
                     newSystemCount++;
                 } else {
                     state.chat.messages.push(message);
                     existingIds.add(msgId);
-                    existingTexts.add(textContent);
+                    existingTexts.add(textContent); // already trimmed by extractContentText
                     newChatCount++;
                 }
             }
@@ -4865,6 +5206,8 @@ function mergeHistoryMessages(messages) {
     }
 
     if (newChatCount > 0 || newSystemCount > 0) {
+        notifLog(`[Notifications] mergeHistoryMessages: Merged ${newChatCount} chat, ${newSystemCount} system messages for session ${activeSession}`);
+
         // Sort and trim chat
         state.chat.messages.sort((a, b) => a.time - b.time);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
@@ -5064,40 +5407,92 @@ function renderDevices(devices) {
 // === sessions.js ===
 // js/sessions.js — Session management, switching, agent selection
 
+const SESSION_DEBUG = false;
+function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
+
 // ===================
 // SESSION MANAGEMENT
 // ===================
 
+// Agent persona names and role labels
+const AGENT_PERSONAS = {
+    'main': { name: 'Halo', role: 'PA' },
+    'exec': { name: 'Elon', role: 'CoS' },
+    'cto': { name: 'Orion', role: 'CTO' },
+    'coo': { name: 'Atlas', role: 'COO' },
+    'cfo': { name: 'Sterling', role: 'CFO' },
+    'cmp': { name: 'Vector', role: 'CMP' },
+    'dev': { name: 'Dev', role: 'ENG' },
+    'forge': { name: 'Forge', role: 'DEVOPS' },
+    'quill': { name: 'Quill', role: 'FE/UI' },
+    'chip': { name: 'Chip', role: 'SWE' },
+    'snip': { name: 'Snip', role: 'YT' },
+    'sec': { name: 'Knox', role: 'SEC' },
+    'smm': { name: 'Nova', role: 'SMM' },
+    'family': { name: 'Haven', role: 'FAM' },
+    'tax': { name: 'Ledger', role: 'TAX' },
+    'docs': { name: 'Canon', role: 'DOC' }
+};
+
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
-function getFriendlySessionName(key) {
-    if (!key) return 'main';
-    // Strip agent:main: or agent:xxx: prefix
-    const match = key.match(/^agent:[^:]+:(.+)$/);
-    return match ? match[1] : key;
+function normalizeDashboardSessionKey(key) {
+    if (!key || key === 'main') return 'agent:main:main';
+    return key;
 }
 
-let currentSessionName = 'main';
+function getFriendlySessionName(key) {
+    if (!key) return 'Halo (PA)';
+    // For agent sessions, show persona name + session suffix
+    const match = key.match(/^agent:([^:]+):(.+)$/);
+    if (match) {
+        const agentId = match[1];
+        const sessionSuffix = match[2];
+        const persona = AGENT_PERSONAS[agentId];
+        const name = persona ? persona.name : agentId.toUpperCase();
+        return sessionSuffix === 'main' ? name : `${name} (${sessionSuffix})`;
+    }
+    return key;
+}
 
-window.toggleSessionMenu = function() {
+// Initialize session variables on window for global access across modular scripts
+window.currentSessionName = window.currentSessionName || null;
+
+// Initialize currentSessionName from localStorage (browser is authoritative for session)
+function initCurrentSessionName() {
+    const localSession = localStorage.getItem('gateway_session');
+    const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
+
+    // localStorage is authoritative (user's explicit choice)
+    window.currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+
+    console.log('[initCurrentSessionName] localStorage:', localSession);
+    console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
+    console.log('[initCurrentSessionName] Final:', window.currentSessionName);
+}
+
+// Initialize immediately (before any other code uses it)
+initCurrentSessionName();
+
+window.toggleSessionMenu = function () {
     const menu = document.getElementById('session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
 }
 
-window.renameSession = async function() {
+window.renameSession = async function () {
     toggleSessionMenu();
-    const newName = prompt('Enter new session name:', currentSessionName);
-    if (!newName || newName === currentSessionName) return;
-    
+    const newName = prompt('Enter new session name:', window.currentSessionName);
+    if (!newName || newName === window.currentSessionName) return;
+
     try {
         const response = await fetch('/api/session/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ oldName: currentSessionName, newName })
+            body: JSON.stringify({ oldName: window.currentSessionName, newName })
         });
-        
+
         if (response.ok) {
-            currentSessionName = newName;
+            window.currentSessionName = newName;
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) nameEl.textContent = newName;
             showToast(`Session renamed to "${newName}"`, 'success');
@@ -5111,20 +5506,20 @@ window.renameSession = async function() {
     }
 }
 
-window.showSessionSwitcher = function() {
+window.showSessionSwitcher = function () {
     toggleSessionMenu();
     showToast('Session switcher coming soon', 'info');
 }
 
 // Chat Page Session Menu Functions
-window.toggleChatPageSessionMenu = function() {
+window.toggleChatPageSessionMenu = function () {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
 }
 
 // Close session menu when clicking outside
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     const menu = document.getElementById('chat-page-session-menu');
     const trigger = e.target.closest('[onclick*="toggleChatPageSessionMenu"]');
     if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !trigger) {
@@ -5134,7 +5529,9 @@ document.addEventListener('click', function(e) {
 
 // Session Management
 let availableSessions = [];
-let currentAgentId = 'main'; // Track which agent's sessions we're viewing
+window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's sessions we're viewing
+let _switchInFlight = false;
+let _sessionSwitchQueue = []; // Queue array for rapid switches
 
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
@@ -5152,7 +5549,7 @@ function filterSessionsForAgent(sessions, agentId) {
         // Direct match: session belongs to this agent
         const sessAgent = getAgentIdFromSession(s.key);
         if (sessAgent === agentId) return true;
-        
+
         // Subagent match: spawned by main but labeled for this agent
         // Pattern: agent:main:subagent:* with label starting with "{agentId}-"
         if (s.key?.startsWith('agent:main:subagent:')) {
@@ -5162,7 +5559,7 @@ function filterSessionsForAgent(sessions, agentId) {
                 return true;
             }
         }
-        
+
         return false;
     });
 }
@@ -5172,7 +5569,7 @@ function checkUrlSessionParam() {
     const params = new URLSearchParams(window.location.search);
     const sessionParam = params.get('session');
     if (sessionParam) {
-        console.log(`[Dashboard] URL session param detected: ${sessionParam}`);
+        sessLog(`[Dashboard] URL session param detected: ${sessionParam}`);
         return sessionParam;
     }
     return null;
@@ -5184,29 +5581,29 @@ function handleSubagentSessionAgent() {
     if (!currentSessionName?.startsWith('agent:main:subagent:')) {
         return; // Not a subagent session
     }
-    
+
     // Find the session in availableSessions
     const session = availableSessions.find(s => s.key === currentSessionName);
     if (!session) {
-        console.log(`[Dashboard] Subagent session not found in available sessions: ${currentSessionName}`);
+        sessLog(`[Dashboard] Subagent session not found in available sessions: ${currentSessionName}`);
         return;
     }
-    
+
     const label = session.displayName || session.name || '';
-    console.log(`[Dashboard] Subagent session label: ${label}`);
-    
+    sessLog(`[Dashboard] Subagent session label: ${label}`);
+
     // Extract agent ID from label pattern: {agentId}-{taskname}
     const labelMatch = label.match(/^([a-z]+)-/i);
     if (labelMatch) {
         const agentFromLabel = labelMatch[1].toLowerCase();
-        console.log(`[Dashboard] Determined agent from label: ${agentFromLabel}`);
-        
+        sessLog(`[Dashboard] Determined agent from label: ${agentFromLabel}`);
+
         // Update current agent ID
         currentAgentId = agentFromLabel;
-        
+
         // Update sidebar highlight
         setActiveSidebarAgent(agentFromLabel);
-        
+
         // Update agent name display
         const agentNameEl = document.getElementById('chat-page-agent-name');
         if (agentNameEl) {
@@ -5215,66 +5612,60 @@ function handleSubagentSessionAgent() {
     }
 }
 
+let _fetchSessionsInFlight = false;
+let _fetchSessionsQueued = false;
 async function fetchSessions() {
-    // Preserve locally-added sessions that might not be in gateway yet
-    const localSessions = availableSessions.filter(s => s.sessionId === null);
-    
-    // Try gateway first if connected (direct RPC call)
-    if (gateway && gateway.isConnected()) {
-        try {
-            // Fetch all sessions without label filter
-            // Note: gateway's label filter checks entry.label but dashboard sessions have origin.label
-            // Don't pass label parameter at all - empty string fails validation
-            const result = await gateway.listSessions({});
-            let sessions = result?.sessions || [];
+    // Debounce: if already fetching, queue one follow-up call
+    if (_fetchSessionsInFlight) { _fetchSessionsQueued = true; return availableSessions; }
+    _fetchSessionsInFlight = true;
 
-            // Show all sessions from gateway (main + DMs + dashboard)
-
-            // Map gateway response to expected format
-            // Always use friendly name for display (strips agent:main: prefix)
-            const gatewaySessions = sessions.map(s => {
-                const friendlyName = getFriendlySessionName(s.key);
-                return {
-                    key: s.key,
-                    name: friendlyName,
-                    displayName: friendlyName,  // Always use friendly name, not gateway's displayName
-                    updatedAt: s.updatedAt,
-                    totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
-                    model: s.model || 'unknown',
-                    sessionId: s.sessionId
-                };
-            });
-            
-            // Merge: gateway sessions + local sessions not in gateway
-            const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
-            const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
-            availableSessions = [...gatewaySessions, ...mergedLocalSessions];
-
-            console.log(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
-            
-            // If current session is a subagent, determine the correct agent from its label
-            handleSubagentSessionAgent();
-            
-            populateSessionDropdown();
-            if (typeof updateSidebarAgentsFromSessions === 'function') {
-                try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
-            }
-            // Subscribe to all sessions for cross-session notifications
-            subscribeToAllSessions();
-            return availableSessions;
-        } catch (e) {
-            console.warn('[Dashboard] Gateway sessions.list failed, falling back to server:', e.message);
-        }
-    }
-
-    // Fallback to server API
     try {
+        // Preserve locally-added sessions that might not be in gateway yet
+        const localSessions = availableSessions.filter(s => s.sessionId === null);
+
+        // Try gateway first if connected (direct RPC call)
+        if (gateway && gateway.isConnected()) {
+            try {
+                const result = await gateway.listSessions({});
+                let sessions = result?.sessions || [];
+
+                const gatewaySessions = sessions.map(s => {
+                    const friendlyName = getFriendlySessionName(s.key);
+                    return {
+                        key: s.key,
+                        name: friendlyName,
+                        displayName: friendlyName,
+                        updatedAt: s.updatedAt,
+                        totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
+                        model: s.model || 'unknown',
+                        sessionId: s.sessionId
+                    };
+                });
+
+                const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
+                const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
+                availableSessions = [...gatewaySessions, ...mergedLocalSessions];
+
+                sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
+
+                handleSubagentSessionAgent();
+                populateSessionDropdown();
+                if (typeof updateSidebarAgentsFromSessions === 'function') {
+                    try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
+                }
+                subscribeToAllSessions();
+                return availableSessions;
+            } catch (e) {
+                console.warn('[Dashboard] Gateway sessions.list failed, falling back to server:', e.message);
+            }
+        }
+
+        // Fallback to server API
         const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const rawServerSessions = data.sessions || [];
-        
-        // Map server sessions to expected format (same as gateway mapping)
+
         const serverSessions = rawServerSessions.map(s => {
             const friendlyName = getFriendlySessionName(s.key);
             return {
@@ -5287,17 +5678,14 @@ async function fetchSessions() {
                 sessionId: s.sessionId
             };
         });
-        
-        // Merge: server sessions + local sessions not in server
+
         const serverKeys = new Set(serverSessions.map(s => s.key));
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
         availableSessions = [...serverSessions, ...mergedLocalSessions];
-        
-        console.log(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
-        
-        // If current session is a subagent, determine the correct agent from its label
+
+        sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
+
         handleSubagentSessionAgent();
-        
         populateSessionDropdown();
         if (typeof updateSidebarAgentsFromSessions === 'function') {
             try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
@@ -5306,40 +5694,43 @@ async function fetchSessions() {
     } catch (e) {
         console.error('[Dashboard] Failed to fetch sessions:', e);
         return [];
+    } finally {
+        _fetchSessionsInFlight = false;
+        if (_fetchSessionsQueued) { _fetchSessionsQueued = false; setTimeout(fetchSessions, 100); }
     }
 }
 
 function populateSessionDropdown() {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
-    
+
     // Filter sessions for current agent only
     const agentSessions = filterSessionsForAgent(availableSessions, currentAgentId);
-    
-    console.log(`[Dashboard] populateSessionDropdown: agent=${currentAgentId}, total=${availableSessions.length}, filtered=${agentSessions.length}`);
-    console.log(`[Dashboard] Available sessions:`, availableSessions.map(s => s.key));
-    
+
+    sessLog(`[Dashboard] populateSessionDropdown: agent=${currentAgentId}, total=${availableSessions.length}, filtered=${agentSessions.length}`);
+    sessLog(`[Dashboard] Available sessions:`, availableSessions.map(s => s.key));
+
     // Build the dropdown HTML
     let html = '';
-    
+
     // Header showing which agent's sessions we're viewing
     const agentLabel = getAgentLabel(currentAgentId);
     html += `<div style="padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center;">
         <span>${escapeHtml(agentLabel)} Sessions</span>
         <button onclick="startNewAgentSession('${currentAgentId}')" style="background: var(--brand-red); color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer;" title="New session for ${agentLabel}">+ New</button>
     </div>`;
-    
+
     if (agentSessions.length === 0) {
         html += '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">No sessions for this agent yet</div>';
         menu.innerHTML = html;
         return;
     }
-    
+
     html += agentSessions.map(s => {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
-        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-        
+        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" data-session-key="${s.key}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
@@ -5358,33 +5749,26 @@ function populateSessionDropdown() {
         </div>
         `;
     }).join('');
-    
+
     menu.innerHTML = html;
 }
 
-// Get human-readable label for an agent ID
+// Get human-readable label for an agent ID (persona name)
 function getAgentLabel(agentId) {
-    const labels = {
-        'main': 'SoLoBot',
-        'exec': 'EXEC',
-        'coo': 'COO',
-        'cfo': 'CFO',
-        'cmp': 'CMP',
-        'dev': 'DEV',
-        'family': 'Family',
-        'tax': 'Tax',
-        'smm': 'SMM'
-    };
-    return labels[agentId] || agentId.toUpperCase();
+    const persona = AGENT_PERSONAS[agentId];
+    return persona ? persona.name : agentId.toUpperCase();
 }
 
-// Get display name for message bubbles (e.g., "SoLoBot-DEV")
+// Get display name for message bubbles (e.g., "SoLoBot-CTO" or persona name)
 function getAgentDisplayName(agentId) {
     if (!agentId || agentId === 'main') {
-        return 'SoLoBot';
+        return 'Halo (PA)';
     }
-    const label = getAgentLabel(agentId);
-    return `SoLoBot-${label}`;
+    const persona = AGENT_PERSONAS[agentId];
+    if (persona) {
+        return `${persona.name} (${persona.role})`;
+    }
+    return `SoLoBot-${agentId.toUpperCase()}`;
 }
 
 function escapeHtml(text) {
@@ -5393,10 +5777,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-window.editSessionName = function(sessionKey, currentName) {
+window.editSessionName = function (sessionKey, currentName) {
     const newName = prompt('Enter new session name:', currentName);
     if (!newName || newName === currentName) return;
-    
+
     fetch('/api/session/rename', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5427,18 +5811,18 @@ window.editSessionName = function(sessionKey, currentName) {
     });
 }
 
-window.deleteSession = async function(sessionKey, sessionName) {
+window.deleteSession = async function (sessionKey, sessionName) {
     // Don't allow deleting the current active session
     if (sessionKey === currentSessionName) {
         showToast('Cannot delete the active session. Switch to another session first.', 'warning');
         return;
     }
-    
+
     // Confirm deletion
     if (!confirm(`Delete session "${sessionName}"?\n\nThis will permanently delete all messages in this session.`)) {
         return;
     }
-    
+
     try {
         // Use gateway RPC to delete the session
         if (gateway && gateway.isConnected()) {
@@ -5460,39 +5844,79 @@ window.deleteSession = async function(sessionKey, sessionName) {
     }
 }
 
-window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
-    toggleChatPageSessionMenu();
-    
-    // Clear unread notifications for this session
-    clearUnreadForSession(sessionKey);
-    
-    if (sessionKey === currentSessionName) {
-        showToast('Already on this session', 'info');
+window.switchToSessionKey = window.switchToSession = async function (sessionKey) {
+    sessionKey = normalizeDashboardSessionKey(sessionKey);
+
+    // Enqueue switch request (FIFO)
+    _sessionSwitchQueue.push({ sessionKey, timestamp: Date.now() });
+
+    // If switch already in progress, queue will be processed after current completes
+    if (_switchInFlight) {
         return;
     }
-    
-    showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
-    
+
+    // Process queue until empty (defeats rapid clicks by processing all)
+    while (_sessionSwitchQueue.length > 0) {
+        const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
+
+        // Skip if already on this session
+        if (nextKey === currentSessionName) {
+            populateSessionDropdown();
+            continue;
+        }
+
+        await executeSessionSwitch(nextKey);
+
+        // Check if a newer request superseded this one
+        // If queue has items that came in AFTER we started this switch, process them
+        // If queue is empty or only has our own re-submit, we're done
+    }
+}
+
+// Core switch execution (no queue handling)
+async function executeSessionSwitch(sessionKey) {
+    _switchInFlight = true;
+
     try {
+        toggleChatPageSessionMenu();
+
+        // Clear unread notifications for this session
+        clearUnreadForSession(sessionKey);
+
+        showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
+
+        // FIRST: nuke all rendering state synchronously — before any async work
+        streamingText = '';
+        _streamingSessionKey = '';
+        isProcessing = false;
+        state.chat.messages = [];
+        renderChat();
+        renderChatPage();
+
         // 1. Save current chat and cache it for fast switching back
         await saveCurrentChat();
         cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
 
         // 2. Increment session version to invalidate any in-flight history loads
         sessionVersion++;
-        console.log(`[Dashboard] Session version now ${sessionVersion}`);
+        sessLog(`[Dashboard] Session version now ${sessionVersion}`);
 
         // 3. Update session config and input field
+        const oldSessionName = currentSessionName;
         currentSessionName = sessionKey;
         GATEWAY_CONFIG.sessionKey = sessionKey;
-        localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
+        localStorage.setItem('gateway_session', sessionKey);
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
-        
+
         // 3a. Update current agent ID from session key
         const agentMatch = sessionKey.match(/^agent:([^:]+):/);
         if (agentMatch) {
             currentAgentId = agentMatch[1];
+            // Force sync UI immediately (before async work)
+            if (typeof forceSyncActiveAgent === 'function') {
+                forceSyncActiveAgent(agentMatch[1]);
+            }
         }
 
         // 4. Clear current chat display
@@ -5503,28 +5927,35 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
         if (cached && cached.length > 0) {
             state.chat.messages = cached.slice();
             if (typeof renderChatPage === 'function') renderChatPage();
-            console.log(`[Dashboard] Restored ${cached.length} cached messages for ${sessionKey}`);
+            sessLog(`[Dashboard] Restored ${cached.length} cached messages for ${sessionKey}`);
         }
 
-        // 5. Reconnect gateway with new session key
+        // 5. Switch gateway session key (no disconnect/reconnect needed)
+        // Add small delay to allow gateway state to stabilize
+        await new Promise(r => setTimeout(r, 50));
+
         if (gateway && gateway.isConnected()) {
-            gateway.disconnect();
-            await new Promise(resolve => setTimeout(resolve, 150));
-            connectToGateway();  // This uses GATEWAY_CONFIG.sessionKey
+            gateway.setSessionKey(sessionKey);
+        } else if (gateway) {
+            sessLog(`[Dashboard] Gateway not connected, initiating connect...`);
+            connectToGateway();
         }
 
-        // 6. Load new session's history (will merge with cached if any)
-        await loadSessionHistory(sessionKey);
-        // Apply per-session model override (if any)
-        await applySessionModelOverride(sessionKey);
+        // 6. Load history + model override in parallel (not sequential)
+        const historyPromise = loadSessionHistory(sessionKey);
+        const modelPromise = applySessionModelOverride(sessionKey).catch(() => { });
+
+        // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
-            // Hard clarity: always show the full session key (e.g. agent:dev:main)
             nameEl.textContent = sessionKey;
             nameEl.title = sessionKey;
         }
-        // Refresh dropdown to show new selection (filtered by agent)
         populateSessionDropdown();
+
+        // Wait for history (critical path)
+        await historyPromise;
+        await modelPromise;
 
         if (agentMatch) {
             setActiveSidebarAgent(agentMatch[1]);
@@ -5537,20 +5968,23 @@ window.switchToSessionKey = window.switchToSession = async function(sessionKey) 
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
         showToast('Failed to switch session', 'error');
+    } finally {
+        _switchInFlight = false;
     }
 }
 
 // Navigate to a session by key - can be called from external links
 // Usage: window.goToSession('agent:main:subagent:abc123')
 // Or via URL: ?session=agent:main:subagent:abc123
-window.goToSession = async function(sessionKey) {
+window.goToSession = async function (sessionKey) {
+    sessionKey = normalizeDashboardSessionKey(sessionKey);
     if (!sessionKey) {
         showToast('No session key provided', 'warning');
         return;
     }
-    
-    console.log(`[Dashboard] goToSession called with: ${sessionKey}`);
-    
+
+    sessLog(`[Dashboard] goToSession called with: ${sessionKey}`);
+
     // Wait for gateway to be connected
     if (!gateway || !gateway.isConnected()) {
         showToast('Connecting to gateway...', 'info');
@@ -5560,7 +5994,7 @@ window.goToSession = async function(sessionKey) {
         localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
-        
+
         // Try to connect
         if (GATEWAY_CONFIG.host) {
             connectToGateway();
@@ -5569,16 +6003,16 @@ window.goToSession = async function(sessionKey) {
         }
         return;
     }
-    
+
     // Show chat page first
     showPage('chat');
-    
+
     // Switch to the session
     await switchToSession(sessionKey);
 }
 
 // Generate a URL for a specific session (for sharing/linking)
-window.getSessionUrl = function(sessionKey) {
+window.getSessionUrl = function (sessionKey) {
     const baseUrl = window.location.origin + window.location.pathname;
     return `${baseUrl}?session=${encodeURIComponent(sessionKey)}`;
 }
@@ -5587,19 +6021,19 @@ async function saveCurrentChat() {
     // Save current chat messages to state as safeguard
     try {
         const response = await fetch('/api/state');
-        const state = await response.json();
-        
+        const serverState = await response.json();
+
         // Save chat history to archivedChats
-        if (!state.archivedChats) state.archivedChats = {};
-        state.archivedChats[currentSessionName] = {
+        if (!serverState.archivedChats) serverState.archivedChats = {};
+        serverState.archivedChats[currentSessionName] = {
             savedAt: Date.now(),
-            messages: chatHistory.slice(-100) // Last 100 messages
+            messages: state.chat.messages.slice(-100) // Fix #5: was chatHistory (undefined), now state.chat.messages
         };
-        
+
         await fetch('/api/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state)
+            body: JSON.stringify(serverState)
         });
     } catch (e) {
         // Silently fail - safeguard is optional
@@ -5607,55 +6041,65 @@ async function saveCurrentChat() {
 }
 
 async function loadSessionHistory(sessionKey) {
-    try {
-        // Find session in available sessions (which now includes messages)
-        const session = availableSessions.find(s => s.key === sessionKey);
-        
-        if (session?.messages && session.messages.length > 0) {
-            // Convert to chat format
-            chatHistory = session.messages.map(msg => ({
-                role: msg.role === 'assistant' ? 'model' : msg.role,
-                content: msg.content || '',
-                timestamp: msg.timestamp || Date.now(),
-                name: msg.name
-            }));
-            
-            renderChat();
-            renderChatPage();
-            console.log(`[Dashboard] Loaded ${session.messages.length} messages from ${sessionKey}`);
-        } else {
-            console.warn('[Dashboard] No messages in session:', sessionKey);
-            // Try loading from archived chats as fallback
-            await loadArchivedChat(sessionKey);
+    const loadVersion = sessionVersion;
+
+    // Helper: attempt to load from gateway
+    async function tryGatewayLoad() {
+        if (!gateway || !gateway.isConnected()) return false;
+        try {
+            const result = await gateway.loadHistory();
+            if (loadVersion !== sessionVersion) {
+                sessLog(`[Dashboard] Ignoring stale history load for ${sessionKey}`);
+                return true; // Stale but don't retry
+            }
+            if (result?.messages && result.messages.length > 0) {
+                if (state.chat?.messages?.length > 0) {
+                    mergeHistoryMessages(result.messages);
+                } else {
+                    loadHistoryMessages(result.messages);
+                }
+                sessLog(`[Dashboard] Loaded ${result.messages.length} messages from gateway for ${sessionKey}`);
+                return true;
+            }
+        } catch (e) {
+            console.warn('[Dashboard] Gateway history failed:', e.message);
         }
-    } catch (e) {
-        console.error('[Dashboard] Failed to load session history:', e);
-        // Fallback to archived chat
-        await loadArchivedChat(sessionKey);
+        return false;
     }
+
+    // Try gateway first
+    if (await tryGatewayLoad()) return;
+
+    // If gateway wasn't connected, wait briefly for reconnect and retry
+    if (gateway && !gateway.isConnected()) {
+        sessLog(`[Dashboard] Gateway disconnected during switch to ${sessionKey}, waiting for reconnect...`);
+        await new Promise(r => setTimeout(r, 2000));
+        if (loadVersion !== sessionVersion) return; // Session changed again
+        if (await tryGatewayLoad()) return;
+    }
+
+    // Fallback: check in-memory cache
+    const cached = getCachedSessionMessages(sessionKey);
+    if (cached && cached.length > 0) {
+        state.chat.messages = cached.slice();
+        renderChat();
+        renderChatPage();
+        sessLog(`[Dashboard] Loaded ${cached.length} cached messages for ${sessionKey}`);
+        return;
+    }
+
+    // Last resort: render empty (gateway is source of truth)
+    sessLog(`[Dashboard] No history available for ${sessionKey} — rendering empty`);
+    renderChat();
+    renderChatPage();
 }
 
 async function loadArchivedChat(sessionKey) {
-    try {
-        const response = await fetch('/api/state');
-        const state = await response.json();
-        
-        const archived = state.archivedChats?.[sessionKey];
-        if (archived?.messages) {
-            chatHistory = archived.messages;
-            renderChat();
-            renderChatPage();
-        } else {
-            chatHistory = [];
-            renderChat();
-            renderChatPage();
-        }
-    } catch (e) {
-        console.warn('[Dashboard] Failed to load archived chat:', e);
-        chatHistory = [];
-        renderChat();
-        renderChatPage();
-    }
+    // Just render empty — gateway.loadHistory() is the primary source now
+    // Previously this fetched entire /api/state which was very expensive
+    chatHistory = [];
+    renderChat();
+    renderChatPage();
 }
 
 // Sessions are fetched when gateway connects (see initGateway onConnected)
@@ -5665,31 +6109,42 @@ function initGateway() {
     gateway = new GatewayClient({
         sessionKey: GATEWAY_CONFIG.sessionKey,
         onConnected: (serverName, sessionKey) => {
-            console.log(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
+            sessLog(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
-            GATEWAY_CONFIG.sessionKey = sessionKey;
-            
-            // Fetch model config from gateway (populates dropdowns),
+
+            // On reconnect, the gateway client reports whatever sessionKey it has.
+            // If the user switched sessions while disconnected, currentSessionName
+            // is authoritative — re-sync the gateway client to match.
+            const intendedSession = normalizeDashboardSessionKey(
+                GATEWAY_CONFIG.sessionKey || currentSessionName || sessionKey
+            );
+            if (sessionKey !== intendedSession) {
+                sessLog(`[Dashboard] Reconnect mismatch: gateway=${sessionKey}, intended=${intendedSession}. Re-syncing gateway.`);
+                if (gateway) gateway.setSessionKey(intendedSession);
+            }
+            GATEWAY_CONFIG.sessionKey = intendedSession;
+            currentSessionName = intendedSession;
+
+            // Fetch live model config from gateway (populates dropdowns),
             // then apply per-session override (authoritative model display).
-            fetchModelsFromGateway().then(() => applySessionModelOverride(sessionKey));
-            
-            // Update session name displays (hard clarity: show full session key)
-            currentSessionName = sessionKey;
+            fetchModelsFromGateway().then(() => applySessionModelOverride(intendedSession));
+
+            // Update session name displays
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) {
-                nameEl.textContent = sessionKey;
-                nameEl.title = sessionKey;
+                nameEl.textContent = intendedSession;
+                nameEl.title = intendedSession;
             }
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) {
-                chatPageNameEl.textContent = sessionKey;
-                chatPageNameEl.title = sessionKey;
+                chatPageNameEl.textContent = intendedSession;
+                chatPageNameEl.title = intendedSession;
             }
-            
+
             // Remember this session for the agent
-            const agentMatch = sessionKey.match(/^agent:([^:]+):/);
-            if (agentMatch) saveLastAgentSession(agentMatch[1], sessionKey);
-            
+            const agentMatch = intendedSession.match(/^agent:([^:]+):/);
+            if (agentMatch) saveLastAgentSession(agentMatch[1], intendedSession);
+
             checkRestartToast();
 
             // Load chat history on connect (one-time full load)
@@ -5699,15 +6154,15 @@ function initGateway() {
             gateway.loadHistory().then(result => {
                 _historyRefreshInFlight = false;
                 if (loadVersion !== sessionVersion) {
-                    console.log(`[Dashboard] Ignoring stale history (version ${loadVersion} != ${sessionVersion})`);
+                    sessLog(`[Dashboard] Ignoring stale history (version ${loadVersion} != ${sessionVersion})`);
                     return;
                 }
                 if (result?.messages) {
-                    if (!state.chat?.messages?.length) {
-                        loadHistoryMessages(result.messages);
-                    } else {
-                        mergeHistoryMessages(result.messages);
-                    }
+                    // Fix #2: On initial connect, always do a full authoritative replace from gateway.
+                    // This ensures hard refresh always shows the correct session's messages.
+                    // mergeHistoryMessages() is reserved for the incremental poll path (_doHistoryRefresh).
+                    sessLog(`[Dashboard] onConnected: full history replace with ${result.messages.length} messages`);
+                    loadHistoryMessages(result.messages);
                 }
             }).catch(() => { _historyRefreshInFlight = false; });
 
@@ -5749,7 +6204,7 @@ function initGateway() {
 
 let newSessionModalResolve = null;
 
-window.openNewSessionModal = function(defaultValue) {
+window.openNewSessionModal = function (defaultValue) {
     return new Promise((resolve) => {
         newSessionModalResolve = resolve;
         const modal = document.getElementById('new-session-modal');
@@ -5768,7 +6223,7 @@ window.openNewSessionModal = function(defaultValue) {
     });
 };
 
-window.closeNewSessionModal = function(value) {
+window.closeNewSessionModal = function (value) {
     const modal = document.getElementById('new-session-modal');
     if (modal) {
         modal.classList.remove('visible');
@@ -5779,14 +6234,14 @@ window.closeNewSessionModal = function(value) {
     }
 };
 
-window.submitNewSessionModal = function() {
+window.submitNewSessionModal = function () {
     const input = document.getElementById('new-session-name-input');
     const value = input ? input.value : null;
     closeNewSessionModal(value);
 };
 
 // Handle Enter key in new session modal
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
     const modal = document.getElementById('new-session-modal');
     if (modal && modal.classList.contains('visible')) {
         if (e.key === 'Enter') {
@@ -5800,10 +6255,10 @@ document.addEventListener('keydown', function(e) {
 });
 
 // Start a new session for a specific agent
-window.startNewAgentSession = async function(agentId) {
+window.startNewAgentSession = async function (agentId) {
     // Close dropdown first
     toggleChatPageSessionMenu();
-    
+
     // Generate default name with timestamp: MM/DD/YYYY hh:mm:ss AM/PM
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -5816,7 +6271,7 @@ window.startNewAgentSession = async function(agentId) {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
     const defaultTimestamp = `${month}/${day}/${year} ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
-    
+
     const agentLabel = getAgentLabel(agentId);
 
     // Open custom modal instead of browser prompt
@@ -5825,7 +6280,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Always prepend agent ID to the session name (lowercase)
     const sessionName = `${agentId.toLowerCase()}-${userInput.trim()}`;
-    
+
     // Build the full session key: agent:{agentId}:{agentId}-{userInput}
     const sessionKey = `agent:${agentId}:${sessionName}`;
 
@@ -5840,7 +6295,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Increment session version to invalidate any in-flight history loads
     sessionVersion++;
-    console.log(`[Dashboard] Session version now ${sessionVersion} (new agent session)`);
+    sessLog(`[Dashboard] Session version now ${sessionVersion} (new agent session)`);
 
     // Clear local chat and cache
     state.chat.messages = [];
@@ -5859,7 +6314,21 @@ window.startNewAgentSession = async function(agentId) {
     // Switch gateway to new session
     currentSessionName = sessionKey;
     GATEWAY_CONFIG.sessionKey = sessionKey;
-    localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
+    // Persist for reload - save to BOTH localStorage AND server state
+    localStorage.setItem('gateway_session', sessionKey);
+    // Also update server state so refresh doesn't revert to stale cached session
+    if (typeof saveGatewaySettings === 'function') {
+        saveGatewaySettings(
+            GATEWAY_CONFIG.host,
+            GATEWAY_CONFIG.port,
+            GATEWAY_CONFIG.token,
+            sessionKey
+        );
+    } else if (typeof state !== 'undefined' && state.gatewayConfig) {
+        // Fallback: update server state directly if saveGatewaySettings unavailable
+        state.gatewayConfig.sessionKey = sessionKey;
+        if (typeof saveState === 'function') saveState('Updated session for reload');
+    }
 
     // Update session input field
     const sessionInput = document.getElementById('gateway-session');
@@ -5870,10 +6339,14 @@ window.startNewAgentSession = async function(agentId) {
     const nameEl = document.getElementById('chat-page-session-name');
     if (nameEl) nameEl.textContent = displayName;
 
-    // Disconnect and reconnect with new session key
+    // Clear streaming state from previous session to prevent cross-session bleed
+    streamingText = '';
+    isProcessing = false;
+
+    // Switch gateway to new session key (no disconnect needed)
     if (gateway && gateway.isConnected()) {
-        gateway.disconnect();
-        await new Promise(resolve => setTimeout(resolve, 300));
+        gateway.setSessionKey(sessionKey);
+    } else if (gateway) {
         connectToGateway();
     }
 
@@ -5887,18 +6360,18 @@ window.startNewAgentSession = async function(agentId) {
         model: currentModel || 'unknown',
         sessionId: null
     };
-    
+
     // Add to beginning of list (most recent)
     availableSessions.unshift(newSession);
-    
+
     // Refresh sessions list from gateway (will merge with our local addition)
     await fetchSessions();
-    
+
     // Ensure our new session is still in the list (in case fetchSessions didn't include it)
     if (!availableSessions.some(s => s.key === sessionKey)) {
         availableSessions.unshift(newSession);
     }
-    
+
     populateSessionDropdown();
     setActiveSidebarAgent(agentId);
 
@@ -5910,7 +6383,7 @@ window.startNewAgentSession = async function(agentId) {
 }
 
 // Legacy function - creates session for current agent
-window.startNewSession = async function() {
+window.startNewSession = async function () {
     await startNewAgentSession(currentAgentId);
 }
 
@@ -5934,10 +6407,10 @@ function filterSessionsBySearch(sessions, query) {
 // Update populateSessionDropdown to include search
 const originalPopulateSessionDropdown = window.populateSessionDropdown;
 if (typeof originalPopulateSessionDropdown === 'function') {
-    window.populateSessionDropdown = function() {
+    window.populateSessionDropdown = function () {
         // Call original first
         originalPopulateSessionDropdown();
-        
+
         // Then add search functionality if not already present
         const dropdown = document.getElementById('chat-page-session-menu');
         if (dropdown && !dropdown.querySelector('.session-search')) {
@@ -5953,14 +6426,14 @@ if (typeof originalPopulateSessionDropdown === 'function') {
     };
 }
 
-window.filterSessionDropdown = function(query) {
+window.filterSessionDropdown = function (query) {
     sessionSearchQuery = query;
     const dropdown = document.getElementById('chat-page-session-menu');
     if (!dropdown) return;
-    
+
     const items = dropdown.querySelectorAll('.session-menu-item');
     const q = query.toLowerCase();
-    
+
     items.forEach(item => {
         const text = item.textContent.toLowerCase();
         item.style.display = text.includes(q) ? '' : 'none';
@@ -6305,21 +6778,93 @@ function setupSidebarAgentsManageButton() {
     });
 }
 
-function initSidebarAgentsUI() {
-    // Order -> hidden -> drag
-    applySidebarAgentsOrder();
-    applySidebarAgentsHidden();
-    setupSidebarAgentsDragAndDrop();
-    setupSidebarAgentsManageButton();
+// Avatar resolution: check for .png first, fall back to .svg, then emoji/initial
+const AVATAR_EXTENSIONS = ['png', 'svg'];
 
-    // Initial activity state if availableSessions already loaded
-    if (window.availableSessions) {
-        updateSidebarAgentActivityIndicators(window.availableSessions);
+function resolveAvatarUrl(agentId) {
+    // Main agent has a special avatar
+    if (agentId === 'main') return '/avatars/solobot.png';
+    // Others: try {id}.png, {id}.svg
+    return `/avatars/${agentId}.png`;
+}
+
+function agentDisplayName(agent) {
+    const id = agent.id || agent.name;
+    const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
+    if (persona) return `${persona.name} (${persona.role})`;
+    if (agent.isDefault) return 'Halo (PA)';
+    const name = agent.name || agent.id;
+    return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+async function loadSidebarAgents() {
+    const container = document.getElementById('sidebar-agents-list');
+    if (!container) return;
+
+    try {
+        const response = await fetch('/api/agents');
+        const data = await response.json();
+        const agents = data.agents || [];
+
+        // Include main agent (it's excluded from /api/agents since it uses the shared workspace)
+        // Add it at the front if not present
+        const hasMain = agents.some(a => a.isDefault || a.id === 'main');
+        const allAgents = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+
+        // Sort: default first, then by id
+        allAgents.sort((a, b) => {
+            if (a.isDefault) return -1;
+            if (b.isDefault) return 1;
+            return a.id.localeCompare(b.id);
+        });
+
+        container.innerHTML = allAgents.map(agent => {
+            const avatarUrl = resolveAvatarUrl(agent.id);
+            const displayName = agentDisplayName(agent);
+            const emoji = agent.emoji || '';
+            const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+
+            return `
+                <div class="sidebar-agent" data-agent="${agent.id}">
+                    <img class="agent-avatar"
+                         src="${avatarUrl}"
+                         alt="${agent.id}"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
+                        ${emoji || fallbackInitial}
+                    </span>
+                    <span class="sidebar-item-text">${displayName}</span>
+                </div>
+            `;
+        }).join('');
+
+        // Re-init after dynamic load
+        applySidebarAgentsOrder();
+        applySidebarAgentsHidden();
+        setupSidebarAgentsDragAndDrop();
+
+        // Re-attach click handlers (setupSidebarAgents from chat.js)
+        if (typeof setupSidebarAgents === 'function') {
+            setupSidebarAgents();
+        }
+
+        if (window.availableSessions) {
+            updateSidebarAgentActivityIndicators(window.availableSessions);
+        }
+
+        console.log(`[Sidebar] Loaded ${allAgents.length} agents dynamically`);
+    } catch (e) {
+        console.warn('[Sidebar] Failed to load agents:', e.message);
     }
 }
 
+function initSidebarAgentsUI() {
+    setupSidebarAgentsManageButton();
+    // Load agents dynamically from API
+    loadSidebarAgents();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Sidebar HTML loads immediately; give other scripts a tick
     setTimeout(initSidebarAgentsUI, 50);
 });
 
@@ -6330,7 +6875,7 @@ window.resetSidebarAgentsOrder = resetSidebarAgentsOrder;
 window.updateSidebarAgentsFromSessions = updateSidebarAgentsFromSessions;
 
 // === skills-mgr.js ===
-// js/skills-mgr.js — Skills Manager page
+// js/skills-mgr.js - Skills Manager page
 
 let skillsList = [];
 let skillsInterval = null;
@@ -6338,8 +6883,17 @@ let skillsPageBound = false;
 
 const skillsUi = {
     search: '',
-    onlyIssues: false
+    onlyIssues: false,
+    onlyInstalled: true
 };
+
+function getHiddenSkills() {
+    try { return JSON.parse(localStorage.getItem('hiddenSkills') || '[]'); } catch { return []; }
+}
+
+function setHiddenSkills(arr) {
+    localStorage.setItem('hiddenSkills', JSON.stringify(arr));
+}
 
 function initSkillsPage() {
     bindSkillsPageControls();
@@ -6367,6 +6921,23 @@ function bindSkillsPageControls() {
     if (onlyIssues) {
         onlyIssues.addEventListener('change', () => {
             skillsUi.onlyIssues = Boolean(onlyIssues.checked);
+            renderSkills();
+        });
+    }
+
+    const onlyInstalled = document.getElementById('skills-only-installed');
+    if (onlyInstalled) {
+        onlyInstalled.checked = skillsUi.onlyInstalled;
+        onlyInstalled.addEventListener('change', () => {
+            skillsUi.onlyInstalled = Boolean(onlyInstalled.checked);
+            renderSkills();
+        });
+    }
+
+    const showHidden = document.getElementById('skills-show-hidden');
+    if (showHidden) {
+        showHidden.addEventListener('change', () => {
+            skillsUi.showHidden = Boolean(showHidden.checked);
             renderSkills();
         });
     }
@@ -6439,8 +7010,8 @@ function renderMissingBadges(skill) {
 }
 
 function skillIsReady(skill) {
-    // “Ready” means prerequisites/binaries are present.
-    // This is NOT the same thing as “installed” (many skills are bundled).
+    // "Ready" means prerequisites/binaries are present.
+    // This is NOT the same thing as "installed" (many skills are bundled).
     const missing = skill?.missing || {};
     const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
     return missingBins === 0;
@@ -6453,10 +7024,11 @@ function renderInstallButtons(skill) {
     const name = skill?.name;
     if (!name) return '';
 
-    // Only show "Reinstall" if the gateway explicitly reports installed=true.
-    // Otherwise we keep the installer’s label (often these buttons install prerequisites like `uv`).
-    const installed = skill?.installed === true;
+    // Show "Reinstall" if the skill is already installed:
+    // - gateway explicitly reports installed=true, OR
+    // - the skill has install options AND all required bins are present (ready)
     const ready = skillIsReady(skill);
+    const installed = skill?.installed === true || ready;
 
     const readyBadge = ready
         ? `<span class="badge" style="background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.25); color: var(--success); padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;">Ready</span>`
@@ -6503,7 +7075,22 @@ function renderSkills() {
             if (!query) return true;
             return name.toLowerCase().includes(query) || desc.toLowerCase().includes(query) || key.toLowerCase().includes(query);
         })
+        .filter(skill => {
+            if (!skillsUi.onlyInstalled) return true;
+            // "Installed" means actually usable: ready (no missing bins) AND eligible for this OS
+            const missing = skill?.missing || {};
+            const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
+            const missingOs = (missing.os || []).length > 0;
+            if (missingOs || missingBins > 0) return false;
+            return skill?.installed === true || skill?.bundled === true || skill?.enabled !== false;
+        })
         .filter(skill => skillsUi.onlyIssues ? skillHasIssues(skill) : true)
+        .filter(skill => {
+            if (skillsUi.showHidden) return true;
+            const hidden = getHiddenSkills();
+            const key = skill?.skillKey || skill?.name || '';
+            return !hidden.includes(key);
+        })
         .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
 
     container.innerHTML = filtered.map(skill => {
@@ -6553,23 +7140,31 @@ function renderSkills() {
 
                 <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end;">
                     ${installButtons}
-                    <button onclick="viewSkillFiles('${escapeHtml(skillKey)}', '${escapeHtml(skill?.path || '')}')" 
-                            class="btn btn-ghost" 
+                    <button onclick="viewSkillFiles('${escapeHtml(skillKey)}', '${escapeHtml(skill?.path || '')}')"
+                            class="btn btn-ghost"
                             style="padding: 4px 10px; font-size: 11px;"
                             title="View and edit skill files">
                         📂 Files
                     </button>
-                    <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})" 
-                            class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}" 
+                    <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})"
+                            class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}"
                             style="padding: 4px 10px; font-size: 11px;">
                         ${enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button onclick="promptSetApiKey('${escapeHtml(skillKey)}', '${escapeHtml(skill?.primaryEnv || '')}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px;">
                         Set key
                     </button>
-                    <button onclick="promptSetEnv('${escapeHtml(skillKey)}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px;">
+                    <button onclick="promptSetEnv('${escapeHtml(skillKey)}', ${escapeHtml(JSON.stringify(skill?.missing?.env || []))})" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px;">
                         Set env
                     </button>
+                    ${skill?.bundled
+                        ? `<button onclick="toggleHideSkill('${escapeHtml(skillKey)}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px; color: var(--text-muted);">
+                            ${getHiddenSkills().includes(skillKey) ? '👁 Unhide' : '🙈 Hide'}
+                          </button>`
+                        : `<button onclick="uninstallSkill('${escapeHtml(skillKey)}')" class="btn btn-ghost" style="padding: 4px 10px; font-size: 11px; color: var(--error);">
+                            🗑 Uninstall
+                          </button>`
+                    }
                 </div>
             </div>
         </div>`;
@@ -6643,36 +7238,39 @@ window.promptSetApiKey = async function(skillKey, primaryEnv) {
         return;
     }
 
-    const hint = primaryEnv ? ` (primary env: ${primaryEnv})` : '';
-    const apiKey = window.prompt(`Enter API key for ${skillKey}${hint}.\n\nLeave blank to clear.`);
+    const envName = primaryEnv || `${skillKey.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
+    const apiKey = window.prompt(`Enter API key for ${skillKey} (${envName}).\n\nLeave blank to clear.`);
     if (apiKey === null) return; // cancelled
 
     try {
-        await gateway._request('skills.update', { skillKey, apiKey });
-        showToast('Saved key', 'success');
+        // Store both as apiKey (legacy) and as the proper env var
+        await gateway._request('skills.update', { skillKey, apiKey, env: { [envName]: apiKey } });
+        showToast(`Saved ${envName}`, 'success');
         loadSkills();
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
     }
 };
 
-window.promptSetEnv = async function(skillKey) {
+window.promptSetEnv = async function(skillKey, missingEnv) {
     if (!gateway || !gateway.isConnected()) {
         showToast('Connect to gateway first', 'warning');
         return;
     }
 
-    const key = window.prompt(`Env var name for ${skillKey} (e.g., FOO_TOKEN).\n\nLeave blank to cancel.`);
+    // Pre-fill with first missing env var if available
+    const defaultKey = Array.isArray(missingEnv) && missingEnv.length > 0 ? missingEnv[0] : '';
+    const key = window.prompt(`Env var name for ${skillKey} (e.g., FOO_TOKEN).${defaultKey ? `\n\nMissing: ${missingEnv.join(', ')}` : ''}\n\nLeave blank to cancel.`, defaultKey);
     if (key === null) return;
     const trimmedKey = (key || '').trim();
     if (!trimmedKey) return;
 
-    const value = window.prompt(`Env var value for ${trimmedKey}.\n\nLeave blank to clear this key.`);
+    const value = window.prompt(`Enter value for ${trimmedKey}.\n\nLeave blank to clear this key.`);
     if (value === null) return;
 
     try {
         await gateway._request('skills.update', { skillKey, env: { [trimmedKey]: value } });
-        showToast('Saved env override', 'success');
+        showToast(`Saved ${trimmedKey}`, 'success');
         loadSkills();
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
@@ -6689,7 +7287,7 @@ let currentEditingFile = null;
 window.viewSkillFiles = async function(skillKey, skillPath) {
     currentSkillPath = skillPath || '';
     currentSkillName = skillKey;
-    
+
     const titleEl = document.getElementById('skill-files-modal-title');
     const treeEl = document.getElementById('skill-files-tree');
     const previewEl = document.getElementById('skill-file-preview');
@@ -6737,7 +7335,7 @@ function renderSkillFilesTree(files) {
     for (const f of files) {
         const relPath = f.relativePath || f.name || '';
         const parts = relPath.split('/').filter(Boolean);
-        
+
         let node = tree;
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
@@ -6775,7 +7373,7 @@ function renderSkillTreeNode(node, prefix) {
     for (const f of files.sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''))) {
         const icon = getFileIcon(f.fileName);
         html += `
-        <div class="skill-tree-file" onclick="previewSkillFile('${escapeHtml(f.relPath)}')" 
+        <div class="skill-tree-file" onclick="previewSkillFile('${escapeHtml(f.relPath)}')"
              style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 12px;"
              onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
             <span>${icon}</span>
@@ -6880,6 +7478,37 @@ window.editSkillFile = async function(relPath) {
     }
 };
 
+window.uninstallSkill = async function(skillKey) {
+    if (!confirm(`Uninstall "${skillKey}"? This will permanently delete the skill directory.`)) return;
+
+    try {
+        const resp = await fetch(`/api/skills/${encodeURIComponent(skillKey)}`, { method: 'DELETE' });
+        const result = await resp.json();
+        if (!resp.ok) {
+            showToast(result.error || 'Uninstall failed', 'error');
+            return;
+        }
+        showToast(`${skillKey} uninstalled`, 'success');
+        loadSkills();
+    } catch (e) {
+        showToast('Uninstall failed: ' + e.message, 'error');
+    }
+};
+
+window.toggleHideSkill = function(skillKey) {
+    const hidden = getHiddenSkills();
+    const idx = hidden.indexOf(skillKey);
+    if (idx >= 0) {
+        hidden.splice(idx, 1);
+        showToast(`${skillKey} unhidden`, 'success');
+    } else {
+        hidden.push(skillKey);
+        showToast(`${skillKey} hidden`, 'success');
+    }
+    setHiddenSkills(hidden);
+    renderSkills();
+};
+
 window.saveSkillFile = async function(relPath) {
     const textarea = document.getElementById('skill-file-editor');
     if (!textarea) return;
@@ -6892,12 +7521,12 @@ window.saveSkillFile = async function(relPath) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content })
         });
-        
+
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'Failed to save file');
         }
-        
+
         showToast('File saved', 'success');
         previewSkillFile(relPath);
     } catch (e) {
@@ -7142,6 +7771,10 @@ function hideModal(id) {
 async function openSettingsModal() {
     showModal('settings-modal');
 
+    // Init memory layout setting
+    const layoutSel = document.getElementById('setting-memory-layout');
+    if (layoutSel && window._memoryCards) layoutSel.value = window._memoryCards.getLayout();
+
     try {
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
@@ -7154,8 +7787,14 @@ async function openSettingsModal() {
         // Set provider select to current
         document.getElementById('setting-provider').value = modelInfo.provider;
         
-        // Populate model dropdown for current provider
+        // Populate model dropdown for current provider FIRST
         await updateModelDropdown(modelInfo.provider);
+        
+        // Then set the correct model value after dropdown is populated
+        const settingModelSelect = document.getElementById('setting-model');
+        if (settingModelSelect && modelInfo.modelId) {
+            settingModelSelect.value = modelInfo.modelId;
+        }
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
@@ -7164,6 +7803,12 @@ async function openSettingsModal() {
         document.getElementById('current-model-display').textContent = 'anthropic/claude-opus-4-5';
         document.getElementById('setting-provider').value = 'anthropic';
         await updateModelDropdown('anthropic');
+        
+        // Set fallback model after dropdown is populated
+        const settingModelSelect = document.getElementById('setting-model');
+        if (settingModelSelect) {
+            settingModelSelect.value = 'anthropic/claude-opus-4-5';
+        }
     }
 
     // Populate gateway settings
@@ -7175,7 +7820,7 @@ async function openSettingsModal() {
     if (hostEl) hostEl.value = GATEWAY_CONFIG.host || '';
     if (portEl) portEl.value = GATEWAY_CONFIG.port || 443;
     if (tokenEl) tokenEl.value = GATEWAY_CONFIG.token || '';
-    if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'main';
+    if (sessionEl) sessionEl.value = GATEWAY_CONFIG.sessionKey || 'agent:main:main';
 }
 
 function closeSettingsModal() {
@@ -8183,9 +8828,92 @@ if (typeof originalShowPage === 'function') {
 // === chat.js ===
 // js/chat.js — Chat event handling, message rendering, voice input, image handling, chat page
 
+const CHAT_DEBUG = false;
+function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
+
+/**
+ * Converts plain text to HTML with clickable links.
+ * - Escapes HTML to prevent XSS
+ * - Converts markdown links [text](url) to <a> tags
+ * - Auto-links bare http/https URLs
+ * - Preserves newlines as <br>
+ * - Skips URLs inside code blocks (``` ... ```)
+ */
+function linkifyText(text) {
+    if (!text) return '';
+
+    // Split on code blocks to avoid linkifying inside them
+    const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
+
+    return parts.map((part, i) => {
+        // Odd indices are code blocks — escape only, no linkify
+        if (i % 2 === 1) {
+            return part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Escape HTML
+        let safe = part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Convert markdown links [text](url)
+        safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        // Auto-link bare URLs (not already inside an href)
+        safe = safe.replace(/(^|[^"'>])(https?:\/\/[^\s<]+)/g,
+            '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+
+        // Preserve newlines
+        safe = safe.replace(/\n/g, '<br>');
+
+        return safe;
+    }).join('');
+}
+
 // ===================
 // CHAT FUNCTIONS (Gateway WebSocket)
 // ===================
+
+/**
+ * Format a model string for display in chat bubbles.
+ * - "openrouter/moonshotai/kimi-k2.5"  → "openrouter moonshotai/kimi-k2.5"
+ * - "google/gemini-flash-latest"        → "google/gemini-flash-latest"
+ * - "anthropic/claude-3-5-sonnet"       → "anthropic/claude-3-5-sonnet"
+ * - "moonshotai/kimi-k2.5" (no prefix) → "openrouter moonshotai/kimi-k2.5"
+ */
+/**
+ * Get the best available model for a message, with fallback chain:
+ *   msg.model → window._lastResponseModel → window.currentModel
+ * Always skip generic gateway placeholders like "openrouter/free" or "unknown".
+ */
+function getBestModel(msg) {
+    const isGeneric = (m) => !m || m === 'unknown' || m === 'openrouter/free' || m === 'free';
+    if (!isGeneric(msg?.model)) return { model: msg.model, provider: msg.provider };
+    if (!isGeneric(window._lastResponseModel)) return { model: window._lastResponseModel, provider: window._lastResponseProvider };
+    return { model: window.currentModel, provider: window.currentProvider };
+}
+
+/**
+ * Format a model + provider for display in chat bubbles.
+ * - provider "openrouter" + model "moonshotai/kimi-k2.5" → "openrouter moonshotai/kimi-k2.5"
+ * - model "openrouter/moonshotai/kimi-k2.5"              → "openrouter moonshotai/kimi-k2.5"
+ * - provider "google" + model "gemini-flash-latest"       → "google/gemini-flash-latest"
+ */
+function formatModelDisplay(model, provider) {
+    if (!model) return '';
+    // Already has openrouter prefix — replace slash with space
+    if (model.startsWith('openrouter/')) {
+        return model.replace('openrouter/', 'openrouter ');
+    }
+    // Provider is openrouter but model lacks prefix
+    if (provider === 'openrouter') {
+        return 'openrouter ' + model;
+    }
+    // Has any provider prefix already
+    if (model.includes('/')) return model;
+    // No prefix — prepend provider if known
+    if (provider) return `${provider}/${model}`;
+    return model;
+}
 
 // ===================
 // VOICE INPUT (Web Speech API)
@@ -8194,8 +8922,8 @@ if (typeof originalShowPage === 'function') {
 let voiceRecognition = null;
 let voiceInputState = 'idle'; // idle, listening, processing
 let voiceAutoSend = localStorage.getItem('voice_auto_send') === 'true'; // Auto-send after speech
-let voicePushToTalk = false; // Track if currently in push-to-talk mode
 let lastVoiceTranscript = ''; // Store last transcript for auto-send
+let accumulatedTranscript = ''; // Store accumulated text across pause/resume cycles
 
 // Live transcript indicator functions (disabled - transcript shows directly in input field)
 function showLiveTranscriptIndicator() { }
@@ -8205,13 +8933,13 @@ function updateLiveTranscriptIndicator(text, isInterim) { }
 function initVoiceInput() {
     // Check for Web Speech API support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
+
     // Update both voice buttons
     const btns = [
         document.getElementById('voice-input-btn'),
         document.getElementById('voice-input-btn-chatpage')
     ];
-    
+
     if (!SpeechRecognition) {
         for (const btn of btns) {
             if (btn) {
@@ -8220,10 +8948,10 @@ function initVoiceInput() {
                 btn.innerHTML = '<span class="voice-unsupported">🎤✗</span>';
             }
         }
-        console.log('[Voice] Web Speech API not supported');
+        chatLog('[Voice] Web Speech API not supported');
         return;
     }
-    
+
     if (btns.every(b => !b)) return;
 
     voiceRecognition = new SpeechRecognition();
@@ -8233,31 +8961,35 @@ function initVoiceInput() {
     voiceRecognition.maxAlternatives = 1;
 
     voiceRecognition.onstart = () => {
-        console.log('[Voice] Started listening, target input:', activeVoiceTarget);
-        lastVoiceTranscript = ''; // Reset transcript
+        chatLog('[Voice] Started listening, target input:', activeVoiceTarget);
+        // Don't reset transcript - keep accumulated text for pause/resume
         setVoiceState('listening');
-        
+
         // Show live transcript indicator
         showLiveTranscriptIndicator();
-        
+
         // Focus the target input
         const input = document.getElementById(activeVoiceTarget);
         if (input) {
             input.focus();
             input.placeholder = 'Listening... (speak now)';
+            // Keep existing accumulated text in the field
+            if (accumulatedTranscript) {
+                input.value = accumulatedTranscript;
+            }
         }
     };
-    
+
     voiceRecognition.onaudiostart = () => {
-        console.log('[Voice] Audio capture started - microphone is working');
+        chatLog('[Voice] Audio capture started - microphone is working');
     };
-    
+
     voiceRecognition.onsoundstart = () => {
-        console.log('[Voice] Sound detected');
+        chatLog('[Voice] Sound detected');
     };
-    
+
     voiceRecognition.onspeechstart = () => {
-        console.log('[Voice] Speech detected - processing...');
+        chatLog('[Voice] Speech detected - processing...');
         const input = document.getElementById(activeVoiceTarget);
         if (input) {
             input.placeholder = 'Hearing you...';
@@ -8265,7 +8997,7 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onresult = (event) => {
-        console.log('[Voice] onresult fired, resultIndex:', event.resultIndex, 'results.length:', event.results.length, 'target:', activeVoiceTarget);
+        chatLog('[Voice] onresult fired, resultIndex:', event.resultIndex, 'results.length:', event.results.length, 'target:', activeVoiceTarget);
         const input = document.getElementById(activeVoiceTarget);
         if (!input) {
             console.error('[Voice] Input not found:', activeVoiceTarget, '- trying fallback');
@@ -8275,10 +9007,10 @@ function initVoiceInput() {
                 console.error('[Voice] No input found at all!');
                 return;
             }
-            console.log('[Voice] Using fallback input:', fallback.id);
+            chatLog('[Voice] Using fallback input:', fallback.id);
         }
         const targetInput = input || document.getElementById('chat-page-input') || document.getElementById('chat-input');
-        console.log('[Voice] Updating input element:', targetInput?.id, targetInput?.tagName);
+        chatLog('[Voice] Updating input element:', targetInput?.id, targetInput?.tagName);
 
         let interimTranscript = '';
         let finalTranscript = '';
@@ -8288,7 +9020,7 @@ function initVoiceInput() {
             const result = event.results[i];
             const transcript = result[0].transcript;
             const confidence = result[0].confidence;
-            console.log(`[Voice] Result[${i}]: isFinal=${result.isFinal}, confidence=${confidence?.toFixed(2) || 'n/a'}, text="${transcript}"`);
+            chatLog(`[Voice] Result[${i}]: isFinal=${result.isFinal}, confidence=${confidence?.toFixed(2) || 'n/a'}, text="${transcript}"`);
             if (result.isFinal) {
                 finalTranscript += transcript;
             } else {
@@ -8296,17 +9028,26 @@ function initVoiceInput() {
             }
         }
 
-        // Combine: show final + interim (interim in progress)
-        const displayText = finalTranscript + interimTranscript;
-        console.log('[Voice] Display text:', displayText, '(final:', finalTranscript.length, 'interim:', interimTranscript.length, ')');
+        // Append new transcripts to accumulated text
+        if (finalTranscript) {
+            // Add space before appending if there's already accumulated text
+            if (accumulatedTranscript && !accumulatedTranscript.endsWith(' ')) {
+                accumulatedTranscript += ' ';
+            }
+            accumulatedTranscript += finalTranscript;
+        }
+
+        // Display accumulated + interim
+        const displayText = accumulatedTranscript + interimTranscript;
+        chatLog('[Voice] Display text:', displayText, '(accumulated:', accumulatedTranscript.length, 'interim:', interimTranscript.length, ')');
 
         // Update live transcript indicator (banner)
         updateLiveTranscriptIndicator(displayText, !!interimTranscript);
 
         // Always update the input with current text (even if empty during pauses)
-        console.log('[Voice] Setting targetInput.value to:', displayText);
+        chatLog('[Voice] Setting targetInput.value to:', displayText);
         targetInput.value = displayText;
-        
+
         // Style based on whether we have final or interim
         if (interimTranscript) {
             // Has interim - show as in-progress with subtle indicator
@@ -8317,10 +9058,10 @@ function initVoiceInput() {
             targetInput.style.fontStyle = 'normal';
             targetInput.style.color = 'var(--text-primary)';
         }
-        
+
         // Trigger input event to handle auto-resize and any listeners
         targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-        
+
         // Keep input focused and cursor at end
         targetInput.focus();
         if (targetInput.setSelectionRange) {
@@ -8330,19 +9071,19 @@ function initVoiceInput() {
         // Store final transcript for auto-send
         if (finalTranscript) {
             lastVoiceTranscript = finalTranscript;
-            console.log('[Voice] Final transcript stored:', finalTranscript);
+            chatLog('[Voice] Final transcript stored:', finalTranscript);
         }
     };
 
     voiceRecognition.onerror = (event) => {
         console.error('[Voice] Error:', event.error, event.message || '');
-        
+
         if (event.error === 'not-allowed') {
             setVoiceState('idle');
             showToast('Microphone access denied. Click the lock icon in your browser address bar to allow.', 'error');
         } else if (event.error === 'no-speech') {
             // Don't stop on no-speech if continuous mode - just keep listening
-            console.log('[Voice] No speech detected yet, still listening...');
+            chatLog('[Voice] No speech detected yet, still listening...');
             // Only show toast if we're ending
             if (!voiceRecognition || voiceInputState !== 'listening') {
                 showToast('No speech detected. Make sure your microphone is working.', 'info');
@@ -8360,9 +9101,9 @@ function initVoiceInput() {
     };
 
     voiceRecognition.onend = () => {
-        console.log('[Voice] Ended, last transcript:', lastVoiceTranscript);
+        chatLog('[Voice] Ended, accumulated transcript:', accumulatedTranscript);
         // Note: hideLiveTranscriptIndicator is called by setVoiceState('idle') below
-        
+
         // Reset styling on both inputs
         for (const inputId of ['chat-input', 'chat-page-input']) {
             const input = document.getElementById(inputId);
@@ -8377,25 +9118,27 @@ function initVoiceInput() {
                 }
             }
         }
-        
+
         // Auto-send if enabled and we have a transcript
-        if (voiceAutoSend && lastVoiceTranscript.trim()) {
-            console.log('[Voice] Auto-sending:', lastVoiceTranscript);
+        if (voiceAutoSend && accumulatedTranscript.trim()) {
+            chatLog('[Voice] Auto-sending:', accumulatedTranscript);
             // Determine which send function to use based on target
             if (activeVoiceTarget === 'chat-page-input') {
                 sendChatPageMessage();
             } else {
                 sendChatMessage();
             }
-            lastVoiceTranscript = '';
+            // Clear accumulated text after auto-send
+            accumulatedTranscript = '';
+            const input = document.getElementById(activeVoiceTarget);
+            if (input) input.value = '';
         }
-        
+
         setVoiceState('idle');
-        voicePushToTalk = false;
         activeVoiceTarget = 'chat-input'; // Reset target
     };
 
-    console.log('[Voice] Initialized successfully');
+    chatLog('[Voice] Initialized successfully');
 }
 
 function toggleVoiceInput() {
@@ -8413,10 +9156,10 @@ function toggleVoiceInput() {
 
 function startVoiceInput() {
     if (!voiceRecognition) return;
-    
+
     try {
         voiceRecognition.start();
-        console.log('[Voice] Starting...');
+        chatLog('[Voice] Starting...');
     } catch (e) {
         console.error('[Voice] Start error:', e);
         // May already be running
@@ -8428,10 +9171,10 @@ function startVoiceInput() {
 
 function stopVoiceInput() {
     if (!voiceRecognition) return;
-    
+
     try {
         voiceRecognition.stop();
-        console.log('[Voice] Stopping...');
+        chatLog('[Voice] Stopping...');
     } catch (e) {
         console.error('[Voice] Stop error:', e);
     }
@@ -8439,23 +9182,23 @@ function stopVoiceInput() {
 
 function setVoiceState(state, targetInput = 'chat-input') {
     voiceInputState = state;
-    
+
     // Hide live transcript indicator when going idle
     if (state === 'idle') {
         hideLiveTranscriptIndicator();
     }
-    
+
     // Update both buttons to stay in sync
     const btns = [
         { btn: document.getElementById('voice-input-btn'), mic: document.getElementById('voice-icon-mic'), stop: document.getElementById('voice-icon-stop') },
         { btn: document.getElementById('voice-input-btn-chatpage'), mic: document.getElementById('voice-icon-mic-chatpage'), stop: document.getElementById('voice-icon-stop-chatpage') }
     ];
-    
+
     for (const { btn, mic, stop } of btns) {
         if (!btn) continue;
-        
+
         btn.classList.remove('listening', 'processing');
-        
+
         switch (state) {
             case 'listening':
                 btn.classList.add('listening');
@@ -8492,7 +9235,7 @@ function toggleVoiceInput() {
     if (activeVoiceTarget !== 'chat-page-input' && voiceInputState !== 'listening') {
         activeVoiceTarget = 'chat-input';
     }
-    
+
     if (!voiceRecognition) {
         showToast('Voice input not available', 'error');
         return;
@@ -8503,7 +9246,7 @@ function toggleVoiceInput() {
     } else {
         startVoiceInput();
     }
-    
+
     // Don't reset target here - it should persist until onend resets it
 }
 
@@ -8523,34 +9266,30 @@ function updateVoiceAutoSendUI() {
     });
 }
 
-// Push-to-talk: Hold Alt+Space to speak
+// Alt+Space toggle: Press once to start, press again to stop
 function initPushToTalk() {
     document.addEventListener('keydown', (e) => {
-        // Trigger on Alt+Space (works even in input fields)
-        if (e.code === 'Space' && e.altKey && !voicePushToTalk && voiceInputState !== 'listening') {
+        // Toggle on Alt+Space (works even in input fields)
+        if (e.code === 'Space' && e.altKey) {
             e.preventDefault();
-            voicePushToTalk = true;
-            
-            // Determine which input to target based on current page
-            const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
-            activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
-            
-            console.log('[Voice] Push-to-talk started (Alt+Space), target:', activeVoiceTarget);
-            startVoiceInput();
+
+            if (voiceInputState === 'listening') {
+                // Already listening - stop
+                chatLog('[Voice] Alt+Space toggle: stopping');
+                stopVoiceInput();
+            } else {
+                // Not listening - start
+                // Determine which input to target based on current page
+                const chatPageVisible = document.getElementById('page-chat')?.classList.contains('active');
+                activeVoiceTarget = chatPageVisible ? 'chat-page-input' : 'chat-input';
+
+                chatLog('[Voice] Alt+Space toggle: starting, target:', activeVoiceTarget);
+                startVoiceInput();
+            }
         }
     });
-    
-    document.addEventListener('keyup', (e) => {
-        // Stop on releasing Space OR releasing Alt while push-to-talk is active
-        if ((e.code === 'Space' || e.key === 'Alt') && voicePushToTalk) {
-            e.preventDefault();
-            console.log('[Voice] Push-to-talk released');
-            voicePushToTalk = false;
-            stopVoiceInput();
-        }
-    });
-    
-    console.log('[Voice] Push-to-talk initialized (hold Alt+Space to speak)');
+
+    chatLog('[Voice] Alt+Space toggle initialized (press to start/stop recording)');
 }
 
 // Check if user is typing in an input field
@@ -8581,7 +9320,7 @@ function handleImageSelect(event) {
 function handlePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
+
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -8662,19 +9401,19 @@ async function compressImage(dataUrl, maxWidth = 1200, quality = 0.8) {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            
+
             // Scale down if too large
             if (width > maxWidth) {
                 height = (height * maxWidth) / width;
                 width = maxWidth;
             }
-            
+
             canvas.width = width;
             canvas.height = height;
-            
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
+
             // Convert to JPEG for better compression (unless PNG transparency needed)
             const compressed = canvas.toDataURL('image/jpeg', quality);
             resolve(compressed);
@@ -8691,7 +9430,7 @@ function processImageFile(file) {
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
         }
-        
+
         pendingImages.push({
             id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
@@ -8706,13 +9445,13 @@ function processImageFile(file) {
 function renderImagePreviews() {
     const container = document.getElementById('image-preview-container');
     if (!container) return;
-    
+
     if (pendingImages.length === 0) {
         container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
-    
+
     container.classList.add('visible');
     container.innerHTML = pendingImages.map((img, idx) => `
         <div class="image-preview-wrapper">
@@ -8739,6 +9478,12 @@ function clearImagePreviews() {
 }
 
 async function sendChatMessage() {
+    // Stop voice recording if active
+    if (voiceInputState === 'listening') {
+        chatLog('[Voice] Stopping recording before send');
+        stopVoiceInput();
+    }
+
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text && pendingImages.length === 0) return;
@@ -8751,7 +9496,7 @@ async function sendChatMessage() {
     // Get images to send
     const imagesToSend = [...pendingImages];
     const hasImages = imagesToSend.length > 0;
-    
+
     // Add to local display
     if (hasImages) {
         // Show all images in local preview
@@ -8762,8 +9507,9 @@ async function sendChatMessage() {
     } else {
         addLocalChatMessage(text, 'user');
     }
-    
+
     input.value = '';
+    accumulatedTranscript = ''; // Clear voice accumulated text
     clearImagePreviews();
     adjustChatInputHeight(input);
     chatInputSelection = { start: 0, end: 0 };
@@ -8775,7 +9521,7 @@ async function sendChatMessage() {
 
     // Send via Gateway WebSocket
     try {
-        console.log(`[Chat] Sending message with model: ${currentModel}`);
+        chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
             // Send with image attachments (send all images)
             const imageDataArray = imagesToSend.map(img => img.data);
@@ -8789,10 +9535,20 @@ async function sendChatMessage() {
     }
 }
 
-function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
+function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null) {
+    // DEFENSIVE: Hard session gate - validate incoming messages match current session
+    // Check if this message already has a session tag from outside
+    const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
+    const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+
+    if (incomingSession && currentSession && incomingSession !== currentSession) {
+        chatLog(`[Chat] BLOCKED addLocalChatMessage: incoming session=${incomingSession}, current=${currentSession}`);
+        return null;
+    }
+
     if (!state.chat) state.chat = { messages: [] };
     if (!state.system) state.system = { messages: [] };
-    
+
     // Handle multiple parameter signatures:
     // (text, from)
     // (text, from, image) - single image data URI
@@ -8801,7 +9557,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
     // (text, from, image, model)
     let images = [];
     let messageModel = model;
-    
+
     if (imageOrModel) {
         if (Array.isArray(imageOrModel)) {
             // Array of images
@@ -8816,8 +9572,8 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
             }
         }
     }
-    
-    console.log(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
+
+    chatLog(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
         id: 'm' + Date.now(),
@@ -8826,7 +9582,10 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
         time: Date.now(),
         image: images[0] || null, // Legacy single image field
         images: images, // New array field
-        model: messageModel // Store which AI model generated this response
+        model: messageModel, // Store which AI model generated this response
+        provider: provider, // Store which provider (e.g., 'google', 'anthropic')
+        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
+        _agentId: window.currentAgentId || 'main' // Fix #3: Store agent at message creation time for correct display later
     };
 
     const isSystem = isSystemMessage(text, from);
@@ -8854,13 +9613,15 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null) {
 
         // Persist chat to localStorage (workaround for Gateway bug #5735)
         persistChatMessages();
-        
+
         // Also sync chat to VPS for cross-computer access
         syncChatToVPS();
-        
+
         renderChat();
         renderChatPage();
     }
+
+    return message;
 }
 
 // Debounced sync of chat messages to VPS (so messages persist across computers)
@@ -8913,24 +9674,33 @@ function renderChat() {
         return;
     }
 
-    // Render each message (no filtering needed - system messages are in separate array)
+    // Render each message (filtered by session to prevent bleed)
+    const activeKey = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
     messages.forEach(msg => {
+        // Defensive: Skip messages from other sessions
+        const msgSession = (msg._sessionKey || '').toLowerCase();
+        if (msgSession && activeKey && msgSession !== activeKey) {
+            chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKey}`);
+            return;
+        }
         const msgEl = createChatMessageElement(msg);
         if (msgEl) container.appendChild(msgEl);
     });
 
-    // Render streaming message if active
-    if (streamingText) {
+    // Render streaming message ONLY if it belongs to the current session
+    const streamingActiveKey = (currentSessionName || '').toLowerCase();
+    if (streamingText && _streamingSessionKey && _streamingSessionKey.toLowerCase() === streamingActiveKey) {
         const streamingMsg = createChatMessageElement({
             id: 'streaming',
             from: 'solobot',
             text: streamingText,
             time: Date.now(),
-            isStreaming: true
+            isStreaming: true,
+            model: window._lastResponseModel || window.currentModel
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
-    
+
     // Show typing indicator when processing but no streaming text yet
     if (isProcessing && !streamingText) {
         const typingIndicator = document.createElement('div');
@@ -9008,27 +9778,30 @@ function createChatMessageElement(msg) {
         nameSpan.textContent = 'System';
     } else {
         nameSpan.style.color = 'var(--success)';
-        const displayName = getAgentDisplayName(currentAgentId);
+        // Fix #3b: Use the agent stored on the message, not the current global agent
+        const displayName = getAgentDisplayName(msg._agentId || currentAgentId);
         nameSpan.textContent = msg.isStreaming ? `${displayName} (typing...)` : displayName;
-    }
-    
-    // Model badge for bot messages (shows which AI model generated the response)
-    if (!isUser && !isSystem && msg.model) {
-        const modelBadge = document.createElement('span');
-        modelBadge.style.cssText = 'font-size: 10px; padding: 1px 5px; background: var(--surface-3); border-radius: 3px; color: var(--text-muted); margin-left: 4px;';
-        // Show short model name (e.g., 'claude-3-5-sonnet' instead of 'anthropic/claude-3-5-sonnet-latest')
-        const shortModel = msg.model.split('/').pop().replace(/-latest$/, '');
-        modelBadge.textContent = shortModel;
-        modelBadge.title = msg.model; // Full model name on hover
-        header.appendChild(modelBadge);
     }
 
     const timeSpan = document.createElement('span');
-    timeSpan.style.color = 'var(--text-muted)';
+    timeSpan.style.cssText = 'color: var(--text-muted); font-size: 12px;';
     timeSpan.textContent = formatTime(msg.time);
+    header.appendChild(timeSpan);
 
     header.appendChild(nameSpan);
-    header.appendChild(timeSpan);
+
+    // Model badge for bot messages - same style as time
+    if (!isUser && !isSystem) {
+        const { model: bestModel, provider: bestProvider } = getBestModel(msg);
+        if (bestModel) {
+            const modelBadge = document.createElement('span');
+            modelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
+            const displayModel = formatModelDisplay(bestModel, bestProvider);
+            modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
+            modelBadge.title = bestModel;
+            header.appendChild(modelBadge);
+        }
+    }
 
     // Message content
     const content = document.createElement('div');
@@ -9036,7 +9809,7 @@ function createChatMessageElement(msg) {
     content.style.color = 'var(--text-primary)';
     content.style.lineHeight = '1.5';
     content.style.whiteSpace = 'pre-wrap';
-    content.textContent = msg.text; // Use textContent for safety - no HTML injection
+    content.innerHTML = linkifyText(msg.text); // linkifyText escapes HTML first, then adds <a> tags
 
     // Images if present - show thumbnails
     const images = msg.images || (msg.image ? [msg.image] : []);
@@ -9046,7 +9819,7 @@ function createChatMessageElement(msg) {
         imageContainer.style.flexWrap = 'wrap';
         imageContainer.style.gap = '8px';
         imageContainer.style.marginBottom = 'var(--space-2)';
-        
+
         images.forEach((imgSrc, idx) => {
             const img = document.createElement('img');
             img.src = imgSrc;
@@ -9060,7 +9833,7 @@ function createChatMessageElement(msg) {
             img.onclick = () => openImageModal(imgSrc);
             imageContainer.appendChild(img);
         });
-        
+
         bubble.appendChild(imageContainer);
     }
 
@@ -9116,6 +9889,16 @@ let chatPagePendingImages = [];
 let chatPageScrollPosition = null;
 let chatPageUserScrolled = false;
 let chatPageNewMessageCount = 0;
+let chatPageLastRenderKey = null;
+let suppressChatRenderUntil = 0;
+
+// Suppress chat re-renders briefly on right-click to preserve text selection
+document.addEventListener('contextmenu', (e) => {
+    const container = document.getElementById('chat-page-messages');
+    if (container && container.contains(e.target)) {
+        suppressChatRenderUntil = Date.now() + 1500;
+    }
+});
 
 // Save scroll position to sessionStorage
 function saveChatScrollPosition() {
@@ -9130,10 +9913,10 @@ function saveChatScrollPosition() {
 function restoreChatScrollPosition() {
     const container = document.getElementById('chat-page-messages');
     if (!container) return;
-    
+
     const savedPosition = sessionStorage.getItem('chatScrollPosition');
     const savedHeight = sessionStorage.getItem('chatScrollHeight');
-    
+
     if (savedPosition && savedHeight) {
         // Calculate relative position and apply
         const ratio = parseFloat(savedPosition) / parseFloat(savedHeight);
@@ -9174,10 +9957,10 @@ function scrollChatToBottom() {
 function updateNewMessageIndicator() {
     const indicator = document.getElementById('chat-page-new-indicator');
     if (!indicator) return;
-    
+
     const container = document.getElementById('chat-page-messages');
     const notAtBottom = container && !isAtBottom(container);
-    
+
     if (notAtBottom && chatPageNewMessageCount > 0) {
         indicator.textContent = `↓ ${chatPageNewMessageCount} new message${chatPageNewMessageCount > 1 ? 's' : ''}`;
         indicator.classList.remove('hidden');
@@ -9193,18 +9976,18 @@ function updateNewMessageIndicator() {
 function setupChatPageScrollListener() {
     const container = document.getElementById('chat-page-messages');
     if (!container || container.dataset.scrollListenerAttached) return;
-    
+
     container.addEventListener('scroll', () => {
         // Update indicator based on scroll position
         updateNewMessageIndicator();
-        
+
         // Show/hide floating scroll button
         updateScrollToBottomButton();
-        
+
         // Save position periodically
         saveChatScrollPosition();
     });
-    
+
     container.dataset.scrollListenerAttached = 'true';
 }
 
@@ -9212,7 +9995,7 @@ function updateScrollToBottomButton() {
     const container = document.getElementById('chat-page-messages');
     const btn = document.getElementById('scroll-to-bottom-btn');
     if (!container || !btn) return;
-    
+
     // Show button if scrolled up more than 200px from bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distanceFromBottom > 200) {
@@ -9250,15 +10033,45 @@ function renderChatPage() {
     }
 
     const messages = state.chat?.messages || [];
-    
+
+    // Avoid clearing selection: if user is selecting text in chat, skip re-render
+    const selection = window.getSelection();
+    const hasSelection = selection && selection.toString().trim().length > 0;
+    const selectionInChat = hasSelection && (
+        (selection.anchorNode && container.contains(selection.anchorNode)) ||
+        (selection.focusNode && container.contains(selection.focusNode))
+    );
+    if (selectionInChat) {
+        return;
+    }
+
+    // Suppress render briefly after right-click
+    if (Date.now() < suppressChatRenderUntil) {
+        return;
+    }
+
+    // Skip re-render if nothing changed (prevents text selection from collapsing)
+    const lastMsg = messages[messages.length - 1];
+    const renderKey = [
+        messages.length,
+        lastMsg?.id || '',
+        lastMsg?.time || '',
+        streamingText || '',
+        isProcessing ? 1 : 0
+    ].join('|');
+
+    if (renderKey === chatPageLastRenderKey) {
+        return;
+    }
+    chatPageLastRenderKey = renderKey;
+
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
     // Save distance from bottom (how far up the user has scrolled)
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    
-    // Clear and re-render
-    container.innerHTML = '';
-    
+
+    // === Incremental rendering — only touch DOM for changes ===
+
     // Show empty state if no messages
     if (messages.length === 0 && !streamingText) {
         const displayName = getAgentDisplayName(currentAgentId);
@@ -9266,33 +10079,71 @@ function renderChatPage() {
             <div class="chat-page-empty">
                 <div class="chat-page-empty-icon">💬</div>
                 <div class="chat-page-empty-text">
-                    ${isConnected 
-                        ? `Start a conversation with ${displayName}` 
-                        : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
+                    ${isConnected
+                ? `Start a conversation with ${displayName}`
+                : 'Connect to Gateway in <a href="#" onclick="openSettingsModal(); return false;">Settings</a> to start chatting'}
                 </div>
             </div>
         `;
+        container._renderedCount = 0;
         return;
     }
-    
-    // Render messages (no filtering - system messages are in separate array)
-    messages.forEach(msg => {
-        const msgEl = createChatPageMessage(msg);
-        if (msgEl) container.appendChild(msgEl);
-    });
-    
-    // Render streaming message
-    if (streamingText) {
+
+    // Remove empty state if it was showing
+    const emptyState = container.querySelector('.chat-page-empty');
+    if (emptyState) { container.innerHTML = ''; container._renderedCount = 0; }
+
+    // How many real messages are already in DOM?
+    const renderedCount = container._renderedCount || 0;
+
+    // Full re-render needed if messages were removed/replaced (session switch, etc.)
+    const needsFullRender = renderedCount > messages.length || container._sessionKey !== (currentSessionName || GATEWAY_CONFIG?.sessionKey);
+    if (needsFullRender) {
+        container.innerHTML = '';
+        container._renderedCount = 0;
+        container._sessionKey = currentSessionName || GATEWAY_CONFIG?.sessionKey;
+    }
+
+    const currentRendered = container._renderedCount || 0;
+
+    // Append only new messages (skip already-rendered ones)
+    // First, remove any transient elements (streaming msg, typing indicator)
+    const transient = container.querySelectorAll('.streaming, .typing-indicator');
+    transient.forEach(el => el.remove());
+
+    // Append new messages (filtered by session to prevent bleed)
+    const activeKeyCP = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    if (messages.length > currentRendered) {
+        const fragment = document.createDocumentFragment();
+        for (let i = currentRendered; i < messages.length; i++) {
+            // Defensive: Skip messages from other sessions
+            const msg = messages[i];
+            const msgSession = (msg._sessionKey || '').toLowerCase();
+            if (msgSession && activeKeyCP && msgSession !== activeKeyCP) {
+                chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKeyCP}`);
+                continue;
+            }
+            const msgEl = createChatPageMessage(msg);
+            if (msgEl) fragment.appendChild(msgEl);
+        }
+        container.appendChild(fragment);
+        container._renderedCount = messages.length;
+    }
+
+    // Render streaming message ONLY if it belongs to the current session
+    const streamingActiveKeyCP = (currentSessionName || '').toLowerCase();
+    if (streamingText && _streamingSessionKey && _streamingSessionKey.toLowerCase() === streamingActiveKeyCP) {
         const streamingMsg = createChatPageMessage({
             id: 'streaming',
             from: 'solobot',
             text: streamingText,
             time: Date.now(),
-            isStreaming: true
+            isStreaming: true,
+            model: window._lastResponseModel || window.currentModel
         });
         if (streamingMsg) container.appendChild(streamingMsg);
     }
-    
+
     // Show typing indicator when processing but no streaming text yet
     if (isProcessing && !streamingText) {
         const typingIndicator = document.createElement('div');
@@ -9306,14 +10157,11 @@ function renderChatPage() {
         `;
         container.appendChild(typingIndicator);
     }
-    
+
     // Smart scroll behavior - only auto-scroll if user was truly at the bottom
     if (wasAtBottom) {
-        // User was at bottom, keep them there
         container.scrollTop = container.scrollHeight;
     } else {
-        // Restore position by maintaining same distance from bottom
-        // This keeps the user looking at the same messages even as new ones arrive
         container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
     }
 }
@@ -9322,20 +10170,21 @@ function renderChatPage() {
 function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
-    
+
     const isUser = msg.from === 'user';
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
-    
+
     // Message wrapper
     const wrapper = document.createElement('div');
     wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
-    
+    wrapper.setAttribute('data-msg-id', msg.id || '');
+
     // Avatar (for bot and user messages, not system)
     if (!isSystem) {
         const avatar = document.createElement('div');
         avatar.className = 'chat-page-avatar';
-        
+
         if (isUser) {
             // User avatar - initials circle
             avatar.classList.add('user-avatar');
@@ -9344,28 +10193,28 @@ function createChatPageMessage(msg) {
             // Bot avatar - agent-specific image and color
             const agentId = currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
-            
+
             // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm'].includes(agentId) 
+            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm'].includes(agentId)
                 ? `/avatars/${agentId === 'main' ? 'solobot' : agentId}.png`
-                : (agentId === 'tax' || agentId === 'sec') 
+                : (agentId === 'tax' || agentId === 'sec')
                     ? `/avatars/${agentId}.svg`
                     : '/avatars/solobot.png';
-            
+
             const avatarImg = document.createElement('img');
             avatarImg.src = avatarPath;
             avatarImg.alt = getAgentDisplayName(agentId);
             avatarImg.onerror = () => { avatarImg.style.display = 'none'; avatar.textContent = '🤖'; };
             avatar.appendChild(avatarImg);
         }
-        
+
         wrapper.appendChild(avatar);
     }
-    
+
     // Bubble
     const bubble = document.createElement('div');
     bubble.className = 'chat-page-bubble';
-    
+
     // Images if present - show thumbnails
     const images = msg.images || (msg.image ? [msg.image] : []);
     if (images.length > 0) {
@@ -9374,7 +10223,7 @@ function createChatPageMessage(msg) {
         imageContainer.style.flexWrap = 'wrap';
         imageContainer.style.gap = '8px';
         imageContainer.style.marginBottom = '8px';
-        
+
         images.forEach((imgSrc, idx) => {
             const img = document.createElement('img');
             img.src = imgSrc;
@@ -9387,14 +10236,14 @@ function createChatPageMessage(msg) {
             img.onclick = () => openImageModal(imgSrc);
             imageContainer.appendChild(img);
         });
-        
+
         bubble.appendChild(imageContainer);
     }
-    
+
     // Header with sender and time
     const header = document.createElement('div');
     header.className = 'chat-page-bubble-header';
-    
+
     const sender = document.createElement('span');
     sender.className = 'chat-page-sender';
     if (isUser) {
@@ -9402,30 +10251,46 @@ function createChatPageMessage(msg) {
     } else if (isSystem) {
         sender.textContent = 'System';
     } else {
-        const displayName = getAgentDisplayName(currentAgentId);
+        // Fix #3b: Use the agent stored on the message, not the current global agent
+        const displayName = getAgentDisplayName(msg._agentId || currentAgentId);
         sender.textContent = msg.isStreaming ? `${displayName} is typing...` : displayName;
     }
-    
+
     const time = document.createElement('span');
     time.className = 'chat-page-bubble-time';
     time.textContent = formatSmartTime(msg.time);
     time.title = formatTime(msg.time); // Show exact time on hover
-    
+
     header.appendChild(sender);
     header.appendChild(time);
+
+    // Model badge for bot messages - same style as time, relative timestamp preserved
+    if (isBot) {
+        const { model: bestModel, provider: bestProvider } = getBestModel(msg);
+        if (bestModel) {
+            const modelBadge = document.createElement('span');
+            modelBadge.className = 'chat-page-bubble-time';
+            modelBadge.style.marginLeft = '4px';
+            const displayModel = formatModelDisplay(bestModel, bestProvider);
+            modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
+            modelBadge.title = bestModel;
+            header.appendChild(modelBadge);
+        }
+    }
+
     bubble.appendChild(header);
-    
+
     // Content
     const content = document.createElement('div');
     content.className = 'chat-page-bubble-content';
-    content.textContent = msg.text;
+    content.innerHTML = linkifyText(msg.text);
     bubble.appendChild(content);
-    
+
     // Action buttons (copy, etc.) - show on hover
     if (!msg.isStreaming) {
         const actions = document.createElement('div');
         actions.className = 'chat-page-bubble-actions';
-        
+
         // Copy button
         const copyBtn = document.createElement('button');
         copyBtn.className = 'chat-action-btn';
@@ -9442,10 +10307,10 @@ function createChatPageMessage(msg) {
             }, 1500);
         };
         actions.appendChild(copyBtn);
-        
+
         bubble.appendChild(actions);
     }
-    
+
     wrapper.appendChild(bubble);
     return wrapper;
 }
@@ -9489,7 +10354,7 @@ function handleChatPageImageSelect(event) {
 function handleChatPagePaste(event) {
     const items = event.clipboardData?.items;
     if (!items) return;
-    
+
     for (const item of items) {
         if (item.type.startsWith('image/')) {
             event.preventDefault();
@@ -9508,7 +10373,7 @@ function processChatPageImageFile(file) {
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
         }
-        
+
         chatPagePendingImages.push({
             id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
             data: imageData,
@@ -9523,14 +10388,14 @@ function processChatPageImageFile(file) {
 function renderChatPageImagePreviews() {
     const container = document.getElementById('chat-page-image-preview');
     if (!container) return;
-    
+
     if (chatPagePendingImages.length === 0) {
         container.classList.add('hidden');
         container.classList.remove('visible');
         container.innerHTML = '';
         return;
     }
-    
+
     container.classList.remove('hidden');
     container.classList.add('visible');
     container.innerHTML = chatPagePendingImages.map((img, idx) => `
@@ -9591,21 +10456,44 @@ function setActiveSidebarAgent(agentId) {
             el.classList.remove('active');
         }
     });
-    
+
     // Update currentAgentId and refresh dropdown to show this agent's sessions
     if (agentId) {
         const wasChanged = agentId !== currentAgentId;
         currentAgentId = agentId;
-        
+
         // Update agent name display in chat header
         const agentNameEl = document.getElementById('chat-page-agent-name');
         if (agentNameEl) {
             agentNameEl.textContent = getAgentLabel(agentId);
         }
-        
+
         if (wasChanged) {
             populateSessionDropdown();
+            // Load this agent's saved model
+            if (typeof loadAgentModel === 'function') {
+                loadAgentModel(agentId);
+            }
         }
+    }
+}
+
+// Force sync active state (for rapid switches)
+function forceSyncActiveAgent(agentId) {
+    const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
+    agentEls.forEach(el => {
+        const elAgent = el.getAttribute('data-agent');
+        if (agentId && elAgent === agentId) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
+    });
+
+    window.currentAgentId = agentId;
+    const agentNameEl = document.getElementById('chat-page-agent-name');
+    if (agentNameEl) {
+        agentNameEl.textContent = getAgentLabel(agentId);
     }
 }
 
@@ -9622,30 +10510,70 @@ function saveLastAgentSession(agentId, sessionKey) {
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
         map[agentId] = sessionKey;
         localStorage.setItem('agent_last_sessions', JSON.stringify(map));
-    } catch {}
+    } catch { }
 }
 
 function setupSidebarAgents() {
     const agentEls = document.querySelectorAll('.sidebar-agent[data-agent]');
     if (!agentEls.length) return;
 
+    const activateAgentFromEl = (el) => {
+        const agentId = el.getAttribute('data-agent');
+        if (!agentId) return;
+
+        // IMMEDIATE UI feedback - show active state before switch completes
+        forceSyncActiveAgent(agentId);
+
+        // Update current agent ID first so dropdown filters correctly
+        currentAgentId = agentId;
+
+        // Restore last session for this agent, or default to main
+        const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
+        showPage('chat');
+
+        // Fire-and-forget switch (queue in sessions.js handles ordering)
+        switchToSession(sessionKey).catch(() => { });
+    };
+
     agentEls.forEach(el => {
         // If text gets truncated in the UI, give a native tooltip with the full name.
         const label = el.querySelector('.sidebar-item-text');
         if (label && !label.title) label.title = (label.textContent || '').trim();
 
-        el.addEventListener('click', async () => {
-            const agentId = el.getAttribute('data-agent');
-            if (!agentId) return;
-            
-            // Update current agent ID first so dropdown filters correctly
-            currentAgentId = agentId;
-            
-            // Restore last session for this agent, or default to main
-            const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
-            showPage('chat');
-            await switchToSession(sessionKey);
-            setActiveSidebarAgent(agentId);
+        // Only add listener once per element
+        if (el._agentClickBound) return;
+        el._agentClickBound = true;
+
+        // PATCH: Always handle mousedown to prevent selection from blocking agent switch
+        // This ensures sidebar clicks work even when chat text is highlighted
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;  // Left click only
+
+            // Clear any text selection to prevent interference
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed) {
+                try { selection.removeAllRanges(); } catch { }
+            }
+
+            // Always prevent default to avoid any selection-related interference
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Mark as handled so click doesn't double-fire
+            el._handledByMousedown = true;
+
+            // Execute switch
+            activateAgentFromEl(el);
+        });
+
+        el.addEventListener('click', (e) => {
+            // Skip if mousedown already handled it
+            if (el._handledByMousedown) {
+                el._handledByMousedown = false;
+                return;
+            }
+            // Handle normal click (no selection case)
+            activateAgentFromEl(el);
         });
     });
 
@@ -9658,18 +10586,24 @@ function setupSidebarAgents() {
 }
 
 async function sendChatPageMessage() {
+    // Stop voice recording if active
+    if (voiceInputState === 'listening') {
+        chatLog('[Voice] Stopping recording before send');
+        stopVoiceInput();
+    }
+
     const input = document.getElementById('chat-page-input');
     const text = input.value.trim();
     if (!text && chatPagePendingImages.length === 0) return;
-    
+
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to Gateway. Please connect first in Settings.', 'warning');
         return;
     }
-    
+
     const imagesToSend = [...chatPagePendingImages];
     const hasImages = imagesToSend.length > 0;
-    
+
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
@@ -9678,25 +10612,26 @@ async function sendChatPageMessage() {
     } else {
         addLocalChatMessage(text, 'user');
     }
-    
+
     input.value = '';
+    accumulatedTranscript = ''; // Clear voice accumulated text
     resizeChatPageInput();
     input.focus();
     clearChatPageImagePreviews();
-    
+
     // Force scroll to bottom when user sends
     chatPageUserScrolled = false;
-    
+
     // Show typing indicator immediately
     isProcessing = true;
-    
+
     // Render both areas
     renderChat();
     renderChatPage();
-    
+
     // Send via Gateway
     try {
-        console.log(`[Chat] Sending message with model: ${currentModel}`);
+        chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
             const imageDataArray = imagesToSend.map(img => img.data);
             await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
@@ -9710,5 +10645,104 @@ async function sendChatPageMessage() {
         renderChatPage();
     }
 }
+
+// ========================================
+// Chat Search Functionality
+// ========================================
+
+let chatSearchQuery = '';
+let chatSearchResults = [];
+let chatSearchCurrentIndex = -1;
+
+function initChatSearch() {
+    const searchInput = document.getElementById('chat-search');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        chatSearchQuery = e.target.value.trim().toLowerCase();
+        performChatSearch();
+    });
+
+    // Keyboard navigation within results
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (chatSearchResults.length > 0) {
+                // Navigate to next/previous result
+                if (e.shiftKey) {
+                    chatSearchCurrentIndex = (chatSearchCurrentIndex - 1 + chatSearchResults.length) % chatSearchResults.length;
+                } else {
+                    chatSearchCurrentIndex = (chatSearchCurrentIndex + 1) % chatSearchResults.length;
+                }
+                scrollToChatSearchResult(chatSearchResults[chatSearchCurrentIndex]);
+            }
+        } else if (e.key === 'Escape') {
+            searchInput.blur();
+        }
+    });
+}
+
+function performChatSearch() {
+    if (!chatSearchQuery) {
+        // Clear any search highlights
+        clearChatSearchHighlights();
+        chatSearchResults = [];
+        chatSearchCurrentIndex = -1;
+        return;
+    }
+
+    const messages = state.chat?.messages || [];
+    chatSearchResults = messages.filter(msg => {
+        const text = msg.text?.toLowerCase() || '';
+        return text.includes(chatSearchQuery);
+    });
+
+    if (chatSearchResults.length > 0) {
+        chatSearchCurrentIndex = 0;
+        scrollToChatSearchResult(chatSearchResults[0]);
+        showToast(`Found ${chatSearchResults.length} match${chatSearchResults.length !== 1 ? 'es' : ''}`, 'info', 2000);
+    } else {
+        showToast('No matches found', 'warning', 2000);
+    }
+}
+
+function scrollToChatSearchResult(msg) {
+    const container = document.getElementById('chat-page-messages');
+    if (!container || !msg) return;
+
+    // Find the message element
+    const msgEl = container.querySelector(`[data-msg-id="${msg.id}"]`);
+    if (msgEl) {
+        msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        highlightChatSearchResult(msgEl);
+    }
+}
+
+function highlightChatSearchResult(element) {
+    // Remove previous highlights
+    clearChatSearchHighlights();
+    // Add highlight class
+    element.classList.add('chat-search-highlight');
+    // Remove highlight after 3 seconds
+    setTimeout(() => {
+        element.classList.remove('chat-search-highlight');
+    }, 3000);
+}
+
+function clearChatSearchHighlights() {
+    const container = document.getElementById('chat-page-messages');
+    if (container) {
+        container.querySelectorAll('.chat-search-highlight').forEach(el => {
+            el.classList.remove('chat-search-highlight');
+        });
+    }
+}
+
+// Initialize search on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
+});
+
+
 
 
