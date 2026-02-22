@@ -315,10 +315,10 @@ const ModelValidator = {
                 const isStressTest = !!document.getElementById('mv-stress-test')?.checked;
                 let testPayload = 'Hello! Please respond with exactly: "OK"';
                 if (isStressTest) {
-                    testPayload += "\n\n[STRESS TEST CONTEXT SIMULATION - HIGH TOKEN WEIGHT]\n" + 
-                                  "The quick brown fox jumps over the lazy dog. ".repeat(1000); // ~10k tokens
+                    testPayload += "\n\n[STRESS TEST]\n" + "The quick brown fox jumps over the lazy dog. ".repeat(5000);
                 }
 
+                const payloadSize = testPayload.length;
                 await gateway.sendMessage(testPayload);
                 
                 result = await Promise.race([responsePromise, timeoutPromise]);
@@ -551,17 +551,19 @@ const ModelValidator = {
         // Base prompt
         let testPrompt = 'Hello! Please respond with exactly: "Model validation successful."';
         
-        // If stress test, append a large synthetic context payload (approx 8k-10k tokens)
+        // If stress test, append a massive synthetic context payload (approx 50k tokens)
         if (isStressTest) {
-            const largeContext = "\n\n[STRESS TEST CONTEXT SIMULATION - HIGH TOKEN WEIGHT]\n" + 
-                               "The quick brown fox jumps over the lazy dog. ".repeat(1000); // ~10k tokens
+            const largeContext = "\n\n[MEGA STRESS TEST - 50K TOKENS]\n" + 
+                               "The quick brown fox jumps over the lazy dog. ".repeat(5000); // ~50k tokens / 225k chars
             testPrompt += largeContext;
-            console.log(`[ModelValidator] Stress test enabled. Payload size: ${testPrompt.length} chars`);
         }
+        
+        const payloadSize = testPrompt.length;
+        console.log(`[ModelValidator] Sending test to ${modelId}. Size: ${payloadSize} chars. Stress: ${isStressTest}`);
 
         // Create promise to wait for response
         const responsePromise = new Promise((resolve) => {
-            this.currentTest.resolver = resolve;
+            this.currentTest = { provider, modelId, startTime: Date.now(), isStressTest, payloadSize, resolver: resolve };
         });
         
         // Timeout after 60 seconds
@@ -582,6 +584,19 @@ const ModelValidator = {
             document.getElementById('mv-status-value').textContent = 'PENDING';
             document.getElementById('mv-status-value').className = 'mv-status-value pending';
             document.getElementById('mv-latency-value').textContent = '...';
+            
+            // Add Payload size display
+            let payloadEl = document.getElementById('mv-payload-value');
+            if (!payloadEl) {
+                const latencyParent = document.getElementById('mv-latency-value').parentElement;
+                const newStat = document.createElement('div');
+                newStat.className = 'mv-stat-item';
+                newStat.innerHTML = `<div class="mv-stat-label">Prompt Size</div><div id="mv-payload-value" class="mv-stat-value">...</div>`;
+                latencyParent.parentElement.appendChild(newStat);
+                payloadEl = document.getElementById('mv-payload-value');
+            }
+            payloadEl.textContent = `${(testPrompt.length / 1024).toFixed(1)} KB`;
+
             document.getElementById('mv-model-value').textContent = `**${modelId}**`;
             document.getElementById('mv-provider-value').textContent = `**${provider}**`;
             document.getElementById('mv-response-block').className = 'mv-code-block';
