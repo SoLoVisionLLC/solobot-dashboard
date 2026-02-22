@@ -50,12 +50,17 @@ function linkifyText(text) {
  * - "openrouter/moonshotai/kimi-k2.5"  → "openrouter moonshotai/kimi-k2.5"
  * - "google/gemini-flash-latest"        → "google/gemini-flash-latest"
  * - "anthropic/claude-3-5-sonnet"       → "anthropic/claude-3-5-sonnet"
+ * - "moonshotai/kimi-k2.5" (no prefix) → "openrouter moonshotai/kimi-k2.5"
  */
-function formatModelDisplay(model) {
+function formatModelDisplay(model, provider) {
     if (!model) return '';
+    // If model already has openrouter prefix, just replace / with space
     if (model.startsWith('openrouter/')) {
-        // openrouter/moonshotai/kimi-k2.5 → openrouter moonshotai/kimi-k2.5
         return model.replace('openrouter/', 'openrouter ');
+    }
+    // If provider is openrouter but model doesn't have prefix, add it
+    if (provider === 'openrouter' && !model.startsWith('openrouter/')) {
+        return 'openrouter ' + model;
     }
     return model;
 }
@@ -937,7 +942,7 @@ function createChatMessageElement(msg) {
     if (!isUser && !isSystem && msg.model) {
         const modelBadge = document.createElement('span');
         modelBadge.style.cssText = 'color: var(--text-muted); font-size: 12px; margin-left: 4px;';
-        const displayModel = formatModelDisplay(msg.model);
+        const displayModel = formatModelDisplay(msg.model, msg.provider);
         // Bold during streaming (unconfirmed), plain once confirmed
         modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
         modelBadge.title = msg.model;
@@ -1409,7 +1414,7 @@ function createChatPageMessage(msg) {
         const modelBadge = document.createElement('span');
         modelBadge.className = 'chat-page-bubble-time';
         modelBadge.style.marginLeft = '4px';
-        const displayModel = formatModelDisplay(msg.model);
+        const displayModel = formatModelDisplay(msg.model, msg.provider);
         // Bold during streaming (unconfirmed), plain once confirmed
         modelBadge.textContent = msg.isStreaming ? `· **${displayModel}**` : `· ${displayModel}`;
         modelBadge.title = msg.model;
@@ -1608,6 +1613,10 @@ function setActiveSidebarAgent(agentId) {
 
         if (wasChanged) {
             populateSessionDropdown();
+            // Load this agent's saved model
+            if (typeof loadAgentModel === 'function') {
+                loadAgentModel(agentId);
+            }
         }
     }
 }
