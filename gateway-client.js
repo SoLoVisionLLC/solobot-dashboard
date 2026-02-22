@@ -19,6 +19,107 @@ function normalizeSessionKey(key) {
     return key;
 }
 
+function normalizeGatewayModelId(modelId) {
+    if (!modelId || typeof modelId !== 'string') return modelId;
+    if (modelId === 'global/default' || modelId.includes('/')) return modelId;
+
+    const knownPrefixes = {
+        claude: 'anthropic',
+        gpt: 'openai-codex',
+        o1: 'openai',
+        o3: 'openai',
+        gemini: 'google',
+        kimi: 'moonshot'
+    };
+
+    for (const [prefix, provider] of Object.entries(knownPrefixes)) {
+        if (modelId.startsWith(prefix)) return `${provider}/${modelId}`;
+    }
+    return modelId;
+}
+
+function _collectTextFromPart(part) {
+    if (!part || typeof part !== 'object') return '';
+    const partType = String(part.type || '').toLowerCase();
+
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.output_text === 'string') return part.output_text;
+    if (typeof part.input_text === 'string') return part.input_text;
+    if (typeof part.content === 'string' && !partType.includes('image')) return part.content;
+
+    return '';
+}
+
+function _extractMessageContent(message, payload = null) {
+    const textCandidates = [];
+    const imageCandidates = [];
+
+    const pushTextCandidate = (value) => {
+        if (typeof value !== 'string') return;
+        const normalized = value.replace(/\r\n/g, '\n');
+        if (!normalized.trim()) return;
+        textCandidates.push(normalized);
+    };
+
+    const pushImageCandidate = (urlOrData) => {
+        if (typeof urlOrData !== 'string' || !urlOrData) return;
+        imageCandidates.push(urlOrData);
+    };
+
+    const handlePart = (part) => {
+        if (!part || typeof part !== 'object') return;
+        const partType = String(part.type || '').toLowerCase();
+
+        const partText = _collectTextFromPart(part);
+        if (partText) pushTextCandidate(partText);
+
+        if (partType === 'image' || partType === 'input_image') {
+            const imageData = part.data || part.content || part.source?.data;
+            if (imageData) {
+                const mimeType = part.mimeType || part.media_type || part.source?.media_type || 'image/jpeg';
+                pushImageCandidate(`data:${mimeType};base64,${imageData}`);
+            }
+        } else if (partType === 'image_url') {
+            pushImageCandidate(part.url || part.image_url?.url || part.source?.url || '');
+        }
+    };
+
+    if (Array.isArray(message?.content)) {
+        for (const part of message.content) handlePart(part);
+        const contentPartsText = message.content.map(_collectTextFromPart).filter(Boolean).join('');
+        pushTextCandidate(contentPartsText);
+    } else if (typeof message?.content === 'string') {
+        pushTextCandidate(message.content);
+    }
+
+    if (Array.isArray(message?.output)) {
+        for (const output of message.output) {
+            if (!output || typeof output !== 'object') continue;
+            pushTextCandidate(output.text);
+            if (Array.isArray(output.content)) {
+                for (const part of output.content) handlePart(part);
+                const outputPartsText = output.content.map(_collectTextFromPart).filter(Boolean).join('');
+                pushTextCandidate(outputPartsText);
+            }
+        }
+    }
+
+    pushTextCandidate(message?.text);
+    pushTextCandidate(message?.output_text);
+    pushTextCandidate(message?.delta);
+    pushTextCandidate(payload?.content);
+    pushTextCandidate(payload?.text);
+    pushTextCandidate(payload?.delta);
+
+    let bestText = '';
+    for (const candidate of textCandidates) {
+        if (candidate.length > bestText.length) bestText = candidate;
+    }
+
+    const uniqueImages = [...new Set(imageCandidates.filter(Boolean))];
+    return { text: bestText, images: uniqueImages };
+}
+
 function _base64UrlEncode(buf) {
     // buf: Uint8Array → base64url string (no padding)
     const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
@@ -522,24 +623,7 @@ class GatewayClient {
             // Only log cross-session notifications, not every delta/tick (too noisy)
 
             if (state === 'final' && role === 'assistant') {
-                let contentText = '';
-                let images = [];
-                if (message?.content) {
-                    for (const part of message.content) {
-                        if (part.type === 'text') {
-                            contentText += part.text || '';
-                        } else if (part.type === 'image') {
-                            // OpenClaw sends 'content', other APIs may send 'data'
-                            const imageData = part.data || part.content;
-                            if (imageData) {
-                                const mimeType = part.mimeType || 'image/jpeg';
-                                images.push(`data:${mimeType};base64,${imageData}`);
-                            }
-                        } else if (part.type === 'image_url' && part.url) {
-                            images.push(part.url);
-                        }
-                    }
-                }
+                const { text: contentText, images } = _extractMessageContent(message, payload);
                 if (contentText.trim() || images.length > 0) {
                     // Skip read-ack sync messages
                     if (contentText.startsWith('[[read_ack]]')) {
@@ -562,32 +646,10 @@ class GatewayClient {
         const message = payload.message;
 
         // Extract text content, images, and role
-        let contentText = '';
-        let images = [];
-        let role = message?.role || 'assistant';
+        const { text: contentText, images } = _extractMessageContent(message, payload);
+        let role = message?.role || payload.role || 'assistant';
 
-        if (message?.content) {
-            for (const part of message.content) {
-                if (part.type === 'text') {
-                    contentText += part.text || '';
-                } else if (part.type === 'image') {
-                    // Base64 image data from AI response
-                    // OpenClaw sends 'content', other APIs may send 'data'
-                    const imageData = part.data || part.content;
-                    if (imageData) {
-                        const mimeType = part.mimeType || 'image/jpeg';
-                        images.push(`data:${mimeType};base64,${imageData}`);
-                    }
-                } else if (part.type === 'image_url') {
-                    // Image URL from AI response
-                    if (part.url) {
-                        images.push(part.url);
-                    }
-                }
-            }
-        }
-
-        let errorMsg = message?.errorMessage || payload.errorMessage;
+        let errorMsg = message?.errorMessage || payload.errorMessage || payload?.error?.message;
 
         // OpenClaw's embedded agent SDK strips underlying error info in favor of a standard Rate Limit response
         // Re-inject the model so the dashboard user knows which fallback triggered it
@@ -774,10 +836,19 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
-        gwLog(`[Gateway] Patching session "${sessionKey}":`, patch);
+        const normalizedPatch = { ...patch };
+        if (typeof normalizedPatch.model === 'string') {
+            const normalized = normalizeGatewayModelId(normalizedPatch.model);
+            if (normalized !== normalizedPatch.model) {
+                gwLog(`[Gateway] Normalized model "${normalizedPatch.model}" -> "${normalized}"`);
+                normalizedPatch.model = normalized;
+            }
+        }
+
+        gwLog(`[Gateway] Patching session "${sessionKey}":`, normalizedPatch);
         return this._request('sessions.patch', {
             key: sessionKey,
-            ...patch
+            ...normalizedPatch
         }).then(result => {
             gwLog(`[Gateway] Session patched:`, result);
             return result;

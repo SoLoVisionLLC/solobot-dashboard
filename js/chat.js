@@ -2,6 +2,11 @@
 
 const CHAT_DEBUG = false;
 function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
+const CHAT_RUNTIME_MARK = '2026-02-22.3';
+if (window.__chatRuntimeMark !== CHAT_RUNTIME_MARK) {
+    window.__chatRuntimeMark = CHAT_RUNTIME_MARK;
+    console.log(`[Chat] chat.js loaded (${CHAT_RUNTIME_MARK})`);
+}
 
 /**
  * Converts plain text to HTML with clickable links.
@@ -504,6 +509,42 @@ function handlePaste(event) {
 }
 
 let chatInputSelection = { start: 0, end: 0 };
+let _chatSendInFlight = false;
+let _lastChatSendSignature = '';
+let _lastChatSendAt = 0;
+
+function buildChatSendSignature(text, images) {
+    const normalizedText = String(text || '').replace(/\s+/g, ' ').trim();
+    const sessionKey = String(currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const imageList = Array.isArray(images) ? images : [];
+    const imageSig = imageList.map((img) => {
+        const data = typeof img === 'string' ? img : img?.data;
+        if (typeof data !== 'string') return '0:';
+        return `${data.length}:${data.slice(-16)}`;
+    }).join('|');
+    return `${sessionKey}|${normalizedText}|${imageList.length}|${imageSig}`;
+}
+
+function shouldSuppressDuplicateSend(signature) {
+    const now = Date.now();
+    if (signature !== _lastChatSendSignature) return false;
+
+    // Immediate double-click / enter+click duplicate
+    if (now - _lastChatSendAt < 1200) return true;
+    // Same payload while previous send is still in-flight
+    if (_chatSendInFlight && now - _lastChatSendAt < 10000) return true;
+    return false;
+}
+
+function markChatSendStart(signature) {
+    _chatSendInFlight = true;
+    _lastChatSendSignature = signature;
+    _lastChatSendAt = Date.now();
+}
+
+function markChatSendEnd() {
+    _chatSendInFlight = false;
+}
 
 function handleChatInputKeydown(event) {
     const input = event.target;
@@ -668,6 +709,12 @@ async function sendChatMessage() {
     // Get images to send
     const imagesToSend = [...pendingImages];
     const hasImages = imagesToSend.length > 0;
+    const sendSignature = buildChatSendSignature(text, imagesToSend.map(img => img?.data || img));
+    if (shouldSuppressDuplicateSend(sendSignature)) {
+        chatLog('[Chat] Suppressed duplicate send (chat-input)');
+        return;
+    }
+    markChatSendStart(sendSignature);
 
     // Add to local display
     if (hasImages) {
@@ -704,6 +751,8 @@ async function sendChatMessage() {
     } catch (err) {
         console.error('Failed to send message:', err);
         addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
+    } finally {
+        markChatSendEnd();
     }
 }
 
@@ -748,7 +797,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
     chatLog(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
-        id: 'm' + Date.now(),
+        id: 'm' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
         from,
         text,
         time: Date.now(),
@@ -1776,6 +1825,12 @@ async function sendChatPageMessage() {
 
     const imagesToSend = [...chatPagePendingImages];
     const hasImages = imagesToSend.length > 0;
+    const sendSignature = buildChatSendSignature(text, imagesToSend.map(img => img?.data || img));
+    if (shouldSuppressDuplicateSend(sendSignature)) {
+        chatLog('[Chat] Suppressed duplicate send (chat-page-input)');
+        return;
+    }
+    markChatSendStart(sendSignature);
 
     if (hasImages) {
         const imgCount = imagesToSend.length;
@@ -1816,6 +1871,8 @@ async function sendChatPageMessage() {
         addLocalChatMessage(`Failed: ${err.message}`, 'system');
         renderChat();
         renderChatPage();
+    } finally {
+        markChatSendEnd();
     }
 }
 
@@ -1915,7 +1972,5 @@ function clearChatSearchHighlights() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
 });
-
-
 
 

@@ -223,12 +223,9 @@ Scripts are loaded in `partials/scripts.html` in this order:
 | `window.resolveAgentId` | `sessions.js` | Function | Maps legacy agent aliases (e.g. `quill`) to current config IDs (e.g. `ui`) |
 | `window.currentProvider` | `models.js` | String | Active AI provider |
 | `window.currentModel` | `models.js` | String | Active model ID |
-| `window._memoryCards` | `memory-cards.js` | Object | Agents org-chart API |
-| `window.showPage` | `scripts.html` | Function | Navigate between pages (hijacked by phase14) |
-| `window.showToast` | `ui.js` | Function | Display toast notifications |
-| `window.showConfirm` | `ui.js` | Function | Async confirm dialog |
-| `window.showModal` | `ui-handlers.js` | Function | Show a modal by ID |
-| `window.hideModal` | `ui-handlers.js` | Function | Hide a modal by ID |
+| `window._memoryCards
+
+
 | `window.fetchSessions` | `sessions.js` | Function | Refresh session list from gateway |
 | `window.switchToSession` | `sessions.js` | Function | Switch active session |
 | `window.updateSidebarAgentsFromSessions` | `sidebar-agents.js` | Function | Refresh sidebar agent list |

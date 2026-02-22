@@ -242,7 +242,10 @@ window.refreshModels = async function () {
  */
 window.changeSessionModel = async function () {
     const modelSelect = document.getElementById('model-select');
-    const selectedModel = modelSelect?.value;
+    const selectedModelRaw = modelSelect?.value;
+    const selectedModel = selectedModelRaw === 'global/default'
+        ? selectedModelRaw
+        : resolveFullModelId(selectedModelRaw);
 
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
@@ -775,6 +778,7 @@ function resolveFullModelId(modelStr) {
 
     return modelStr;
 }
+window.resolveFullModelId = resolveFullModelId;
 
 /**
  * Extracts the provider from a full model ID correctly, handling edge cases
@@ -961,11 +965,14 @@ function selectModelInDropdowns(model) {
 document.addEventListener('DOMContentLoaded', async function () {
     try {
         // Optimistically load from localStorage first to prevent UI flashes (e.g. "openrouter/free" flash)
-        let modelId = localStorage.getItem('selected_model');
+        let modelId = resolveFullModelId(localStorage.getItem('selected_model'));
         let provider = localStorage.getItem('selected_provider');
 
         if (modelId) {
             provider = provider || window.getProviderFromModelId(modelId);
+            // Persist normalized full model IDs so stale short IDs do not get reused.
+            localStorage.setItem('selected_model', modelId);
+            if (provider) localStorage.setItem('selected_provider', provider);
             window.currentModel = modelId;
             window.currentProvider = provider;
 
@@ -1059,5 +1066,4 @@ const defaultSettings = {
     showProducts: true,
     showDocs: true
 };
-
 

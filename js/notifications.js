@@ -7,6 +7,66 @@ const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
 const NOTIFICATION_DEBUG = false;
 function notifLog(...args) { if (NOTIFICATION_DEBUG) console.log(...args); }
+const NOTIFICATIONS_RUNTIME_MARK = '2026-02-22.3';
+if (window.__notificationsRuntimeMark !== NOTIFICATIONS_RUNTIME_MARK) {
+    window.__notificationsRuntimeMark = NOTIFICATIONS_RUNTIME_MARK;
+    console.log(`[Notifications] notifications.js loaded (${NOTIFICATIONS_RUNTIME_MARK})`);
+}
+const FINAL_DEDUPE_WINDOW_MS = 15000;
+const recentFinalFingerprints = new Map(); // fingerprint -> timestamp
+let _streamingRunId = null;
+
+function normalizeMessageText(text) {
+    return String(text || '').replace(/\r\n/g, '\n');
+}
+
+function mergeStreamingDelta(previousText, incomingText) {
+    const prev = normalizeMessageText(previousText);
+    const next = normalizeMessageText(incomingText);
+    if (!next) return prev;
+    if (!prev) return next;
+
+    // Cumulative snapshot (ideal path): replace with latest full snapshot
+    if (next.startsWith(prev)) return next;
+    // Out-of-order shorter snapshot: keep longer one
+    if (prev.startsWith(next)) return prev;
+    // Duplicate chunk already present
+    if (prev.includes(next)) return prev;
+
+    // Token/chunk streaming fallback: append chunk
+    return prev + next;
+}
+
+function pruneRecentFinalFingerprints(now = Date.now()) {
+    for (const [key, ts] of recentFinalFingerprints.entries()) {
+        if (now - ts > FINAL_DEDUPE_WINDOW_MS) {
+            recentFinalFingerprints.delete(key);
+        }
+    }
+}
+
+function buildFinalFingerprint({ runId, sessionKey, text, images }) {
+    const session = String(sessionKey || '').toLowerCase();
+    if (runId) return `run:${session}:${runId}`;
+
+    const normalizedText = String(text || '').trim();
+    const imageCount = Array.isArray(images) ? images.length : 0;
+    const firstImageSig = imageCount > 0 && typeof images[0] === 'string'
+        ? images[0].slice(0, 32)
+        : '';
+    return `text:${session}:${normalizedText}:${imageCount}:${firstImageSig}`;
+}
+
+function hasRecentFinalFingerprint(fingerprint) {
+    const now = Date.now();
+    pruneRecentFinalFingerprints(now);
+    return recentFinalFingerprints.has(fingerprint);
+}
+
+function rememberFinalFingerprint(fingerprint) {
+    pruneRecentFinalFingerprints();
+    recentFinalFingerprints.set(fingerprint, Date.now());
+}
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -527,14 +587,20 @@ function handleChatEvent(event) {
         case 'thinking':
             // AI has started processing - show typing indicator
             isProcessing = true;
-            streamingText = '';  // Clear any stale streaming text
+            streamingText = ''; // Clear stale stream from previous runs
+            _streamingRunId = runId || null;
             renderChat();
             renderChatPage();
             break;
 
         case 'delta':
-            // Streaming response - content is cumulative, so REPLACE not append
-            streamingText = content;
+            // Some providers send cumulative snapshots, others send token chunks.
+            // Merge robustly so final content doesn't collapse to partial text.
+            if (runId && _streamingRunId && runId !== _streamingRunId) {
+                streamingText = '';
+            }
+            if (runId) _streamingRunId = runId;
+            streamingText = mergeStreamingDelta(streamingText, content);
             _streamingSessionKey = sessionKey || currentSessionName || '';
             isProcessing = true;
             renderChat();
@@ -543,29 +609,49 @@ function handleChatEvent(event) {
 
         case 'final':
             // Final response from assistant
-            // Prefer streamingText if available for consistency (avoid content mismatch)
-            const finalContent = streamingText || content;
+            const streamedText = normalizeMessageText(streamingText);
+            const payloadText = normalizeMessageText(content);
+
+            // Prefer the longer/more complete variant on final.
+            let finalContent = '';
+            if (payloadText && streamedText) {
+                finalContent = payloadText.length >= streamedText.length ? payloadText : streamedText;
+            } else {
+                finalContent = payloadText || streamedText;
+            }
+
             // Skip gateway-injected internal messages
             if (finalContent && /^\s*\[read-sync\]\s*(\n\s*\[\[read_ack\]\])?\s*$/s.test(finalContent)) {
                 streamingText = '';
+                _streamingRunId = null;
                 isProcessing = false;
                 lastProcessingEndTime = Date.now();
                 break;
             }
-            if (finalContent && role !== 'user') {
+
+            if ((finalContent || images?.length > 0) && role !== 'user') {
                 // Check for duplicate - by runId first, then by trimmed text within 10 seconds
                 const trimmed = finalContent.trim();
-                const isDuplicate = state.chat.messages.some(m =>
+                const runtimeDuplicate = state.chat.messages.some(m =>
                     (runId && m.runId === runId) ||
-                    (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
+                    (trimmed && m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
-                if (!isDuplicate) {
+                const finalFingerprint = buildFinalFingerprint({
+                    runId,
+                    sessionKey,
+                    text: trimmed,
+                    images
+                });
+                const recentDuplicate = hasRecentFinalFingerprint(finalFingerprint);
+                if (!runtimeDuplicate && !recentDuplicate) {
                     const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
+                    rememberFinalFingerprint(finalFingerprint);
                 }
             }
             streamingText = '';
+            _streamingRunId = null;
             isProcessing = false;
             lastProcessingEndTime = Date.now();
             // Schedule a history refresh (guarded, won't spam)
@@ -670,6 +756,7 @@ function loadHistoryMessages(messages) {
             images: content.images, // All images
             time: msg.timestamp || Date.now(),
             model: msg.model, // Preserve model from gateway history
+            runId: msg.runId || msg.message?.runId || null,
             // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
             _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
             _agentId: window.currentAgentId || 'main'
@@ -686,16 +773,20 @@ function loadHistoryMessages(messages) {
     // Merge chat: combine gateway history with ALL local messages
     // Dedupe by ID first, then by exact text match (not snippet) to be safer
     const historyIds = new Set(chatMessages.map(m => m.id));
-    const historyExactTexts = new Set(chatMessages.map(m => m.text));
+    const historyExactTexts = new Set(chatMessages.map(m => (m.text || '').trim()));
     const uniqueLocalMessages = allLocalChatMessages.filter(m => {
-        // Keep local message if: different ID AND different exact text
-        return !historyIds.has(m.id) && !historyExactTexts.has(m.text);
+        const normalizedText = (m.text || '').trim();
+        // Keep local message if: different ID AND (no text or text isn't already in history)
+        return !historyIds.has(m.id) && (!normalizedText || !historyExactTexts.has(normalizedText));
     });
 
     // Patch history messages: if we have a local copy with a real model, prefer it
     // (history may return "openrouter/free" while local has the resolved model)
     const localByText = {};
-    allLocalChatMessages.forEach(m => { if (m.text) localByText[m.text.trim()] = m; });
+    allLocalChatMessages.forEach(m => {
+        const key = (m.text || '').trim();
+        if (key) localByText[key] = m;
+    });
     chatMessages.forEach(m => {
         const local = localByText[m.text?.trim()];
         if (local?.model && (!m.model || m.model === 'openrouter/free' || m.model === 'unknown')) {
@@ -895,7 +986,8 @@ function mergeHistoryMessages(messages) {
                     text: textContent,
                     time: msg.timestamp || Date.now(),
                     model: msg.model || null,
-                    provider: msg.provider || null
+                    provider: msg.provider || null,
+                    runId: msg.runId || msg.message?.runId || null
                 };
 
                 // Classify and route
@@ -906,6 +998,7 @@ function mergeHistoryMessages(messages) {
                 } else {
                     state.chat.messages.push(message);
                     existingIds.add(msgId);
+                    if (message.runId) existingRunIds.add(message.runId);
                     existingTexts.add(textContent); // already trimmed by extractContentText
                     newChatCount++;
                 }
@@ -960,5 +1053,3 @@ function mergeHistoryMessages(messages) {
         }
     }
 }
-
-
