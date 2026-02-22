@@ -1,4 +1,4 @@
-// js/model-validator.js — Model Validator with EXACT chat pipeline duplicate
+// js/model-validator.js - Model Validator with EXACT chat pipeline duplicate
 // Uses the same gateway.sendMessage() path as the chat to ensure identical results
 
 const ModelValidator = {
@@ -224,7 +224,7 @@ const ModelValidator = {
      */
     async runTest(provider, modelId) {
         console.log(`[ModelValidator] Starting test for ${provider}/${modelId}`);
-
+        
         // Check rate limit
         const rlKey = `${provider}:${modelId}`;
         if (this.rateLimitTimers[rlKey]) {
@@ -237,7 +237,7 @@ const ModelValidator = {
 
         this.currentTest = { provider, modelId };
         this.render(); // Update UI
-
+        
         // Show loading state
         this.setUIState('loading');
         document.getElementById('mv-loading-model').textContent = `${provider} / ${modelId}`;
@@ -246,20 +246,34 @@ const ModelValidator = {
         const startTime = Date.now();
         let resultData = null;
         let errorData = null;
-
+        
         // Save current model to restore later
         const previousModel = localStorage.getItem('selected_model');
-
+        
         try {
             // ===== EXACT SAME PIPELINE AS CHAT =====
             // 1. Set the model we want to test
             localStorage.setItem('selected_model', modelId);
             console.log(`[ModelValidator] Set model to: ${modelId}`);
-
-            // 2. Check gateway connection (same as chat)
-            if (!window.gateway || !window.gateway.isConnected()) {
-                throw new Error('Not connected to Gateway. Please connect first in Settings.');
+            
+            // 2. Check gateway connection (same as chat) - with retry
+            let connectionAttempts = 0;
+            const maxAttempts = 30; // 30 seconds max wait
+            
+            while ((!window.gateway || !window.gateway.isConnected()) && connectionAttempts < maxAttempts) {
+                if (connectionAttempts === 0) {
+                    document.getElementById('mv-loading-text').textContent = 'Waiting for gateway connection...';
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                connectionAttempts++;
+                console.log(`[ModelValidator] Waiting for gateway... attempt ${connectionAttempts}/${maxAttempts}`);
             }
+            
+            if (!window.gateway || !window.gateway.isConnected()) {
+                throw new Error('Gateway connection timeout. Please check Settings → Gateway configuration.');
+            }
+            
+            document.getElementById('mv-loading-text').textContent = 'Running test...';
 
             // 3. Use EXACT same send method as chat
             // chat.js: await gateway.sendMessage(text)
