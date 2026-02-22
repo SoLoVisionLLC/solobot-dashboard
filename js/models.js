@@ -300,7 +300,7 @@ window.changeSessionModel = async function () {
 
             if (globalModel?.modelId) {
                 currentModel = globalModel.modelId;
-                const provider = globalModel.provider || currentModel.split('/')[0];
+                const provider = globalModel.provider || window.getProviderFromModelId(currentModel) || currentModel.split('/')[0];
                 currentProvider = provider;
 
                 syncModelDisplay(currentModel, currentProvider);
@@ -328,7 +328,7 @@ window.changeSessionModel = async function () {
 
             // Update local state
             currentModel = selectedModel;
-            const provider = selectedModel.split('/')[0];
+            const provider = window.getProviderFromModelId(selectedModel) || selectedModel.split('/')[0];
             currentProvider = provider;
             localStorage.setItem('selected_model', selectedModel);
             localStorage.setItem('selected_provider', provider);
@@ -408,7 +408,7 @@ window.changeGlobalModel = async function () {
 
         if (response.ok) {
             currentModel = selectedModel;
-            const provider = selectedModel.split('/')[0];
+            const provider = window.getProviderFromModelId(selectedModel) || currentProvider;
             currentProvider = provider;
             localStorage.setItem('selected_provider', provider);
             localStorage.setItem('selected_model', selectedModel);
@@ -456,7 +456,7 @@ window.loadAgentModel = async function (agentId) {
 
         // Update current model vars
         currentModel = agentModel.modelId;
-        currentProvider = agentModel.provider || agentModel.modelId.split('/')[0];
+        currentProvider = agentModel.provider || window.getProviderFromModelId(agentModel.modelId) || currentProvider;
 
         // Update localStorage for persistence
         localStorage.setItem('selected_model', currentModel);
@@ -607,11 +607,9 @@ async function fetchModelsFromGateway() {
         // Group by provider
         const modelsByProvider = {};
         for (const modelId of allModelIds) {
+            const provider = window.getProviderFromModelId(modelId) || 'unknown';
             const slashIdx = modelId.indexOf('/');
-            if (slashIdx === -1) continue;
-
-            const provider = modelId.substring(0, slashIdx);
-            const modelName = modelId.substring(slashIdx + 1);
+            const modelName = slashIdx !== -1 ? modelId.substring(slashIdx + 1) : modelId;
 
             if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
 
@@ -736,6 +734,28 @@ function resolveFullModelId(modelStr) {
 }
 
 /**
+ * Extracts the provider from a full model ID correctly, handling edge cases
+ * like OpenRouter models which often contain multiple slashes (e.g.,
+ * openrouter/huggingface/moonshotai/Kimi-K2.5:fastest).
+ */
+window.getProviderFromModelId = function (modelId) {
+    if (!modelId || typeof modelId !== 'string') return '';
+
+    // OpenRouter edge case: sometimes the model ID has multiple slashes
+    if (modelId.startsWith('openrouter/')) {
+        return 'openrouter';
+    }
+
+    // Fallback: extract the first segment before a slash
+    const slashIdx = modelId.indexOf('/');
+    if (slashIdx !== -1) {
+        return modelId.substring(0, slashIdx);
+    }
+
+    return '';
+}
+
+/**
  * Sync the model dropdown and display elements with the actual model in use.
  * Called when we get model info from gateway connect or chat responses.
  * This is the source of truth — gateway tells us what model is actually running.
@@ -769,13 +789,8 @@ function syncModelDisplay(model, provider) {
     currentModel = model;
 
     // Extract provider from model ID if not provided
-    if (!provider && model.includes('/')) {
-        // If it's an OpenRouter model with double slash, provider is always openrouter
-        if (model.includes('moonshotai/') || model.includes('minimax/')) {
-            provider = 'openrouter';
-        } else {
-            provider = model.split('/')[0];
-        }
+    if (!provider) {
+        provider = window.getProviderFromModelId(model);
     }
     if (provider) currentProvider = provider;
 
@@ -864,7 +879,7 @@ async function applySessionModelOverride(sessionKey) {
 
     if (sessionModel) {
         sessionModel = resolveFullModelId(sessionModel);
-        const provider = sessionModel.includes('/') ? sessionModel.split('/')[0] : currentProvider;
+        const provider = window.getProviderFromModelId(sessionModel) || currentProvider;
         syncModelDisplay(sessionModel, provider);
     } else {
         console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
@@ -922,7 +937,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         // No fallback — leave null and let the gateway/config provide the model
         if (!modelId) modelId = null;
-        if (!provider && modelId) provider = modelId.split('/')[0];
+        if (!provider && modelId) provider = window.getProviderFromModelId(modelId) || modelId.split('/')[0];
 
         window.currentProvider = provider;
         window.currentModel = modelId;

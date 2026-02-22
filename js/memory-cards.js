@@ -750,7 +750,7 @@
                     <span class="agent-fallback-grip">⠿</span>
                     <span class="agent-fallback-num">${i + 1}</span>
                     <span class="agent-fallback-name">${escapeHtml(fb.split('/').pop())}</span>
-                    <span class="agent-fallback-provider">${escapeHtml(fb.split('/')[0] || '')}</span>
+                    <span class="agent-fallback-provider">${escapeHtml(window.getProviderFromModelId ? window.getProviderFromModelId(fb) : (fb.split('/')[0] || ''))}</span>
                     ${usingGlobalFallbacks ? '' : `<button class="agent-fallback-remove" onclick="window._memoryCards.removeFallback('${agentId}', ${i})" title="Remove">×</button>`}
                 </div>
             `).join('') || `<div style="color:var(--text-muted); font-size:11px; padding:4px 0;">No fallbacks configured</div>`;
@@ -836,7 +836,7 @@
                 <span class="agent-fallback-grip">⠿</span>
                 <span class="agent-fallback-num">${i + 1}</span>
                 <span class="agent-fallback-name">${escapeHtml(fb.split('/').pop())}</span>
-                <span class="agent-fallback-provider">${escapeHtml(fb.split('/')[0] || '')}</span>
+                <span class="agent-fallback-provider">${escapeHtml(window.getProviderFromModelId ? window.getProviderFromModelId(fb) : (fb.split('/')[0] || ''))}</span>
                 <button class="agent-fallback-remove" onclick="window._memoryCards.removeFallback('${agentId}', ${i})" title="Remove">×</button>
             </div>
         `).join('') || `<div style="color:var(--text-muted); font-size:11px; padding:4px 0;">No fallbacks — add one below</div>`;
