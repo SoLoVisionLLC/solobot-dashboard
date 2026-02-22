@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-22T14:33:50Z
+// Generated: 2026-02-22T14:40:19Z
 // Modules: 25
 
 
@@ -3784,6 +3784,13 @@ window.loadAgentModel = async function (agentId) {
         localStorage.setItem('selected_model', currentModel);
         localStorage.setItem('selected_provider', currentProvider);
 
+        // Update the sticky lock so syncModelDisplay allows the new model
+        const activeSession = window.currentSessionName;
+        if (activeSession) {
+            window._configModelLocks = window._configModelLocks || {};
+            window._configModelLocks[activeSession] = currentModel;
+        }
+
         // Update UI
         syncModelDisplay(currentModel, currentProvider);
 
@@ -4283,11 +4290,15 @@ document.addEventListener('DOMContentLoaded', async function () {
             const response = await fetch('/api/models/current');
             const modelInfo = await response.json();
 
-            // Only update if the server gives us a valid response and we aren't already set up by a session override
+            // Only update if the server gives us a valid response
             if (modelInfo?.modelId) {
-                modelId = modelInfo.modelId;
-                provider = modelInfo.provider || window.getProviderFromModelId(modelId);
-                console.log(`[Dashboard] Model from API global default: ${modelId} (provider: ${provider})`);
+                // If we didn't have a local model, apply the UI update
+                // If we DID have one, we log it but don't force a visual overwrite to prevent flash
+                if (!localStorage.getItem('selected_model')) {
+                    modelId = modelInfo.modelId;
+                    provider = modelInfo.provider || window.getProviderFromModelId(modelId);
+                }
+                console.log(`[Dashboard] Model from API global default: ${modelInfo.modelId} (provider: ${modelInfo.provider || window.getProviderFromModelId(modelInfo.modelId)})`);
             }
         } catch (e) {
             console.warn('[Dashboard] Failed to fetch current model from API:', e.message);
