@@ -1,26 +1,22 @@
 <!-- =================== AGENTS PAGE =================== -->
 <div id="page-agents" class="page">
     <div class="memory-page">
-        <div class="page-header" style="display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-3);">
-            <div>
-                <h1 class="page-title">🤖 Agents</h1>
-                <p class="page-subtitle">Your AI team — org chart, agent status, model config, and memory files.</p>
+
+        <!-- Sticky agents toolbar -->
+        <div class="agents-toolbar">
+            <input type="text" id="memory-search" class="input agents-toolbar-search"
+                placeholder="🔍 Search agents or files…"
+                oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)}">
+            <button class="btn btn-secondary btn-sm" onclick="syncMemoryFilesNow()">🔄 Sync</button>
+            <div id="sync-status" class="sync-status" style="white-space:nowrap;">
+                <span class="status-dot success"></span>
+                <span id="last-memory-sync" style="font-size:11px; color:var(--text-muted);">--</span>
             </div>
-            <div class="memory-layout-toggle" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+            <div class="memory-layout-toggle" style="margin-left:auto;">
                 <button id="memory-toggle-grid" title="Org Chart"
                     onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
-                <button id="memory-toggle-list" title="Classic View"
+                <button id="memory-toggle-list" title="List View"
                     onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
-            </div>
-        </div>
-
-        <div class="memory-search-bar">
-            <input type="text" id="memory-search" class="input" placeholder="Search agents or files..."
-                oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards.renderAgentCardsView(this.value)}">
-            <button class="btn btn-secondary" onclick="syncMemoryFilesNow()">🔄 Sync</button>
-            <div id="sync-status" class="sync-status">
-                <span class="status-dot success"></span>
-                Last synced: <span id="last-memory-sync">--</span>
             </div>
         </div>
 
@@ -37,7 +33,7 @@
                         style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase;">
                         File Tree</div>
                     <div style="margin-bottom: 8px;">
-                        <input type="text" id="memory-browser-search" class="input" placeholder="Search files..."
+                        <input type="text" id="memory-browser-search" class="input" placeholder="Search files…"
                             oninput="searchMemoryFiles()" style="font-size: 12px; padding: 4px 8px; width: 100%;">
                     </div>
                     <div id="memory-tree" style="font-size: 12px;"></div>
@@ -49,9 +45,7 @@
                         file to preview</div>
                 </div>
             </div>
-            <div id="memory-files-grid" class="docs-grid">
-                <!-- Memory files rendered here -->
-            </div>
+            <div id="memory-files-grid" class="docs-grid"></div>
         </div>
     </div>
 </div>
