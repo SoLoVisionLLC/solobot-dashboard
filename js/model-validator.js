@@ -8,7 +8,195 @@ const ModelValidator = {
     recentTests: [],
     rateLimitTimers: {},
     testResults: [],
-    pendingTestResolvers: new Map(), // For waiting on responses
+    pendingTestResolvers: new Map(),
+    allProvidersTest: {
+        running: false,
+        queue: [],
+        results: [],
+        currentIndex: 0
+    },
+
+    // Representative models for each provider (pick a fast, cheap model)
+    PROVIDER_TEST_MODELS: {
+        'openrouter': [
+            { id: 'openrouter/google/gemini-2.0-flash-lite-001', name: 'Gemini Flash Lite (free)', isFree: true },
+            { id: 'openrouter/anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku (normal)' }
+        ],
+        'anthropic': { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' },
+        'openai-codex': { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+        'google': { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+        'moonshot': { id: 'moonshot/kimi-k2.5', name: 'Kimi K2.5' },
+        'minimax': { id: 'minimax/m2.5', name: 'Minimax m2.5' },
+        'deepseek': { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' }
+    },
+
+    getProviderTestModels() {
+        const testModels = [];
+        // First check providers we have explicit models for
+        for (const [provider, def] of Object.entries(this.PROVIDER_TEST_MODELS)) {
+            if (Array.isArray(def)) {
+                def.forEach(m => testModels.push({ provider, ...m }));
+            } else {
+                testModels.push({ provider, ...def });
+            }
+        }
+        
+        // Then add any other providers found in the models list that aren't covered
+        for (const provider of Object.keys(this.models)) {
+            if (!this.PROVIDER_TEST_MODELS[provider]) {
+                const firstModel = this.models[provider][0];
+                if (firstModel) {
+                    testModels.push({ 
+                        provider, 
+                        id: firstModel.id, 
+                        name: firstModel.name || firstModel.id 
+                    });
+                }
+            }
+        }
+        return testModels;
+    },
+
+    async runAllProvidersTest() {
+        if (this.allProvidersTest.running) return;
+        
+        const testModels = this.getProviderTestModels();
+        this.allProvidersTest = {
+            running: true,
+            queue: testModels,
+            results: [],
+            currentIndex: 0
+        };
+
+        this.renderAllResults();
+        
+        for (let i = 0; i < testModels.length; i++) {
+            this.allProvidersTest.currentIndex = i;
+            const test = testModels[i];
+            
+            this.renderAllResults();
+            
+            const startTime = Date.now();
+            let result;
+            
+            try {
+                // Set the model in localStorage so gateway uses it
+                localStorage.setItem('selected_model', test.id);
+                
+                // Create promise for response
+                const responsePromise = new Promise((resolve) => {
+                    this.currentTest = { provider: test.provider, modelId: test.id, resolver: resolve };
+                });
+                
+                const timeoutPromise = new Promise((resolve) => {
+                    setTimeout(() => resolve({ type: 'timeout' }), 30000); // 30s timeout for bulk test
+                });
+                
+                await gateway.sendMessage('Hello! Please respond with exactly: "OK"');
+                
+                result = await Promise.race([responsePromise, timeoutPromise]);
+            } catch (e) {
+                result = { type: 'error', error: e.message };
+            }
+            
+            const duration = Date.now() - startTime;
+            const finalResult = {
+                ...test,
+                duration,
+                status: result.type === 'success' ? 'pass' : (result.rateLimit ? 'rate-limited' : 'fail'),
+                error: result.error || (result.type === 'timeout' ? 'Timeout' : null),
+                rateLimit: result.rateLimit
+            };
+            
+            this.allProvidersTest.results.push(finalResult);
+            this.saveTestResult({
+                status: finalResult.status,
+                durationMs: duration,
+                provider: test.provider,
+                modelId: test.id,
+                timestamp: new Date().toISOString(),
+                isBulk: true
+            });
+        }
+        
+        this.allProvidersTest.running = false;
+        this.currentTest = null;
+        this.renderAllResults();
+    },
+
+    renderAllResults() {
+        const container = document.getElementById('mv-all-results-container');
+        if (!container) return;
+        
+        container.classList.add('visible');
+        
+        const progress = this.allProvidersTest.queue.length > 0 ? 
+            Math.round((this.allProvidersTest.results.length / this.allProvidersTest.queue.length) * 100) : 0;
+            
+        let html = `
+            <div class="mv-all-header">
+                <h3>Provider Health Dashboard</h3>
+                <div class="mv-progress-bar">
+                    <div class="mv-progress-fill" style="width: ${progress}%"></div>
+                </div>
+                <div class="mv-progress-text">
+                    ${this.allProvidersTest.running ? `Testing ${this.allProvidersTest.queue[this.allProvidersTest.currentIndex]?.provider || ''}...` : 'Test Complete'} 
+                    (${this.allProvidersTest.results.length}/${this.allProvidersTest.queue.length})
+                </div>
+            </div>
+            <table class="mv-all-table">
+                <thead>
+                    <tr>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Status</th>
+                        <th>Latency</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        // Show completed results
+        this.allProvidersTest.results.forEach(res => {
+            html += `
+                <tr class="${res.status}">
+                    <td><strong>${res.provider}</strong></td>
+                    <td><span class="mv-mini-id">${res.id}</span></td>
+                    <td><span class="mv-status-badge ${res.status}">${res.status.toUpperCase()}</span></td>
+                    <td>${res.duration}ms</td>
+                    <td class="mv-error-cell">${res.error || (res.rateLimit ? `Retry in ${res.rateLimit.retryAfter || '?'}s` : '-')}</td>
+                </tr>
+            `;
+        });
+        
+        // Show current test if running
+        if (this.allProvidersTest.running && this.allProvidersTest.currentIndex < this.allProvidersTest.queue.length) {
+            const current = this.allProvidersTest.queue[this.allProvidersTest.currentIndex];
+            html += `
+                <tr class="pending">
+                    <td><strong>${current.provider}</strong></td>
+                    <td><span class="mv-mini-id">${current.id}</span></td>
+                    <td><span class="mv-status-badge pending">TESTING...</span></td>
+                    <td>-</td>
+                    <td>In progress...</td>
+                </tr>
+            `;
+        }
+        
+        html += `</tbody></table>`;
+        
+        if (!this.allProvidersTest.running) {
+            html += `
+                <div class="mv-all-footer">
+                    <button class="mv-run-btn" onclick="ModelValidator.runAllProvidersTest()">Rerun All Tests</button>
+                    <button class="mv-run-btn secondary" onclick="document.getElementById('mv-all-results-container').classList.remove('visible')">Close Summary</button>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    },
 
     async init() {
         await this.loadModels();
@@ -153,23 +341,70 @@ const ModelValidator = {
         } catch (e) {}
     },
 
-    filterModels() {
-        const search = document.getElementById('mv-search-input')?.value.toLowerCase() || '';
-        this.filteredModels = {};
-        for (const [provider, models] of Object.entries(this.models)) {
-            const filtered = models.filter(m => 
-                m.id.toLowerCase().includes(search) || 
-                (m.name && m.name.toLowerCase().includes(search))
-            );
-            if (filtered.length > 0) this.filteredModels[provider] = filtered;
+    ensureTestAllButton() {
+        const headerAction = document.querySelector('.mv-header-actions');
+        if (headerAction && !document.getElementById('mv-test-all-btn')) {
+            const btn = document.createElement('button');
+            btn.id = 'mv-test-all-btn';
+            btn.className = 'mv-run-btn primary';
+            btn.style.marginLeft = '12px';
+            btn.innerHTML = '<span>⚡</span> Test All Providers';
+            btn.onclick = () => this.runAllProvidersTest();
+            headerAction.appendChild(btn);
+
+            // Add container for results
+            if (!document.getElementById('mv-all-results-container')) {
+                const resultsContainer = document.createElement('div');
+                resultsContainer.id = 'mv-all-results-container';
+                resultsContainer.className = 'mv-all-results-overlay';
+                document.body.appendChild(resultsContainer);
+                
+                // Add styles
+                const style = document.createElement('style');
+                style.textContent = `
+                    .mv-all-results-overlay {
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 90%;
+                        max-width: 800px;
+                        max-height: 80vh;
+                        background: var(--bg-card);
+                        border: 1px solid var(--border-color);
+                        border-radius: 12px;
+                        z-index: 2000;
+                        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+                        padding: 24px;
+                        overflow-y: auto;
+                        display: none;
+                    }
+                    .mv-all-results-overlay.visible { display: block; }
+                    .mv-all-header { margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
+                    .mv-progress-bar { height: 8px; background: var(--bg-body); border-radius: 4px; overflow: hidden; margin: 10px 0; }
+                    .mv-progress-fill { height: 100%; background: var(--accent-color); transition: width 0.3s; }
+                    .mv-all-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                    .mv-all-table th { text-align: left; padding: 12px; border-bottom: 2px solid var(--border-color); }
+                    .mv-all-table td { padding: 12px; border-bottom: 1px solid var(--border-color); }
+                    .mv-mini-id { font-family: monospace; font-size: 11px; color: var(--text-muted); }
+                    .mv-all-footer { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+                    .mv-error-cell { color: var(--text-muted); font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+                    tr.pass .mv-status-badge { background: #059669; }
+                    tr.fail .mv-status-badge { background: #dc2626; }
+                    tr.rate-limited .mv-status-badge { background: #d97706; }
+                `;
+                document.head.appendChild(style);
+            }
         }
-        this.render();
     },
 
     render() {
         const container = document.getElementById('mv-models-list');
         if (!container) return;
         
+        // Add "Test All" button to the header if it doesn't exist
+        this.ensureTestAllButton();
+
         let totalModels = 0;
         const html = Object.entries(this.filteredModels).map(([provider, models]) => {
             totalModels += models.length;
