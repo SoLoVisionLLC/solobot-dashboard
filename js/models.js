@@ -327,6 +327,11 @@ window.changeSessionModel = async function () {
             localStorage.setItem('selected_model', selectedModel);
             localStorage.setItem('selected_provider', provider);
 
+            // Update lock so new manual choice is honored
+            if (window._configModelLocks) {
+                window._configModelLocks[window.currentSessionName] = selectedModel;
+            }
+
             // Update settings display
             const currentModelDisplay = document.getElementById('current-model-display');
             if (currentModelDisplay) currentModelDisplay.textContent = selectedModel;
@@ -734,12 +739,21 @@ function resolveFullModelId(modelStr) {
 function syncModelDisplay(model, provider) {
     if (!model) return;
 
-    // Ignore updates if manual change happened recently (prevent reversion flicker)
-    // Use a shorter timeout and more precise tracking
+    // 1. Ignore updates if manual change happened recently (prevent reversion flicker)
     const now = Date.now();
-    if (window._lastManualModelChange && (now - window._lastManualModelChange < 2000)) {
+    if (window._lastManualModelChange && (now - window._lastManualModelChange < 5000)) {
         console.log('[Dashboard] Skipping model sync due to recent manual change');
         return;
+    }
+
+    // 2. STICKY CONFIG LOCK: If a model is set in openclaw.json, refuse to let gateway change it
+    const activeSession = window.currentSessionName || '';
+    if (window._configModelLocks && window._configModelLocks[activeSession]) {
+        const lockedModel = window._configModelLocks[activeSession];
+        if (model !== lockedModel) {
+            console.log(`[Dashboard] IGNORING gateway model override (${model}) — Session is locked to openclaw.json value: ${lockedModel}`);
+            return;
+        }
     }
 
     // Resolve bare model names to full provider/model IDs
@@ -806,6 +820,9 @@ function syncModelDisplay(model, provider) {
     }
 }
 
+// Track models loaded from config to prevent gateway overrides
+window._configModelLocks = window._configModelLocks || {};
+
 // Apply per-session model override — openclaw.json is SOURCE OF TRUTH
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
@@ -821,12 +838,11 @@ async function applySessionModelOverride(sessionKey) {
                 const agentModel = await response.json();
                 if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
                     sessionModel = agentModel.modelId;
-                    console.log(`[Dashboard] Using openclaw.json model for ${agentId}: ${sessionModel}`);
+                    console.log(`[Dashboard] LOCKING model for ${agentId} to config value: ${sessionModel}`);
+                    window._configModelLocks[sessionKey] = sessionModel;
                 }
             }
-        } catch (e) {
-            // Agent may not have custom model — fall through to global default
-        }
+        } catch (e) {}
     }
 
     // === 2. SECOND: Check global default in openclaw.json ===
@@ -837,68 +853,11 @@ async function applySessionModelOverride(sessionKey) {
                 const modelInfo = await response.json();
                 if (modelInfo?.modelId) {
                     sessionModel = modelInfo.modelId;
-                    console.log(`[Dashboard] Using global default from openclaw.json: ${sessionModel}`);
+                    console.log(`[Dashboard] LOCKING model to global default: ${sessionModel}`);
+                    window._configModelLocks[sessionKey] = sessionModel;
                 }
             }
-        } catch (e) {
-            console.warn('[Dashboard] Failed to read openclaw.json:', e.message);
-        }
-    }
-
-    // === 3. LAST RESORT: Per-agent localStorage (for sessions without config) ===
-    if (!sessionModel && agentId) {
-        const agentSavedModel = localStorage.getItem(`agent_model_${agentId}`);
-        if (agentSavedModel) {
-            sessionModel = agentSavedModel;
-            console.log(`[Dashboard] Using localStorage model for ${agentId}: ${sessionModel}`);
-        }
-    }
-
-    // 1. Check local availableSessions cache (model = last used model from sessions.list)
-    const session = availableSessions.find(s => s.key === sessionKey);
-    const cachedModel = session?.model && session.model !== 'unknown' ? session.model : null;
-    if (cachedModel) {
-        sessionModel = cachedModel;
-    }
-
-    // 2. If not cached, refresh sessions list from gateway
-    if (!sessionModel) {
-        try {
-            const result = await gateway?.listSessions?.({});
-            if (result?.sessions?.length) {
-                availableSessions = result.sessions.map(s => ({
-                    key: s.key,
-                    name: getFriendlySessionName(s.key),
-                    displayName: getFriendlySessionName(s.key),
-                    updatedAt: s.updatedAt,
-                    totalTokens: s.totalTokens || (s.inputTokens || 0) + (s.outputTokens || 0),
-                    model: s.model || 'unknown',
-                    sessionId: s.sessionId
-                }));
-                const updated = availableSessions.find(s => s.key === sessionKey);
-                const updatedModel = updated?.model && updated.model !== 'unknown' ? updated.model : null;
-                if (updatedModel) sessionModel = updatedModel;
-            }
-        } catch (e) {
-            console.warn('[Dashboard] Failed to refresh sessions for model override:', e.message);
-        }
-    }
-
-    // 3. Check per-agent model override via server API
-    if (!sessionModel) {
-        try {
-            // Use server API to get current model configuration
-            const response = await fetch('/api/models/current');
-            if (response.ok) {
-                const modelInfo = await response.json();
-                if (modelInfo?.modelId) {
-                    sessionModel = modelInfo.modelId;
-                    console.log(`[Dashboard] Session ${sessionKey} using server model: ${sessionModel}`);
-                }
-            }
-        } catch (e) {
-            console.warn('[Dashboard] Failed to fetch model config from server:', e.message);
-        }
+        } catch (e) {}
     }
 
     if (sessionModel) {
