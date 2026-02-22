@@ -185,14 +185,22 @@ function navigateToSession(sessionKey) {
 }
 
 // In-app toast notification — always visible, no browser permission needed
-function showNotificationToast(title, body, sessionKey) {
+function showNotificationToast(title, body, sessionKey, onClick = null, duration = 12000) {
     // Create toast container if it doesn't exist
-    let container = document.getElementById('notification-toast-container');
+    let container = document.getElementById('toast-container') || document.getElementById('notification-toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-toast-container';
-        container.style.cssText = 'position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
+        container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
         document.body.appendChild(container);
+    }
+
+    // Keep all notification toasts in the same visible corner.
+    if (container.id === 'toast-container') {
+        container.style.position = 'fixed';
+        container.style.bottom = '20px';
+        container.style.right = '20px';
+        container.style.flexDirection = 'column';
     }
 
     // Determine agent color from session key
@@ -225,16 +233,20 @@ function showNotificationToast(title, body, sessionKey) {
             <strong style="color: var(--text-primary, #e0e0e0); font-size: 13px;">${title}</strong>
             <span style="margin-left: auto; color: var(--text-muted, #666); font-size: 11px; cursor: pointer;" class="toast-close">✕</span>
         </div>
-        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
+        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body?.replace(/</g, '&lt;') || ''}</div>
     `;
 
-    // Click toast → navigate to session
+    // Click toast → navigate to session (for message notifications) or call custom action (for system/gateway notices)
     toast.addEventListener('click', (e) => {
         if (e.target.classList?.contains('toast-close')) {
             dismissToast(toast);
             return;
         }
-        navigateToSession(sessionKey);
+        if (typeof onClick === 'function') {
+            onClick();
+        } else if (sessionKey) {
+            navigateToSession(sessionKey);
+        }
         dismissToast(toast);
     });
 
@@ -247,8 +259,8 @@ function showNotificationToast(title, body, sessionKey) {
         toast.style.transform = 'translateX(0)';
     });
 
-    // Auto-dismiss after 12 seconds
-    const timer = setTimeout(() => dismissToast(toast), 12000);
+    // Auto-dismiss after specified duration
+    const timer = setTimeout(() => dismissToast(toast), duration);
     toast._dismissTimer = timer;
 
     // Limit to 4 toasts max
@@ -437,18 +449,18 @@ function disconnectFromGateway() {
 // Restart gateway directly via WebSocket RPC (no bot involved)
 window.requestGatewayRestart = async function () {
     if (!gateway || !gateway.isConnected()) {
-        showToast('Not connected to gateway', 'warning');
+        showNotificationToast('Gateway', 'Not connected to gateway', null, null, 5000);
         return;
     }
 
-    showToast('Restarting gateway...', 'info');
+    showNotificationToast('Gateway', 'Restarting gateway...', null, null, 5000);
 
     try {
         await gateway.restartGateway('manual restart from dashboard');
-        showToast('Gateway restart initiated. Reconnecting...', 'success');
+        showNotificationToast('Gateway', 'Gateway restart initiated. Reconnecting...', null, null, 5000);
     } catch (err) {
         console.error('[Dashboard] Gateway restart failed:', err);
-        showToast('Restart failed: ' + err.message, 'error');
+        showNotificationToast('Gateway', 'Restart failed: ' + err.message, null, null, 5000);
     }
 };
 

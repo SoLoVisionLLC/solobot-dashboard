@@ -1081,7 +1081,7 @@ async function checkRestartToast() {
         if (!response.ok) return;
         const state = await response.json();
         if (state.restartPending) {
-            showToast('Gateway restarted successfully', 'success');
+            showNotificationToast('Gateway', 'Gateway restarted successfully');
             delete state.restartPending;
             await fetch('/api/sync', {
                 method: 'POST',
