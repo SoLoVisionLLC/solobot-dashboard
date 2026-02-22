@@ -837,14 +837,11 @@ async function applySessionModelOverride(sessionKey) {
     // === 1. FIRST: Check openclaw.json for agent-specific model (source of truth) ===
     if (agentId) {
         try {
-            const response = await fetch(`/api/models/agent/${agentId}`);
-            if (response.ok) {
-                const agentModel = await response.json();
-                if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
-                    sessionModel = agentModel.modelId;
-                    console.log(`[Dashboard] LOCKING model for ${agentId} to config value: ${sessionModel}`);
-                    window._configModelLocks[sessionKey] = sessionModel;
-                }
+            const agentModel = await fetch(`/api/models/agent/${agentId}`).then(r => r.json());
+            if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
+                sessionModel = agentModel.modelId;
+                console.log(`[Dashboard] LOCKING model for ${agentId} to config value: ${sessionModel}`);
+                window._configModelLocks[sessionKey] = sessionModel;
             }
         } catch (e) { }
     }
