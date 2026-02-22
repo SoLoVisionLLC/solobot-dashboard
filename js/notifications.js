@@ -479,10 +479,17 @@ function handleChatEvent(event) {
     }
     
     // Track the current model being used for responses and sync UI
+    // BUT: Don't override if user just manually changed (respect openclaw.json settings)
     if (model) {
         window._lastResponseModel = model;
         window._lastResponseProvider = provider;
-        syncModelDisplay(model, provider);
+        // Skip sync if manual change happened recently — openclaw.json is source of truth
+        const now = Date.now();
+        if (!window._lastManualModelChange || (now - window._lastManualModelChange > 5000)) {
+            syncModelDisplay(model, provider);
+        } else {
+            notifLog(`[Notifications] Skipping model sync from gateway (manual change active)`);
+        }
     }
 
     // Handle user messages from other clients (WebUI, Telegram, etc.)
