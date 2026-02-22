@@ -1,6 +1,8 @@
 // js/state.js — Global state, config constants, persistence, chat storage
 
-let state = {
+// Initialize global state on window object to prevent "Identifier already declared" errors
+// across modular script boundaries and ensure global accessibility.
+window.state = window.state || {
     status: 'idle',
     model: 'opus 4.5',
     currentTask: null,
@@ -38,7 +40,9 @@ let state = {
 
 // Global agent color map — reads from CSS variables (--agent-*) defined in themes.css
 // Used by phase10-taskboard.js, phase11-agents.js, phase12-analytics.js
-const AGENT_COLORS = new Proxy({}, {
+window._lastManualModelChange = window._lastManualModelChange || null;
+
+const AGENT_COLORS = window.AGENT_COLORS = new Proxy({}, {
     get(target, prop) {
         if (typeof prop !== 'string') return undefined;
         const cached = target[prop];
@@ -90,7 +94,7 @@ function loadPersistedMessages() {
         // Also try legacy global key as fallback (one-time migration)
         const legacyChat = !savedChat ? localStorage.getItem('solobot-chat-messages') : null;
         const chatData = savedChat || legacyChat;
-        
+
         if (chatData) {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
@@ -102,7 +106,7 @@ function loadPersistedMessages() {
                 return;
             }
         }
-        
+
         // No local messages - fetch from server
         loadChatFromServer();
     } catch (e) {
@@ -150,7 +154,7 @@ function persistChatMessages() {
         localStorage.setItem(key, JSON.stringify(chatToSave));
         // Also update in-memory cache
         cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
-        
+
         // Also sync to server for persistence across deploys
         syncChatToServer(chatToSave);
     } catch (e) {
@@ -190,19 +194,19 @@ const GATEWAY_CONFIG = {
 // Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
     const normalizedSessionKey = normalizeSessionKey(sessionKey);
-    
+
     // Save to localStorage only (sessionKey is browser/localStorage concern)
     localStorage.setItem('gateway_host', host);
     localStorage.setItem('gateway_port', port.toString());
     localStorage.setItem('gateway_token', token);
     localStorage.setItem('gateway_session', normalizedSessionKey);
-    
+
     // Update config
     GATEWAY_CONFIG.host = host;
     GATEWAY_CONFIG.port = port;
     GATEWAY_CONFIG.token = token;
     GATEWAY_CONFIG.sessionKey = normalizedSessionKey;
-    
+
     console.log('[saveGatewaySettings] Saved sessionKey:', normalizedSessionKey);
 }
 
@@ -313,7 +317,7 @@ async function saveState(changeDescription = null) {
     if (changeDescription) {
         state.lastChange = changeDescription;
     }
-    
+
     // Create a trimmed copy for localStorage (limit messages to prevent quota exceeded)
     try {
         const stateForStorage = JSON.parse(JSON.stringify(state));
@@ -342,7 +346,7 @@ async function saveState(changeDescription = null) {
         }
     }
     updateLastSync();
-    
+
     // Sync to server
     await syncToServer();
 }
@@ -361,14 +365,14 @@ async function syncToServer() {
                 serverTaskCount = (st.todo?.length || 0) + (st.progress?.length || 0) + (st.done?.length || 0) + (st.archive?.length || 0);
                 serverActivityCount = Array.isArray(serverState.activity) ? serverState.activity.length : 0;
                 serverTaskVersion = serverState._taskVersion || 0;
-                
+
                 // If server has newer task version, pull server tasks into local state
                 if (serverTaskVersion > (state._taskVersion || 0)) {
                     console.log(`[Sync] Server tasks are newer (v${serverTaskVersion} > v${state._taskVersion || 0}) — adopting server tasks`);
                     state.tasks = serverState.tasks;
                     state._taskVersion = serverTaskVersion;
                     // Update localStorage with server tasks
-                    try { localStorage.setItem('solovision-dashboard', JSON.stringify(state)); } catch(e) {}
+                    try { localStorage.setItem('solovision-dashboard', JSON.stringify(state)); } catch (e) { }
                     renderTasks();
                 }
             }
@@ -392,7 +396,7 @@ async function syncToServer() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(syncPayload)
         });
-        
+
         if (response.ok) {
             const result = await response.json();
             if (result.protected?.tasks || result.protected?.activity) {

@@ -9,22 +9,22 @@ function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 
 // Agent persona names and role labels
 const AGENT_PERSONAS = {
-    'main':   { name: 'Halo',     role: 'PA' },
-    'exec':   { name: 'Elon',     role: 'CoS' },
-    'cto':    { name: 'Orion',    role: 'CTO' },
-    'coo':    { name: 'Atlas',    role: 'COO' },
-    'cfo':    { name: 'Sterling', role: 'CFO' },
-    'cmp':    { name: 'Vector',   role: 'CMP' },
-    'dev':    { name: 'Dev',      role: 'ENG' },
-    'forge':  { name: 'Forge',   role: 'DEVOPS' },
-    'quill':  { name: 'Quill',   role: 'FE/UI' },
-    'chip':    { name: 'Chip',    role: 'SWE' },
-    'snip':    { name: 'Snip',    role: 'YT' },
-    'sec':     { name: 'Knox',    role: 'SEC' },
-    'smm':    { name: 'Nova',    role: 'SMM' },
-    'family':  { name: 'Haven',   role: 'FAM' },
-    'tax':     { name: 'Ledger',  role: 'TAX' },
-    'docs':    { name: 'Canon',   role: 'DOC' }
+    'main': { name: 'Halo', role: 'PA' },
+    'exec': { name: 'Elon', role: 'CoS' },
+    'cto': { name: 'Orion', role: 'CTO' },
+    'coo': { name: 'Atlas', role: 'COO' },
+    'cfo': { name: 'Sterling', role: 'CFO' },
+    'cmp': { name: 'Vector', role: 'CMP' },
+    'dev': { name: 'Dev', role: 'ENG' },
+    'forge': { name: 'Forge', role: 'DEVOPS' },
+    'quill': { name: 'Quill', role: 'FE/UI' },
+    'chip': { name: 'Chip', role: 'SWE' },
+    'snip': { name: 'Snip', role: 'YT' },
+    'sec': { name: 'Knox', role: 'SEC' },
+    'smm': { name: 'Nova', role: 'SMM' },
+    'family': { name: 'Haven', role: 'FAM' },
+    'tax': { name: 'Ledger', role: 'TAX' },
+    'docs': { name: 'Canon', role: 'DOC' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
@@ -47,44 +47,45 @@ function getFriendlySessionName(key) {
     return key;
 }
 
-let currentSessionName;
+// Initialize session variables on window for global access across modular scripts
+window.currentSessionName = window.currentSessionName || null;
 
 // Initialize currentSessionName from localStorage (browser is authoritative for session)
 function initCurrentSessionName() {
     const localSession = localStorage.getItem('gateway_session');
     const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
-    
+
     // localStorage is authoritative (user's explicit choice)
-    currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
-    
+    window.currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+
     console.log('[initCurrentSessionName] localStorage:', localSession);
     console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
-    console.log('[initCurrentSessionName] Final:', currentSessionName);
+    console.log('[initCurrentSessionName] Final:', window.currentSessionName);
 }
 
 // Initialize immediately (before any other code uses it)
 initCurrentSessionName();
 
-window.toggleSessionMenu = function() {
+window.toggleSessionMenu = function () {
     const menu = document.getElementById('session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
 }
 
-window.renameSession = async function() {
+window.renameSession = async function () {
     toggleSessionMenu();
-    const newName = prompt('Enter new session name:', currentSessionName);
-    if (!newName || newName === currentSessionName) return;
-    
+    const newName = prompt('Enter new session name:', window.currentSessionName);
+    if (!newName || newName === window.currentSessionName) return;
+
     try {
         const response = await fetch('/api/session/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ oldName: currentSessionName, newName })
+            body: JSON.stringify({ oldName: window.currentSessionName, newName })
         });
-        
+
         if (response.ok) {
-            currentSessionName = newName;
+            window.currentSessionName = newName;
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) nameEl.textContent = newName;
             showToast(`Session renamed to "${newName}"`, 'success');
@@ -98,20 +99,20 @@ window.renameSession = async function() {
     }
 }
 
-window.showSessionSwitcher = function() {
+window.showSessionSwitcher = function () {
     toggleSessionMenu();
     showToast('Session switcher coming soon', 'info');
 }
 
 // Chat Page Session Menu Functions
-window.toggleChatPageSessionMenu = function() {
+window.toggleChatPageSessionMenu = function () {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
     menu.classList.toggle('hidden');
 }
 
 // Close session menu when clicking outside
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     const menu = document.getElementById('chat-page-session-menu');
     const trigger = e.target.closest('[onclick*="toggleChatPageSessionMenu"]');
     if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !trigger) {
@@ -121,7 +122,7 @@ document.addEventListener('click', function(e) {
 
 // Session Management
 let availableSessions = [];
-let currentAgentId = 'main'; // Track which agent's sessions we're viewing
+window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's sessions we're viewing
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
 
@@ -141,7 +142,7 @@ function filterSessionsForAgent(sessions, agentId) {
         // Direct match: session belongs to this agent
         const sessAgent = getAgentIdFromSession(s.key);
         if (sessAgent === agentId) return true;
-        
+
         // Subagent match: spawned by main but labeled for this agent
         // Pattern: agent:main:subagent:* with label starting with "{agentId}-"
         if (s.key?.startsWith('agent:main:subagent:')) {
@@ -151,7 +152,7 @@ function filterSessionsForAgent(sessions, agentId) {
                 return true;
             }
         }
-        
+
         return false;
     });
 }
@@ -173,29 +174,29 @@ function handleSubagentSessionAgent() {
     if (!currentSessionName?.startsWith('agent:main:subagent:')) {
         return; // Not a subagent session
     }
-    
+
     // Find the session in availableSessions
     const session = availableSessions.find(s => s.key === currentSessionName);
     if (!session) {
         sessLog(`[Dashboard] Subagent session not found in available sessions: ${currentSessionName}`);
         return;
     }
-    
+
     const label = session.displayName || session.name || '';
     sessLog(`[Dashboard] Subagent session label: ${label}`);
-    
+
     // Extract agent ID from label pattern: {agentId}-{taskname}
     const labelMatch = label.match(/^([a-z]+)-/i);
     if (labelMatch) {
         const agentFromLabel = labelMatch[1].toLowerCase();
         sessLog(`[Dashboard] Determined agent from label: ${agentFromLabel}`);
-        
+
         // Update current agent ID
         currentAgentId = agentFromLabel;
-        
+
         // Update sidebar highlight
         setActiveSidebarAgent(agentFromLabel);
-        
+
         // Update agent name display
         const agentNameEl = document.getElementById('chat-page-agent-name');
         if (agentNameEl) {
@@ -295,34 +296,34 @@ async function fetchSessions() {
 function populateSessionDropdown() {
     const menu = document.getElementById('chat-page-session-menu');
     if (!menu) return;
-    
+
     // Filter sessions for current agent only
     const agentSessions = filterSessionsForAgent(availableSessions, currentAgentId);
-    
+
     sessLog(`[Dashboard] populateSessionDropdown: agent=${currentAgentId}, total=${availableSessions.length}, filtered=${agentSessions.length}`);
     sessLog(`[Dashboard] Available sessions:`, availableSessions.map(s => s.key));
-    
+
     // Build the dropdown HTML
     let html = '';
-    
+
     // Header showing which agent's sessions we're viewing
     const agentLabel = getAgentLabel(currentAgentId);
     html += `<div style="padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center;">
         <span>${escapeHtml(agentLabel)} Sessions</span>
         <button onclick="startNewAgentSession('${currentAgentId}')" style="background: var(--brand-red); color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer;" title="New session for ${agentLabel}">+ New</button>
     </div>`;
-    
+
     if (agentSessions.length === 0) {
         html += '<div style="padding: 12px; color: var(--text-muted); font-size: 13px;">No sessions for this agent yet</div>';
         menu.innerHTML = html;
         return;
     }
-    
+
     html += agentSessions.map(s => {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
-        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-        
+        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" data-session-key="${s.key}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
@@ -341,7 +342,7 @@ function populateSessionDropdown() {
         </div>
         `;
     }).join('');
-    
+
     menu.innerHTML = html;
 }
 
@@ -369,10 +370,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-window.editSessionName = function(sessionKey, currentName) {
+window.editSessionName = function (sessionKey, currentName) {
     const newName = prompt('Enter new session name:', currentName);
     if (!newName || newName === currentName) return;
-    
+
     fetch('/api/session/rename', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -403,18 +404,18 @@ window.editSessionName = function(sessionKey, currentName) {
     });
 }
 
-window.deleteSession = async function(sessionKey, sessionName) {
+window.deleteSession = async function (sessionKey, sessionName) {
     // Don't allow deleting the current active session
     if (sessionKey === currentSessionName) {
         showToast('Cannot delete the active session. Switch to another session first.', 'warning');
         return;
     }
-    
+
     // Confirm deletion
     if (!confirm(`Delete session "${sessionName}"?\n\nThis will permanently delete all messages in this session.`)) {
         return;
     }
-    
+
     try {
         // Use gateway RPC to delete the session
         if (gateway && gateway.isConnected()) {
@@ -436,29 +437,29 @@ window.deleteSession = async function(sessionKey, sessionName) {
     }
 }
 
-window.switchToSessionKey = window.switchToSession = async function(sessionKey) {
+window.switchToSessionKey = window.switchToSession = async function (sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
-    
+
     // Enqueue switch request (FIFO)
     _sessionSwitchQueue.push({ sessionKey, timestamp: Date.now() });
-    
+
     // If switch already in progress, queue will be processed after current completes
     if (_switchInFlight) {
         return;
     }
-    
+
     // Process queue until empty (defeats rapid clicks by processing all)
     while (_sessionSwitchQueue.length > 0) {
         const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
-        
+
         // Skip if already on this session
         if (nextKey === currentSessionName) {
             populateSessionDropdown();
             continue;
         }
-        
+
         await executeSessionSwitch(nextKey);
-        
+
         // Check if a newer request superseded this one
         // If queue has items that came in AFTER we started this switch, process them
         // If queue is empty or only has our own re-submit, we're done
@@ -525,7 +526,7 @@ async function executeSessionSwitch(sessionKey) {
         // 5. Switch gateway session key (no disconnect/reconnect needed)
         // Add small delay to allow gateway state to stabilize
         await new Promise(r => setTimeout(r, 50));
-        
+
         if (gateway && gateway.isConnected()) {
             gateway.setSessionKey(sessionKey);
         } else if (gateway) {
@@ -535,7 +536,7 @@ async function executeSessionSwitch(sessionKey) {
 
         // 6. Load history + model override in parallel (not sequential)
         const historyPromise = loadSessionHistory(sessionKey);
-        const modelPromise = applySessionModelOverride(sessionKey).catch(() => {});
+        const modelPromise = applySessionModelOverride(sessionKey).catch(() => { });
 
         // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
@@ -568,15 +569,15 @@ async function executeSessionSwitch(sessionKey) {
 // Navigate to a session by key - can be called from external links
 // Usage: window.goToSession('agent:main:subagent:abc123')
 // Or via URL: ?session=agent:main:subagent:abc123
-window.goToSession = async function(sessionKey) {
+window.goToSession = async function (sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
     if (!sessionKey) {
         showToast('No session key provided', 'warning');
         return;
     }
-    
+
     sessLog(`[Dashboard] goToSession called with: ${sessionKey}`);
-    
+
     // Wait for gateway to be connected
     if (!gateway || !gateway.isConnected()) {
         showToast('Connecting to gateway...', 'info');
@@ -586,7 +587,7 @@ window.goToSession = async function(sessionKey) {
         localStorage.setItem('gateway_session', sessionKey);  // Persist for reload
         const sessionInput = document.getElementById('gateway-session');
         if (sessionInput) sessionInput.value = sessionKey;
-        
+
         // Try to connect
         if (GATEWAY_CONFIG.host) {
             connectToGateway();
@@ -595,16 +596,16 @@ window.goToSession = async function(sessionKey) {
         }
         return;
     }
-    
+
     // Show chat page first
     showPage('chat');
-    
+
     // Switch to the session
     await switchToSession(sessionKey);
 }
 
 // Generate a URL for a specific session (for sharing/linking)
-window.getSessionUrl = function(sessionKey) {
+window.getSessionUrl = function (sessionKey) {
     const baseUrl = window.location.origin + window.location.pathname;
     return `${baseUrl}?session=${encodeURIComponent(sessionKey)}`;
 }
@@ -614,14 +615,14 @@ async function saveCurrentChat() {
     try {
         const response = await fetch('/api/state');
         const state = await response.json();
-        
+
         // Save chat history to archivedChats
         if (!state.archivedChats) state.archivedChats = {};
         state.archivedChats[currentSessionName] = {
             savedAt: Date.now(),
             messages: chatHistory.slice(-100) // Last 100 messages
         };
-        
+
         await fetch('/api/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -634,7 +635,7 @@ async function saveCurrentChat() {
 
 async function loadSessionHistory(sessionKey) {
     const loadVersion = sessionVersion;
-    
+
     // Helper: attempt to load from gateway
     async function tryGatewayLoad() {
         if (!gateway || !gateway.isConnected()) return false;
@@ -658,10 +659,10 @@ async function loadSessionHistory(sessionKey) {
         }
         return false;
     }
-    
+
     // Try gateway first
     if (await tryGatewayLoad()) return;
-    
+
     // If gateway wasn't connected, wait briefly for reconnect and retry
     if (gateway && !gateway.isConnected()) {
         sessLog(`[Dashboard] Gateway disconnected during switch to ${sessionKey}, waiting for reconnect...`);
@@ -703,11 +704,11 @@ function initGateway() {
         onConnected: (serverName, sessionKey) => {
             sessLog(`[Dashboard] Connected to ${serverName}, session: ${sessionKey}`);
             updateConnectionUI('connected', serverName);
-            
+
             // On reconnect, the gateway client reports whatever sessionKey it has.
             // If the user switched sessions while disconnected, currentSessionName
             // is authoritative — re-sync the gateway client to match.
-                    const intendedSession = normalizeDashboardSessionKey(
+            const intendedSession = normalizeDashboardSessionKey(
                 GATEWAY_CONFIG.sessionKey || currentSessionName || sessionKey
             );
             if (sessionKey !== intendedSession) {
@@ -716,11 +717,11 @@ function initGateway() {
             }
             GATEWAY_CONFIG.sessionKey = intendedSession;
             currentSessionName = intendedSession;
-            
+
             // Fetch live model config from gateway (populates dropdowns),
             // then apply per-session override (authoritative model display).
             fetchModelsFromGateway().then(() => applySessionModelOverride(intendedSession));
-            
+
             // Update session name displays
             const nameEl = document.getElementById('current-session-name');
             if (nameEl) {
@@ -732,11 +733,11 @@ function initGateway() {
                 chatPageNameEl.textContent = intendedSession;
                 chatPageNameEl.title = intendedSession;
             }
-            
+
             // Remember this session for the agent
             const agentMatch = intendedSession.match(/^agent:([^:]+):/);
             if (agentMatch) saveLastAgentSession(agentMatch[1], intendedSession);
-            
+
             checkRestartToast();
 
             // Load chat history on connect (one-time full load)
@@ -808,7 +809,7 @@ function initGateway() {
 
 let newSessionModalResolve = null;
 
-window.openNewSessionModal = function(defaultValue) {
+window.openNewSessionModal = function (defaultValue) {
     return new Promise((resolve) => {
         newSessionModalResolve = resolve;
         const modal = document.getElementById('new-session-modal');
@@ -827,7 +828,7 @@ window.openNewSessionModal = function(defaultValue) {
     });
 };
 
-window.closeNewSessionModal = function(value) {
+window.closeNewSessionModal = function (value) {
     const modal = document.getElementById('new-session-modal');
     if (modal) {
         modal.classList.remove('visible');
@@ -838,14 +839,14 @@ window.closeNewSessionModal = function(value) {
     }
 };
 
-window.submitNewSessionModal = function() {
+window.submitNewSessionModal = function () {
     const input = document.getElementById('new-session-name-input');
     const value = input ? input.value : null;
     closeNewSessionModal(value);
 };
 
 // Handle Enter key in new session modal
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
     const modal = document.getElementById('new-session-modal');
     if (modal && modal.classList.contains('visible')) {
         if (e.key === 'Enter') {
@@ -859,10 +860,10 @@ document.addEventListener('keydown', function(e) {
 });
 
 // Start a new session for a specific agent
-window.startNewAgentSession = async function(agentId) {
+window.startNewAgentSession = async function (agentId) {
     // Close dropdown first
     toggleChatPageSessionMenu();
-    
+
     // Generate default name with timestamp: MM/DD/YYYY hh:mm:ss AM/PM
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -875,7 +876,7 @@ window.startNewAgentSession = async function(agentId) {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
     const defaultTimestamp = `${month}/${day}/${year} ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
-    
+
     const agentLabel = getAgentLabel(agentId);
 
     // Open custom modal instead of browser prompt
@@ -884,7 +885,7 @@ window.startNewAgentSession = async function(agentId) {
 
     // Always prepend agent ID to the session name (lowercase)
     const sessionName = `${agentId.toLowerCase()}-${userInput.trim()}`;
-    
+
     // Build the full session key: agent:{agentId}:{agentId}-{userInput}
     const sessionKey = `agent:${agentId}:${sessionName}`;
 
@@ -964,18 +965,18 @@ window.startNewAgentSession = async function(agentId) {
         model: currentModel || 'unknown',
         sessionId: null
     };
-    
+
     // Add to beginning of list (most recent)
     availableSessions.unshift(newSession);
-    
+
     // Refresh sessions list from gateway (will merge with our local addition)
     await fetchSessions();
-    
+
     // Ensure our new session is still in the list (in case fetchSessions didn't include it)
     if (!availableSessions.some(s => s.key === sessionKey)) {
         availableSessions.unshift(newSession);
     }
-    
+
     populateSessionDropdown();
     setActiveSidebarAgent(agentId);
 
@@ -987,7 +988,7 @@ window.startNewAgentSession = async function(agentId) {
 }
 
 // Legacy function - creates session for current agent
-window.startNewSession = async function() {
+window.startNewSession = async function () {
     await startNewAgentSession(currentAgentId);
 }
 
@@ -1011,10 +1012,10 @@ function filterSessionsBySearch(sessions, query) {
 // Update populateSessionDropdown to include search
 const originalPopulateSessionDropdown = window.populateSessionDropdown;
 if (typeof originalPopulateSessionDropdown === 'function') {
-    window.populateSessionDropdown = function() {
+    window.populateSessionDropdown = function () {
         // Call original first
         originalPopulateSessionDropdown();
-        
+
         // Then add search functionality if not already present
         const dropdown = document.getElementById('chat-page-session-menu');
         if (dropdown && !dropdown.querySelector('.session-search')) {
@@ -1030,14 +1031,14 @@ if (typeof originalPopulateSessionDropdown === 'function') {
     };
 }
 
-window.filterSessionDropdown = function(query) {
+window.filterSessionDropdown = function (query) {
     sessionSearchQuery = query;
     const dropdown = document.getElementById('chat-page-session-menu');
     if (!dropdown) return;
-    
+
     const items = dropdown.querySelectorAll('.session-menu-item');
     const q = query.toLowerCase();
-    
+
     items.forEach(item => {
         const text = item.textContent.toLowerCase();
         item.style.display = text.includes(q) ? '' : 'none';
