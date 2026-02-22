@@ -1970,6 +1970,25 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Get per-agent model override
+  if (url.pathname.startsWith('/api/models/agent/') && req.method === 'GET') {
+    const agentId = url.pathname.replace('/api/models/agent/', '').trim();
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const configPaths = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK, OPENCLAW_CONFIG_FALLBACK2].filter(Boolean);
+      const configPath = configPaths.find(p => { try { return fs.existsSync(p); } catch { return false; } });
+      if (!configPath) { res.writeHead(404); res.end(JSON.stringify({ error: 'No config file found' })); return; }
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const agent = config.agents?.list?.find(a => a.id === agentId);
+      if (!agent || !agent.model) { res.writeHead(404); res.end(JSON.stringify({ error: 'No model override for agent' })); return; }
+      const modelId = agent.model;
+      res.end(JSON.stringify({ agentId, modelId, provider: modelId.split('/')[0] }));
+    } catch (e) {
+      res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Set per-agent model override
   if (url.pathname === '/api/models/set-agent' && req.method === 'POST') {
     let body = '';

@@ -286,7 +286,7 @@ window.changeSessionModel = async function () {
             });
 
             // Also clear session override
-            try { await gateway.patchSession(sessionKey, { model: null }); } catch (_) { }
+            try { await gateway.patchSession(window.currentSessionName, { model: null }); } catch (_) { }
 
             // Fetch current global default to update UI
             const response = await fetch('/api/models/current');
@@ -315,7 +315,7 @@ window.changeSessionModel = async function () {
 
             // Also patch current session so it takes effect immediately
             try {
-                await gateway.patchSession(sessionKey, { model: selectedModel });
+                await gateway.patchSession(window.currentSessionName, { model: selectedModel });
             } catch (e) {
                 console.warn('[Dashboard] sessions.patch model failed (may need gateway restart):', e.message);
             }
@@ -423,6 +423,54 @@ window.changeGlobalModel = async function () {
 
 // Legacy alias — keep for any old references
 window.changeModel = window.changeSessionModel;
+
+/**
+ * Load the saved model for a specific agent
+ * Fetches from server and updates the UI dropdowns
+ */
+window.loadAgentModel = async function(agentId) {
+    if (!agentId) return;
+    
+    try {
+        // Fetch agent's model from server
+        const response = await fetch(`/api/models/agent/${agentId}`);
+        if (!response.ok) {
+            // Agent may not have a custom model, use global default
+            console.log(`[Dashboard] No custom model for ${agentId}, using global default`);
+            return;
+        }
+        
+        const agentModel = await response.json();
+        if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
+            console.log(`[Dashboard] Loaded model for ${agentId}: ${agentModel.modelId}`);
+            
+            // Update current model vars
+            currentModel = agentModel.modelId;
+            currentProvider = agentModel.provider || agentModel.modelId.split('/')[0];
+            
+            // Update localStorage for persistence
+            localStorage.setItem('selected_model', currentModel);
+            localStorage.setItem('selected_provider', currentProvider);
+            
+            // Update UI
+            syncModelDisplay(currentModel, currentProvider);
+            
+            // Update dropdowns
+            const providerSelect = document.getElementById('provider-select');
+            if (providerSelect) {
+                providerSelect.value = currentProvider;
+                await updateHeaderModelDropdown(currentProvider);
+            }
+            
+            const modelSelect = document.getElementById('model-select');
+            if (modelSelect) {
+                modelSelect.value = currentModel;
+            }
+        }
+    } catch (e) {
+        console.warn(`[Dashboard] Failed to load model for ${agentId}:`, e.message);
+    }
+};
 
 async function updateHeaderModelDropdown(provider) {
     const models = await getModelsForProvider(provider);
