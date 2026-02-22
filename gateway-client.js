@@ -120,6 +120,18 @@ function _extractMessageContent(message, payload = null) {
     return { text: bestText, images: uniqueImages };
 }
 
+function _normalizeGatewayTextForSignature(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function _buildGatewayImageSignature(imageDataUrls) {
+    if (!Array.isArray(imageDataUrls)) return '';
+    return imageDataUrls.map((imageDataUrl) => {
+        if (typeof imageDataUrl !== 'string') return '0:';
+        return `${imageDataUrl.length}:${imageDataUrl.slice(-16)}`;
+    }).join('|');
+}
+
 function _base64UrlEncode(buf) {
     // buf: Uint8Array → base64url string (no padding)
     const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
@@ -236,6 +248,7 @@ class GatewayClient {
         this._isConnecting = false;
         this._nodeEventUnsupported = false;
         this._identityRecoveryAttempted = false;
+        this._inFlightSend = null;
 
         // Callbacks
         this.onConnected = options.onConnected || (() => { });
@@ -704,9 +717,16 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
+        const normalizedSessionKey = normalizeSessionKey(this.sessionKey);
+        const sendKey = `text|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(text)}`;
+        if (this._inFlightSend?.key === sendKey) {
+            gwWarn('[Gateway] Suppressed duplicate in-flight text send');
+            return this._inFlightSend.promise;
+        }
+
         const params = {
             message: text,
-            sessionKey: normalizeSessionKey(this.sessionKey),
+            sessionKey: normalizedSessionKey,
             idempotencyKey: crypto.randomUUID()
         };
 
@@ -716,11 +736,10 @@ class GatewayClient {
         gwLog(`[Gateway]    Model: ${model}`);
         gwLog(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
-        try {
-            const result = await this._request('chat.send', params);
+        const requestPromise = this._request('chat.send', params).then(result => {
             gwLog(`[Gateway] ✅ Message sent, runId: ${result?.runId || 'none'}`);
             return result;
-        } catch (err) {
+        }).catch(err => {
             const msg = String(err?.message || '');
             if (!this._identityRecoveryAttempted && /user not found/i.test(msg)) {
                 this._identityRecoveryAttempted = true;
@@ -732,7 +751,12 @@ class GatewayClient {
             }
             console.error(`[Gateway] ❌ Failed to send message: ${msg}`);
             throw err;
-        }
+        }).finally(() => {
+            if (this._inFlightSend?.key === sendKey) this._inFlightSend = null;
+        });
+
+        this._inFlightSend = { key: sendKey, promise: requestPromise };
+        return requestPromise;
     }
 
     sendMessageWithImage(text, imageDataUrl) {
@@ -742,6 +766,13 @@ class GatewayClient {
     async sendMessageWithImages(text, imageDataUrls) {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));
+        }
+
+        const normalizedSessionKey = normalizeSessionKey(this.sessionKey);
+        const sendKey = `images|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(text)}|${_buildGatewayImageSignature(imageDataUrls)}`;
+        if (this._inFlightSend?.key === sendKey) {
+            gwWarn('[Gateway] Suppressed duplicate in-flight image send');
+            return this._inFlightSend.promise;
         }
 
         // Build attachments array from all images
@@ -768,7 +799,7 @@ class GatewayClient {
 
         const params = {
             message: text || 'Attached image',
-            sessionKey: normalizeSessionKey(this.sessionKey),
+            sessionKey: normalizedSessionKey,
             idempotencyKey: crypto.randomUUID(),
             attachments: attachments
         };
@@ -780,9 +811,7 @@ class GatewayClient {
         const model = localStorage.getItem('selected_model') || '(not set)';
         gwLog(`[Gateway] Sending with ${model}`);
 
-        try {
-            return await this._request('chat.send', params);
-        } catch (err) {
+        const requestPromise = this._request('chat.send', params).catch(err => {
             const msg = String(err?.message || '');
             if (!this._identityRecoveryAttempted && /user not found/i.test(msg)) {
                 this._identityRecoveryAttempted = true;
@@ -793,7 +822,12 @@ class GatewayClient {
                 throw new Error('User identity missing; reconnecting and regenerating identity. Please retry image send.');
             }
             throw err;
-        }
+        }).finally(() => {
+            if (this._inFlightSend?.key === sendKey) this._inFlightSend = null;
+        });
+
+        this._inFlightSend = { key: sendKey, promise: requestPromise };
+        return requestPromise;
     }
 
     loadHistory() {
