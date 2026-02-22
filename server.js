@@ -1977,16 +1977,19 @@ const server = http.createServer((req, res) => {
     try {
       const configPaths = [OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_FALLBACK, OPENCLAW_CONFIG_FALLBACK2].filter(Boolean);
       const configPath = configPaths.find(p => { try { return fs.existsSync(p); } catch { return false; } });
-      if (!configPath) { res.end(JSON.stringify({ agentId, modelId: 'global/default', provider: null })); return; }
+      if (!configPath) { res.end(JSON.stringify({ agentId, modelId: 'global/default', provider: null, fallbackModels: null, globalFallbacks: [] })); return; }
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      // Global fallbacks from agents.defaults.model.fallbacks
+      const globalFallbacks = config.agents?.defaults?.model?.fallbacks || [];
       const agent = config.agents?.list?.find(a => a.id === agentId);
       if (!agent || !agent.model) {
         // No override — agent uses the global default
-        res.end(JSON.stringify({ agentId, modelId: 'global/default', provider: null }));
+        res.end(JSON.stringify({ agentId, modelId: 'global/default', provider: null, fallbackModels: null, globalFallbacks }));
         return;
       }
       const modelId = agent.model;
-      res.end(JSON.stringify({ agentId, modelId, provider: modelId.split('/')[0] }));
+      const fallbackModels = agent.fallbacks || null; // null = use global
+      res.end(JSON.stringify({ agentId, modelId, provider: modelId.split('/')[0], fallbackModels, globalFallbacks }));
     } catch (e) {
       res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
     }
@@ -1999,7 +2002,7 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { agentId, modelId } = JSON.parse(body);
+        const { agentId, modelId, fallbackModels } = JSON.parse(body);
         if (!agentId || !modelId) {
           res.writeHead(400);
           res.end(JSON.stringify({ error: 'agentId and modelId are required' }));
@@ -2016,19 +2019,30 @@ const server = http.createServer((req, res) => {
           if (config.agents?.list) {
             const agent = config.agents.list.find(a => a.id === agentId);
             if (agent) {
+              // Handle primary model
               if (modelId === 'global/default') {
                 delete agent.model;
+                delete agent.fallbacks; // also clear fallbacks when reverting to global
                 console.log(`[Server] Cleared model override for agent ${agentId}`);
               } else {
                 agent.model = modelId;
                 console.log(`[Server] Set model for agent ${agentId}: ${modelId}`);
+              }
+              // Handle fallback models (undefined = don't touch, null/[] = clear, array = set)
+              if (fallbackModels !== undefined && modelId !== 'global/default') {
+                if (!fallbackModels || fallbackModels.length === 0) {
+                  delete agent.fallbacks; // revert to global fallbacks
+                  console.log(`[Server] Cleared fallback models for agent ${agentId} — using global`);
+                } else {
+                  agent.fallbacks = fallbackModels;
+                  console.log(`[Server] Set fallback models for agent ${agentId}: ${fallbackModels.join(', ')}`);
+                }
               }
               fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
             }
           }
         } else {
           // No config file available (Docker without volume mount)
-          // The frontend handles this via gateway WebSocket (sessions.patch)
           console.log(`[Server] No config file available — model change for ${agentId} handled by gateway WebSocket`);
         }
 

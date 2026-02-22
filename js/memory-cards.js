@@ -662,8 +662,11 @@
 
             const currentModelId = (agentModelRes?.modelId && agentModelRes.modelId !== 'global/default')
                 ? agentModelRes.modelId : null;
+            const agentFallbacks = agentModelRes?.fallbackModels || null; // null = using global
+            const globalFallbacks = agentModelRes?.globalFallbacks || [];
+            const usingGlobalFallbacks = agentFallbacks === null;
 
-            // Flatten all models for the dropdown
+            // Flatten all models for dropdowns
             const allModels = [];
             for (const [provider, models] of Object.entries(allModelsRes || {})) {
                 for (const m of models) {
@@ -671,7 +674,24 @@
                 }
             }
 
+            const modelOptions = allModels.map(m =>
+                `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} <span style="opacity:0.6">(${escapeHtml(m.provider)})</span></option>`
+            ).join('');
+
+            // Build fallback list display
+            const displayFallbacks = usingGlobalFallbacks ? globalFallbacks : agentFallbacks;
+            const fallbackListHtml = (displayFallbacks || []).map((fb, i) => `
+                <div class="agent-fallback-row" data-index="${i}" data-model="${escapeHtml(fb)}">
+                    <span class="agent-fallback-grip">⠿</span>
+                    <span class="agent-fallback-num">${i + 1}</span>
+                    <span class="agent-fallback-name">${escapeHtml(fb.split('/').pop())}</span>
+                    <span class="agent-fallback-provider">${escapeHtml(fb.split('/')[0] || '')}</span>
+                    ${usingGlobalFallbacks ? '' : `<button class="agent-fallback-remove" onclick="window._memoryCards.removeFallback('${agentId}', ${i})" title="Remove">×</button>`}
+                </div>
+            `).join('') || `<div style="color:var(--text-muted); font-size:11px; padding:4px 0;">No fallbacks configured</div>`;
+
             el.innerHTML = `
+                <!-- Primary model -->
                 <div class="agent-model-row">
                     <label class="agent-model-label">Primary Model</label>
                     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -679,17 +699,116 @@
                             <option value="global/default" ${!currentModelId ? 'selected' : ''}>🌐 Global Default</option>
                             ${allModels.map(m => `<option value="${escapeHtml(m.id)}" ${currentModelId === m.id ? 'selected' : ''}>${escapeHtml(m.name)} (${escapeHtml(m.provider)})</option>`).join('')}
                         </select>
-                        <button class="btn btn-primary btn-sm" onclick="window._memoryCards.saveAgentModel('${agentId}')">Save</button>
                     </div>
-                    <div id="agent-model-save-status-${agentId}" style="font-size:11px; color:var(--text-muted); margin-top:4px; min-height:16px;"></div>
                 </div>
-                <div class="agent-model-row" style="margin-top:8px;">
-                    <label class="agent-model-label" style="color:var(--text-muted);">Current Active: <strong style="color:var(--text-primary);">${escapeHtml(currentModelId || 'Global Default')}</strong></label>
+
+                <!-- Fallback chain -->
+                <div class="agent-model-row" style="margin-top:10px;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                        <label class="agent-model-label" style="margin:0;">Fallback Chain</label>
+                        ${usingGlobalFallbacks
+                    ? `<span class="agent-fallback-source-badge">🌐 Global</span>`
+                    : `<span class="agent-fallback-source-badge agent-fallback-source-custom">✏️ Custom</span>`
+                }
+                        ${usingGlobalFallbacks
+                    ? `<button class="btn btn-ghost btn-xs" style="margin-left:auto;" onclick="window._memoryCards.customizeFallbacks('${agentId}')">Override →</button>`
+                    : `<button class="btn btn-ghost btn-xs" style="margin-left:auto;" onclick="window._memoryCards.revertFallbacksToGlobal('${agentId}')">↩ Use Global</button>`
+                }
+                    </div>
+                    <div id="agent-fallback-list-${agentId}" class="agent-fallback-list ${usingGlobalFallbacks ? 'agent-fallback-readonly' : ''}">
+                        ${fallbackListHtml}
+                    </div>
+                    ${!usingGlobalFallbacks ? `
+                    <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; align-items:center;">
+                        <select id="agent-fallback-add-${agentId}" class="input agent-model-select" style="max-width:200px;">
+                            <option value="">— Add fallback —</option>
+                            ${allModels.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)} (${escapeHtml(m.provider)})</option>`).join('')}
+                        </select>
+                        <button class="btn btn-secondary btn-xs" onclick="window._memoryCards.addFallback('${agentId}')">+ Add</button>
+                    </div>` : ''}
+                </div>
+
+                <!-- Save row -->
+                <div style="display:flex; gap:8px; align-items:center; margin-top:12px; padding-top:10px; border-top: 1px solid var(--border-subtle);">
+                    <button class="btn btn-primary btn-sm" onclick="window._memoryCards.saveAgentModel('${agentId}')">💾 Save</button>
+                    <button class="btn btn-ghost btn-sm" onclick="window._memoryCards.resetAgentModel('${agentId}')">↩ Reset to Global</button>
+                    <div id="agent-model-save-status-${agentId}" style="font-size:11px; color:var(--text-muted); margin-left:auto; min-height:16px;"></div>
+                </div>
+                <div style="font-size:10px; color:var(--text-faint); margin-top:4px;">
+                    Active: <strong>${escapeHtml(currentModelId || 'Global Default')}</strong>
+                    · Fallbacks: <strong>${usingGlobalFallbacks ? 'Global (' + globalFallbacks.length + ')' : 'Custom (' + (agentFallbacks || []).length + ')'}</strong>
                 </div>
             `;
+
+            // Store current fallback state on element for mutations
+            el.dataset.agentFallbacks = JSON.stringify(usingGlobalFallbacks ? null : (agentFallbacks || []));
+            el.dataset.globalFallbacks = JSON.stringify(globalFallbacks);
+            el.dataset.allModels = JSON.stringify(allModels);
+
         } catch (e) {
             el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Failed to load model config</div>`;
         }
+    }
+
+    function getFallbackList(agentId) {
+        const el = document.getElementById(`agent-model-config-${agentId}`);
+        try { return JSON.parse(el?.dataset.agentFallbacks || 'null'); } catch { return null; }
+    }
+
+    function setFallbackList(agentId, list) {
+        const el = document.getElementById(`agent-model-config-${agentId}`);
+        if (el) el.dataset.agentFallbacks = JSON.stringify(list);
+        // Re-render the fallback list rows
+        const listEl = document.getElementById(`agent-fallback-list-${agentId}`);
+        if (!listEl) return;
+        const allModels = JSON.parse(el?.dataset.allModels || '[]');
+        listEl.innerHTML = (list || []).map((fb, i) => `
+            <div class="agent-fallback-row" data-index="${i}" data-model="${escapeHtml(fb)}">
+                <span class="agent-fallback-grip">⠿</span>
+                <span class="agent-fallback-num">${i + 1}</span>
+                <span class="agent-fallback-name">${escapeHtml(fb.split('/').pop())}</span>
+                <span class="agent-fallback-provider">${escapeHtml(fb.split('/')[0] || '')}</span>
+                <button class="agent-fallback-remove" onclick="window._memoryCards.removeFallback('${agentId}', ${i})" title="Remove">×</button>
+            </div>
+        `).join('') || `<div style="color:var(--text-muted); font-size:11px; padding:4px 0;">No fallbacks — add one below</div>`;
+    }
+
+    function customizeFallbacks(agentId) {
+        // Copy global fallbacks as starting point for custom chain
+        const el = document.getElementById(`agent-model-config-${agentId}`);
+        const globalFallbacks = JSON.parse(el?.dataset.globalFallbacks || '[]');
+        setFallbackList(agentId, [...globalFallbacks]);
+        // Re-render entire config to show edit UI
+        loadAgentModelConfig(agentId);
+        // Temporarily override to show as custom
+        requestAnimationFrame(() => {
+            const el2 = document.getElementById(`agent-model-config-${agentId}`);
+            if (el2) el2.dataset.agentFallbacks = JSON.stringify([...globalFallbacks]);
+            setFallbackList(agentId, [...globalFallbacks]);
+        });
+    }
+
+    function revertFallbacksToGlobal(agentId) {
+        const el = document.getElementById(`agent-model-config-${agentId}`);
+        if (el) el.dataset.agentFallbacks = JSON.stringify(null);
+        loadAgentModelConfig(agentId);
+    }
+
+    function addFallback(agentId) {
+        const sel = document.getElementById(`agent-fallback-add-${agentId}`);
+        if (!sel || !sel.value) return;
+        const modelId = sel.value;
+        const current = getFallbackList(agentId) || [];
+        if (!current.includes(modelId)) {
+            setFallbackList(agentId, [...current, modelId]);
+        }
+        sel.value = '';
+    }
+
+    function removeFallback(agentId, index) {
+        const current = getFallbackList(agentId) || [];
+        current.splice(index, 1);
+        setFallbackList(agentId, current);
     }
 
     async function saveAgentModel(agentId) {
@@ -698,6 +817,7 @@
         if (!select) return;
 
         const modelId = select.value;
+        const fallbackModels = getFallbackList(agentId); // null = use global, array = custom
         status.textContent = 'Saving...';
         status.style.color = 'var(--text-muted)';
 
@@ -705,14 +825,13 @@
             const res = await fetch('/api/models/set-agent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ agentId, modelId })
+                body: JSON.stringify({ agentId, modelId, fallbackModels })
             });
             const data = await res.json();
             if (data.ok) {
-                status.textContent = '✅ Saved successfully';
+                status.textContent = '✅ Saved';
                 status.style.color = 'var(--success)';
-                // Reload model config to show updated state
-                setTimeout(() => loadAgentModelConfig(agentId), 1000);
+                setTimeout(() => loadAgentModelConfig(agentId), 800);
             } else {
                 status.textContent = `❌ ${data.error || 'Failed to save'}`;
                 status.style.color = 'var(--brand-red)';
@@ -720,6 +839,25 @@
         } catch (e) {
             status.textContent = `❌ Network error`;
             status.style.color = 'var(--brand-red)';
+        }
+    }
+
+    async function resetAgentModel(agentId) {
+        const status = document.getElementById(`agent-model-save-status-${agentId}`);
+        if (status) { status.textContent = 'Resetting...'; status.style.color = 'var(--text-muted)'; }
+        try {
+            const res = await fetch('/api/models/set-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId, modelId: 'global/default', fallbackModels: null })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                if (status) { status.textContent = '✅ Reset to global'; status.style.color = 'var(--success)'; }
+                setTimeout(() => loadAgentModelConfig(agentId), 800);
+            }
+        } catch (e) {
+            if (status) { status.textContent = '❌ Failed'; status.style.color = 'var(--brand-red)'; }
         }
     }
 
@@ -940,11 +1078,16 @@
         resetView,
         fitToContent,
         saveAgentModel,
+        resetAgentModel,
         pingAgent,
         switchToAgentChat,
         switchToSession,
         openAgentMemory,
         toggleIdentityExpand,
+        customizeFallbacks,
+        revertFallbacksToGlobal,
+        addFallback,
+        removeFallback,
         toggleMinimap: function () {
             const minimap = document.getElementById('org-minimap');
             if (minimap) {
