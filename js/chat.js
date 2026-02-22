@@ -756,7 +756,8 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         images: images, // New array field
         model: messageModel, // Store which AI model generated this response
         provider: provider, // Store which provider (e.g., 'google', 'anthropic')
-        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '' // Tag with session to prevent cross-session bleed
+        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
+        _agentId: window.currentAgentId || 'main' // Fix #3: Store agent at message creation time for correct display later
     };
 
     const isSystem = isSystemMessage(text, from);
@@ -949,7 +950,8 @@ function createChatMessageElement(msg) {
         nameSpan.textContent = 'System';
     } else {
         nameSpan.style.color = 'var(--success)';
-        const displayName = getAgentDisplayName(currentAgentId);
+        // Fix #3b: Use the agent stored on the message, not the current global agent
+        const displayName = getAgentDisplayName(msg._agentId || currentAgentId);
         nameSpan.textContent = msg.isStreaming ? `${displayName} (typing...)` : displayName;
     }
 
@@ -1421,7 +1423,8 @@ function createChatPageMessage(msg) {
     } else if (isSystem) {
         sender.textContent = 'System';
     } else {
-        const displayName = getAgentDisplayName(currentAgentId);
+        // Fix #3b: Use the agent stored on the message, not the current global agent
+        const displayName = getAgentDisplayName(msg._agentId || currentAgentId);
         sender.textContent = msg.isStreaming ? `${displayName} is typing...` : displayName;
     }
 

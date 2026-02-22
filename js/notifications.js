@@ -6,7 +6,7 @@
 const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
 const NOTIFICATION_DEBUG = false;
-function notifLog(...args){ if (NOTIFICATION_DEBUG) console.log(...args); }
+function notifLog(...args) { if (NOTIFICATION_DEBUG) console.log(...args); }
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -33,7 +33,7 @@ function subscribeToAllSessions() {
 
 function handleCrossSessionNotification(msg) {
     const { sessionKey, content, images } = msg;
-    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content||'').slice(0,80)}..., images=${images?.length || 0}`);
+    notifLog(`[Notifications] 📥 Cross-session notification received: session=${sessionKey}, content=${(content || '').slice(0, 80)}..., images=${images?.length || 0}`);
 
     // Never count read-ack sync events as notifications.
     // These are internal signals used to clear unreads across clients.
@@ -71,17 +71,17 @@ function handleCrossSessionNotification(msg) {
 
     const friendlyName = getFriendlySessionName(sessionKey);
     const preview = content.length > 120 ? content.slice(0, 120) + '…' : content;
-    
+
     notifLog(`[Notifications] 🔔 Message from ${friendlyName}: ${preview.slice(0, 60)}`);
-    
+
     // Track unread count
     unreadSessions.set(sessionKey, (unreadSessions.get(sessionKey) || 0) + 1);
     updateUnreadBadges();
-    notifLog(`[Notifications] Unread total: ${Array.from(unreadSessions.values()).reduce((a,b)=>a+b,0)}`);
-    
+    notifLog(`[Notifications] Unread total: ${Array.from(unreadSessions.values()).reduce((a, b) => a + b, 0)}`);
+
     // Always show in-app toast (works regardless of browser notification permission)
     showNotificationToast(friendlyName, preview, sessionKey);
-    
+
     // Browser notification (best-effort — may not be permitted)
     if ('Notification' in window && Notification.permission === 'granted') {
         try {
@@ -91,19 +91,19 @@ function handleCrossSessionNotification(msg) {
                 tag: `session-${sessionKey}`,
                 silent: false
             });
-            
+
             notification.onclick = () => {
                 window.focus();
                 navigateToSession(sessionKey);
                 notification.close();
             };
-            
+
             setTimeout(() => notification.close(), 8000);
         } catch (e) {
             console.warn('[Notifications] Browser notification failed:', e);
         }
     }
-    
+
     // Play notification sound
     playNotificationSound();
 }
@@ -133,13 +133,13 @@ function showNotificationToast(title, body, sessionKey) {
         container.style.cssText = 'position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
         document.body.appendChild(container);
     }
-    
+
     // Determine agent color from session key
     const agentMatch = sessionKey?.match(/^agent:([^:]+):/);
     const agentId = agentMatch ? agentMatch[1] : 'main';
     const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
     const color = agentColors[agentId] || '#BC2026';
-    
+
     const toast = document.createElement('div');
     toast.className = 'notification-toast';
     toast.style.cssText = `
@@ -161,7 +161,7 @@ function showNotificationToast(title, body, sessionKey) {
         </div>
         <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
     `;
-    
+
     // Click toast → navigate to session
     toast.addEventListener('click', (e) => {
         if (e.target.classList?.contains('toast-close')) {
@@ -171,20 +171,20 @@ function showNotificationToast(title, body, sessionKey) {
         navigateToSession(sessionKey);
         dismissToast(toast);
     });
-    
+
     container.appendChild(toast);
     notifLog(`[Notifications] Toast rendered for ${title} (session=${sessionKey})`);
-    
+
     // Animate in
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateX(0)';
     });
-    
+
     // Auto-dismiss after 12 seconds
     const timer = setTimeout(() => dismissToast(toast), 12000);
     toast._dismissTimer = timer;
-    
+
     // Limit to 4 toasts max
     while (container.children.length > 4) {
         dismissToast(container.firstChild);
@@ -212,13 +212,13 @@ function toggleNotificationPanel() {
         }
         return;
     }
-    
+
     // Find session with most unreads
     let maxKey = null, maxCount = 0;
     for (const [key, count] of unreadSessions) {
         if (count > maxCount) { maxCount = count; maxKey = key; }
     }
-    
+
     if (maxKey) {
         navigateToSession(maxKey);
     }
@@ -245,10 +245,10 @@ function updateUnreadBadges() {
     document.querySelectorAll('.session-option, [data-session-key]').forEach(el => {
         const key = el.dataset?.sessionKey || el.getAttribute('data-session-key');
         if (!key) return;
-        
+
         let badge = el.querySelector('.unread-badge');
         const count = unreadSessions.get(key) || 0;
-        
+
         if (count > 0) {
             if (!badge) {
                 badge = document.createElement('span');
@@ -266,7 +266,7 @@ function updateUnreadBadges() {
     document.querySelectorAll('.sidebar-agent[data-agent]').forEach(el => {
         const agentId = el.getAttribute('data-agent');
         if (!agentId) return;
-        
+
         // Sum unread across all sessions for this agent
         let agentUnread = 0;
         for (const [key, count] of unreadSessions) {
@@ -274,7 +274,7 @@ function updateUnreadBadges() {
                 agentUnread += count;
             }
         }
-        
+
         let dot = el.querySelector('.agent-unread-dot');
         if (agentUnread > 0) {
             if (!dot) {
@@ -369,7 +369,7 @@ function disconnectFromGateway() {
 }
 
 // Restart gateway directly via WebSocket RPC (no bot involved)
-window.requestGatewayRestart = async function() {
+window.requestGatewayRestart = async function () {
     if (!gateway || !gateway.isConnected()) {
         showToast('Not connected to gateway', 'warning');
         return;
@@ -453,7 +453,7 @@ function handleChatEvent(event) {
     if (eventSession && activeSession && eventSession !== activeSession) {
         return;
     }
-    
+
     // Ignore read-ack sync events
     if (content && content.startsWith(READ_ACK_PREFIX)) {
         if (sessionKey) clearUnreadForSession(sessionKey);
@@ -480,7 +480,7 @@ function handleChatEvent(event) {
         // Don't show health check events in the main chat UI
         return;
     }
-    
+
     // Track the current model being used for responses and sync UI
     // BUT: Don't override if user just manually changed (respect openclaw.json settings)
     if (model) {
@@ -504,7 +504,7 @@ function handleChatEvent(event) {
             notifLog(`[Notifications] Ignoring user message for session ${eventSession} (current: ${activeSession})`);
             return;
         }
-        
+
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
             m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
@@ -525,7 +525,7 @@ function handleChatEvent(event) {
             renderChat();
             renderChatPage();
             break;
-            
+
         case 'delta':
             // Streaming response - content is cumulative, so REPLACE not append
             streamingText = content;
@@ -599,7 +599,7 @@ function loadHistoryMessages(messages) {
         if (!container) return { text: '', images: [] };
         let text = '';
         let images = [];
-        
+
         if (Array.isArray(container.content)) {
             for (const part of container.content) {
                 if (part.type === 'text') {
@@ -626,7 +626,7 @@ function loadHistoryMessages(messages) {
         } else if (typeof container.content === 'string') {
             text = container.content;
         }
-        
+
         // Check for attachments array (our send format)
         if (Array.isArray(container.attachments)) {
             for (const att of container.attachments) {
@@ -635,7 +635,7 @@ function loadHistoryMessages(messages) {
                 }
             }
         }
-        
+
         if (!text && typeof container.text === 'string') text = container.text;
         return { text: (text || '').trim(), images };
     };
@@ -645,12 +645,12 @@ function loadHistoryMessages(messages) {
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
         }
-        
+
         // Skip gateway-injected messages (read-sync, read_ack, etc.)
         if (msg.model === 'gateway-injected' || msg.provider === 'openclaw') {
             return;
         }
-        
+
         let content = extractContent(msg);
         if (!content.text && !content.images.length && msg.message) {
             content = extractContent(msg.message);
@@ -663,7 +663,10 @@ function loadHistoryMessages(messages) {
             image: content.images[0] || null, // First image as thumbnail
             images: content.images, // All images
             time: msg.timestamp || Date.now(),
-            model: msg.model // Preserve model from gateway history
+            model: msg.model, // Preserve model from gateway history
+            // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
+            _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+            _agentId: window.currentAgentId || 'main'
         };
 
         // Classify and route
@@ -749,7 +752,7 @@ function _doHistoryRefresh() {
         } else {
             notifLog(`[Notifications] _doHistoryRefresh: No messages returned`);
         }
-    }).catch(err => { 
+    }).catch(err => {
         _historyRefreshInFlight = false;
         notifLog(`[Notifications] _doHistoryRefresh: Error - ${err.message}`);
     });
@@ -794,7 +797,7 @@ function mergeHistoryMessages(messages) {
         notifLog('[Notifications] mergeHistoryMessages: No active session, skipping merge');
         return;
     }
-    
+
     // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
@@ -831,12 +834,12 @@ function mergeHistoryMessages(messages) {
         if (existingIds.has(msgId) || existingSystemIds.has(msgId)) {
             continue;
         }
-        
+
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             continue;
         }
-        
+
         // Skip gateway-injected messages (read-sync, read_ack, etc.)
         if (msg.model === 'gateway-injected' || msg.provider === 'openclaw') {
             continue;
@@ -906,7 +909,7 @@ function mergeHistoryMessages(messages) {
 
     if (newChatCount > 0 || newSystemCount > 0) {
         notifLog(`[Notifications] mergeHistoryMessages: Merged ${newChatCount} chat, ${newSystemCount} system messages for session ${activeSession}`);
-        
+
         // Sort and trim chat
         state.chat.messages.sort((a, b) => a.time - b.time);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {

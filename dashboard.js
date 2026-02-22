@@ -16,7 +16,7 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadState();
-    
+
     // Always start at the top
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     const dashPage = document.getElementById('page-dashboard');
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             placeholder.style.display = 'none';
             toolbar.parentNode.insertBefore(placeholder, toolbar);
             let isSticky = false;
-            
+
             dashPage.addEventListener('scroll', () => {
                 const boardRect = taskBoard.getBoundingClientRect();
                 const headerH = taskBoard.querySelector('.bento-widget-header')?.offsetHeight || 0;
@@ -79,12 +79,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const provider = localStorage.getItem('selected_provider') || 'anthropic';
     const model = localStorage.getItem('selected_model') || 'claude-3-opus';
     console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
-    
+
     // Gateway settings are now loaded from localStorage only (see state.js)
-    
+
     // Request browser notification permission
     requestNotificationPermission();
-    
+
     render({ includeSystem: true }); // Initial render includes system page
     updateLastSync();
 
@@ -109,11 +109,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         GATEWAY_CONFIG.sessionKey = urlSession;
         currentSessionName = urlSession;
         if (sessionEl) sessionEl.value = urlSession;
-        
+
         // Clear URL parameter to avoid re-loading on refresh
         const cleanUrl = window.location.pathname + window.location.hash;
         window.history.replaceState({}, document.title, cleanUrl);
-        
+
         console.log(`[Dashboard] Will connect to session from URL: ${urlSession}`);
     }
 
@@ -127,25 +127,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             currentAgentId = 'main';
         }
-        
+
         // Also update currentSessionName if not set
         if (!currentSessionName) {
             currentSessionName = sessionKey;
         }
-        
+
         return currentAgentId;
     }
-    
+
     const initialAgentId = initCurrentAgentId();
 
     // Initialize sidebar agent shortcuts AFTER config is loaded
     setupSidebarAgents();
-    
+
     // Ensure active sidebar state is synced (setupSidebarAgents should handle this, but double-check)
     if (initialAgentId) {
         setActiveSidebarAgent(initialAgentId);
     }
-    
+
     // Initialize agent name display based on current session
     const agentNameEl = document.getElementById('chat-page-agent-name');
     if (agentNameEl) {
@@ -159,9 +159,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (GATEWAY_CONFIG.host) {
         setTimeout(() => connectToGateway(), 500);
     }
-
-    // Initialize dashboard improvement tasks
-    initDashboardTasks();
 
     // Auto-refresh dashboard state from VPS (tasks/notes only, NOT chat)
     // Reduced to 60s — chat is real-time via gateway, tasks rarely change
@@ -180,30 +177,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Auto-refresh error:', e);
         }
     }, 60000);
-    
+
     // Enter key handlers
     document.getElementById('note-input').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') addNote();
     });
-    
+
     document.getElementById('new-task-title').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') submitTask();
     });
-    
+
     // Docs search
     const docsSearch = document.getElementById('docs-search'); if (docsSearch) docsSearch.addEventListener('input', (e) => {
         renderDocs(e.target.value);
     });
-    
+
     attachChatInputHandlers();
-    
+
     // Close menus when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.task-menu') && !e.target.closest('.task-menu-btn')) {
             closeAllTaskMenus();
         }
     });
-    
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -223,12 +220,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
-    
+
     // Enter key for edit title modal
     document.getElementById('edit-title-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') saveEditedTitle();
     });
-    
+
     // Drag and drop for images on chat page
     setupChatDragDrop();
 });
@@ -237,7 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupChatDragDrop() {
     const chatWrapper = document.querySelector('.chat-page-wrapper');
     if (!chatWrapper) return;
-    
+
     // Prevent default drag behaviors on the whole page
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         chatWrapper.addEventListener(eventName, (e) => {
@@ -245,20 +242,20 @@ function setupChatDragDrop() {
             e.stopPropagation();
         }, false);
     });
-    
+
     // Highlight drop zone
     ['dragenter', 'dragover'].forEach(eventName => {
         chatWrapper.addEventListener(eventName, () => {
             chatWrapper.classList.add('drag-over');
         }, false);
     });
-    
+
     ['dragleave', 'drop'].forEach(eventName => {
         chatWrapper.addEventListener(eventName, () => {
             chatWrapper.classList.remove('drag-over');
         }, false);
     });
-    
+
     // Handle drop
     chatWrapper.addEventListener('drop', (e) => {
         const files = e.dataTransfer?.files;
@@ -296,17 +293,17 @@ window.dashboardAPI = {
     addConsoleLog: (text, type) => {
         if (!state.console) state.console = { logs: [] };
         if (!state.console.logs) state.console.logs = [];
-        
+
         state.console.logs.push({
             text,
             type,
             time: Date.now()
         });
-        
+
         if (state.console.logs.length > 100) {
             state.console.logs = state.console.logs.slice(-100);
         }
-        
+
         saveState();
         renderConsole();
     },

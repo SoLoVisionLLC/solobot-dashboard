@@ -614,19 +614,19 @@ async function saveCurrentChat() {
     // Save current chat messages to state as safeguard
     try {
         const response = await fetch('/api/state');
-        const state = await response.json();
+        const serverState = await response.json();
 
         // Save chat history to archivedChats
-        if (!state.archivedChats) state.archivedChats = {};
-        state.archivedChats[currentSessionName] = {
+        if (!serverState.archivedChats) serverState.archivedChats = {};
+        serverState.archivedChats[currentSessionName] = {
             savedAt: Date.now(),
-            messages: chatHistory.slice(-100) // Last 100 messages
+            messages: state.chat.messages.slice(-100) // Fix #5: was chatHistory (undefined), now state.chat.messages
         };
 
         await fetch('/api/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state)
+            body: JSON.stringify(serverState)
         });
     } catch (e) {
         // Silently fail - safeguard is optional
@@ -751,23 +751,11 @@ function initGateway() {
                     return;
                 }
                 if (result?.messages) {
-                    // ALWAYS merge on reconnect — never replace.
-                    // loadHistoryMessages wipes local messages which causes data loss.
-                    // If chat is empty, try restoring from localStorage first.
-                    if (!state.chat?.messages?.length) {
-                        try {
-                            const key = chatStorageKey();
-                            const saved = localStorage.getItem(key);
-                            if (saved) {
-                                const parsed = JSON.parse(saved);
-                                if (Array.isArray(parsed) && parsed.length > 0) {
-                                    state.chat.messages = parsed;
-                                    sessLog(`[Dashboard] Restored ${parsed.length} messages from localStorage before merge`);
-                                }
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    mergeHistoryMessages(result.messages);
+                    // Fix #2: On initial connect, always do a full authoritative replace from gateway.
+                    // This ensures hard refresh always shows the correct session's messages.
+                    // mergeHistoryMessages() is reserved for the incremental poll path (_doHistoryRefresh).
+                    sessLog(`[Dashboard] onConnected: full history replace with ${result.messages.length} messages`);
+                    loadHistoryMessages(result.messages);
                 }
             }).catch(() => { _historyRefreshInFlight = false; });
 

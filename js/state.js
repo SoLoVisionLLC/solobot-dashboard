@@ -98,12 +98,18 @@ function loadPersistedMessages() {
         if (chatData) {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                state.chat.messages = parsed;
+                // Fix #1: Session-guard messages — drop any tagged with a different session
+                // This prevents stale messages from a previously-visited session appearing on hard refresh
+                const sessionTag = GATEWAY_CONFIG.sessionKey.toLowerCase();
+                state.chat.messages = parsed.filter(m => {
+                    if (!m._sessionKey) return true; // Legacy untagged — keep (conservative)
+                    return m._sessionKey.toLowerCase() === sessionTag;
+                });
                 // Migrate legacy key to session-scoped
                 if (legacyChat && !savedChat) {
                     localStorage.setItem(currentKey, chatData);
                 }
-                return;
+                if (state.chat.messages.length > 0) return;
             }
         }
 
