@@ -1,5 +1,5 @@
-// js/model-validator.js — Model Validator using EXACT chat code
-// Copy-pasted from chat.js sendChatPageMessage() with minimal changes
+// js/model-validator.js — Model Validator with complete response capture
+// Waits for full response and captures rate limit details
 
 const ModelValidator = {
     models: {},
@@ -8,12 +8,115 @@ const ModelValidator = {
     recentTests: [],
     rateLimitTimers: {},
     testResults: [],
+    pendingTestResolvers: new Map(), // For waiting on responses
 
     async init() {
+        // Hook into gateway events to capture responses
+        this.hookGatewayEvents();
         await this.loadModels();
         this.loadRecentTests();
         this.render();
         this.loadTestHistory();
+    },
+
+    hookGatewayEvents() {
+        // Store original handler
+        const originalHandler = window.gateway?.onChatEvent;
+        
+        // Wrap to capture responses for our tests
+        window.gateway.onChatEvent = (payload) => {
+            this.handleGatewayEvent(payload);
+            // Call original handler
+            if (originalHandler) originalHandler(payload);
+        };
+    },
+
+    handleGatewayEvent(payload) {
+        if (!payload || !this.currentTest) return;
+        
+        const state = payload.state;
+        const message = payload.message;
+        
+        // Check for rate limit in the payload
+        if (state === 'error' || payload.error) {
+            const errorInfo = this.parseErrorForRateLimit(payload.error || message);
+            if (errorInfo.isRateLimit && this.currentTest.resolver) {
+                this.currentTest.resolver({
+                    type: 'error',
+                    rateLimit: errorInfo,
+                    error: payload.error || message
+                });
+            } else if (this.currentTest.resolver) {
+                this.currentTest.resolver({
+                    type: 'error',
+                    error: payload.error || message
+                });
+            }
+            return;
+        }
+        
+        // Capture final response
+        if (state === 'final' && message?.role === 'assistant') {
+            let contentText = '';
+            let model = message.model;
+            let provider = message.provider;
+            
+            if (message.content) {
+                for (const part of message.content) {
+                    if (part.type === 'text') {
+                        contentText += part.text || '';
+                    }
+                }
+            }
+            
+            if (this.currentTest.resolver) {
+                this.currentTest.resolver({
+                    type: 'success',
+                    text: contentText,
+                    model: model,
+                    provider: provider,
+                    raw: message
+                });
+            }
+        }
+    },
+
+    parseErrorForRateLimit(error) {
+        if (!error) return { isRateLimit: false };
+        
+        const msg = (typeof error === 'string' ? error : error.message || '').toLowerCase();
+        const isRateLimit = msg.includes('rate limit') || 
+                           msg.includes('too many requests') || 
+                           msg.includes('429') ||
+                           msg.includes('rate_limit');
+        
+        // Extract retry-after
+        let retryAfter = null;
+        let resetTime = null;
+        let limit = null;
+        let remaining = null;
+        
+        // Try to extract from message
+        const retryMatch = msg.match(/retry[\s-]?after[:\s]*(\d+)/i);
+        if (retryMatch) retryAfter = parseInt(retryMatch[1]);
+        
+        const resetMatch = msg.match(/reset[\s]?(?:at|in)[:\s]*([^\n]+)/i);
+        if (resetMatch) resetTime = resetMatch[1].trim();
+        
+        const limitMatch = msg.match(/limit[:\s]*(\d+)/i);
+        if (limitMatch) limit = parseInt(limitMatch[1]);
+        
+        const remainingMatch = msg.match(/remaining[:\s]*(\d+)/i);
+        if (remainingMatch) remaining = parseInt(remainingMatch[1]);
+        
+        return {
+            isRateLimit,
+            retryAfter,
+            resetTime,
+            limit,
+            remaining,
+            rawMessage: typeof error === 'string' ? error : error.message
+        };
     },
 
     async loadModels() {
@@ -22,7 +125,6 @@ const ModelValidator = {
             this.models = await res.json();
             this.filteredModels = { ...this.models };
         } catch (e) {
-            console.error('[ModelValidator] Failed to load models:', e);
             this.showError('Failed to load models: ' + e.message);
         }
     },
@@ -30,18 +132,14 @@ const ModelValidator = {
     loadRecentTests() {
         try {
             const stored = localStorage.getItem('mv_recent_tests');
-            if (stored) {
-                this.recentTests = JSON.parse(stored);
-            }
+            if (stored) this.recentTests = JSON.parse(stored);
         } catch (e) {}
     },
 
     loadTestHistory() {
         try {
             const stored = localStorage.getItem('mv_test_history');
-            if (stored) {
-                this.testResults = JSON.parse(stored);
-            }
+            if (stored) this.testResults = JSON.parse(stored);
         } catch (e) {}
     },
 
@@ -82,9 +180,7 @@ const ModelValidator = {
                 m.id.toLowerCase().includes(search) || 
                 (m.name && m.name.toLowerCase().includes(search))
             );
-            if (filtered.length > 0) {
-                this.filteredModels[provider] = filtered;
-            }
+            if (filtered.length > 0) this.filteredModels[provider] = filtered;
         }
         this.render();
     },
@@ -110,17 +206,11 @@ const ModelValidator = {
             `;
         }).join('');
         
-        container.innerHTML = html || `
-            <div style="padding: 40px; text-align: center; color: var(--text-muted);">
-                <div style="font-size: 32px; margin-bottom: 12px;">🔍</div>
-                <div>No models found</div>
-            </div>
-        `;
+        container.innerHTML = html || `<div style="padding: 40px; text-align: center;"><div style="font-size: 32px; margin-bottom: 12px;">🔍</div><div>No models found</div></div>`;
         
         const countEl = document.getElementById('mv-model-count');
-        if (countEl) {
-            countEl.textContent = `${totalModels} model${totalModels !== 1 ? 's' : ''} available`;
-        }
+        if (countEl) countEl.textContent = `${totalModels} model${totalModels !== 1 ? 's' : ''} available`;
+        
         this.renderRecentTests();
     },
 
@@ -133,7 +223,7 @@ const ModelValidator = {
             `<span class="mv-status-badge ${lastTest.status}">${lastTest.status}</span>` : '';
         
         return `
-            <div class="mv-model-item ${isTesting ? 'testing' : ''}" data-provider="${provider}" data-model="${model.id}">
+            <div class="mv-model-item ${isTesting ? 'testing' : ''}">
                 <div class="mv-model-info">
                     <div class="mv-model-id">${model.id}</div>
                     <div class="mv-model-name">${model.name || model.id}</div>
@@ -173,100 +263,72 @@ const ModelValidator = {
     toggleProvider(header) {
         header.classList.toggle('collapsed');
         const models = header.nextElementSibling;
-        if (models) {
-            models.style.display = header.classList.contains('collapsed') ? 'none' : 'block';
-        }
+        if (models) models.style.display = header.classList.contains('collapsed') ? 'none' : 'block';
     },
 
     // ========================================
-    // EXACT COPY OF CHAT SEND CODE
+    // MAIN TEST FUNCTION - Waits for response
     // ========================================
     async runTest(provider, modelId) {
-        // EXACT check from chat.js
         if (!gateway || !gateway.isConnected()) {
             showToast('Not connected to Gateway. Please connect first.', 'warning');
             return;
         }
 
-        this.currentTest = { provider, modelId };
+        this.currentTest = { provider, modelId, startTime: Date.now() };
         this.render();
         
-        // Show loading (same as chat "isProcessing = true")
+        // Show loading
         document.getElementById('mv-empty-state').style.display = 'none';
         document.getElementById('mv-results-content').classList.remove('visible');
         document.getElementById('mv-loading-state').classList.add('visible');
         document.getElementById('mv-loading-model').textContent = modelId;
 
-        const startTime = Date.now();
         const previousModel = localStorage.getItem('selected_model');
+        const TEST_PROMPT = 'Hello! Please respond with exactly: "Model validation successful."';
+        
+        // Create promise to wait for response
+        const responsePromise = new Promise((resolve) => {
+            this.currentTest.resolver = resolve;
+        });
+        
+        // Timeout after 60 seconds
+        const timeoutPromise = new Promise((resolve) => {
+            setTimeout(() => resolve({ type: 'timeout' }), 60000);
+        });
         
         try {
-            // Set test model (same as chat would use)
+            // Set test model
             localStorage.setItem('selected_model', modelId);
             
-            // EXACT same call as chat: await gateway.sendMessage(text)
-            const TEST_PROMPT = 'Hello! Please respond with exactly: "Model validation successful."';
-            const result = await gateway.sendMessage(TEST_PROMPT);
+            // Send message (this returns immediately with runId)
+            const sendResult = await gateway.sendMessage(TEST_PROMPT);
             
-            const duration = Date.now() - startTime;
+            // Wait for actual response or timeout
+            const result = await Promise.race([responsePromise, timeoutPromise]);
             
-            // Build result (same structure chat would get)
-            let responseText = '';
-            if (result && result.message && result.message.content) {
-                const content = result.message.content;
-                if (Array.isArray(content)) {
-                    responseText = content.map(c => c.text || '').join('');
-                } else {
-                    responseText = String(content);
-                }
-            } else if (typeof result === 'string') {
-                responseText = result;
-            } else {
-                responseText = JSON.stringify(result, null, 2);
+            const duration = Date.now() - this.currentTest.startTime;
+            
+            if (result.type === 'timeout') {
+                throw new Error('Test timed out after 60 seconds. The model did not respond.');
             }
             
-            const resultData = {
-                status: 'pass',
-                durationMs: duration,
-                provider: provider,
-                modelId: modelId,
-                timestamp: new Date().toISOString(),
-                response: { text: responseText, raw: result }
-            };
-            
-            this.displayResults(resultData);
-            this.saveRecentTest(provider, modelId, 'pass');
-            this.saveTestResult(resultData);
+            if (result.type === 'error') {
+                // Handle rate limit
+                if (result.rateLimit?.isRateLimit) {
+                    this.displayRateLimit(result.rateLimit, duration, provider, modelId);
+                } else {
+                    throw new Error(result.error?.message || result.error || 'Unknown error');
+                }
+            } else {
+                // Success
+                this.displaySuccess(result, duration, provider, modelId);
+            }
             
         } catch (err) {
-            const duration = Date.now() - startTime;
-            console.error('[ModelValidator] Test failed:', err);
-            
-            // EXACT same error handling as chat
-            const errorData = {
-                status: this.isRateLimitError(err) ? 'rate-limited' : 'fail',
-                durationMs: duration,
-                provider: provider,
-                modelId: modelId,
-                timestamp: new Date().toISOString(),
-                error: {
-                    message: err.message,
-                    type: err.name || 'Error'
-                }
-            };
-            
-            if (errorData.status === 'rate-limited') {
-                const retryAfter = this.extractRetryAfter(err);
-                this.rateLimitTimers[`${provider}:${modelId}`] = Date.now() + (retryAfter * 1000);
-                this.showRateLimitBanner(retryAfter);
-            }
-            
-            this.displayError(errorData);
-            this.saveRecentTest(provider, modelId, errorData.status);
-            this.saveTestResult(errorData);
-            
+            const duration = Date.now() - this.currentTest.startTime;
+            this.displayError(err, duration, provider, modelId);
         } finally {
-            // Restore model
             if (previousModel) {
                 localStorage.setItem('selected_model', previousModel);
             } else {
@@ -277,57 +339,133 @@ const ModelValidator = {
         }
     },
 
-    // Helper: check if error is rate limit
-    isRateLimitError(error) {
-        if (!error) return false;
-        const msg = (error.message || '').toLowerCase();
-        return msg.includes('rate limit') || msg.includes('429') || error.code === 429;
-    },
-
-    // Helper: extract retry after
-    extractRetryAfter(error) {
-        const msg = (error.message || '');
-        const match = msg.match(/retry[\s-]?after[:\s]*(\d+)/i);
-        return match ? parseInt(match[1]) : 60;
-    },
-
-    displayResults(resultData) {
+    displaySuccess(result, duration, provider, modelId) {
         document.getElementById('mv-loading-state').classList.remove('visible');
         document.getElementById('mv-results-content').classList.add('visible');
         
         document.getElementById('mv-result-title').textContent = '✅ Test Complete';
         document.getElementById('mv-status-value').textContent = 'PASS';
         document.getElementById('mv-status-value').className = 'mv-status-value success';
-        document.getElementById('mv-latency-value').textContent = `${resultData.durationMs}ms`;
-        document.getElementById('mv-model-value').textContent = resultData.modelId;
-        document.getElementById('mv-provider-value').textContent = resultData.provider;
+        document.getElementById('mv-latency-value').textContent = `${duration}ms`;
+        document.getElementById('mv-model-value').textContent = modelId;
+        document.getElementById('mv-provider-value').textContent = provider;
         
         const responseBlock = document.getElementById('mv-response-block');
         responseBlock.className = 'mv-code-block success';
-        responseBlock.textContent = resultData.response.text || 'No response';
+        responseBlock.textContent = result.text || 'No text response';
         
-        document.getElementById('mv-headers-block').textContent = 'WebSocket (no HTTP headers)';
+        document.getElementById('mv-headers-block').textContent = 
+            `Model: ${result.model || 'unknown'}\nProvider: ${result.provider || 'unknown'}\nProtocol: WebSocket`;
+        
+        const resultData = {
+            status: 'pass',
+            durationMs: duration,
+            provider: provider,
+            modelId: modelId,
+            timestamp: new Date().toISOString(),
+            response: {
+                text: result.text,
+                model: result.model,
+                provider: result.provider,
+                raw: result.raw
+            }
+        };
+        
         document.getElementById('mv-raw-block').textContent = JSON.stringify(resultData, null, 2);
+        
+        this.saveRecentTest(provider, modelId, 'pass');
+        this.saveTestResult(resultData);
     },
 
-    displayError(errorData) {
+    displayRateLimit(rateLimitInfo, duration, provider, modelId) {
+        document.getElementById('mv-loading-state').classList.remove('visible');
+        document.getElementById('mv-results-content').classList.add('visible');
+        document.getElementById('mv-rate-limit-banner').style.display = 'flex';
+        
+        document.getElementById('mv-result-title').textContent = '⏳ Rate Limited';
+        document.getElementById('mv-status-value').textContent = 'RATE LIMITED';
+        document.getElementById('mv-status-value').className = 'mv-status-value pending';
+        document.getElementById('mv-latency-value').textContent = `${duration}ms`;
+        document.getElementById('mv-model-value').textContent = modelId;
+        document.getElementById('mv-provider-value').textContent = provider;
+        
+        const responseBlock = document.getElementById('mv-response-block');
+        responseBlock.className = 'mv-code-block pending';
+        
+        let rateLimitText = '⚠️ RATE LIMIT HIT\n\n';
+        rateLimitText += `Error: ${rateLimitInfo.rawMessage || 'Rate limit exceeded'}\n\n`;
+        
+        if (rateLimitInfo.retryAfter) {
+            rateLimitText += `⏱️ Retry After: ${rateLimitInfo.retryAfter} seconds\n`;
+            this.showRateLimitBanner(rateLimitInfo.retryAfter);
+            this.rateLimitTimers[`${provider}:${modelId}`] = Date.now() + (rateLimitInfo.retryAfter * 1000);
+        }
+        
+        if (rateLimitInfo.resetTime) {
+            rateLimitText += `🔄 Reset Time: ${rateLimitInfo.resetTime}\n`;
+        }
+        
+        if (rateLimitInfo.limit) {
+            rateLimitText += `📊 Rate Limit: ${rateLimitInfo.limit} requests\n`;
+        }
+        
+        if (rateLimitInfo.remaining !== null) {
+            rateLimitText += `📉 Remaining: ${rateLimitInfo.remaining}\n`;
+        }
+        
+        responseBlock.textContent = rateLimitText;
+        
+        document.getElementById('mv-headers-block').textContent = 
+            `Protocol: WebSocket\nRate Limited: true`;
+        
+        const resultData = {
+            status: 'rate-limited',
+            durationMs: duration,
+            provider: provider,
+            modelId: modelId,
+            timestamp: new Date().toISOString(),
+            rateLimitInfo: rateLimitInfo
+        };
+        
+        document.getElementById('mv-raw-block').textContent = JSON.stringify(resultData, null, 2);
+        
+        this.saveRecentTest(provider, modelId, 'rate-limited');
+        this.saveTestResult(resultData);
+    },
+
+    displayError(err, duration, provider, modelId) {
         document.getElementById('mv-loading-state').classList.remove('visible');
         document.getElementById('mv-results-content').classList.add('visible');
         
-        const isRL = errorData.status === 'rate-limited';
-        document.getElementById('mv-result-title').textContent = isRL ? '⏳ Rate Limited' : '❌ Test Failed';
-        document.getElementById('mv-status-value').textContent = errorData.status.toUpperCase();
-        document.getElementById('mv-status-value').className = `mv-status-value ${isRL ? 'pending' : 'error'}`;
-        document.getElementById('mv-latency-value').textContent = `${errorData.durationMs}ms`;
-        document.getElementById('mv-model-value').textContent = errorData.modelId;
-        document.getElementById('mv-provider-value').textContent = errorData.provider;
+        document.getElementById('mv-result-title').textContent = '❌ Test Failed';
+        document.getElementById('mv-status-value').textContent = 'FAIL';
+        document.getElementById('mv-status-value').className = 'mv-status-value error';
+        document.getElementById('mv-latency-value').textContent = `${duration}ms`;
+        document.getElementById('mv-model-value').textContent = modelId;
+        document.getElementById('mv-provider-value').textContent = provider;
         
         const responseBlock = document.getElementById('mv-response-block');
-        responseBlock.className = `mv-code-block ${isRL ? 'pending' : 'error'}`;
-        responseBlock.textContent = `Error: ${errorData.error.message}`;
+        responseBlock.className = 'mv-code-block error';
+        responseBlock.textContent = `Error: ${err.message || err}`;
         
-        document.getElementById('mv-headers-block').textContent = 'No headers (error occurred)';
-        document.getElementById('mv-raw-block').textContent = JSON.stringify(errorData, null, 2);
+        document.getElementById('mv-headers-block').textContent = 'Protocol: WebSocket\nError: true';
+        
+        const resultData = {
+            status: 'fail',
+            durationMs: duration,
+            provider: provider,
+            modelId: modelId,
+            timestamp: new Date().toISOString(),
+            error: {
+                message: err.message || String(err),
+                stack: err.stack
+            }
+        };
+        
+        document.getElementById('mv-raw-block').textContent = JSON.stringify(resultData, null, 2);
+        
+        this.saveRecentTest(provider, modelId, 'fail');
+        this.saveTestResult(resultData);
     },
 
     showRateLimitBanner(seconds) {
@@ -356,8 +494,7 @@ const ModelValidator = {
             container.innerHTML = `
                 <div style="padding: 40px; text-align: center; color: #ef4444;">
                     <div style="font-size: 32px; margin-bottom: 12px;">❌</div>
-                    <div>Error</div>
-                    <div style="font-size: 12px; margin-top: 8px; color: var(--text-muted);">${message}</div>
+                    <div>${message}</div>
                 </div>
             `;
         }
@@ -394,9 +531,7 @@ const ModelValidator = {
         if (providers.length > 0) {
             const firstProvider = providers[0];
             const firstModel = this.models[firstProvider][0];
-            if (firstModel) {
-                this.runTest(firstProvider, firstModel.id);
-            }
+            if (firstModel) this.runTest(firstProvider, firstModel.id);
         }
     }
 };
@@ -404,4 +539,4 @@ const ModelValidator = {
 window.ModelValidator = ModelValidator;
 window.initModelValidatorPage = () => ModelValidator.init();
 
-console.log('[ModelValidator] Loaded - uses EXACT chat code');
+console.log('[ModelValidator] Loaded - waits for full response with rate limit capture');
