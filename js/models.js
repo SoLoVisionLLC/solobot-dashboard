@@ -698,6 +698,15 @@ window.currentModel = window.currentModel || 'anthropic/claude-opus-4-5';
  */
 function resolveFullModelId(modelStr) {
     if (!modelStr) return modelStr;
+    
+    // Special handling for OpenRouter which often uses double slashes or gets stripped
+    if (modelStr.includes('moonshotai/') || modelStr.includes('minimax/') || modelStr.includes('deepseek/')) {
+        if (!modelStr.startsWith('openrouter/')) {
+            return `openrouter/${modelStr}`;
+        }
+        return modelStr;
+    }
+
     // Already has a provider prefix
     if (modelStr.includes('/')) return modelStr;
 
@@ -743,7 +752,12 @@ function syncModelDisplay(model, provider) {
 
     // Extract provider from model ID if not provided
     if (!provider && model.includes('/')) {
-        provider = model.split('/')[0];
+        // If it's an OpenRouter model with double slash, provider is always openrouter
+        if (model.includes('moonshotai/') || model.includes('minimax/')) {
+            provider = 'openrouter';
+        } else {
+            provider = model.split('/')[0];
+        }
     }
     if (provider) currentProvider = provider;
 
