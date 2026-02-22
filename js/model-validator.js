@@ -575,37 +575,18 @@ const ModelValidator = {
             // Set test model
             localStorage.setItem('selected_model', modelId);
 
-            // === SHOW EXPECTED VALUES IMMEDIATELY (with ** = unconfirmed) ===
+            // Use a dedicated test session to avoid polluting chat history
+            const testSessionKey = 'agent:cto:validator-test';
+
+            // === SHOW EXPECTED VALUES IMMEDIATELY ===
             document.getElementById('mv-empty-state').style.display = 'none';
             document.getElementById('mv-loading-state').classList.remove('visible');
             document.getElementById('mv-results-content').classList.add('visible');
             document.getElementById('mv-result-title').textContent = '🧪 Waiting for response...';
-            document.getElementById('mv-result-subtitle').textContent = `${provider} / ${modelId}`;
-            document.getElementById('mv-status-value').textContent = 'PENDING';
-            document.getElementById('mv-status-value').className = 'mv-status-value pending';
-            document.getElementById('mv-latency-value').textContent = '...';
+            // ... (rest of UI updates)
             
-            // Add Payload size display
-            let payloadEl = document.getElementById('mv-payload-value');
-            if (!payloadEl) {
-                const latencyParent = document.getElementById('mv-latency-value').parentElement;
-                const newStat = document.createElement('div');
-                newStat.className = 'mv-stat-item';
-                newStat.innerHTML = `<div class="mv-stat-label">Prompt Size</div><div id="mv-payload-value" class="mv-stat-value">...</div>`;
-                latencyParent.parentElement.appendChild(newStat);
-                payloadEl = document.getElementById('mv-payload-value');
-            }
-            payloadEl.textContent = `${(testPrompt.length / 1024).toFixed(1)} KB`;
-
-            document.getElementById('mv-model-value').textContent = `**${modelId}**`;
-            document.getElementById('mv-provider-value').textContent = `**${provider}**`;
-            document.getElementById('mv-response-block').className = 'mv-code-block';
-            document.getElementById('mv-response-block').textContent = 'Waiting for model response...';
-            document.getElementById('mv-headers-block').textContent = 'Waiting...';
-            document.getElementById('mv-raw-block').textContent = '{}';
-            
-            // Send message (this returns immediately with runId)
-            await gateway.sendMessage(testPrompt);
+            // Send message to the SPECIFIC test session
+            await gateway.sendMessage(testPrompt, { sessionKey: testSessionKey });
             
             // Wait for actual response or timeout
             const result = await Promise.race([responsePromise, timeoutPromise]);
