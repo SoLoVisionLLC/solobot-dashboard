@@ -6,23 +6,23 @@
  * - Responsive mobile layout improvements
  */
 
-(function() {
+(function () {
     'use strict';
 
     // =================== PAGE TRANSITIONS ===================
-    
+
     const PageTransitions = {
         duration: 250,
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        
+
         init() {
             this.addTransitionStyles();
             this.hijackNavigation();
         },
-        
+
         addTransitionStyles() {
             if (document.getElementById('page-transition-styles')) return;
-            
+
             const styles = document.createElement('style');
             styles.id = 'page-transition-styles';
             styles.textContent = `
@@ -41,34 +41,53 @@
                     opacity: 0;
                     transform: translateY(-8px);
                 }
+
+                /*
+                 * #page-agents contains a position:fixed toolbar.
+                 * Any transform (even translateY(0)) creates a CSS containing block
+                 * that breaks position:fixed on descendants — the fixed element
+                 * positions relative to the .page instead of the viewport.
+                 * Solution: animate only opacity for this page, no transform.
+                 */
+                #page-agents {
+                    transform: none !important;
+                    will-change: opacity !important;
+                }
+                #page-agents.active {
+                    transform: none !important;
+                }
+                #page-agents.exiting {
+                    transform: none !important;
+                }
             `;
             document.head.appendChild(styles);
         },
-        
+
+
         hijackNavigation() {
             // Override the global showPage function
             const originalShowPage = window.showPage;
             if (!originalShowPage) return;
-            
+
             window.showPage = (pageName, updateURL = true) => {
                 const currentPage = document.querySelector('.page.active');
                 const targetPage = document.getElementById('page-' + pageName);
-                
+
                 if (!targetPage || (currentPage && currentPage.id === targetPage.id)) {
                     return originalShowPage(pageName, updateURL);
                 }
-                
+
                 // Animate out current page
                 if (currentPage) {
                     currentPage.classList.add('exiting');
                     currentPage.classList.remove('active');
                 }
-                
+
                 // Small delay for exit animation
                 setTimeout(() => {
                     if (currentPage) currentPage.classList.remove('exiting');
                     originalShowPage(pageName, updateURL);
-                    
+
                     // Trigger skeleton loading for widgets on new page
                     SkeletonLoader.showForWidgets(targetPage);
                 }, this.duration / 2);
@@ -77,15 +96,15 @@
     };
 
     // =================== SKELETON LOADING ===================
-    
+
     const SkeletonLoader = {
         init() {
             this.addSkeletonStyles();
         },
-        
+
         addSkeletonStyles() {
             if (document.getElementById('skeleton-styles')) return;
-            
+
             const styles = document.createElement('style');
             styles.id = 'skeleton-styles';
             styles.textContent = `
@@ -169,7 +188,7 @@
             `;
             document.head.appendChild(styles);
         },
-        
+
         createSkeleton(type) {
             const templates = {
                 'task-board': `
@@ -241,36 +260,36 @@
                     <div class="skeleton skeleton-text short"></div>
                 `
             };
-            
+
             const wrapper = document.createElement('div');
             wrapper.className = `skeleton-content skeleton-${type}`;
             wrapper.innerHTML = templates[type] || templates['default'];
             return wrapper;
         },
-        
+
         showForWidget(widget, type) {
             const content = widget.querySelector('.bento-widget-content');
             if (!content) return;
-            
+
             // Store original content
             if (!content.dataset.originalContent) {
                 content.dataset.originalContent = content.innerHTML;
             }
-            
+
             content.innerHTML = '';
             content.appendChild(this.createSkeleton(type));
             widget.classList.add('skeleton-widget');
         },
-        
+
         hideForWidget(widget) {
             const content = widget.querySelector('.bento-widget-content');
             if (!content || !content.dataset.originalContent) return;
-            
+
             content.innerHTML = content.dataset.originalContent;
             delete content.dataset.originalContent;
             widget.classList.remove('skeleton-widget');
         },
-        
+
         showForWidgets(container) {
             const widgets = container.querySelectorAll('.bento-widget');
             widgets.forEach(widget => {
@@ -282,10 +301,10 @@
                 else if (widget.classList.contains('bento-terminal')) type = 'terminal';
                 else if (widget.classList.contains('bento-agents')) type = 'agents';
                 else if (widget.classList.contains('bento-channels')) type = 'agents';
-                
+
                 this.showForWidget(widget, type);
             });
-            
+
             // Auto-hide skeletons after delay (simulating data load)
             setTimeout(() => {
                 widgets.forEach(widget => this.hideForWidget(widget));
@@ -294,7 +313,7 @@
     };
 
     // =================== EMPTY STATES ===================
-    
+
     const EmptyStates = {
         illustrations: {
             tasks: `<svg viewBox="0 0 120 120" fill="none" style="width: 80px; height: 80px; opacity: 0.5;">
@@ -325,7 +344,7 @@
                 <path d="M45 60h30M60 45v30" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>`
         },
-        
+
         messages: {
             tasks: {
                 title: 'No tasks yet',
@@ -353,12 +372,12 @@
                 subtitle: 'Items will appear here when available'
             }
         },
-        
+
         create(type, customMessage) {
             const config = this.messages[type] || this.messages.default;
             const illustration = this.illustrations[type] || this.illustrations.default;
             const message = customMessage || config;
-            
+
             const container = document.createElement('div');
             container.className = 'empty-state-container';
             container.innerHTML = `
@@ -377,38 +396,38 @@
                     ` : ''}
                 </div>
             `;
-            
+
             return container;
         },
-        
+
         showIn(container, type, customMessage) {
             if (typeof container === 'string') {
                 container = document.getElementById(container);
             }
             if (!container) return;
-            
+
             container.innerHTML = '';
             container.appendChild(this.create(type, customMessage));
         }
     };
 
     // =================== MOBILE RESPONSIVENESS ===================
-    
+
     const MobileResponsive = {
         breakpoint: 768,
-        
+
         init() {
             this.addMobileStyles();
             this.setupMobileNav();
             this.setupTouchGestures();
             this.handleResize();
-            
+
             window.addEventListener('resize', () => this.handleResize());
         },
-        
+
         addMobileStyles() {
             if (document.getElementById('mobile-responsive-styles')) return;
-            
+
             const styles = document.createElement('style');
             styles.id = 'mobile-responsive-styles';
             styles.textContent = `
@@ -589,109 +608,109 @@
             `;
             document.head.appendChild(styles);
         },
-        
+
         setupMobileNav() {
             // Add mobile menu toggle button for sidebar on smaller screens
             const header = document.querySelector('.app-header');
             if (!header || document.getElementById('mobile-menu-toggle')) return;
-            
+
             const toggleBtn = document.createElement('button');
             toggleBtn.id = 'mobile-menu-toggle';
             toggleBtn.className = 'btn btn-ghost mobile-menu-toggle';
             toggleBtn.innerHTML = '☰';
             toggleBtn.style.cssText = 'padding: 8px; font-size: 18px;';
             toggleBtn.onclick = () => this.toggleMobileSidebar();
-            
+
             const headerLeft = header.querySelector('.flex');
             if (headerLeft) {
                 headerLeft.insertBefore(toggleBtn, headerLeft.firstChild);
             }
         },
-        
+
         toggleMobileSidebar() {
             const sidebar = document.querySelector('.sidebar');
             if (!sidebar) return;
-            
+
             sidebar.classList.toggle('mobile-expanded');
         },
-        
+
         setupTouchGestures() {
             let startX = 0;
             let startY = 0;
             let startTime = 0;
-            
+
             document.addEventListener('touchstart', (e) => {
                 startX = e.touches[0].clientX;
                 startY = e.touches[0].clientY;
                 startTime = Date.now();
             }, { passive: true });
-            
+
             document.addEventListener('touchend', (e) => {
                 const endX = e.changedTouches[0].clientX;
                 const endY = e.changedTouches[0].clientY;
                 const endTime = Date.now();
-                
+
                 const deltaX = endX - startX;
                 const deltaY = endY - startY;
                 const deltaTime = endTime - startTime;
-                
+
                 // Only handle horizontal swipes
                 if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 300) {
                     this.handleSwipe(deltaX > 0 ? 'right' : 'left');
                 }
             }, { passive: true });
-            
+
             // Pull-to-refresh simulation
             this.setupPullToRefresh();
         },
-        
+
         handleSwipe(direction) {
             if (window.innerWidth > this.breakpoint) return;
-            
+
             const pages = window.VALID_PAGES || ['dashboard', 'memory', 'chat', 'system'];
             const currentPage = document.querySelector('.page.active');
             if (!currentPage) return;
-            
+
             const currentId = currentPage.id.replace('page-', '');
             const currentIndex = pages.indexOf(currentId);
-            
+
             if (direction === 'left' && currentIndex < pages.length - 1) {
                 window.showPage(pages[currentIndex + 1]);
             } else if (direction === 'right' && currentIndex > 0) {
                 window.showPage(pages[currentIndex - 1]);
             }
         },
-        
+
         setupPullToRefresh() {
             let pullStartY = 0;
             let isPulling = false;
-            
+
             const indicator = document.createElement('div');
             indicator.className = 'pull-indicator';
             indicator.textContent = 'Pull to refresh';
             document.body.appendChild(indicator);
-            
+
             document.addEventListener('touchstart', (e) => {
                 if (window.scrollY === 0) {
                     pullStartY = e.touches[0].clientY;
                     isPulling = true;
                 }
             }, { passive: true });
-            
+
             document.addEventListener('touchmove', (e) => {
                 if (!isPulling) return;
-                
+
                 const pullDistance = e.touches[0].clientY - pullStartY;
                 if (pullDistance > 80 && window.scrollY === 0) {
                     indicator.classList.add('visible');
                 }
             }, { passive: true });
-            
+
             document.addEventListener('touchend', () => {
                 if (indicator.classList.contains('visible')) {
                     indicator.textContent = 'Refreshing...';
                     indicator.classList.add('spinning');
-                    
+
                     // Trigger refresh
                     setTimeout(() => {
                         location.reload();
@@ -700,7 +719,7 @@
                 isPulling = false;
             }, { passive: true });
         },
-        
+
         handleResize() {
             const isMobile = window.innerWidth <= this.breakpoint;
             document.body.classList.toggle('is-mobile', isMobile);
@@ -709,16 +728,16 @@
     };
 
     // =================== INITIALIZATION ===================
-    
+
     document.addEventListener('DOMContentLoaded', () => {
         PageTransitions.init();
         SkeletonLoader.init();
         MobileResponsive.init();
-        
+
         // Expose utilities globally
         window.SkeletonLoader = SkeletonLoader;
         window.EmptyStates = EmptyStates;
-        
+
         console.log('[Phase 14] UX Polish loaded');
     });
 })();

@@ -17,7 +17,6 @@
 
 /* Memory/products: normal flow inside .app-content (sidebar offset handled by parent margin) */
 #page-memory,
-#page-agents,
 #page-products {
     padding: var(--space-6);
 }

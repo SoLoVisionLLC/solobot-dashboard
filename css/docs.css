@@ -1172,33 +1172,54 @@ body.space-panning {
     color: #d29922;
 }
 
-/* ── Agents Page Sticky Toolbar ── */
-/* The toolbar is a direct child of #page-agents (outside .memory-page).
-   #page-agents has padding: var(--space-6) from chat.css.
-   We use negative margins to bleed edge-to-edge, then re-add horizontal padding. */
+/* ── Agents Page Fixed Toolbar ── */
+/*
+ * Layout truth:
+ *   .header        → position:fixed; top:0; left:64px; height:60px; z-index:100
+ *   .app-content   → margin-left:64px; overflow-x:hidden (does NOT affect position:fixed)
+ *   .agents-toolbar → position:fixed; must sit below header at top:60px; z-index:99
+ *
+ * The toolbar is a DIRECT child of #page-agents (outside .memory-page which has
+ * isolation:isolate — isolation breaks fixed positioning inside it).
+ * Being outside .memory-page means fixed positioning works correctly.
+ */
 .agents-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 50;
+    position: fixed;
+    top: 60px;
+    /* directly below the 60px main header */
+    left: 64px;
+    /* collapsed sidebar width (matches .header and .app-content) */
+    right: 0;
+    z-index: 99;
+    /* below .header (100) so header always wins */
     display: flex;
     align-items: center;
     gap: 10px;
-    /* Bleed out of #page-agents padding on all three sides */
-    margin-top: calc(-1 * var(--space-6));
-    margin-left: calc(-1 * var(--space-6));
-    margin-right: calc(-1 * var(--space-6));
-    margin-bottom: 16px;
-    /* Re-add horizontal padding + vertical breathing room */
-    padding: 10px var(--space-6);
-    background: var(--surface-0);
-    border-bottom: 1px solid var(--border-subtle);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    padding: 0 24px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-default);
+    height: 48px;
+    box-sizing: border-box;
+}
+
+/* When sidebar expands, shift toolbar right to match */
+.sidebar.pinned~.app-content .agents-toolbar,
+.sidebar:hover~.app-content .agents-toolbar {
+    left: 240px;
 }
 
 .agents-toolbar-search {
     flex: 1;
     min-width: 0;
-    max-width: 320px;
+    max-width: 300px;
     font-size: 13px;
+}
+
+/*
+ * #page-agents padding:
+ *   - top: 60px (header) + 48px (toolbar) = 108px
+ *   - sides + bottom: var(--space-6) = 24px (matches other pages)
+ */
+#page-agents {
+    padding: 108px 24px 24px 24px;
 }

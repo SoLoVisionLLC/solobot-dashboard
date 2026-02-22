@@ -36,12 +36,17 @@
   },
   "SOUL.md": {
     "botUpdated": true,
-    "botUpdatedAt": 1771257879619,
+    "botUpdatedAt": 1771764949078,
     "acknowledged": false
   },
   "HEARTBEAT.md": {
     "botUpdated": true,
     "botUpdatedAt": 1771257909619,
+    "acknowledged": false
+  },
+  "RUNNING_CONTEXT.md": {
+    "botUpdated": true,
+    "botUpdatedAt": 1771764949078,
     "acknowledged": false
   }
 }

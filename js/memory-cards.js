@@ -500,6 +500,65 @@
         return renderOrgTree(filter);
     }
 
+    // ── Toolbar update helpers ──
+    // Called by drillInto / backToGrid to swap toolbar content
+    function updateToolbarForAgent(agent, statusLabel, statusClass) {
+        const tb = document.querySelector('.agents-toolbar');
+        if (!tb) return;
+        const org = ORG_TREE[agent.id] || {};
+        tb.innerHTML = `
+            <button class="btn btn-ghost btn-sm" onclick="window._memoryCards.backToGrid()" style="flex-shrink:0; white-space:nowrap;">← Agents</button>
+            <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
+            <span style="font-size:22px; line-height:1; flex-shrink:0;">${org.emoji || agent.emoji || '🤖'}</span>
+            <div style="min-width:0; overflow:hidden;">
+                <div style="font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(org.name || agent.name)}</div>
+                ${org.role ? `<div style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${escapeHtml(org.role)}</div>` : ''}
+            </div>
+            <span class="agent-status-badge ${statusClass}" style="flex-shrink:0;">${statusLabel}</span>
+            <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
+            <button class="btn btn-primary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.switchToAgentChat('${agent.id}')">💬 Chat</button>
+            <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.openAgentMemory('${agent.id}')">🧠 Memory</button>
+            <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" id="agent-ping-btn-${agent.id}" onclick="window._memoryCards.pingAgent('${agent.id}')">⚡ Ping</button>
+            <input type="text" id="memory-search" class="input agents-toolbar-search" placeholder="🔍 Search…"
+                oninput="window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)"
+                style="margin-left:auto;">
+            <div class="memory-layout-toggle" style="flex-shrink:0;">
+                <button id="memory-toggle-grid" title="Org Chart" onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
+                <button id="memory-toggle-list" title="List View" onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
+            </div>
+        `;
+        // Keep active button state correct
+        const layout = getMemoryLayout();
+        const g = tb.querySelector('#memory-toggle-grid');
+        const l = tb.querySelector('#memory-toggle-list');
+        if (g) g.classList.toggle('active', layout !== 'classic');
+        if (l) l.classList.toggle('active', layout === 'classic');
+    }
+
+    function updateToolbarDefault() {
+        const tb = document.querySelector('.agents-toolbar');
+        if (!tb) return;
+        tb.innerHTML = `
+            <input type="text" id="memory-search" class="input agents-toolbar-search"
+                placeholder="🔍  Search agents or files…"
+                oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)}">
+            <button class="btn btn-secondary btn-sm" onclick="syncMemoryFilesNow()">🔄 Sync</button>
+            <div id="sync-status" class="sync-status" style="white-space:nowrap; flex-shrink:0;">
+                <span class="status-dot success"></span>
+                <span id="last-memory-sync" style="font-size:11px; color:var(--text-muted);">--</span>
+            </div>
+            <div class="memory-layout-toggle" style="margin-left:auto; flex-shrink:0;">
+                <button id="memory-toggle-grid" title="Org Chart" onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
+                <button id="memory-toggle-list" title="List View" onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
+            </div>
+        `;
+        const layout = getMemoryLayout();
+        const g = tb.querySelector('#memory-toggle-grid');
+        const l = tb.querySelector('#memory-toggle-list');
+        if (g) g.classList.toggle('active', layout !== 'classic');
+        if (l) l.classList.toggle('active', layout === 'classic');
+    }
+
     function drillInto(agentId) {
         // If agentsData not yet loaded, wait for it
         if (!agentsData || !agentsData.length) {
@@ -525,8 +584,10 @@
         if (window.location.pathname !== '/agents') {
             history.pushState({ page: 'agents', agentId: null }, '', '/agents');
         }
+        updateToolbarDefault();
         renderAgentCardsView();
     }
+
 
     // ── Full Agent Dashboard (replaces simple file list) ──
     function renderDrilledView(container) {
@@ -572,26 +633,12 @@
             .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
             .slice(0, 5);
 
-        container.innerHTML = `
-            <!-- Back Nav -->
-            <div class="agent-drill-header">
-                <button class="btn btn-ghost" onclick="window._memoryCards.backToGrid()">← Org Chart</button>
-                <div class="agent-drill-title">
-                    <span class="org-node-avatar" style="font-size: 28px; width: 42px; height: 42px; line-height:42px; text-align:center; display:inline-block;">${org.emoji || '🤖'}</span>
-                    <div>
-                        <div style="font-size:18px; font-weight:700;">${escapeHtml(org.name || agent.name)}</div>
-                        <div style="font-size:12px; color:var(--text-muted);">${org.role ? escapeHtml(org.role) + ' · ' : ''}${escapeHtml(org.description || '')}</div>
-                    </div>
-                    <span class="agent-status-badge ${statusClass}" style="margin-left:auto;">${statusLabel}</span>
-                </div>
-                <!-- Quick Actions -->
-                <div class="agent-quick-actions">
-                    <button class="btn btn-primary btn-sm" onclick="window._memoryCards.switchToAgentChat('${agent.id}')">💬 Chat</button>
-                    <button class="btn btn-secondary btn-sm" onclick="window._memoryCards.openAgentMemory('${agent.id}')">🧠 Memory</button>
-                    <button class="btn btn-secondary btn-sm" id="agent-ping-btn-${agent.id}" onclick="window._memoryCards.pingAgent('${agent.id}')">⚡ Ping</button>
-                </div>
-            </div>
+        container.innerHTML = ``;
 
+        // Update the fixed toolbar with agent nav + actions
+        updateToolbarForAgent(agent, statusLabel, statusClass);
+
+        container.innerHTML = `
             <!-- Dashboard Grid -->
             <div class="agent-dashboard-grid">
 
