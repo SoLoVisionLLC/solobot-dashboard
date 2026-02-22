@@ -792,32 +792,53 @@ function syncModelDisplay(model, provider) {
     }
 }
 
-// Apply per-session model override from availableSessions (if present)
+// Apply per-session model override — openclaw.json is SOURCE OF TRUTH
 async function applySessionModelOverride(sessionKey) {
     if (!sessionKey) return;
 
-    // === PER-AGENT OVERRIDE TAKES PRIORITY ===
-    // If the user has manually set a model for this agent, use that and skip
-    // the session/gateway model which may contain stale data.
     const agentId = sessionKey.match(/^agent:([^:]+):/)?.[1];
+    let sessionModel = null;
+
+    // === 1. FIRST: Check openclaw.json for agent-specific model (source of truth) ===
     if (agentId) {
-        const agentSavedModel = localStorage.getItem(`agent_model_${agentId}`);
-        if (agentSavedModel) {
-            console.log(`[Dashboard] Using per-agent saved model for ${agentId}: ${agentSavedModel}`);
-            const resolved = resolveFullModelId(agentSavedModel);
-            const provider = resolved.includes('/') ? resolved.split('/')[0] : currentProvider;
-            syncModelDisplay(resolved, provider);
-            // Also patch the session to keep gateway in sync
-            try {
-                if (gateway?.isConnected()) {
-                    gateway.request('sessions.patch', { key: sessionKey, model: resolved });
+        try {
+            const response = await fetch(`/api/models/agent/${agentId}`);
+            if (response.ok) {
+                const agentModel = await response.json();
+                if (agentModel?.modelId && agentModel.modelId !== 'global/default') {
+                    sessionModel = agentModel.modelId;
+                    console.log(`[Dashboard] Using openclaw.json model for ${agentId}: ${sessionModel}`);
                 }
-            } catch (_) {}
-            return;
+            }
+        } catch (e) {
+            // Agent may not have custom model — fall through to global default
         }
     }
 
-    let sessionModel = null;
+    // === 2. SECOND: Check global default in openclaw.json ===
+    if (!sessionModel) {
+        try {
+            const response = await fetch('/api/models/current');
+            if (response.ok) {
+                const modelInfo = await response.json();
+                if (modelInfo?.modelId) {
+                    sessionModel = modelInfo.modelId;
+                    console.log(`[Dashboard] Using global default from openclaw.json: ${sessionModel}`);
+                }
+            }
+        } catch (e) {
+            console.warn('[Dashboard] Failed to read openclaw.json:', e.message);
+        }
+    }
+
+    // === 3. LAST RESORT: Per-agent localStorage (for sessions without config) ===
+    if (!sessionModel && agentId) {
+        const agentSavedModel = localStorage.getItem(`agent_model_${agentId}`);
+        if (agentSavedModel) {
+            sessionModel = agentSavedModel;
+            console.log(`[Dashboard] Using localStorage model for ${agentId}: ${sessionModel}`);
+        }
+    }
 
     // 1. Check local availableSessions cache (model = last used model from sessions.list)
     const session = availableSessions.find(s => s.key === sessionKey);
