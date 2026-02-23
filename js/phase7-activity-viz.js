@@ -339,7 +339,7 @@
             const agents = [
                 { id: 'main', name: 'Main', color: '#ef4444' },
                 { id: 'dev', name: 'DEV', color: '#3b82f6' },
-                { id: 'coo', name: 'COO', color: '#22c55e' },
+                { id: 'atlas', name: 'COO', color: '#22c55e' },
                 { id: 'research', name: 'Research', color: '#8b5cf6' }
             ];
             

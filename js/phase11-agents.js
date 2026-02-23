@@ -235,7 +235,7 @@
     }
 
     function showHandoffDialog(fromAgent) {
-        const agents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax']
+        const agents = ['main', 'dev', 'exec', 'atlas', 'sterling', 'vector', 'knox', 'nova', 'family', 'tax']
             .filter(a => a !== fromAgent);
         
         const buttons = agents.map(agent => {
@@ -281,7 +281,7 @@
 
         // Group sessions by agent
         const agents = {};
-        const knownAgents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'tax', 'sec', 'smm'];
+        const knownAgents = ['main', 'dev', 'exec', 'atlas', 'sterling', 'vector', 'family', 'tax', 'knox', 'nova'];
 
         for (const s of sessions) {
             const match = s.key?.match(/^agent:([^:]+):/);

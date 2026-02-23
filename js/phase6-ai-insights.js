@@ -164,7 +164,7 @@
             
             // Check if any agent has been idle
             const agentActivity = {};
-            const agents = ['main', 'dev', 'coo', 'research'];
+            const agents = ['main', 'dev', 'atlas', 'research'];
             
             agents.forEach(agent => {
                 const agentActs = recentActivity.filter(a => 

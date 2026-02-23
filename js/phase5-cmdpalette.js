@@ -32,7 +32,7 @@
             { id: 'action-task', icon: '✓', title: 'Create Task', desc: 'Add a new task', category: 'Actions', shortcut: 'T', action: () => openNewTaskDetail('todo') },
             { id: 'action-note', icon: '📝', title: 'Quick Note', desc: 'Add a quick note', category: 'Actions', shortcut: 'N', action: () => quickAddNote() },
             { id: 'action-agent-dev', icon: '👨‍💻', title: 'Switch to DEV', desc: 'Switch to developer agent', category: 'Actions', shortcut: 'A D', action: () => switchToAgent('dev') },
-            { id: 'action-agent-coo', icon: '💼', title: 'Switch to COO', desc: 'Switch to operations agent', category: 'Actions', shortcut: 'A C', action: () => switchToAgent('coo') },
+            { id: 'action-agent-coo', icon: '💼', title: 'Switch to COO', desc: 'Switch to operations agent', category: 'Actions', shortcut: 'A C', action: () => switchToAgent('atlas') },
             { id: 'action-agent-main', icon: '🤖', title: 'Switch to Main', desc: 'Switch to main agent', category: 'Actions', shortcut: 'A M', action: () => switchToAgent('main') },
             { id: 'action-focus', icon: '🎯', title: 'Toggle Focus Timer', desc: 'Start/pause Pomodoro', category: 'Actions', shortcut: 'F', action: () => toggleFocusTimer() },
             { id: 'action-sync', icon: '🔄', title: 'Sync from VPS', desc: 'Pull latest state', category: 'Actions', shortcut: 'S', action: () => syncFromVPS() },

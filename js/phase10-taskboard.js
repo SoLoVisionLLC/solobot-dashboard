@@ -66,7 +66,7 @@
         const groups = {};
         
         if (swimlaneGroupBy === 'agent') {
-            const agents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax'];
+            const agents = ['main', 'dev', 'exec', 'atlas', 'sterling', 'vector', 'knox', 'nova', 'family', 'tax'];
             agents.forEach(agent => groups[agent] = []);
             
             filtered.forEach(task => {
@@ -285,7 +285,7 @@
     }
 
     function bulkAssignAgent() {
-        const agents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax'];
+        const agents = ['main', 'dev', 'exec', 'atlas', 'sterling', 'vector', 'knox', 'nova', 'family', 'tax'];
         const agent = prompt(`Assign to agent:\n${agents.join(', ')}`, 'main');
         if (!agent || !agents.includes(agent)) return;
 

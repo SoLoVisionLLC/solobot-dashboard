@@ -11,7 +11,7 @@ function getTaskAgent(task) {
     // 2. Detect from title prefix patterns or description
     const title = (task.title || '').toLowerCase();
     const desc = (task.description || '').toLowerCase();
-    const agents = ['dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax'];
+    const agents = ['dev', 'exec', 'atlas', 'sterling', 'vector', 'knox', 'nova', 'family', 'tax'];
     
     // Check explicit prefixes
     for (const agent of agents) {
@@ -21,9 +21,9 @@ function getTaskAgent(task) {
     // Check title patterns
     if (title.startsWith('solobot-android:') || title.startsWith('android:') || title.includes('dashboard:')) return 'dev';
     if (title.includes('android') || title.includes('api ') || title.includes('fix ') || title.includes('deploy') || title.includes('cache') || title.includes('sync') || title.includes('notification') || title.includes('server.js')) return 'dev';
-    if (title.includes('marketing') || title.includes('social') || title.includes('content')) return 'cmp';
-    if (title.includes('budget') || title.includes('invoice') || title.includes('financial')) return 'cfo';
-    if (title.includes('security') || title.includes('audit')) return 'sec';
+    if (title.includes('marketing') || title.includes('social') || title.includes('content')) return 'vector';
+    if (title.includes('budget') || title.includes('invoice') || title.includes('financial')) return 'sterling';
+    if (title.includes('security') || title.includes('audit')) return 'knox';
     
     return 'main'; // default
 }

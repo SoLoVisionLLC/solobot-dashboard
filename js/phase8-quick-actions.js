@@ -287,7 +287,7 @@
             let currentAgent = 'main';
             
             if (sessionKey.includes('dev')) currentAgent = 'dev';
-            else if (sessionKey.includes('coo')) currentAgent = 'coo';
+            else if (sessionKey.includes('atlas')) currentAgent = 'atlas';
             
             document.querySelectorAll('.quick-agent-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.agent === currentAgent);
