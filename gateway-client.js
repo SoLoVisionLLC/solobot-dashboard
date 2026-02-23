@@ -845,7 +845,6 @@ class GatewayClient {
         const params = {
             message: text,
             sessionKey: normalizedSessionKey,
-            model: modelId,  // Override model for this message
             idempotencyKey: crypto.randomUUID()
         };
 
