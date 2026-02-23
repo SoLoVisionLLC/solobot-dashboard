@@ -6,22 +6,24 @@ window.sessLog = function(...args) { if (SESSION_DEBUG) console.log(...args); }
 function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 
 const AGENT_PERSONAS = {
-    'main':   { name: 'Halo',     role: 'PA' },
-    'exec':   { name: 'Elon',     role: 'CoS' },
-    'cto':    { name: 'Orion',    role: 'CTO' },
-    'coo':    { name: 'Atlas',    role: 'COO' },
-    'cfo':    { name: 'Sterling', role: 'CFO' },
-    'cmp':    { name: 'Vector',   role: 'CMP' },
-    'dev':    { name: 'Dev',      role: 'ENG' },
-    'forge':  { name: 'Forge',   role: 'DEVOPS' },
-    'quill':  { name: 'Quill',   role: 'FE/UI' },
-    'chip':    { name: 'Chip',    role: 'SWE' },
-    'snip':    { name: 'Snip',    role: 'YT' },
-    'sec':     { name: 'Knox',    role: 'SEC' },
-    'smm':    { name: 'Nova',    role: 'SMM' },
-    'family':  { name: 'Haven',   role: 'FAM' },
-    'tax':     { name: 'Ledger',  role: 'TAX' },
-    'docs':    { name: 'Canon',   role: 'DOC' }
+    'main':      { name: 'Halo',     role: 'PA' },
+    'exec':      { name: 'Elon',     role: 'CoS' },
+    'orion':     { name: 'Orion',    role: 'CTO' },
+    'atlas':     { name: 'Atlas',    role: 'COO' },
+    'sterling':  { name: 'Sterling', role: 'CFO' },
+    'vector':    { name: 'Vector',   role: 'CMP' },
+    'dev':       { name: 'Dev',      role: 'ENG' },
+    'forge':     { name: 'Forge',    role: 'DEVOPS' },
+    'quill':     { name: 'Quill',    role: 'FE/UI' },
+    'chip':      { name: 'Chip',     role: 'SWE' },
+    'snip':      { name: 'Snip',     role: 'YT' },
+    'knox':      { name: 'Knox',     role: 'SEC' },
+    'nova':      { name: 'Nova',     role: 'SMM' },
+    'family':    { name: 'Haven',    role: 'FAM' },
+    'tax':       { name: 'Ledger',   role: 'TAX' },
+    'canon':     { name: 'Canon',    role: 'DOC' },
+    'luma':      { name: 'Luma',     role: 'Art' },
+    'sentinel':  { name: 'Sentinel', role: 'Net' }
 };
 
 function normalizeDashboardSessionKey(key) {
