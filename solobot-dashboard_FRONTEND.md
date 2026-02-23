@@ -3,6 +3,7 @@
 > **Purpose:** Complete reference for any agent or developer making UI changes.
 > Read this before touching ANY frontend file. Violations of the layout rules documented
 > here cause hours of debugging (e.g. the `position:fixed` / `transform` story below).
+> **Rule:** Any PR/change that touches frontend behavior or structure must update this file in the same commit.
 
 ---
 
@@ -523,21 +524,36 @@ Agents page: org-chart, drilled agent view, per-agent model config, toolbar mana
 
 ---
 
-### `sidebar-agents.js` (407 lines)
+### `sidebar-agents.js` (grouped departments + DnD)
 
-Dynamic sidebar AGENTS section — reordering, hide/show, activity indicators.
+Dynamic sidebar AGENTS section — department grouping, collapsible sections, drag/drop reordering, hide/show, activity indicators.
 
 **localStorage keys:**
-- `sidebar_agents_order_v1` — Array of agent IDs in display order
+- `sidebar_agents_order_v1` — Legacy flat order (kept for backward compatibility)
 - `sidebar_agents_hidden_v1` — Set of hidden agent IDs
-- `sidebar_agents_prefs_v1` — Object: `{ autoHideInactive: bool }`
+- `sidebar_agents_prefs_v1` — Object: `{ hideInactive: bool, inactivityMs: number }`
+- `sidebar_agents_dept_overrides_v1` — Per-agent department override (for cross-group drag/drop)
+- `sidebar_agents_group_collapsed_v1` — Collapsed group names
+- `sidebar_agents_order_by_dept_v1` — Per-department ordering arrays
+
+**Department model (canonical):**
+- Executive
+- Technology
+- Operations
+- Marketing & Product
+- Finance
+- Family / Household
+
+**Normalization and safety guard:**
+- Agent IDs are normalized through an alias map (`quill→ui`, `orion→cto`, `forge→devops`, etc.) before rendering.
+- Sidebar rendering uses an allowlist of known canonical IDs to prevent accidental display of malformed workspace IDs/template text.
 
 **Key functions:**
-- `loadSidebarAgents()` — Fetches `/api/agents`, renders sidebar `[data-agent-id]` items
-- `applySidebarAgentsOrder()` — Reorders DOM elements to match saved order
+- `loadSidebarAgents()` — Fetches `/api/agents`, normalizes/filters/dedupes, renders grouped sidebar sections
+- `applySidebarAgentsOrder()` — Reorders DOM elements within each department
 - `applySidebarAgentsHidden()` — Shows/hides items based on hidden set
 - `updateSidebarAgentsFromSessions(sessions)` — Called by `sessions.js` after session fetch; updates activity dots
-- `setupSidebarAgentsDragAndDrop()` — Native HTML5 drag-and-drop for sidebar reordering
+- `setupSidebarAgentsDragAndDrop()` — Native HTML5 drag-and-drop within/across groups
 - `openSidebarAgentsModal()` / `renderSidebarAgentsModal()` — "Manage Agents" modal
 
 **Avatar resolution:** Checks `/avatars/<agentId>.png`, then `.svg`, falls back to emoji.

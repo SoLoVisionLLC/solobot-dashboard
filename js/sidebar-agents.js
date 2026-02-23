@@ -15,37 +15,55 @@ const SIDEBAR_AGENT_DEPT_OVERRIDES_KEY = 'sidebar_agents_dept_overrides_v1';
 const SIDEBAR_AGENT_GROUP_COLLAPSED_KEY = 'sidebar_agents_group_collapsed_v1';
 const SIDEBAR_AGENT_ORDER_BY_DEPT_KEY = 'sidebar_agents_order_by_dept_v1';
 
-// Default department mapping (can be overridden by drag/drop across groups)
-const DEFAULT_DEPARTMENTS = {
-    // Leadership / general
-    main: 'Leadership',
-    exec: 'Leadership',
-    coo: 'Leadership',
-    cfo: 'Leadership',
-
-    // Engineering / product
-    dev: 'Engineering',
-    swe: 'Engineering',
-    devops: 'Engineering',
-    cto: 'Engineering',
-    ui: 'Engineering',
-
-    // Security
-    sec: 'Security',
-    net: 'Security',
-
-    // Marketing / growth
-    cmp: 'Marketing',
-    smm: 'Marketing',
-    youtube: 'Marketing',
-
-    // Ops / admin
-    docs: 'Operations',
-    tax: 'Operations',
-    family: 'Personal'
+// Legacy/alias agent IDs mapped to canonical IDs used by session routing
+const AGENT_ID_ALIASES = {
+    quill: 'ui',
+    forge: 'devops',
+    orion: 'cto',
+    atlas: 'coo',
+    sterling: 'cfo',
+    vector: 'cmp',
+    nova: 'smm',
+    snip: 'youtube',
+    knox: 'sec',
+    sentinel: 'net',
+    canon: 'docs',
+    ledger: 'tax',
+    haven: 'family',
+    halo: 'main',
+    elon: 'exec'
 };
 
-const DEPARTMENT_ORDER = ['Leadership', 'Engineering', 'Security', 'Marketing', 'Operations', 'Personal', 'Other'];
+// Departments requested by user (canonical org grouping)
+const DEFAULT_DEPARTMENTS = {
+    main: 'Executive',
+    exec: 'Executive',
+
+    cto: 'Technology',
+    dev: 'Technology',
+    devops: 'Technology',
+    ui: 'Technology',
+    swe: 'Technology',
+    net: 'Technology',
+    sec: 'Technology',
+
+    coo: 'Operations',
+    docs: 'Operations',
+
+    cmp: 'Marketing & Product',
+    smm: 'Marketing & Product',
+    youtube: 'Marketing & Product',
+    art: 'Marketing & Product',
+
+    cfo: 'Finance',
+    tax: 'Finance',
+
+    family: 'Family / Household'
+};
+
+const DEPARTMENT_ORDER = ['Executive', 'Technology', 'Operations', 'Marketing & Product', 'Finance', 'Family / Household', 'Other'];
+
+const ALLOWED_AGENT_IDS = new Set(Object.keys(DEFAULT_DEPARTMENTS));
 
 function getSidebarAgentsPrefs() {
     try {
@@ -137,15 +155,20 @@ function setSidebarOrderByDept(map) {
     } catch { }
 }
 
+function normalizeAgentId(agentId) {
+    const raw = (agentId || '').toLowerCase().trim();
+    return AGENT_ID_ALIASES[raw] || raw;
+}
+
 function getAgentDepartment(agentId) {
     const overrides = getSidebarDeptOverrides();
-    const normalized = (agentId || '').toLowerCase();
+    const normalized = normalizeAgentId(agentId);
     return overrides[normalized] || DEFAULT_DEPARTMENTS[normalized] || 'Other';
 }
 
 function setAgentDepartment(agentId, dept) {
     const overrides = getSidebarDeptOverrides();
-    overrides[(agentId || '').toLowerCase()] = dept;
+    overrides[normalizeAgentId(agentId)] = dept;
     setSidebarDeptOverrides(overrides);
 }
 
@@ -492,11 +515,11 @@ function resolveAvatarUrl(agentId) {
 }
 
 function agentDisplayName(agent) {
-    const id = agent.id || agent.name;
+    const id = normalizeAgentId(agent.id || agent.name);
     const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
     if (persona) return `${persona.name} (${persona.role})`;
-    if (agent.isDefault) return 'Halo (PA)';
-    const name = agent.name || agent.id;
+    if (agent.isDefault || id === 'main') return 'Halo (PA)';
+    const name = agent.name || id;
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
@@ -511,14 +534,36 @@ async function loadSidebarAgents() {
 
         // Include main agent (it's excluded from /api/agents since it uses the shared workspace)
         // Add it at the front if not present
-        const hasMain = agents.some(a => a.isDefault || a.id === 'main');
-        const allAgents = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+        const hasMain = agents.some(a => normalizeAgentId(a.id) === 'main' || a.isDefault);
+        const allAgentsRaw = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+
+        // Normalize IDs, dedupe alias/canonical duplicates, and drop unknown/noise IDs.
+        // This prevents stray workspace names or template text from becoming sidebar agents.
+        const dedupedByCanonicalId = new Map();
+        for (const agent of allAgentsRaw) {
+            const canonicalId = normalizeAgentId(agent.id);
+            if (!ALLOWED_AGENT_IDS.has(canonicalId)) continue;
+
+            const existing = dedupedByCanonicalId.get(canonicalId);
+            const normalizedAgent = {
+                ...agent,
+                id: canonicalId,
+                isDefault: canonicalId === 'main' || agent.isDefault === true
+            };
+
+            // Prefer canonical/native entries over alias entries when both exist
+            if (!existing || existing.id !== canonicalId || agent.id === canonicalId) {
+                dedupedByCanonicalId.set(canonicalId, normalizedAgent);
+            }
+        }
+
+        const allAgents = Array.from(dedupedByCanonicalId.values());
 
         // Sort: default first, then by id
         allAgents.sort((a, b) => {
             if (a.isDefault) return -1;
             if (b.isDefault) return 1;
-            return a.id.localeCompare(b.id);
+            return (a.id || '').localeCompare(b.id || '');
         });
 
         // Group agents by department
