@@ -359,6 +359,14 @@ function playNotificationSound() {
 }
 
 function updateUnreadBadges() {
+    // Build agent -> department map from sidebar DOM (for collapsed group badges)
+    const agentDeptMap = new Map();
+    document.querySelectorAll('.sidebar-agent[data-agent][data-dept]').forEach(el => {
+        const agentId = el.getAttribute('data-agent');
+        const dept = el.getAttribute('data-dept');
+        if (agentId && dept) agentDeptMap.set(agentId, dept);
+    });
+
     // Update session dropdown badges
     document.querySelectorAll('.session-option, [data-session-key]').forEach(el => {
         const key = el.dataset?.sessionKey || el.getAttribute('data-session-key');
@@ -405,6 +413,40 @@ function updateUnreadBadges() {
             dot.textContent = agentUnread > 99 ? '99+' : agentUnread;
         } else if (dot) {
             dot.remove();
+        }
+    });
+
+    // Update department/group header badges (so collapsed groups still show unread)
+    const unreadByDept = new Map();
+    for (const [key, count] of unreadSessions) {
+        const match = String(key || '').match(/^agent:([^:]+):/);
+        const rawAgentId = match ? match[1] : 'main';
+        const agentId = (window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId) || 'main';
+        const dept = agentDeptMap.get(agentId);
+        if (!dept) continue;
+        unreadByDept.set(dept, (unreadByDept.get(dept) || 0) + (count || 0));
+    }
+
+    document.querySelectorAll('.sidebar-agent-group[data-dept]').forEach(groupEl => {
+        const dept = groupEl.getAttribute('data-dept');
+        const header = groupEl.querySelector('.sidebar-agent-group-header');
+        if (!dept || !header) return;
+
+        const groupUnread = unreadByDept.get(dept) || 0;
+        let badge = header.querySelector('.group-unread-badge');
+
+        if (groupUnread > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'group-unread-badge';
+                badge.style.cssText = 'margin-left: 6px; background: var(--brand-red, #BC2026); color: white; border-radius: 999px; min-width: 18px; height: 18px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; pointer-events: none;';
+                header.appendChild(badge);
+            }
+            badge.textContent = groupUnread > 99 ? '99+' : groupUnread;
+            groupEl.classList.add('has-unread');
+        } else {
+            if (badge) badge.remove();
+            groupEl.classList.remove('has-unread');
         }
     });
 

@@ -700,6 +700,11 @@ async function loadSidebarAgents() {
             updateSidebarAgentActivityIndicators(window.availableSessions);
         }
 
+        // Re-apply unread badges after sidebar re-render (notifications.js)
+        if (typeof updateUnreadBadges === 'function') {
+            updateUnreadBadges();
+        }
+
         console.log(`[Sidebar] Loaded ${allAgents.length} agents dynamically`);
     } catch (e) {
         console.warn('[Sidebar] Failed to load agents:', e.message);

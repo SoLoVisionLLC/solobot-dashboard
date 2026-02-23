@@ -556,6 +556,7 @@ Dynamic sidebar AGENTS section — department grouping, collapsible sections, dr
 - `updateSidebarAgentsFromSessions(sessions)` — Called by `sessions.js` after session fetch; updates activity dots
 - `setupSidebarAgentsDragAndDrop()` — Native HTML5 drag-and-drop within/across groups
 - `openSidebarAgentsModal()` / `renderSidebarAgentsModal()` — "Manage Agents" modal
+- Re-renders trigger `updateUnreadBadges()` so unread indicators stay accurate after dynamic sidebar rebuild
 
 **Avatar resolution:** Checks `/avatars/<agentId>.png`, then `.svg`, falls back to emoji.
 
