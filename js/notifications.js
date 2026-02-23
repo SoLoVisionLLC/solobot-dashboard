@@ -434,13 +434,20 @@ function updateUnreadBadges() {
 
         const groupUnread = unreadByDept.get(dept) || 0;
         let badge = header.querySelector('.group-unread-badge');
+        const countBadge = header.querySelector('.sidebar-agent-group-count');
 
         if (groupUnread > 0) {
             if (!badge) {
                 badge = document.createElement('span');
                 badge.className = 'group-unread-badge';
-                badge.style.cssText = 'margin-left: 6px; background: var(--brand-red, #BC2026); color: white; border-radius: 999px; min-width: 18px; height: 18px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; pointer-events: none;';
-                header.appendChild(badge);
+                badge.style.cssText = 'margin-left: auto; margin-right: 6px; background: var(--brand-red, #BC2026); color: white; border-radius: 999px; min-width: 18px; height: 18px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; pointer-events: none;';
+
+                // Keep unread badge inside header, but before the normal group-count pill.
+                if (countBadge) {
+                    header.insertBefore(badge, countBadge);
+                } else {
+                    header.appendChild(badge);
+                }
             }
             badge.textContent = groupUnread > 99 ? '99+' : groupUnread;
             groupEl.classList.add('has-unread');
