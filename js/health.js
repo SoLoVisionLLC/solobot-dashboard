@@ -88,6 +88,13 @@ async function testSingleModel(modelId) {
         const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-').replace(/[^a-zA-Z0-9-]/g, '');
         console.log(`[Health] Testing model ${modelId} using session ${healthSessionKey}`);
 
+        // Patch session to use the target model (same as how chat sets model)
+        try {
+            await gateway.patchSession(healthSessionKey, { model: modelId });
+        } catch (patchErr) {
+            console.warn(`[Health] Session patch failed (may not exist yet): ${patchErr.message}`);
+        }
+
         // Use the SAME method as chat.send but with model override AND explicit session
         // This goes through the exact same WebSocket, auth, and routing as regular chat
         const result = await gateway.sendTestMessage('OK', modelId, healthSessionKey);
