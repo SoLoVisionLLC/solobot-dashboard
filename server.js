@@ -9,6 +9,142 @@ const { exec } = require('child_process');
 process.env.TZ = process.env.TZ || 'America/New_York';
 
 // ============================================
+// Notion Configuration
+// ============================================
+const NOTION_API_KEY = process.env.NOTION_API_KEY;
+const NOTION_DATABASE_ID = '8e85701f-81a6-490f-a859-5c0bc9e52827';
+let notionTasksCache = null;
+let notionLastFetch = 0;
+const NOTION_CACHE_TTL = 60 * 1000; // 1 minute cache
+
+// Notion Status Mapping
+const STATUS_MAP_REV = {
+  'To Do': 'todo',
+  'In Progress': 'progress',
+  'Done': 'done'
+};
+const STATUS_MAP_FWD = {
+  'todo': 'To Do',
+  'progress': 'In Progress',
+  'done': 'Done'
+};
+const PRIORITY_MAP_REV = {
+  'P0 Critical': 0,
+  'P1 High': 1,
+  'P2 Medium': 2,
+  'P3 Low': 3,
+  'High': 1,
+  'Low': 3
+};
+
+async function fetchNotionTasks() {
+  if (!NOTION_API_KEY) return null;
+  
+  // Return cached if fresh
+  if (notionTasksCache && (Date.now() - notionLastFetch < NOTION_CACHE_TTL)) {
+    return notionTasksCache;
+  }
+
+  try {
+    console.log('[Notion] Fetching tasks from database...');
+    const response = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.notion.com',
+        path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${NOTION_API_KEY}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json'
+        }
+      }, res => {
+        let data = '';
+        res.on('data', c => data += c);
+        res.on('end', () => resolve(JSON.parse(data)));
+      });
+      req.on('error', reject);
+      req.write(JSON.stringify({ 
+        page_size: 100, 
+        filter: { 
+          property: 'Status', 
+          select: { 
+            is_not_empty: true 
+          } 
+        } 
+      }));
+      req.end();
+    });
+
+    if (!response.results) {
+      console.error('[Notion] Failed to fetch tasks:', response);
+      return null;
+    }
+
+    // Transform to Dashboard format
+    const tasks = { todo: [], progress: [], done: [], archive: [] };
+    
+    for (const page of response.results) {
+      const props = page.properties;
+      const statusVal = props.Status?.select?.name;
+      const listName = STATUS_MAP_REV[statusVal] || 'todo';
+      
+      const task = {
+        id: page.id,
+        title: props.Task?.title?.[0]?.plain_text || 'Untitled',
+        description: props.Notes?.rich_text?.[0]?.plain_text || '',
+        priority: PRIORITY_MAP_REV[props.Priority?.select?.name] ?? 2,
+        agent: (props['Assigned Agent']?.select?.name || 'Dev').toLowerCase(),
+        created: new Date(page.created_time).getTime(),
+        notionUrl: page.url
+      };
+
+      if (tasks[listName]) {
+        tasks[listName].push(task);
+      }
+    }
+
+    notionTasksCache = tasks;
+    notionLastFetch = Date.now();
+    return tasks;
+  } catch (e) {
+    console.error('[Notion] Error fetching tasks:', e.message);
+    return null;
+  }
+}
+
+async function updateNotionTaskStatus(pageId, newStatus) {
+  if (!NOTION_API_KEY) return;
+  
+  const notionStatus = STATUS_MAP_FWD[newStatus];
+  if (!notionStatus) return;
+
+  try {
+    console.log(`[Notion] Updating task ${pageId} to ${notionStatus}`);
+    const req = https.request({
+      hostname: 'api.notion.com',
+      path: `/v1/pages/${pageId}`,
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      }
+    });
+    req.write(JSON.stringify({
+      properties: {
+        'Status': { select: { name: notionStatus } }
+      }
+    }));
+    req.end();
+    
+    // Invalidate cache to force refresh on next load
+    notionTasksCache = null;
+  } catch (e) {
+    console.error('[Notion] Update failed:', e.message);
+  }
+}
+
+// ============================================
 // Dynamic Model Fetching from OpenClaw Config
 // ============================================
 
@@ -748,7 +884,7 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -763,9 +899,20 @@ const server = http.createServer((req, res) => {
 
   // API Routes
   if (url.pathname === '/api/state') {
+    // Fetch live tasks from Notion
+    const notionTasks = await fetchNotionTasks();
+    
+    // If Notion is available, override local tasks with Notion data
+    const responseState = { ...state };
+    if (notionTasks) {
+      responseState.tasks = notionTasks;
+      // Update version to prevent client from overwriting
+      responseState._taskVersion = (state._taskVersion || 0) + 1;
+    }
+
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
-    return res.end(JSON.stringify(state));
+    return res.end(JSON.stringify(responseState));
   }
 
   if (url.pathname === '/api/sync' && req.method === 'POST') {
@@ -838,6 +985,29 @@ const server = http.createServer((req, res) => {
             delete update.notes;
             protections.notes = true;
           }
+        }
+
+        // ============================================
+        // Notion Sync: Push changes to Notion
+        // ============================================
+        if (update.tasks && !protections.tasks && NOTION_API_KEY) {
+          // Helper to check and update list
+          const syncList = (listName) => {
+            const tasks = update.tasks[listName] || [];
+            tasks.forEach(task => {
+              // We only update status for now. 
+              // Optimization: We could track previous state to avoid API calls, 
+              // but Notion API is fast enough for occasional drags.
+              // Only update if it looks like a Notion ID (UUID with dashes)
+              if (task.id && task.id.length > 20 && task.id.includes('-')) {
+                 updateNotionTaskStatus(task.id, listName);
+              }
+            });
+          };
+          
+          syncList('todo');
+          syncList('progress');
+          syncList('done');
         }
 
         state = { ...state, ...update, lastSync: Date.now() };
@@ -926,90 +1096,14 @@ const server = http.createServer((req, res) => {
   }
 
   // ===================
-  // NOTION TASKS API
+  // LEGACY NOTION TASKS API (Removed)
   // ===================
 
-  const NOTION_API_CACHE_TTL = 60000; // 60 seconds
-  let notionCache = { tasks: [], timestamp: 0 };
+  // Legacy code removed
 
-  async function fetchNotionTasks() {
-    const now = Date.now();
-    if (notionCache.tasks.length > 0 && (now - notionCache.timestamp) < NOTION_API_CACHE_TTL) {
-      return { ...notionCache, cached: true };
-    }
+    // Removed apiKey block
 
-    const NOTION_API_KEY_PATH = process.env.NOTION_API_KEY_PATH || path.join(os.homedir(), '.config', 'notion', 'api_key');
-    const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || '426bc82e-256d-4bfc-9e23-2254cd16f87f';
-
-    let apiKey;
-    try {
-      apiKey = fs.readFileSync(NOTION_API_KEY_PATH, 'utf8').trim();
-    } catch (err) {
-      console.error('[Notion] Failed to read API key:', err.message);
-      return { error: 'Notion API key not configured', cached: false };
-    }
-
-    try {
-      const response = await new Promise((resolve, reject) => {
-        const req = https.request({
-          hostname: 'api.notion.com',
-          path: `/v1/data_sources/${NOTION_DATABASE_ID}/query`,
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Notion-Version': '2025-09-03',
-            'Content-Type': 'application/json'
-          }
-        }, (res) => {
-          let body = '';
-          res.on('data', chunk => body += chunk);
-          res.on('end', () => {
-            try {
-              resolve(JSON.parse(body));
-            } catch (e) {
-              reject(new Error(`Failed to parse Notion response: ${e.message}`));
-            }
-          });
-        });
-        req.on('error', reject);
-        req.write(JSON.stringify({})); // Empty request body for default query
-        req.end();
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Notion API error');
-      }
-
-      if (!response.results) {
-        console.error('[Notion] Unexpected response structure:', JSON.stringify(response).slice(0, 500));
-        throw new Error('Notion API returned unexpected response (no results array)');
-      }
-
-      const tasks = response.results.map(page => {
-        const props = page.properties;
-        return {
-          id: page.id,
-          title: getNotionProperty(props.Task || props.Name || props.Title || props.title, 'title'),
-          description: getNotionProperty(props.Notes || props.Description || props.description, 'rich_text'),
-          status: getNotionProperty(props.Status || props.status, 'select'),
-          priority: mapNotionPriority(props.Priority || props.priority),
-          owner: getNotionProperty(props['Assigned Agent'] || props.Assigned || props.owner, 'select'),
-          dueDate: getNotionDate(props['Due Date'] || props.Due || props.DueDate || props.date),
-          url: page.url
-        };
-      });
-
-      notionCache = { tasks, timestamp: now };
-      return { tasks, timestamp: now.toISOString(), cached: false };
-    } catch (err) {
-      console.error('[Notion] Fetch error:', err.message);
-      // Return cached data on error if available
-      if (notionCache.tasks.length > 0) {
-        return { ...notionCache, cached: true, error: err.message };
-      }
-      return { error: err.message, cached: false };
-    }
-  }
+    // Legacy fetch logic removed
 
   function getNotionProperty(prop, type) {
     if (!prop) return '';

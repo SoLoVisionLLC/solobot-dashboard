@@ -10,6 +10,43 @@ const SIDEBAR_AGENTS_ORDER_KEY = 'sidebar_agents_order_v1';
 const SIDEBAR_AGENTS_HIDDEN_KEY = 'sidebar_agents_hidden_v1';
 const SIDEBAR_AGENTS_PREFS_KEY = 'sidebar_agents_prefs_v1';
 
+// Grouping / departments
+const SIDEBAR_AGENT_DEPT_OVERRIDES_KEY = 'sidebar_agents_dept_overrides_v1';
+const SIDEBAR_AGENT_GROUP_COLLAPSED_KEY = 'sidebar_agents_group_collapsed_v1';
+const SIDEBAR_AGENT_ORDER_BY_DEPT_KEY = 'sidebar_agents_order_by_dept_v1';
+
+// Default department mapping (can be overridden by drag/drop across groups)
+const DEFAULT_DEPARTMENTS = {
+    // Leadership / general
+    main: 'Leadership',
+    exec: 'Leadership',
+    coo: 'Leadership',
+    cfo: 'Leadership',
+
+    // Engineering / product
+    dev: 'Engineering',
+    swe: 'Engineering',
+    devops: 'Engineering',
+    cto: 'Engineering',
+    ui: 'Engineering',
+
+    // Security
+    sec: 'Security',
+    net: 'Security',
+
+    // Marketing / growth
+    cmp: 'Marketing',
+    smm: 'Marketing',
+    youtube: 'Marketing',
+
+    // Ops / admin
+    docs: 'Operations',
+    tax: 'Operations',
+    family: 'Personal'
+};
+
+const DEPARTMENT_ORDER = ['Leadership', 'Engineering', 'Security', 'Marketing', 'Operations', 'Personal', 'Other'];
+
 function getSidebarAgentsPrefs() {
     try {
         return JSON.parse(localStorage.getItem(SIDEBAR_AGENTS_PREFS_KEY) || '{}');
@@ -40,6 +77,7 @@ function setSidebarAgentsHiddenSet(set) {
 }
 
 function getSidebarAgentsOrder() {
+    // Legacy global order (kept for backwards compatibility)
     try {
         const arr = JSON.parse(localStorage.getItem(SIDEBAR_AGENTS_ORDER_KEY) || '[]');
         return Array.isArray(arr) ? arr : [];
@@ -54,6 +92,63 @@ function setSidebarAgentsOrder(order) {
     } catch { }
 }
 
+function getSidebarDeptOverrides() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+        return {};
+    }
+}
+
+function setSidebarDeptOverrides(map) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY, JSON.stringify(map || {}));
+    } catch { }
+}
+
+function getSidebarCollapsedGroupsSet() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY) || '[]');
+        return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function setSidebarCollapsedGroupsSet(set) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY, JSON.stringify(Array.from(set || [])));
+    } catch { }
+}
+
+function getSidebarOrderByDept() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+        return {};
+    }
+}
+
+function setSidebarOrderByDept(map) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY, JSON.stringify(map || {}));
+    } catch { }
+}
+
+function getAgentDepartment(agentId) {
+    const overrides = getSidebarDeptOverrides();
+    const normalized = (agentId || '').toLowerCase();
+    return overrides[normalized] || DEFAULT_DEPARTMENTS[normalized] || 'Other';
+}
+
+function setAgentDepartment(agentId, dept) {
+    const overrides = getSidebarDeptOverrides();
+    overrides[(agentId || '').toLowerCase()] = dept;
+    setSidebarDeptOverrides(overrides);
+}
+
 function getSidebarAgentsContainer() {
     return document.getElementById('sidebar-agents-list');
 }
@@ -64,33 +159,46 @@ function getSidebarAgentElements() {
     return Array.from(container.querySelectorAll('.sidebar-agent[data-agent]'));
 }
 
-function applySidebarAgentsOrder() {
+function getSidebarGroupElements() {
     const container = getSidebarAgentsContainer();
-    if (!container) return;
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('.sidebar-agent-group[data-dept]'));
+}
 
-    const order = getSidebarAgentsOrder();
-    if (!order.length) return;
+function getGroupListEl(dept) {
+    const container = getSidebarAgentsContainer();
+    if (!container) return null;
+    return container.querySelector(`.sidebar-agent-group[data-dept="${CSS.escape(dept)}"] .sidebar-agent-group-list`);
+}
 
-    const map = new Map();
-    for (const el of getSidebarAgentElements()) {
-        map.set(el.getAttribute('data-agent'), el);
+function applySidebarAgentsOrder() {
+    // Apply ordering within each department group.
+    const byDept = getSidebarOrderByDept();
+
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        if (!dept || !listEl) continue;
+
+        const desired = Array.isArray(byDept[dept]) ? byDept[dept] : [];
+        if (!desired.length) continue;
+
+        const els = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]'));
+        const map = new Map(els.map(el => [el.getAttribute('data-agent'), el]));
+
+        for (const id of desired) {
+            const el = map.get(id);
+            if (el) listEl.appendChild(el);
+            map.delete(id);
+        }
+        for (const el of map.values()) listEl.appendChild(el);
+
+        // Save normalized order for this group
+        const normalized = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]')).map(el => el.getAttribute('data-agent'));
+        byDept[dept] = normalized;
     }
 
-    // Append in saved order first
-    for (const id of order) {
-        const el = map.get(id);
-        if (el) container.appendChild(el);
-        map.delete(id);
-    }
-
-    // Append any new agents not in saved order
-    for (const el of map.values()) {
-        container.appendChild(el);
-    }
-
-    // Save normalized order (includes any new agents)
-    const normalized = getSidebarAgentElements().map(el => el.getAttribute('data-agent'));
-    setSidebarAgentsOrder(normalized);
+    setSidebarOrderByDept(byDept);
 }
 
 function applySidebarAgentsHidden() {
@@ -147,11 +255,23 @@ function updateSidebarAgentsFromSessions(availableSessions) {
 
 let sidebarAgentsDragging = false;
 
+function persistDeptOrdersFromDOM() {
+    const byDept = {};
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        if (!dept || !listEl) continue;
+        byDept[dept] = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]'))
+            .map(el => el.getAttribute('data-agent'));
+    }
+    setSidebarOrderByDept(byDept);
+}
+
 function setupSidebarAgentsDragAndDrop() {
     const els = getSidebarAgentElements();
     if (!els.length) return;
 
-    // Add a drag handle (if not present) and make elements draggable
+    // Make agent elements draggable + ensure handle
     for (const el of els) {
         el.setAttribute('draggable', 'true');
         el.classList.add('draggable');
@@ -161,7 +281,6 @@ function setupSidebarAgentsDragAndDrop() {
             handle.className = 'agent-drag-handle';
             handle.title = 'Drag to reorder';
             handle.textContent = '⠿';
-            // Prevent handle clicks from triggering agent switch
             handle.addEventListener('click', (e) => e.stopPropagation());
             handle.addEventListener('mousedown', (e) => e.stopPropagation());
             el.insertBefore(handle, el.firstChild);
@@ -177,9 +296,7 @@ function setupSidebarAgentsDragAndDrop() {
         el.addEventListener('dragend', () => {
             sidebarAgentsDragging = false;
             el.classList.remove('dragging');
-            // Persist current DOM order
-            const order = getSidebarAgentElements().map(x => x.getAttribute('data-agent'));
-            setSidebarAgentsOrder(order);
+            persistDeptOrdersFromDOM();
         });
 
         el.addEventListener('dragover', (e) => {
@@ -189,16 +306,65 @@ function setupSidebarAgentsDragAndDrop() {
 
         el.addEventListener('drop', (e) => {
             e.preventDefault();
-            const container = getSidebarAgentsContainer();
-            if (!container) return;
-
             const draggedId = e.dataTransfer.getData('text/plain');
-            const draggedEl = container.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
+            if (!draggedId) return;
+
+            const draggedEl = document.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
             if (!draggedEl || draggedEl === el) return;
 
-            // Insert dragged before drop target
-            container.insertBefore(draggedEl, el);
+            // If dropped onto an agent, insert before it (within that agent's department list)
+            const targetDept = el.getAttribute('data-dept') || getAgentDepartment(el.getAttribute('data-agent'));
+            const listEl = getGroupListEl(targetDept);
+            if (!listEl) return;
+
+            // Re-home if moved across departments
+            if (draggedEl.getAttribute('data-dept') !== targetDept) {
+                setAgentDepartment(draggedId, targetDept);
+            }
+
+            listEl.insertBefore(draggedEl, el);
+            draggedEl.setAttribute('data-dept', targetDept);
+            persistDeptOrdersFromDOM();
         });
+    }
+
+    // Allow dropping into empty space within a department group
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        const headerEl = groupEl.querySelector('.sidebar-agent-group-header');
+        if (!dept || !listEl) continue;
+
+        const onDropIntoGroup = (e) => {
+            e.preventDefault();
+            const draggedId = e.dataTransfer.getData('text/plain');
+            if (!draggedId) return;
+            const draggedEl = document.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
+            if (!draggedEl) return;
+
+            if (draggedEl.getAttribute('data-dept') !== dept) {
+                setAgentDepartment(draggedId, dept);
+            }
+
+            listEl.appendChild(draggedEl);
+            draggedEl.setAttribute('data-dept', dept);
+            persistDeptOrdersFromDOM();
+        };
+
+        listEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        listEl.addEventListener('drop', onDropIntoGroup);
+
+        // Header drop = quick move to group (Notion-ish)
+        if (headerEl) {
+            headerEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+            headerEl.addEventListener('drop', onDropIntoGroup);
+        }
     }
 
     // Guard: if user clicks while dragging, ignore
@@ -295,7 +461,12 @@ function renderSidebarAgentsModal() {
 }
 
 function resetSidebarAgentsOrder() {
-    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch { }
+    try {
+        localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY);
+    } catch { }
     // Reload page for clean order restore
     location.reload();
 }
@@ -350,25 +521,115 @@ async function loadSidebarAgents() {
             return a.id.localeCompare(b.id);
         });
 
-        container.innerHTML = allAgents.map(agent => {
-            const avatarUrl = resolveAvatarUrl(agent.id);
-            const displayName = agentDisplayName(agent);
-            const emoji = agent.emoji || '';
-            const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+        // Group agents by department
+        const groups = {};
+        for (const agent of allAgents) {
+            const dept = getAgentDepartment(agent.id);
+            groups[dept] = groups[dept] || [];
+            groups[dept].push(agent);
+        }
+
+        // Stable group order (Notion-ish)
+        const groupNames = Array.from(new Set([
+            ...DEPARTMENT_ORDER,
+            ...Object.keys(groups).sort()
+        ])).filter((d) => groups[d] && groups[d].length > 0);
+
+        // Apply stored per-dept ordering, or default sort by id
+        const orderByDept = getSidebarOrderByDept();
+        for (const dept of groupNames) {
+            const desired = Array.isArray(orderByDept[dept]) ? orderByDept[dept] : [];
+            if (!desired.length) {
+                groups[dept].sort((a, b) => {
+                    if (a.isDefault) return -1;
+                    if (b.isDefault) return 1;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
+                continue;
+            }
+
+            const map = new Map(groups[dept].map(a => [a.id, a]));
+            const ordered = [];
+            for (const id of desired) {
+                const a = map.get(id);
+                if (a) ordered.push(a);
+                map.delete(id);
+            }
+            for (const a of map.values()) ordered.push(a);
+            groups[dept] = ordered;
+        }
+
+        const collapsed = getSidebarCollapsedGroupsSet();
+
+        container.innerHTML = groupNames.map((dept) => {
+            const isCollapsed = collapsed.has(dept);
+            const listHtml = groups[dept].map(agent => {
+                const avatarUrl = resolveAvatarUrl(agent.id);
+                const displayName = agentDisplayName(agent);
+                const emoji = agent.emoji || '';
+                const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+
+                return `
+                    <div class="sidebar-agent" data-agent="${agent.id}" data-dept="${dept}">
+                        <img class="agent-avatar"
+                             src="${avatarUrl}"
+                             alt="${agent.id}"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
+                            ${emoji || fallbackInitial}
+                        </span>
+                        <span class="sidebar-item-text">${displayName}</span>
+                    </div>
+                `;
+            }).join('');
 
             return `
-                <div class="sidebar-agent" data-agent="${agent.id}">
-                    <img class="agent-avatar"
-                         src="${avatarUrl}"
-                         alt="${agent.id}"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                    <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
-                        ${emoji || fallbackInitial}
-                    </span>
-                    <span class="sidebar-item-text">${displayName}</span>
+                <div class="sidebar-agent-group" data-dept="${dept}">
+                    <div class="sidebar-agent-group-header" role="button" tabindex="0" title="Toggle ${dept}">
+                        <span class="sidebar-agent-group-caret">${isCollapsed ? '▶' : '▼'}</span>
+                        <span class="sidebar-agent-group-title">${dept}</span>
+                        <span class="sidebar-agent-group-count">${groups[dept].length}</span>
+                    </div>
+                    <div class="sidebar-agent-group-list" style="${isCollapsed ? 'display:none;' : ''}">
+                        ${listHtml}
+                    </div>
                 </div>
             `;
         }).join('');
+
+        // Group collapse handlers
+        for (const groupEl of getSidebarGroupElements()) {
+            const dept = groupEl.getAttribute('data-dept');
+            const header = groupEl.querySelector('.sidebar-agent-group-header');
+            const list = groupEl.querySelector('.sidebar-agent-group-list');
+            const caret = groupEl.querySelector('.sidebar-agent-group-caret');
+            if (!dept || !header || !list || !caret) continue;
+
+            const toggle = () => {
+                const set = getSidebarCollapsedGroupsSet();
+                const nowCollapsed = !set.has(dept);
+                if (nowCollapsed) set.add(dept); else set.delete(dept);
+                setSidebarCollapsedGroupsSet(set);
+                const isCollapsedNow = set.has(dept);
+                list.style.display = isCollapsedNow ? 'none' : '';
+                caret.textContent = isCollapsedNow ? '▶' : '▼';
+            };
+
+            header.addEventListener('click', (e) => {
+                // Don't collapse when dropping onto header
+                if (sidebarAgentsDragging) return;
+                e.preventDefault();
+                e.stopPropagation();
+                toggle();
+            });
+
+            header.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                }
+            });
+        }
 
         // Re-init after dynamic load
         applySidebarAgentsOrder();

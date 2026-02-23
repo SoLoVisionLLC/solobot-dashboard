@@ -830,6 +830,39 @@ class GatewayClient {
         return requestPromise;
     }
 
+    /**
+     * Send a test message with a specific model - uses EXACT same path as sendMessage.
+     * This is for model validation to ensure tests go through the same gateway path as chat.
+     */
+    async sendTestMessage(text, modelId, explicitSessionKey = null) {
+        if (!this.connected) {
+            return Promise.reject(new Error('Not connected'));
+        }
+
+        const targetSession = explicitSessionKey || this.sessionKey;
+        const normalizedSessionKey = normalizeSessionKey(targetSession);
+
+        const params = {
+            message: text,
+            sessionKey: normalizedSessionKey,
+            model: modelId,  // Override model for this message
+            idempotencyKey: crypto.randomUUID()
+        };
+
+        gwLog(`[Gateway] 🧪 TEST message to session "${normalizedSessionKey}" with model "${modelId}"`);
+        gwLog(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
+        try {
+            const result = await this._request('chat.send', params);
+            gwLog(`[Gateway] ✅ Test message sent, runId: ${result?.runId || 'none'}`);
+            return result;
+        } catch (err) {
+            const msg = String(err?.message || '');
+            console.error(`[Gateway] ❌ Failed to send test message: ${msg}`);
+            throw err;
+        }
+    }
+
     loadHistory() {
         if (!this.connected) {
             return Promise.reject(new Error('Not connected'));

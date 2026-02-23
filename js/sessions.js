@@ -515,17 +515,18 @@ async function executeSessionSwitch(sessionKey) {
 
         showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
 
-        // FIRST: nuke all rendering state synchronously — before any async work
+        // FIRST: Save current chat messages BEFORE clearing state
+        // (order matters: save first, then clear)
+        await saveCurrentChat();
+        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
+
+        // THEN: nuke all rendering state synchronously
         streamingText = '';
         _streamingSessionKey = '';
         isProcessing = false;
         state.chat.messages = [];
         renderChat();
         renderChatPage();
-
-        // 1. Save current chat and cache it for fast switching back
-        await saveCurrentChat();
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
 
         // 2. Increment session version to invalidate any in-flight history loads
         sessionVersion++;

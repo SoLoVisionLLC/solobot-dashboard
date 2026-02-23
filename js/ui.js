@@ -28,9 +28,23 @@ function closeConfirmModal(result) {
 
 // Toast notification - replaces alert()
 function showToast(message, type = 'info', duration = 4000) {
+    // Centralized notification rendering via showNotificationToast for a single look/feel.
+    const normalized = String(message ?? '');
+    const title = type === 'error' ? 'Warning' :
+                  type === 'warning' ? 'Notice' :
+                  type === 'success' ? 'Status' :
+                  'Info';
+
+    if (typeof showNotificationToast === 'function') {
+        // showNotificationToast keeps all notification UI centralized in one style.
+        showNotificationToast(title, normalized, null, null, duration);
+        return;
+    }
+
+    // Fallback to legacy toast styling if notifications module is not loaded yet.
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
     const toast = document.createElement('div');
     toast.style.cssText = `
         padding: 12px 20px;
@@ -42,18 +56,18 @@ function showToast(message, type = 'info', duration = 4000) {
         max-width: 350px;
         word-wrap: break-word;
     `;
-    
+
     // Set color based on type
-    switch(type) {
+    switch (type) {
         case 'success': toast.style.background = 'var(--success)'; break;
         case 'error': toast.style.background = 'var(--error)'; break;
         case 'warning': toast.style.background = '#f59e0b'; break;
         default: toast.style.background = 'var(--accent)'; break;
     }
-    
-    toast.textContent = message;
+
+    toast.textContent = normalized;
     container.appendChild(toast);
-    
+
     // Auto-remove after duration
     setTimeout(() => {
         toast.style.animation = 'fadeOut 0.3s ease';
