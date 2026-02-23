@@ -18,7 +18,7 @@ function initHealthPage() {
 function updateHealthGatewayStatus() {
     const statusEl = document.getElementById('health-gateway-status');
     if (!statusEl) return;
-    
+
     if (gateway && gateway.isConnected()) {
         statusEl.innerHTML = `
             <span style="font-size: 20px;">✅</span>
@@ -38,7 +38,7 @@ async function loadHealthModels() {
         const response = await fetch('/api/models/list');
         if (!response.ok) throw new Error('Failed to fetch models');
         const data = await response.json();
-        
+
         // API returns models grouped by provider: { anthropic: [...], google: [...] }
         // Flatten into a single array
         let models = [];
@@ -53,13 +53,13 @@ async function loadHealthModels() {
                 }
             }
         }
-        
+
         const countEl = document.getElementById('health-model-count');
         if (countEl) countEl.textContent = models.length;
-        
+
         // Render initial model list (not tested yet)
         renderHealthModelList(models, {});
-        
+
         return models;
     } catch (error) {
         console.error('[Health] Failed to load models:', error);
@@ -69,11 +69,11 @@ async function loadHealthModels() {
     }
 }
 
-// Test a single model using the EXACT same code path as regular chat
-// Uses gateway.sendTestMessage() which is identical to sendMessage() but with a model override
+// Test a single model using EXACT same path as chat (same session, same WebSocket, same auth)
+// Uses gateway.sendTestMessage() which mirrors sendMessage() but with a model override
 async function testSingleModel(modelId) {
     const startTime = Date.now();
-    
+
     try {
         // Check if gateway is connected
         if (!gateway || !gateway.isConnected()) {
@@ -83,24 +83,26 @@ async function testSingleModel(modelId) {
                 latencyMs: Date.now() - startTime
             };
         }
+
+        // Create a unique health-check session for this model to ensure isolation
+        const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+        console.log(`[Health] Testing model ${modelId} using session ${healthSessionKey}`);
+
+        // Use the SAME method as chat.send but with model override AND explicit session
+        // This goes through the exact same WebSocket, auth, and routing as regular chat
+        const result = await gateway.sendTestMessage('OK', modelId, healthSessionKey);
         
-        console.log(`[Health] Testing model ${modelId} using SAME path as chat`);
-        
-        // Use the SAME method as chat.send but with model override
-        // This goes through the exact same WebSocket, auth, and routing
-        const result = await gateway.sendTestMessage('Respond with exactly: OK', modelId);
-        
-        // The response will come back as a chat event (same as normal chat)
-        // We wait for it using the same mechanism that handles regular chat responses
         const latencyMs = Date.now() - startTime;
+        
+        console.log(`[Health] ✅ Model ${modelId} test sent successfully, runId: ${result?.runId}`);
         
         return {
             success: true,
             runId: result?.runId,
             latencyMs,
-            note: 'Response will arrive via chat event (same as regular chat)'
+            note: 'Message sent via chat.send (same as chat). Response arrives via chat events.'
         };
-        
+
     } catch (error) {
         return {
             success: false,
@@ -111,78 +113,78 @@ async function testSingleModel(modelId) {
 }
 
 // Run health checks on all models
-window.runAllModelTests = async function() {
+window.runAllModelTests = async function () {
     if (healthTestInProgress) {
         showToast('Health check already in progress', 'warning');
         return;
     }
-    
+
     healthTestInProgress = true;
     healthTestResults = {};
-    
+
     const testBtn = document.getElementById('test-all-btn');
     const progressEl = document.getElementById('health-test-progress');
-    
+
     if (testBtn) {
         testBtn.disabled = true;
         testBtn.innerHTML = '⏳ Testing...';
     }
-    
+
     try {
         // Load models
         const models = await loadHealthModels();
-        
+
         if (models.length === 0) {
             showToast('No models found to test', 'warning');
             return;
         }
-        
+
         // Mark all as testing
         models.forEach(m => {
             healthTestResults[m.id] = { status: 'testing' };
         });
         renderHealthModelList(models, healthTestResults);
-        
+
         // Test each model sequentially
         let tested = 0;
         let passed = 0;
         let failed = 0;
-        
+
         for (const model of models) {
             tested++;
             if (progressEl) {
                 progressEl.textContent = `Testing ${tested}/${models.length}...`;
             }
-            
+
             const result = await testSingleModel(model.id);
-            
+
             healthTestResults[model.id] = {
                 status: result.success ? 'success' : 'error',
                 error: result.error,
                 latencyMs: result.latencyMs,
                 response: result.response
             };
-            
+
             if (result.success) passed++;
             else failed++;
-            
+
             // Re-render after each test for real-time updates
             renderHealthModelList(models, healthTestResults);
         }
-        
+
         // Update last test time
         const lastTestEl = document.getElementById('health-last-test');
         if (lastTestEl) {
             lastTestEl.textContent = new Date().toLocaleTimeString();
         }
-        
+
         if (progressEl) {
             progressEl.textContent = `✅ ${passed} passed, ❌ ${failed} failed`;
         }
-        
-        showToast(`Health check complete: ${passed}/${models.length} models working`, 
+
+        showToast(`Health check complete: ${passed}/${models.length} models working`,
             failed > 0 ? 'warning' : 'success');
-        
+
     } catch (error) {
         console.error('[Health] Test failed:', error);
         showToast('Health check failed: ' + error.message, 'error');
@@ -199,7 +201,7 @@ window.runAllModelTests = async function() {
 function renderHealthModelList(models, results) {
     const container = document.getElementById('health-model-list');
     if (!container) return;
-    
+
     if (models.length === 0) {
         container.innerHTML = `
             <div style="padding: var(--space-4); color: var(--text-muted); text-align: center;">
@@ -208,10 +210,10 @@ function renderHealthModelList(models, results) {
         `;
         return;
     }
-    
+
     container.innerHTML = models.map(model => {
         const result = results[model.id] || { status: 'pending' };
-        
+
         let statusIcon, statusColor, statusText;
         switch (result.status) {
             case 'success':
@@ -234,11 +236,11 @@ function renderHealthModelList(models, results) {
                 statusColor = 'var(--text-muted)';
                 statusText = 'Not tested';
         }
-        
+
         // Extract provider from model ID (e.g., 'anthropic/claude-3-5-sonnet' -> 'anthropic')
-        const provider = model.id.split('/')[0] || 'unknown';
+        const provider = window.getProviderFromModelId ? window.getProviderFromModelId(model.id) : (model.id.split('/')[0] || 'unknown');
         const modelName = model.id.split('/').slice(1).join('/') || model.id;
-        
+
         return `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle);">
                 <div style="display: flex; align-items: center; gap: var(--space-3);">
@@ -265,11 +267,11 @@ function renderHealthModelList(models, results) {
 }
 
 // Test single model from UI button
-window.testSingleModelUI = async function(modelId) {
+window.testSingleModelUI = async function (modelId) {
     const models = await loadHealthModels();
     healthTestResults[modelId] = { status: 'testing' };
     renderHealthModelList(models, healthTestResults);
-    
+
     const result = await testSingleModel(modelId);
     healthTestResults[modelId] = {
         status: result.success ? 'success' : 'error',
@@ -277,7 +279,7 @@ window.testSingleModelUI = async function(modelId) {
         latencyMs: result.latencyMs
     };
     renderHealthModelList(models, healthTestResults);
-    
+
     showToast(result.success ? `${modelId.split('/').pop()} is working!` : `${modelId.split('/').pop()} failed: ${result.error}`,
         result.success ? 'success' : 'error');
 };
@@ -285,7 +287,7 @@ window.testSingleModelUI = async function(modelId) {
 // Hook into page navigation to init health page
 const originalShowPage = window.showPage;
 if (typeof originalShowPage === 'function') {
-    window.showPage = function(pageName, updateURL = true) {
+    window.showPage = function (pageName, updateURL = true) {
         originalShowPage(pageName, updateURL);
         if (pageName === 'health') {
             initHealthPage();
