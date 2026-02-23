@@ -105,6 +105,43 @@ function isSystemMessage(text, from) {
     return false;
 }
 
+// Temporary guardrail: this environment's OpenAI Codex OAuth flow cannot request
+// api.responses.write, so gpt-5.3-codex fails with 404/cooldown loops.
+const MODEL_GUARD_BLOCKLIST = {
+    'openai-codex/gpt-5.3-codex': true
+};
+
+function pickSafeOpenAICodexFallback(requestedModel) {
+    const candidates = [
+        'openai-codex/gpt-5.2',
+        'openai-codex/gpt-5.3-codex-spark',
+        'openai-codex/gpt-5.1-codex-mini'
+    ];
+
+    // Prefer models actually visible in gateway model inventory when available.
+    const gatewayProviderModels = window._gatewayModels?.['openai-codex'] || [];
+    const available = new Set(gatewayProviderModels.map(m => m.id));
+    if (available.size > 0) {
+        const found = candidates.find(m => available.has(m));
+        if (found) return found;
+    }
+
+    // Fallback to known-safe order.
+    return candidates.find(m => m !== requestedModel) || 'openai-codex/gpt-5.2';
+}
+
+function normalizeGuardedModel(modelId) {
+    const resolved = resolveFullModelId(modelId);
+    if (!resolved) return { model: resolved, redirected: false };
+
+    if (MODEL_GUARD_BLOCKLIST[resolved]) {
+        const fallback = pickSafeOpenAICodexFallback(resolved);
+        return { model: fallback, redirected: true, original: resolved };
+    }
+
+    return { model: resolved, redirected: false };
+}
+
 // Provider and Model selection functions
 window.changeProvider = function () {
     const providerSelect = document.getElementById('provider-select');
@@ -243,7 +280,7 @@ window.refreshModels = async function () {
 window.changeSessionModel = async function () {
     const modelSelect = document.getElementById('model-select');
     const selectedModelRaw = modelSelect?.value;
-    const selectedModel = selectedModelRaw === 'global/default'
+    let selectedModel = selectedModelRaw === 'global/default'
         ? selectedModelRaw
         : resolveFullModelId(selectedModelRaw);
 
@@ -258,6 +295,16 @@ window.changeSessionModel = async function () {
     } else if (!selectedModel.includes('/')) {
         showToast('Invalid model format. Please select a valid model.', 'warning');
         return;
+    }
+
+    if (selectedModel !== 'global/default') {
+        const guard = normalizeGuardedModel(selectedModel);
+        if (guard.redirected) {
+            selectedModel = guard.model;
+            if (modelSelect) modelSelect.value = selectedModel;
+            showToast(`gpt-5.3-codex is unavailable in this OAuth profile. Using ${selectedModel.split('/').pop()} instead.`, 'warning');
+            console.warn(`[Dashboard] Model guard redirected ${guard.original} -> ${selectedModel}`);
+        }
     }
 
     if (!gateway || !gateway.isConnected()) {
@@ -388,7 +435,7 @@ window.changeSessionModel = async function () {
 window.changeGlobalModel = async function () {
     const modelSelect = document.getElementById('setting-model');
     const providerSelect = document.getElementById('setting-provider');
-    const selectedModel = modelSelect?.value;
+    let selectedModel = modelSelect?.value;
     const selectedProvider = providerSelect?.value;
 
     if (!selectedModel) {
@@ -399,6 +446,14 @@ window.changeGlobalModel = async function () {
     if (!selectedModel.includes('/')) {
         showToast('Invalid model format. Please select a valid model.', 'warning');
         return;
+    }
+
+    const guard = normalizeGuardedModel(selectedModel);
+    if (guard.redirected) {
+        selectedModel = guard.model;
+        if (modelSelect) modelSelect.value = selectedModel;
+        showToast(`gpt-5.3-codex is unavailable in this OAuth profile. Global default set to ${selectedModel.split('/').pop()}.`, 'warning');
+        console.warn(`[Dashboard] Global model guard redirected ${guard.original} -> ${selectedModel}`);
     }
 
     if (selectedModel.includes('ERROR')) {
@@ -827,8 +882,9 @@ function syncModelDisplay(model, provider) {
         }
     }
 
-    // Resolve bare model names to full provider/model IDs
-    model = resolveFullModelId(model);
+    // Resolve bare model names to full provider/model IDs and guard blocked models.
+    const guarded = normalizeGuardedModel(model);
+    model = guarded.model;
 
     if (model === currentModel && provider === currentProvider) return;
 
@@ -925,7 +981,23 @@ async function applySessionModelOverride(sessionKey) {
     }
 
     if (sessionModel) {
-        sessionModel = resolveFullModelId(sessionModel);
+        const guard = normalizeGuardedModel(sessionModel);
+        sessionModel = guard.model;
+
+        if (guard.redirected) {
+            console.warn(`[Dashboard] Session model guard redirected ${guard.original} -> ${sessionModel} for ${sessionKey}`);
+            if (window._configModelLocks) {
+                window._configModelLocks[sessionKey] = sessionModel;
+            }
+
+            // Best-effort: patch active session immediately so chat sends stop failing.
+            try {
+                if (gateway && gateway.isConnected()) {
+                    gateway.request('sessions.patch', { key: sessionKey, model: sessionModel });
+                }
+            } catch (_) { }
+        }
+
         const provider = window.getProviderFromModelId(sessionModel) || currentProvider;
         syncModelDisplay(sessionModel, provider);
     } else {
@@ -1066,4 +1138,3 @@ const defaultSettings = {
     showProducts: true,
     showDocs: true
 };
-

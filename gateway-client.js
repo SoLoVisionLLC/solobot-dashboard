@@ -697,6 +697,18 @@ class GatewayClient {
             console.error(`[Gateway] ❌ Chat error state: ${errorMsg || 'Unknown error'}`);
         }
 
+        // Check if this is a health check response - resolve the promise
+        if (window._healthCheckResolvers && eventSessionKey) {
+            const healthResolver = window._healthCheckResolvers[eventSessionKey];
+            if (healthResolver) {
+                if (state === 'complete') {
+                    healthResolver.resolve({ content: contentText, state });
+                } else if (state === 'error') {
+                    healthResolver.reject(new Error(errorMsg || 'Chat error'));
+                }
+            }
+        }
+
         this.onChatEvent({
             state,
             content: contentText,

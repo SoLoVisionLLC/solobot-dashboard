@@ -88,19 +88,49 @@ async function testSingleModel(modelId) {
         const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-').replace(/[^a-zA-Z0-9-]/g, '');
         console.log(`[Health] Testing model ${modelId} using session ${healthSessionKey}`);
 
-        // Use the SAME method as chat.send but with model override AND explicit session
-        // This goes through the exact same WebSocket, auth, and routing as regular chat
+        // Patch session to use the target model (ensures gateway uses correct model)
+        try {
+            await gateway.patchSession(healthSessionKey, { model: modelId });
+        } catch (patchErr) {
+            console.warn(`[Health] Session patch failed (may not exist yet): ${patchErr.message}`);
+        }
+
+        // Wait for the response event on this specific session
+        const responsePromise = new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error('Response timeout (60s)'));
+            }, 60000);
+            
+            // Store resolver so chat event handler can call it
+            window._healthCheckResolvers = window._healthCheckResolvers || {};
+            window._healthCheckResolvers[healthSessionKey] = {
+                resolve: (res) => {
+                    clearTimeout(timer);
+                    delete window._healthCheckResolvers[healthSessionKey];
+                    resolve(res);
+                },
+                reject: (err) => {
+                    clearTimeout(timer);
+                    delete window._healthCheckResolvers[healthSessionKey];
+                    reject(err);
+                }
+            };
+        });
+
+        // Send test message via chat.send - same path as regular chat
         const result = await gateway.sendTestMessage('OK', modelId, healthSessionKey);
-        
+        console.log(`[Health] Message sent, runId: ${result?.runId}, waiting for response...`);
+
+        // Wait for actual LLM response
+        const response = await responsePromise;
         const latencyMs = Date.now() - startTime;
         
-        console.log(`[Health] ✅ Model ${modelId} test sent successfully, runId: ${result?.runId}`);
+        console.log(`[Health] ✅ Model ${modelId} responded: ${response?.content?.substring(0, 50)}...`);
         
         return {
             success: true,
-            runId: result?.runId,
-            latencyMs,
-            note: 'Message sent via chat.send (same as chat). Response arrives via chat events.'
+            response: response?.content || 'OK',
+            latencyMs
         };
 
     } catch (error) {
