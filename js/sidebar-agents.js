@@ -523,6 +523,16 @@ function agentDisplayName(agent) {
     return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
+function sanitizeAgentEmoji(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return '';
+    // Reject template/noise phrases leaking from uninitialized IDENTITY.md files.
+    if (/your signature|pick one|workspace-relative|data uri|ghost in the machine/i.test(v)) return '';
+    // Keep short values only (emoji, small token).
+    if (v.length > 8) return '';
+    return v;
+}
+
 async function loadSidebarAgents() {
     const container = document.getElementById('sidebar-agents-list');
     if (!container) return;
@@ -611,7 +621,7 @@ async function loadSidebarAgents() {
             const listHtml = groups[dept].map(agent => {
                 const avatarUrl = resolveAvatarUrl(agent.id);
                 const displayName = agentDisplayName(agent);
-                const emoji = agent.emoji || '';
+                const emoji = sanitizeAgentEmoji(agent.emoji);
                 const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
 
                 return `

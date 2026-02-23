@@ -547,6 +547,7 @@ Dynamic sidebar AGENTS section — department grouping, collapsible sections, dr
 **Normalization and safety guard:**
 - Agent IDs are normalized through an alias map (`quill→ui`, `orion→cto`, `forge→devops`, etc.) before rendering.
 - Sidebar rendering uses an allowlist of known canonical IDs to prevent accidental display of malformed workspace IDs/template text.
+- Emoji fallback text is sanitized (`sanitizeAgentEmoji`) so placeholder phrases from uninitialized `IDENTITY.md` files never render in the sidebar.
 
 **Key functions:**
 - `loadSidebarAgents()` — Fetches `/api/agents`, normalizes/filters/dedupes, renders grouped sidebar sections

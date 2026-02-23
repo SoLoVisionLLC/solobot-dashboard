@@ -1299,10 +1299,25 @@ const server = http.createServer(async (req, res) => {
           const identityPath = path.join(agentDir, 'IDENTITY.md');
           if (fs.existsSync(identityPath)) {
             const identityContent = fs.readFileSync(identityPath, 'utf8');
-            const nameMatch = identityContent.match(/\*\*Name:\*\*\s*(.+)/);
-            const emojiMatch = identityContent.match(/\*\*Emoji:\*\*\s*(.+)/);
-            if (nameMatch) name = nameMatch[1].trim();
-            if (emojiMatch) emoji = emojiMatch[1].trim();
+
+            // Parse strictly on the same list-item line only to avoid capturing
+            // template placeholder text on the following line.
+            const nameMatch = identityContent.match(/^\s*-\s*\*\*Name:\*\*\s*(.+)\s*$/mi);
+            const emojiMatch = identityContent.match(/^\s*-\s*\*\*Emoji:\*\*\s*(.+)\s*$/mi);
+
+            if (nameMatch) {
+              const parsed = String(nameMatch[1] || '').trim();
+              if (parsed && !parsed.includes('pick something you like')) name = parsed;
+            }
+
+            if (emojiMatch) {
+              const parsed = String(emojiMatch[1] || '').trim();
+              // Guard against template/noise strings (e.g. "your signature — pick one...")
+              const looksLikeTemplate = /your signature|pick one|workspace-relative|data uri|ghost in the machine/i.test(parsed);
+              if (parsed && parsed.length <= 8 && !looksLikeTemplate) {
+                emoji = parsed;
+              }
+            }
           }
         } catch { /* skip */ }
 
