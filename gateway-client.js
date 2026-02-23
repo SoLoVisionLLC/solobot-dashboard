@@ -124,6 +124,20 @@ function _normalizeGatewayTextForSignature(text) {
     return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
+function _isHtmlGatewayError(raw) {
+    const msg = String(raw || '').toLowerCase();
+    return msg.includes('<html') && (msg.includes('bad gateway') || msg.includes('cloudflare'));
+}
+
+function _normalizeGatewayErrorMessage(raw) {
+    const msg = String(raw || '').trim();
+    if (!msg) return '';
+    if (_isHtmlGatewayError(msg)) {
+        return 'Temporary upstream outage (502 Bad Gateway via Cloudflare). Please retry.';
+    }
+    return msg;
+}
+
 function _buildGatewayImageSignature(imageDataUrls) {
     if (!Array.isArray(imageDataUrls)) return '';
     return imageDataUrls.map((imageDataUrl) => {
@@ -663,6 +677,7 @@ class GatewayClient {
         let role = message?.role || payload.role || 'assistant';
 
         let errorMsg = message?.errorMessage || payload.errorMessage || payload?.error?.message;
+        errorMsg = _normalizeGatewayErrorMessage(errorMsg);
 
         // OpenClaw's embedded agent SDK strips underlying error info in favor of a standard Rate Limit response
         // Re-inject the model so the dashboard user knows which fallback triggered it
@@ -716,6 +731,7 @@ class GatewayClient {
             role,
             sessionKey: eventSessionKey,
             errorMessage: errorMsg ? `${errorMsg} (Model: ${message?.model || payload.model || 'unknown'})` : null,
+            errorKind: _isHtmlGatewayError(message?.errorMessage || payload.errorMessage || payload?.error?.message) ? 'upstream_transient' : null,
             // Pass through model info for dashboard to use
             model: message?.model || payload.model,
             provider: message?.provider || payload.provider,

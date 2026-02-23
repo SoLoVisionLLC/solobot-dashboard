@@ -7,6 +7,22 @@ if (window.__chatRuntimeMark !== CHAT_RUNTIME_MARK) {
     window.__chatRuntimeMark = CHAT_RUNTIME_MARK;
     console.log(`[Chat] chat.js loaded (${CHAT_RUNTIME_MARK})`);
 }
+window._chatPendingSends = window._chatPendingSends || new Map();
+
+function trackPendingSend(runId, payload) {
+    if (!runId || !payload) return;
+    const map = window._chatPendingSends;
+    if (!(map instanceof Map)) return;
+    map.set(runId, {
+        ...payload,
+        retries: Number(payload.retries || 0),
+        createdAt: Date.now()
+    });
+    if (map.size > 100) {
+        const oldest = [...map.entries()].sort((a, b) => (a[1]?.createdAt || 0) - (b[1]?.createdAt || 0)).slice(0, map.size - 100);
+        for (const [key] of oldest) map.delete(key);
+    }
+}
 
 /**
  * Converts plain text to HTML with clickable links.
@@ -741,12 +757,21 @@ async function sendChatMessage() {
     // Send via Gateway WebSocket
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
+        let result = null;
         if (hasImages) {
             // Send with image attachments (send all images)
             const imageDataArray = imagesToSend.map(img => img.data);
-            await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
+            result = await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
-            await gateway.sendMessage(text);
+            result = await gateway.sendMessage(text);
+        }
+
+        if (result?.runId) {
+            trackPendingSend(result.runId, {
+                sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+                text: hasImages ? (text || 'Image') : text,
+                images: hasImages ? imagesToSend.map(img => img.data).filter(Boolean) : []
+            });
         }
     } catch (err) {
         console.error('Failed to send message:', err);
@@ -1972,5 +1997,4 @@ function clearChatSearchHighlights() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
 });
-
 

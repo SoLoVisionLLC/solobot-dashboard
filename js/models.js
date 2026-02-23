@@ -105,40 +105,9 @@ function isSystemMessage(text, from) {
     return false;
 }
 
-// Temporary guardrail: this environment's OpenAI Codex OAuth flow cannot request
-// api.responses.write, so gpt-5.3-codex fails with 404/cooldown loops.
-const MODEL_GUARD_BLOCKLIST = {
-    'openai-codex/gpt-5.3-codex': true
-};
-
-function pickSafeOpenAICodexFallback(requestedModel) {
-    const candidates = [
-        'openai-codex/gpt-5.2',
-        'openai-codex/gpt-5.3-codex-spark',
-        'openai-codex/gpt-5.1-codex-mini'
-    ];
-
-    // Prefer models actually visible in gateway model inventory when available.
-    const gatewayProviderModels = window._gatewayModels?.['openai-codex'] || [];
-    const available = new Set(gatewayProviderModels.map(m => m.id));
-    if (available.size > 0) {
-        const found = candidates.find(m => available.has(m));
-        if (found) return found;
-    }
-
-    // Fallback to known-safe order.
-    return candidates.find(m => m !== requestedModel) || 'openai-codex/gpt-5.2';
-}
-
 function normalizeGuardedModel(modelId) {
     const resolved = resolveFullModelId(modelId);
     if (!resolved) return { model: resolved, redirected: false };
-
-    if (MODEL_GUARD_BLOCKLIST[resolved]) {
-        const fallback = pickSafeOpenAICodexFallback(resolved);
-        return { model: fallback, redirected: true, original: resolved };
-    }
-
     return { model: resolved, redirected: false };
 }
 

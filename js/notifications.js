@@ -15,6 +15,85 @@ if (window.__notificationsRuntimeMark !== NOTIFICATIONS_RUNTIME_MARK) {
 const FINAL_DEDUPE_WINDOW_MS = 15000;
 const recentFinalFingerprints = new Map(); // fingerprint -> timestamp
 let _streamingRunId = null;
+const TRANSIENT_RETRY_DELAY_MS = 1400;
+const MAX_TRANSIENT_RETRIES_PER_RUN = 1;
+const _retryScheduledForRun = new Set();
+
+function isTransientGatewayError(errorMessage, errorKind) {
+    if (errorKind === 'upstream_transient') return true;
+    const msg = String(errorMessage || '').toLowerCase();
+    if (!msg) return false;
+    if (msg.includes('502 bad gateway')) return true;
+    if (msg.includes('cloudflare')) return true;
+    return msg.includes('<html') && msg.includes('bad gateway');
+}
+
+function clearPendingSendByRunId(runId) {
+    if (!runId) return;
+    const map = window._chatPendingSends;
+    if (map instanceof Map) map.delete(runId);
+    _retryScheduledForRun.delete(runId);
+}
+
+function tryRetryTransientSend({ runId, sessionKey, errorMessage, errorKind }) {
+    if (!runId) return;
+    if (!isTransientGatewayError(errorMessage, errorKind)) return;
+    if (_retryScheduledForRun.has(runId)) return;
+
+    const map = window._chatPendingSends;
+    if (!(map instanceof Map)) return;
+    const pending = map.get(runId);
+    if (!pending) return;
+
+    const activeSession = String(currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const pendingSession = String(pending.sessionKey || sessionKey || '').toLowerCase();
+    if (!activeSession || !pendingSession || activeSession !== pendingSession) return;
+    if (Number(pending.retries || 0) >= MAX_TRANSIENT_RETRIES_PER_RUN) return;
+
+    _retryScheduledForRun.add(runId);
+    showToast('Transient gateway outage detected. Retrying once...', 'warning');
+
+    setTimeout(async () => {
+        const latest = map.get(runId);
+        if (!latest) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+        if (Number(latest.retries || 0) >= MAX_TRANSIENT_RETRIES_PER_RUN) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+        if (!gateway || !gateway.isConnected()) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+
+        latest.retries = Number(latest.retries || 0) + 1;
+        map.set(runId, latest);
+
+        try {
+            let retryResult = null;
+            if (Array.isArray(latest.images) && latest.images.length > 0) {
+                retryResult = await gateway.sendMessageWithImages(latest.text || 'Image', latest.images);
+            } else {
+                retryResult = await gateway.sendMessage(latest.text || '');
+            }
+            if (retryResult?.runId) {
+                map.set(retryResult.runId, {
+                    ...latest,
+                    createdAt: Date.now()
+                });
+            }
+            map.delete(runId);
+            showToast('Retry sent after temporary upstream error.', 'success');
+        } catch (err) {
+            console.error('[Notifications] Auto-retry failed:', err);
+            showToast('Retry failed. Please send once more.', 'warning');
+        } finally {
+            _retryScheduledForRun.delete(runId);
+        }
+    }, TRANSIENT_RETRY_DELAY_MS);
+}
 
 function normalizeMessageText(text) {
     return String(text || '').replace(/\r\n/g, '\n');
@@ -611,7 +690,7 @@ function handleChatEvent(event) {
     if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
         window.ModelValidator.handleGatewayEvent(event);
     }
-    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind } = event;
 
     // HARD GATE: only render events for the active session. Period.
     // Cross-session notifications are handled separately by onCrossSessionMessage.
@@ -709,6 +788,7 @@ function handleChatEvent(event) {
             break;
 
         case 'final':
+            clearPendingSendByRunId(runId);
             // Final response from assistant
             const streamedText = normalizeMessageText(streamingText);
             const payloadText = normalizeMessageText(content);
@@ -762,6 +842,7 @@ function handleChatEvent(event) {
             break;
 
         case 'error':
+            tryRetryTransientSend({ runId, sessionKey, errorMessage, errorKind });
             addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
             streamingText = '';
             isProcessing = false;
