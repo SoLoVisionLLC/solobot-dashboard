@@ -1974,13 +1974,10 @@ const server = http.createServer(async (req, res) => {
       // Final fallback: hardcoded defaults
       const models = {
         'openai-codex': [
-          { id: 'openai-codex/gpt-5.2-codex', name: 'GPT-5.2 Codex ⭐', tier: 'flagship' }
+          { id: 'openai-codex/gpt-5.3-codex', name: 'GPT-5.3 Codex ⭐', tier: 'flagship' }
         ],
-        anthropic: [
-          { id: 'anthropic/claude-opus-4-5', name: 'Claude Opus 4.5', tier: 'flagship' }
-        ],
-        'google-antigravity': [
-          { id: 'google-antigravity/claude-opus-4-5-thinking', name: 'Claude Opus 4.5 Thinking', tier: 'flagship' }
+        google: [
+          { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'fast' }
         ],
         moonshot: [
           { id: 'moonshot/kimi-k2-0905-preview', name: 'Kimi K2', tier: 'flagship' }

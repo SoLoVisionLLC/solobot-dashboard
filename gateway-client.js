@@ -52,7 +52,7 @@ function normalizeGatewayModelId(modelId) {
     if (modelId === 'global/default' || modelId.includes('/')) return modelId;
 
     const knownPrefixes = {
-        claude: 'anthropic',
+        claude: 'openrouter',
         gpt: 'openai-codex',
         o1: 'openai',
         o3: 'openai',

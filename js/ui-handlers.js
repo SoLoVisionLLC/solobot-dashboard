@@ -56,16 +56,16 @@ async function openSettingsModal() {
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
-        // Fallback
-        document.getElementById('current-provider-display').textContent = 'anthropic';
-        document.getElementById('current-model-display').textContent = 'anthropic/claude-opus-4-5';
-        document.getElementById('setting-provider').value = 'anthropic';
-        await updateModelDropdown('anthropic');
+        // Fallback (approved providers only)
+        document.getElementById('current-provider-display').textContent = 'openai-codex';
+        document.getElementById('current-model-display').textContent = 'openai-codex/gpt-5.3-codex';
+        document.getElementById('setting-provider').value = 'openai-codex';
+        await updateModelDropdown('openai-codex');
         
         // Set fallback model after dropdown is populated
         const settingModelSelect = document.getElementById('setting-model');
         if (settingModelSelect) {
-            settingModelSelect.value = 'anthropic/claude-opus-4-5';
+            settingModelSelect.value = 'openai-codex/gpt-5.3-codex';
         }
     }
 

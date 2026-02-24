@@ -214,7 +214,7 @@ window.refreshModels = async function () {
             await populateProviderDropdown();
             // Update model dropdown for current provider (use currentProvider variable as fallback)
             const providerSelect = document.getElementById('provider-select');
-            const provider = providerSelect?.value || currentProvider || 'anthropic';
+            const provider = providerSelect?.value || currentProvider || 'openai-codex';
             await updateModelDropdown(provider);
 
             // Also refresh current model info from server
@@ -789,7 +789,7 @@ function resolveFullModelId(modelStr) {
 
     // Well-known provider prefixes
     const knownPrefixes = {
-        'claude': 'anthropic',
+        'claude': 'openrouter',
         'gpt': 'openai-codex',
         'o1': 'openai',
         'o3': 'openai',

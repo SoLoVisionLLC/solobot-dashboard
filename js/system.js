@@ -150,7 +150,7 @@ function renderStatus() {
 
     const providerEl = document.getElementById('provider-name');
     if (providerEl) {
-        providerEl.textContent = state.provider || 'anthropic';
+        providerEl.textContent = state.provider || 'openai-codex';
     }
 
     if (state.currentTask) {

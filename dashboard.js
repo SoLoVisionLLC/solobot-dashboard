@@ -76,8 +76,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     initDashboardTasks();
 
     // Log summary after state is loaded
-    const provider = localStorage.getItem('selected_provider') || 'anthropic';
-    const model = localStorage.getItem('selected_model') || 'claude-3-opus';
+    const provider = localStorage.getItem('selected_provider') || 'openai-codex';
+    const model = localStorage.getItem('selected_model') || 'gpt-5.3-codex';
     console.log(`[Dashboard] Ready - Provider: ${provider}, Model: ${model}`);
 
     // Gateway settings are now loaded from localStorage only (see state.js)

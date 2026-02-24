@@ -20,9 +20,8 @@ const ModelValidator = {
     PROVIDER_TEST_MODELS: {
         'openrouter': [
             { id: 'openrouter/google/gemini-2.0-flash-lite-001', name: 'Gemini Flash Lite (free)', isFree: true },
-            { id: 'openrouter/anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku (normal)' }
+            { id: 'openrouter/auto', name: 'OpenRouter Auto' }
         ],
-        'anthropic': { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' },
         'openai-codex': { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
         'google': { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
         'moonshot': { id: 'moonshot/kimi-k2.5', name: 'Kimi K2.5' },
