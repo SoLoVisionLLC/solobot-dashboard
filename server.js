@@ -1029,19 +1029,79 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       try {
         for await (const chunk of req) { body += chunk; }
-        const { messages } = JSON.parse(body);
-        if (!state.chat) state.chat = { messages: [] };
-        if (Array.isArray(messages)) {
-          const existingIds = new Set(state.chat.messages.map(m => m.id));
-          const newMsgs = messages.filter(m => !existingIds.has(m.id));
-          state.chat.messages.push(...newMsgs);
-          if (state.chat.messages.length > 200) {
-            state.chat.messages = state.chat.messages.slice(-200);
+        const payload = JSON.parse(body || '{}');
+        const messages = Array.isArray(payload.messages) ? payload.messages : [];
+        const normalizeChatSessionKey = (key) => {
+          if (!key || key === 'main') return 'agent:main:main';
+          return String(key);
+        };
+        const resolveMessageSessionKey = (msg) => {
+          const raw = msg?._sessionKey || msg?.sessionKey;
+          if (!raw || typeof raw !== 'string') return null;
+          return normalizeChatSessionKey(raw);
+        };
+        const requestedSessionKey = normalizeChatSessionKey(payload.sessionKey || req.headers['x-session-key']);
+
+        if (!state.chat || typeof state.chat !== 'object') state.chat = {};
+        if (!Array.isArray(state.chat.messages)) state.chat.messages = [];
+        if (!state.chat.sessions || typeof state.chat.sessions !== 'object') state.chat.sessions = {};
+
+        // One-time compatibility migration: bucket legacy flat history by _sessionKey.
+        if (state.chat.messages.length > 0) {
+          for (const msg of state.chat.messages) {
+            const msgSession = resolveMessageSessionKey(msg);
+            if (!msgSession) continue;
+            if (!Array.isArray(state.chat.sessions[msgSession])) state.chat.sessions[msgSession] = [];
+            const bucket = state.chat.sessions[msgSession];
+            if (msg.id && bucket.some(existing => existing.id === msg.id)) continue;
+            bucket.push({ ...msg, _sessionKey: msgSession });
+            if (bucket.length > 400) {
+              state.chat.sessions[msgSession] = bucket.slice(-400);
+            }
           }
         }
+
+        const stampedMessages = messages
+          .filter(m => m && typeof m === 'object')
+          .map(m => {
+            const msgSession = resolveMessageSessionKey(m) || requestedSessionKey;
+            return { ...m, _sessionKey: msgSession };
+          });
+
+        let addedForRequestedSession = 0;
+        for (const msg of stampedMessages) {
+          const bucketKey = msg._sessionKey || requestedSessionKey;
+          if (!Array.isArray(state.chat.sessions[bucketKey])) {
+            state.chat.sessions[bucketKey] = [];
+          }
+
+          const bucket = state.chat.sessions[bucketKey];
+          if (msg.id && bucket.some(existing => existing?.id === msg.id)) continue;
+
+          bucket.push(msg);
+          if (bucket.length > 400) {
+            state.chat.sessions[bucketKey] = bucket.slice(-400);
+          }
+          if (bucketKey === requestedSessionKey) {
+            addedForRequestedSession++;
+          }
+        }
+
+        // Compatibility: keep a flat stream for older clients, but preserve session tags.
+        const existingGlobalIds = new Set(state.chat.messages.map(m => m?.id).filter(Boolean));
+        const globalNewMsgs = stampedMessages.filter(m => !m.id || !existingGlobalIds.has(m.id));
+        state.chat.messages.push(...globalNewMsgs);
+        if (state.chat.messages.length > 400) {
+          state.chat.messages = state.chat.messages.slice(-400);
+        }
+
         saveState();
         res.setHeader('Content-Type', 'application/json');
-        return res.end(JSON.stringify({ ok: true, added: messages?.length || 0 }));
+        return res.end(JSON.stringify({
+          ok: true,
+          added: addedForRequestedSession,
+          sessionKey: requestedSessionKey
+        }));
       } catch (e) {
         res.writeHead(400);
         return res.end(JSON.stringify({ error: e.message }));

@@ -877,10 +877,14 @@ function syncChatToVPS() {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
     chatSyncTimeout = setTimeout(async () => {
         try {
+            const sessionKey = normalizeSessionKey(currentSessionName || GATEWAY_CONFIG?.sessionKey || 'agent:main:main');
             await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: state.chat.messages.slice(-100) })
+                body: JSON.stringify({
+                    messages: state.chat.messages.slice(-100),
+                    sessionKey
+                })
             });
         } catch (e) {
             // Chat sync failed - not critical
@@ -925,7 +929,7 @@ function renderChat() {
     messages.forEach(msg => {
         // Defensive: Skip messages from other sessions
         const msgSession = (msg._sessionKey || '').toLowerCase();
-        if (msgSession && activeKey && msgSession !== activeKey) {
+        if (!msgSession || !activeKey || msgSession !== activeKey) {
             chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKey}`);
             return;
         }
@@ -1365,7 +1369,7 @@ function renderChatPage() {
             // Defensive: Skip messages from other sessions
             const msg = messages[i];
             const msgSession = (msg._sessionKey || '').toLowerCase();
-            if (msgSession && activeKeyCP && msgSession !== activeKeyCP) {
+            if (!msgSession || !activeKeyCP || msgSession !== activeKeyCP) {
                 chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKeyCP}`);
                 continue;
             }
@@ -1997,4 +2001,3 @@ function clearChatSearchHighlights() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
 });
-

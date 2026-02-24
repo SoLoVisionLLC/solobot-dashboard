@@ -63,6 +63,12 @@ function chatStorageKey(sessionKey) {
     return 'solobot-chat-' + key;
 }
 
+function resolveMessageSessionKey(message) {
+    const raw = message?._sessionKey || message?.sessionKey || '';
+    if (!raw || typeof raw !== 'string') return '';
+    return normalizeSessionKey(raw);
+}
+
 // In-memory session message cache (avoids full reload on agent switch)
 const _sessionMessageCache = new Map();
 
@@ -98,16 +104,19 @@ function loadPersistedMessages() {
         if (chatData) {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                // Fix #1: Session-guard messages — drop any tagged with a different session
-                // This prevents stale messages from a previously-visited session appearing on hard refresh
-                const sessionTag = GATEWAY_CONFIG.sessionKey.toLowerCase();
-                state.chat.messages = parsed.filter(m => {
-                    if (!m._sessionKey) return true; // Legacy untagged — keep (conservative)
-                    return m._sessionKey.toLowerCase() === sessionTag;
-                });
+                const sessionTag = normalizeSessionKey(GATEWAY_CONFIG.sessionKey).toLowerCase();
+                // Strict session isolation: untagged messages are dropped to prevent bleed.
+                state.chat.messages = parsed
+                    .map(m => {
+                        if (!m || typeof m !== 'object') return null;
+                        const msgSession = resolveMessageSessionKey(m);
+                        if (!msgSession) return null;
+                        return { ...m, _sessionKey: msgSession };
+                    })
+                    .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
                 // Migrate legacy key to session-scoped
                 if (legacyChat && !savedChat) {
-                    localStorage.setItem(currentKey, chatData);
+                    localStorage.setItem(currentKey, JSON.stringify(state.chat.messages));
                 }
                 if (state.chat.messages.length > 0) return;
             }
@@ -125,8 +134,29 @@ async function loadChatFromServer() {
     try {
         const response = await fetch('/api/state');
         const serverState = await response.json();
-        if (serverState.chat?.messages?.length > 0) {
-            state.chat.messages = serverState.chat.messages;
+        const sessionKey = normalizeSessionKey(GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
+        const sessionTag = sessionKey.toLowerCase();
+
+        const hasSessionMap = !!(serverState.chat?.sessions && typeof serverState.chat.sessions === 'object');
+        const sessionMessages = Array.isArray(serverState.chat?.sessions?.[sessionKey])
+            ? serverState.chat.sessions[sessionKey]
+            : [];
+        const fallbackMessages = Array.isArray(serverState.chat?.messages)
+            ? serverState.chat.messages
+            : [];
+
+        const sourceMessages = hasSessionMap ? sessionMessages : fallbackMessages;
+        const filtered = sourceMessages
+            .map(m => {
+                if (!m || typeof m !== 'object') return null;
+                const msgSession = resolveMessageSessionKey(m);
+                if (!msgSession) return null;
+                return { ...m, _sessionKey: msgSession };
+            })
+            .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
+
+        if (filtered.length > 0) {
+            state.chat.messages = filtered;
             localStorage.setItem(chatStorageKey(), JSON.stringify(state.chat.messages));
             // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
             // Re-render if on chat page
@@ -156,13 +186,14 @@ function persistChatMessages() {
         // Limit to 50 messages to prevent localStorage quota exceeded
         const chatToSave = state.chat.messages.slice(-200);
         // Use session-scoped key so each agent's chat is stored separately
-        const key = chatStorageKey();
+        const sessionKey = normalizeSessionKey(currentSessionName || GATEWAY_CONFIG.sessionKey);
+        const key = chatStorageKey(sessionKey);
         localStorage.setItem(key, JSON.stringify(chatToSave));
         // Also update in-memory cache
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
+        cacheSessionMessages(sessionKey, chatToSave);
 
         // Also sync to server for persistence across deploys
-        syncChatToServer(chatToSave);
+        syncChatToServer(chatToSave, sessionKey);
     } catch (e) {
         // Silently fail - not critical
     }
@@ -170,23 +201,23 @@ function persistChatMessages() {
 
 // Sync chat messages to server (debounced)
 let chatSyncTimeout = null;
-function syncChatToServer(messages) {
+function syncChatToServer(messages, sessionKey) {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
     chatSyncTimeout = setTimeout(async () => {
         try {
             await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
+                body: JSON.stringify({
+                    messages,
+                    sessionKey: normalizeSessionKey(sessionKey || currentSessionName || GATEWAY_CONFIG.sessionKey)
+                })
             });
         } catch (e) {
             // Silently fail - not critical
         }
     }, 2000); // Debounce 2 seconds
 }
-
-// Load persisted messages immediately
-loadPersistedMessages();
 
 // Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
 const GATEWAY_CONFIG = {
@@ -196,6 +227,9 @@ const GATEWAY_CONFIG = {
     sessionKey: normalizeSessionKey(localStorage.getItem('gateway_session') || 'agent:main:main'),
     maxMessages: 500
 };
+
+// Load persisted messages after gateway config is initialized.
+loadPersistedMessages();
 
 // Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
@@ -448,5 +482,3 @@ function initSampleData() {
 function initDashboardTasks() {
     console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
-
-

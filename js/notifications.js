@@ -860,10 +860,9 @@ function loadHistoryMessages(messages) {
     const allLocalChatMessages = state.chat.messages.filter(m => {
         // Skip non-local messages (have real IDs from server)
         if (!m.id?.startsWith('m')) return false;
-        // If the message was tagged with a session, only keep if it matches
-        // If NOT tagged, assume it's from current session (conservative - old messages)
-        if (m._sessionKey && m._sessionKey.toLowerCase() !== currentKey) return false;
-        return true;
+        // Strict isolation: untagged messages are treated as unsafe legacy data and dropped.
+        const msgSession = (m._sessionKey || m.sessionKey || '').toLowerCase();
+        return !!msgSession && !!currentKey && msgSession === currentKey;
     });
 
     const chatMessages = [];
@@ -911,6 +910,11 @@ function loadHistoryMessages(messages) {
     };
 
     messages.forEach(msg => {
+        const historySession = String(msg?.sessionKey || msg?.message?.sessionKey || '').toLowerCase();
+        if (historySession && currentKey && historySession !== currentKey) {
+            return;
+        }
+
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
@@ -1010,6 +1014,12 @@ function _doHistoryRefresh() {
     if (Date.now() - lastProcessingEndTime < 1500) return;
     if (_historyRefreshInFlight) return; // Prevent overlapping calls
     if (Date.now() - _lastHistoryLoadTime < HISTORY_MIN_INTERVAL) return; // Rate limit
+    const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const gatewaySession = (gateway.sessionKey || '').toLowerCase();
+    if (activeSession && gatewaySession && activeSession !== gatewaySession) {
+        notifLog(`[Notifications] _doHistoryRefresh: Skipped (gateway session mismatch ${gatewaySession} vs ${activeSession})`);
+        return;
+    }
     _historyRefreshInFlight = true;
     _lastHistoryLoadTime = Date.now();
     const pollVersion = sessionVersion;
@@ -1019,6 +1029,12 @@ function _doHistoryRefresh() {
         _historyRefreshInFlight = false;
         if (pollVersion !== sessionVersion) {
             notifLog(`[Notifications] _doHistoryRefresh: Skipped (version mismatch ${pollVersion} vs ${sessionVersion})`);
+            return;
+        }
+        const currentActive = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+        const currentGateway = (gateway.sessionKey || '').toLowerCase();
+        if (currentActive && currentGateway && currentActive !== currentGateway) {
+            notifLog(`[Notifications] _doHistoryRefresh: Skipped merge (post-load mismatch ${currentGateway} vs ${currentActive})`);
             return;
         }
         if (result?.messages) {
@@ -1073,23 +1089,33 @@ function mergeHistoryMessages(messages) {
         return;
     }
 
+    const existingChatMessages = state.chat.messages.filter(m => {
+        const msgSession = (m?._sessionKey || m?.sessionKey || '').toLowerCase();
+        return !!msgSession && msgSession === activeSession;
+    });
+
     // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
-    const existingIds = new Set(state.chat.messages.map(m => m.id));
+    const existingIds = new Set(existingChatMessages.map(m => m.id));
     const existingSystemIds = new Set(state.system.messages.map(m => m.id));
     // Also track existing text content (trimmed) to prevent duplicates when IDs differ
     // (local messages use 'm' + Date.now(), history messages have server IDs)
-    const existingTexts = new Set(state.chat.messages.map(m => (m.text || '').trim()));
+    const existingTexts = new Set(existingChatMessages.map(m => (m.text || '').trim()));
     const existingSystemTexts = new Set(state.system.messages.map(m => (m.text || '').trim()));
     // Track runIds from real-time messages for dedup
-    const existingRunIds = new Set(state.chat.messages.filter(m => m.runId).map(m => m.runId));
+    const existingRunIds = new Set(existingChatMessages.filter(m => m.runId).map(m => m.runId));
     let newChatCount = 0;
     let newSystemCount = 0;
 
     const extractContentText = (container) => extractHistoryText(container);
 
     for (const msg of messages) {
+        const historySession = String(msg?.sessionKey || msg?.message?.sessionKey || '').toLowerCase();
+        if (historySession && historySession !== activeSession) {
+            continue;
+        }
+
         const msgId = msg.id || 'm' + msg.timestamp;
 
         // Skip if already exists in either array (by ID)
@@ -1133,12 +1159,12 @@ function mergeHistoryMessages(messages) {
                 // Time guard: skip non-user assistant messages if we have any local message added within the last 5 seconds
                 // Uses client-side time (m.time) to avoid clock skew with server timestamps
                 if (msg.role !== 'user') {
-                    const hasRecentLocal = state.chat.messages.some(m =>
+                    const hasRecentLocal = existingChatMessages.some(m =>
                         m.from === 'solobot' && (Date.now() - m.time) < 5000
                     );
                     if (hasRecentLocal && !existingIds.has(msgId)) {
                         // Check if this message's text matches a recent local one (likely the same)
-                        const recentMatch = state.chat.messages.some(m =>
+                        const recentMatch = existingChatMessages.some(m =>
                             m.from === 'solobot' && (Date.now() - m.time) < 5000 && m.text?.trim() === textContent
                         );
                         if (recentMatch) continue;
@@ -1152,7 +1178,9 @@ function mergeHistoryMessages(messages) {
                     time: msg.timestamp || Date.now(),
                     model: msg.model || null,
                     provider: msg.provider || null,
-                    runId: msg.runId || msg.message?.runId || null
+                    runId: msg.runId || msg.message?.runId || null,
+                    _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+                    _agentId: window.currentAgentId || 'main'
                 };
 
                 // Classify and route
@@ -1162,6 +1190,7 @@ function mergeHistoryMessages(messages) {
                     newSystemCount++;
                 } else {
                     state.chat.messages.push(message);
+                    existingChatMessages.push(message);
                     existingIds.add(msgId);
                     if (message.runId) existingRunIds.add(message.runId);
                     existingTexts.add(textContent); // already trimmed by extractContentText
