@@ -124,6 +124,24 @@ function _normalizeGatewayTextForSignature(text) {
     return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
+function _isSmokeHookText(text) {
+    const t = String(text || '').trim().toLowerCase();
+    return (
+        t.startsWith('codex-smoke') ||
+        t.startsWith('codex-connectivity-check') ||
+        t.startsWith('codex-direct-') ||
+        t.startsWith('codex-post-script-smoke')
+    );
+}
+
+function _smokeHooksAllowed() {
+    try {
+        if (typeof window !== 'undefined' && window.__ALLOW_SMOKE_HOOKS__ === true) return true;
+        if (typeof localStorage !== 'undefined') return localStorage.getItem('allow_smoke_hooks') === 'true';
+    } catch { }
+    return false;
+}
+
 function _isHtmlGatewayError(raw) {
     const msg = String(raw || '').toLowerCase();
     return msg.includes('<html') && (msg.includes('bad gateway') || msg.includes('cloudflare'));
@@ -745,6 +763,12 @@ class GatewayClient {
             return Promise.reject(new Error('Not connected'));
         }
 
+        if (_isSmokeHookText(text) && !_smokeHooksAllowed()) {
+            const msg = 'Smoke hook message blocked (disabled in production dashboard).';
+            gwWarn(`[Gateway] 🚫 ${msg} text="${String(text).slice(0, 80)}"`);
+            return Promise.reject(new Error(msg));
+        }
+
         const normalizedSessionKey = normalizeSessionKey(this.sessionKey);
         const sendKey = `text|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(text)}`;
         if (this._inFlightSend?.key === sendKey) {
@@ -869,6 +893,11 @@ class GatewayClient {
 
         const targetSession = explicitSessionKey || this.sessionKey;
         const normalizedSessionKey = normalizeSessionKey(targetSession);
+
+        // Hard gate: test traffic must stay in dedicated health-check sessions unless explicitly allowed.
+        if (!normalizedSessionKey.startsWith('health-check-') && !_smokeHooksAllowed()) {
+            return Promise.reject(new Error('Blocked test send: non health-check session'));
+        }
 
         const params = {
             message: text,
