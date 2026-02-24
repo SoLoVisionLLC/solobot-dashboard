@@ -235,7 +235,7 @@
     }
 
     function showHandoffDialog(fromAgent) {
-        const agents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax']
+        const agents = ['main', 'dev', 'elon', 'atlas', 'sterling', 'vector', 'knox', 'nova', 'haven', 'ledger']
             .filter(a => a !== fromAgent);
 
         const buttons = agents.map(agent => {
@@ -281,7 +281,7 @@
 
         // Group sessions by agent
         const agents = {};
-        const knownAgents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'tax', 'sec', 'smm'];
+        const knownAgents = ['main', 'dev', 'elon', 'atlas', 'sterling', 'vector', 'haven', 'ledger', 'knox', 'nova'];
 
         for (const s of sessions) {
             const match = s.key?.match(/^agent:([^:]+):/);
@@ -308,8 +308,16 @@
         const sorted = Object.entries(agents).sort((a, b) => b[1].lastActivity - a[1].lastActivity);
 
         const agentLabels = {
-            main: 'SoLoBot', exec: 'EXEC', coo: 'COO', cfo: 'CFO',
-            cmp: 'CMP', dev: 'DEV', family: 'Family', tax: 'Tax', sec: 'SEC', smm: 'SMM'
+            main: 'SoLoBot',
+            elon: 'Elon',
+            atlas: 'Atlas',
+            sterling: 'Sterling',
+            vector: 'Vector',
+            dev: 'Dev',
+            haven: 'Haven',
+            ledger: 'Ledger',
+            knox: 'Knox',
+            nova: 'Nova'
         };
 
         container.innerHTML = sorted.map(([id, data]) => {

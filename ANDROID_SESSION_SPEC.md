@@ -4,7 +4,7 @@ This document describes what the Android app needs to implement to match the web
 
 ## Overview
 
-Each sub-agent now has a persistent "main" session (e.g., `agent:dev:main`, `agent:cmp:main`), similar to how `agent:main:main` works for SoLoBot. When clicking an agent in the sidebar, the app should:
+Each sub-agent now has a persistent "main" session (e.g., `agent:dev:main`, `agent:vector:main`), similar to how `agent:main:main` works for SoLoBot. When clicking an agent in the sidebar, the app should:
 
 1. Connect to that agent's main session
 2. Filter the sessions dropdown to only show that agent's sessions
@@ -17,7 +17,7 @@ Session keys follow the pattern: `agent:{agentId}:{sessionName}`
 Examples:
 - `agent:main:main` - SoLoBot's main session
 - `agent:dev:main` - DEV's main session
-- `agent:cfo:main` - CFO's main session
+- `agent:sterling:main` - Sterling's main session
 - `agent:dev:bugfix-2024-02` - A DEV one-off session
 
 ## Agent IDs
@@ -25,14 +25,23 @@ Examples:
 | Agent ID | Display Name |
 |----------|--------------|
 | `main` | SoLoBot |
-| `exec` | EXEC Orchestrator |
-| `coo` | COO |
-| `cfo` | CFO |
-| `cmp` | CMP |
-| `dev` | DEV |
-| `family` | Family Coordinator |
-| `tax` | Tax Compliance |
-| `sec` | Security Operations |
+| `elon` | Elon (CoS) |
+| `orion` | Orion (CTO) |
+| `atlas` | Atlas (COO) |
+| `sterling` | Sterling (CFO) |
+| `vector` | Vector (CMP) |
+| `dev` | Dev (ENG) |
+| `forge` | Forge (DEVOPS) |
+| `quill` | Quill (FE/UI) |
+| `chip` | Chip (SWE) |
+| `sentinel` | Sentinel (NET) |
+| `snip` | Snip (YouTube) |
+| `knox` | Knox (SEC) |
+| `nova` | Nova (SMM) |
+| `haven` | Haven (FAM) |
+| `ledger` | Ledger (TAX) |
+| `canon` | Canon (DOC) |
+| `luma` | Luma (Creative) |
 
 ## Behavior Changes
 
@@ -118,14 +127,23 @@ fun startNewAgentSession(agentId: String) {
 fun getAgentLabel(agentId: String): String {
     return when (agentId) {
         "main" -> "SoLoBot"
-        "exec" -> "EXEC"
-        "coo" -> "COO"
-        "cfo" -> "CFO"
-        "cmp" -> "CMP"
-        "dev" -> "DEV"
-        "family" -> "Family"
-        "tax" -> "Tax"
-        "sec" -> "SEC"
+        "elon" -> "Elon"
+        "orion" -> "Orion"
+        "atlas" -> "Atlas"
+        "sterling" -> "Sterling"
+        "vector" -> "Vector"
+        "dev" -> "Dev"
+        "forge" -> "Forge"
+        "quill" -> "Quill"
+        "chip" -> "Chip"
+        "sentinel" -> "Sentinel"
+        "snip" -> "Snip"
+        "knox" -> "Knox"
+        "nova" -> "Nova"
+        "haven" -> "Haven"
+        "ledger" -> "Ledger"
+        "canon" -> "Canon"
+        "luma" -> "Luma"
         else -> agentId.uppercase()
     }
 }
@@ -176,7 +194,7 @@ If the app currently shows all sessions in the dropdown:
 
 Verify these scenarios:
 1. Click DEV in sidebar → connects to `agent:dev:main`
-2. Sessions dropdown shows only DEV sessions (not main/coo/etc)
+2. Sessions dropdown shows only DEV sessions (not main/atlas/etc)
 3. Click "+ New" → creates `agent:dev:{name}` and connects
-4. Click CFO in sidebar → switches agent context, shows CFO sessions
-5. Session created for DEV doesn't appear in CFO dropdown
+4. Click Sterling in sidebar → switches agent context, shows Sterling sessions
+5. Session created for DEV doesn't appear in Sterling dropdown

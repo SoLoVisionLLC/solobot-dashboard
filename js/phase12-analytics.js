@@ -221,9 +221,9 @@
         // If no data, use sample
         if (Object.keys(agentCosts).length === 0) {
             agentCosts['dev'] = 12.50;
-            agentCosts['exec'] = 8.30;
+            agentCosts['elon'] = 8.30;
             agentCosts['main'] = 25.00;
-            agentCosts['cmp'] = 5.20;
+            agentCosts['vector'] = 5.20;
         }
 
         const total = Object.values(agentCosts).reduce((a, b) => a + b, 0);
@@ -476,7 +476,7 @@
 
         // Calculate performance metrics per agent
         const metrics = {};
-        const agents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'sec', 'smm', 'family', 'tax'];
+        const agents = ['main', 'dev', 'elon', 'atlas', 'sterling', 'vector', 'knox', 'nova', 'haven', 'ledger'];
         
         agents.forEach(agent => {
             const tasks = [
@@ -538,7 +538,7 @@
     // ==========================================
 
     function generateSampleTokenData() {
-        const agents = ['main', 'dev', 'exec', 'coo', 'cmp'];
+        const agents = ['main', 'dev', 'elon', 'atlas', 'vector'];
         const now = Date.now();
         
         for (let i = 0; i < 30; i++) {
@@ -555,7 +555,7 @@
     }
 
     function generateSampleSessionData() {
-        const agents = ['main', 'dev', 'exec', 'coo'];
+        const agents = ['main', 'dev', 'elon', 'atlas'];
         const now = Date.now();
         
         for (let i = 0; i < 50; i++) {

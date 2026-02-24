@@ -256,9 +256,9 @@
                     <span class="agent-dot" style="background: #3b82f6;"></span>
                     <span>DEV</span>
                 </button>
-                <button class="quick-agent-btn" data-agent="coo" title="COO Agent">
+                <button class="quick-agent-btn" data-agent="atlas" title="Atlas Agent">
                     <span class="agent-dot" style="background: #22c55e;"></span>
-                    <span>COO</span>
+                    <span>Atlas</span>
                 </button>
             `;
             
@@ -287,7 +287,7 @@
             let currentAgent = 'main';
             
             if (sessionKey.includes('dev')) currentAgent = 'dev';
-            else if (sessionKey.includes('coo')) currentAgent = 'coo';
+            else if (sessionKey.includes('atlas')) currentAgent = 'atlas';
             
             document.querySelectorAll('.quick-agent-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.agent === currentAgent);
@@ -296,9 +296,10 @@
         
         switchToAgent(agent) {
             if (typeof switchToSession === 'function') {
-                const sessionKey = `agent:${agent}:main`;
+                const canonicalAgent = (typeof window.resolveAgentId === 'function') ? window.resolveAgentId(agent) : agent;
+                const sessionKey = `agent:${canonicalAgent}:main`;
                 switchToSession(sessionKey);
-                showToast(`Switched to ${agent.toUpperCase()}`, 'success');
+                showToast(`Switched to ${canonicalAgent.toUpperCase()}`, 'success');
             } else {
                 // Fallback: just show toast
                 showToast(`Agent switch: ${agent.toUpperCase()}`, 'info');

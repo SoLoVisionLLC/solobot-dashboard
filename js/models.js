@@ -913,6 +913,32 @@ function syncModelDisplay(model, provider) {
 
 // Track models loaded from config to prevent gateway overrides
 window._configModelLocks = window._configModelLocks || {};
+window._sessionModelEnforcement = window._sessionModelEnforcement || {};
+
+// Ensure the gateway session model matches the locked config model.
+// This prevents drift when a session was previously patched to a different provider/model.
+window.enforceSessionModelLock = async function enforceSessionModelLock(sessionKey, model, reason = 'config-lock') {
+    if (!sessionKey || !model || model === 'global/default') return;
+    const normalizedModel = resolveFullModelId(model);
+    if (!normalizedModel) return;
+
+    const gw = window.gateway || (typeof gateway !== 'undefined' ? gateway : null);
+    if (!gw || typeof gw.isConnected !== 'function' || !gw.isConnected()) return;
+
+    const now = Date.now();
+    const prev = window._sessionModelEnforcement[sessionKey];
+    if (prev && prev.model === normalizedModel && (now - prev.ts) < 10000) {
+        return;
+    }
+    window._sessionModelEnforcement[sessionKey] = { model: normalizedModel, ts: now };
+
+    try {
+        await gw.patchSession(sessionKey, { model: normalizedModel });
+        console.log(`[Dashboard] Enforced session model for ${sessionKey}: ${normalizedModel} (${reason})`);
+    } catch (e) {
+        console.warn(`[Dashboard] Failed to enforce session model for ${sessionKey}: ${e?.message || e}`);
+    }
+};
 
 // Apply per-session model override — openclaw.json is SOURCE OF TRUTH
 async function applySessionModelOverride(sessionKey) {
@@ -969,6 +995,12 @@ async function applySessionModelOverride(sessionKey) {
 
         const provider = window.getProviderFromModelId(sessionModel) || currentProvider;
         syncModelDisplay(sessionModel, provider);
+
+        // Always enforce the lock on the actual gateway session entry.
+        // Display lock alone is not enough because chat.send uses server-side session model.
+        if (typeof window.enforceSessionModelLock === 'function') {
+            window.enforceSessionModelLock(sessionKey, sessionModel, 'session-switch').catch(() => { });
+        }
     } else {
         console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
     }

@@ -1282,20 +1282,71 @@ const server = http.createServer(async (req, res) => {
     try {
       const agents = [];
 
+      // Canonical ID policy: use name-based agent IDs in API payloads.
+      const LEGACY_AGENT_ID_MAP = {
+        exec: 'elon',
+        cto: 'orion',
+        coo: 'atlas',
+        cfo: 'sterling',
+        cmp: 'vector',
+        devops: 'forge',
+        ui: 'quill',
+        swe: 'chip',
+        youtube: 'snip',
+        sec: 'knox',
+        net: 'sentinel',
+        smm: 'nova',
+        family: 'haven',
+        tax: 'ledger',
+        docs: 'canon',
+        creative: 'luma',
+        art: 'luma',
+        halo: 'main'
+      };
+
+      const canonicalizeAgentId = (agentId) => {
+        const id = String(agentId || '').trim().toLowerCase();
+        return LEGACY_AGENT_ID_MAP[id] || id;
+      };
+
+      const canonicalCandidates = new Map();
+      const addCanonicalCandidate = (canonicalId, candidateId) => {
+        if (!canonicalId || !candidateId) return;
+        if (!canonicalCandidates.has(canonicalId)) canonicalCandidates.set(canonicalId, new Set());
+        canonicalCandidates.get(canonicalId).add(candidateId);
+      };
+      for (const [legacyId, canonicalId] of Object.entries(LEGACY_AGENT_ID_MAP)) {
+        addCanonicalCandidate(canonicalId, legacyId);
+        addCanonicalCandidate(canonicalId, canonicalId);
+      }
+
       // ── Workspace resolver ──
       // Convention: workspace-<agentId>/ for each agent, workspace/ for main (Halo)
       const resolveAgentWorkspace = (agentId) => {
-        if (agentId === 'main') {
+        const canonicalId = canonicalizeAgentId(agentId);
+        if (canonicalId === 'main') {
           // Halo's primary workspace is workspace/ (not workspace-main/)
           const primary = path.join(OPENCLAW_HOME, 'workspace');
           if (fs.existsSync(primary)) return primary;
         }
+
+        const candidates = Array.from(new Set([
+          canonicalId,
+          ...(canonicalCandidates.get(canonicalId) ? Array.from(canonicalCandidates.get(canonicalId)) : [])
+        ]));
+
         // Standard: workspace-<agentId>
-        const standard = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
-        if (fs.existsSync(standard)) return standard;
+        for (const candidate of candidates) {
+          const standard = path.join(OPENCLAW_HOME, `workspace-${candidate}`);
+          if (fs.existsSync(standard)) return standard;
+        }
+
         // Legacy fallback: agents/<agentId>/workspace
-        const legacy = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
-        if (fs.existsSync(legacy)) return legacy;
+        for (const candidate of candidates) {
+          const legacy = path.join(OPENCLAW_HOME, 'agents', candidate, 'workspace');
+          if (fs.existsSync(legacy)) return legacy;
+        }
+
         return null;
       };
 
@@ -1311,8 +1362,9 @@ const server = http.createServer(async (req, res) => {
       // Scan workspace-<agentId> dirs
       for (const entry of siblings) {
         if (!entry.startsWith('workspace-')) continue;
-        const agentId = entry.replace('workspace-', '');
-        if (!agentId) continue;
+        const rawAgentId = entry.replace('workspace-', '');
+        if (!rawAgentId) continue;
+        const agentId = canonicalizeAgentId(rawAgentId);
         try {
           const stat = fs.statSync(path.join(OPENCLAW_HOME, entry));
           if (stat.isDirectory()) discoveredIds.add(agentId);

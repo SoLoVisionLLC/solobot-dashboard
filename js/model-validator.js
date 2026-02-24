@@ -587,7 +587,7 @@ const ModelValidator = {
             localStorage.setItem('selected_model', modelId);
 
             // Use a dedicated test session to avoid polluting chat history
-            const testSessionKey = 'agent:cto:validator-test';
+            const testSessionKey = 'agent:orion:validator-test';
 
             // === SHOW EXPECTED VALUES IMMEDIATELY ===
             document.getElementById('mv-empty-state').style.display = 'none';

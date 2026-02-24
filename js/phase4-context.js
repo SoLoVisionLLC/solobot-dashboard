@@ -181,7 +181,7 @@
             let agent = 'default';
 
             if (sessionKey.includes('dev')) agent = 'dev';
-            else if (sessionKey.includes('coo')) agent = 'coo';
+            else if (sessionKey.includes('atlas')) agent = 'atlas';
             else if (sessionKey.includes('research')) agent = 'research';
             else if (sessionKey.startsWith('agent:')) {
                 const match = sessionKey.match(/^agent:([^:]+):/);

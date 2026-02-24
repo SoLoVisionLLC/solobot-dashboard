@@ -15,50 +15,53 @@ const SIDEBAR_AGENT_DEPT_OVERRIDES_KEY = 'sidebar_agents_dept_overrides_v1';
 const SIDEBAR_AGENT_GROUP_COLLAPSED_KEY = 'sidebar_agents_group_collapsed_v1';
 const SIDEBAR_AGENT_ORDER_BY_DEPT_KEY = 'sidebar_agents_order_by_dept_v1';
 
-// Legacy/alias agent IDs mapped to canonical IDs used by session routing
+// Legacy/alias role IDs mapped to canonical name IDs used by session routing.
 const AGENT_ID_ALIASES = {
-    quill: 'ui',
-    forge: 'devops',
-    orion: 'cto',
-    atlas: 'coo',
-    sterling: 'cfo',
-    vector: 'cmp',
-    nova: 'smm',
-    snip: 'youtube',
-    knox: 'sec',
-    sentinel: 'net',
-    canon: 'docs',
-    ledger: 'tax',
-    haven: 'family',
-    halo: 'main',
-    elon: 'exec'
+    exec: 'elon',
+    cto: 'orion',
+    coo: 'atlas',
+    cfo: 'sterling',
+    cmp: 'vector',
+    devops: 'forge',
+    ui: 'quill',
+    swe: 'chip',
+    youtube: 'snip',
+    sec: 'knox',
+    net: 'sentinel',
+    smm: 'nova',
+    docs: 'canon',
+    tax: 'ledger',
+    family: 'haven',
+    creative: 'luma',
+    art: 'luma',
+    halo: 'main'
 };
 
 // Departments requested by user (canonical org grouping)
 const DEFAULT_DEPARTMENTS = {
     main: 'Executive',
-    exec: 'Executive',
+    elon: 'Executive',
 
-    cto: 'Technology',
+    orion: 'Technology',
     dev: 'Technology',
-    devops: 'Technology',
-    ui: 'Technology',
-    swe: 'Technology',
-    net: 'Technology',
-    sec: 'Technology',
+    forge: 'Technology',
+    quill: 'Technology',
+    chip: 'Technology',
+    sentinel: 'Technology',
+    knox: 'Technology',
 
-    coo: 'Operations',
-    docs: 'Operations',
+    atlas: 'Operations',
+    canon: 'Operations',
 
-    cmp: 'Marketing & Product',
-    smm: 'Marketing & Product',
-    youtube: 'Marketing & Product',
-    art: 'Marketing & Product',
+    vector: 'Marketing & Product',
+    nova: 'Marketing & Product',
+    snip: 'Marketing & Product',
+    luma: 'Marketing & Product',
 
-    cfo: 'Finance',
-    tax: 'Finance',
+    sterling: 'Finance',
+    ledger: 'Finance',
 
-    family: 'Family / Household'
+    haven: 'Family / Household'
 };
 
 const DEPARTMENT_ORDER = ['Executive', 'Technology', 'Operations', 'Marketing & Product', 'Finance', 'Family / Household', 'Other'];

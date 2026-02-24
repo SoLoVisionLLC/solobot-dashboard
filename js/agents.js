@@ -41,7 +41,7 @@ function renderAgentStatuses(sessions) {
 
     // Group sessions by agent
     const agents = {};
-    const knownAgents = ['main', 'exec', 'coo', 'cfo', 'cmp', 'dev', 'family', 'tax', 'sec', 'smm'];
+    const knownAgents = ['main', 'elon', 'atlas', 'sterling', 'vector', 'dev', 'haven', 'ledger', 'knox', 'nova'];
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);

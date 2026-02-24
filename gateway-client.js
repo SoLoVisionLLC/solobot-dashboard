@@ -16,7 +16,35 @@ const DEVICE_IDENTITY_KEY = 'openclaw-device-identity';
 
 function normalizeSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
-    return key;
+    const raw = String(key);
+    const match = raw.match(/^agent:([^:]+):(.+)$/);
+    if (!match) return raw;
+
+    const roleToName = {
+        exec: 'elon',
+        cto: 'orion',
+        coo: 'atlas',
+        cfo: 'sterling',
+        cmp: 'vector',
+        devops: 'forge',
+        ui: 'quill',
+        swe: 'chip',
+        youtube: 'snip',
+        sec: 'knox',
+        net: 'sentinel',
+        smm: 'nova',
+        docs: 'canon',
+        tax: 'ledger',
+        family: 'haven',
+        creative: 'luma',
+        art: 'luma',
+        halo: 'main'
+    };
+
+    const rawAgentId = match[1].toLowerCase();
+    const canonical = roleToName[rawAgentId] || rawAgentId;
+    if (canonical === rawAgentId) return raw;
+    return `agent:${canonical}:${match[2]}`;
 }
 
 function normalizeGatewayModelId(modelId) {
@@ -145,6 +173,14 @@ function _smokeHooksAllowed() {
 function _isHtmlGatewayError(raw) {
     const msg = String(raw || '').toLowerCase();
     return msg.includes('<html') && (msg.includes('bad gateway') || msg.includes('cloudflare'));
+}
+
+function _getUiSelectedModelId() {
+    try {
+        return localStorage.getItem('selected_model') || window.currentModel || '';
+    } catch {
+        return window.currentModel || '';
+    }
 }
 
 function _normalizeGatewayErrorMessage(raw) {
@@ -655,8 +691,8 @@ class GatewayClient {
         if (!payload) return;
 
         // Route by session key (case-insensitive)
-        const eventSessionKey = payload.sessionKey || 'main';
-        const currentKey = this.sessionKey.toLowerCase();
+        const eventSessionKey = normalizeSessionKey(payload.sessionKey || 'main');
+        const currentKey = normalizeSessionKey(this.sessionKey).toLowerCase();
         const eventKey = eventSessionKey.toLowerCase();
 
         if (eventKey !== currentKey) {
@@ -700,7 +736,7 @@ class GatewayClient {
         // OpenClaw's embedded agent SDK strips underlying error info in favor of a standard Rate Limit response
         // Re-inject the model so the dashboard user knows which fallback triggered it
         if (errorMsg === "⚠️ API rate limit reached. Please try again later.") {
-            const problemModel = message?.model || payload.model || 'unknown';
+            const problemModel = message?.model || payload.model || _getUiSelectedModelId() || 'unknown';
             errorMsg = `⚠️ Rate limit reached (Model: ${problemModel}). Please try again.`;
         }
 
@@ -770,6 +806,15 @@ class GatewayClient {
         }
 
         const normalizedSessionKey = normalizeSessionKey(this.sessionKey);
+
+        // Prevent stale server-side session model drift: enforce lock before send.
+        const lockedModel = window?._configModelLocks?.[normalizedSessionKey];
+        if (lockedModel && typeof window?.enforceSessionModelLock === 'function') {
+            try {
+                await window.enforceSessionModelLock(normalizedSessionKey, lockedModel, 'pre-send');
+            } catch { }
+        }
+
         const sendKey = `text|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(text)}`;
         if (this._inFlightSend?.key === sendKey) {
             gwWarn('[Gateway] Suppressed duplicate in-flight text send');
@@ -783,7 +828,7 @@ class GatewayClient {
         };
 
         // Log model and session info
-        const model = localStorage.getItem('selected_model') || '(not set)';
+        const model = lockedModel || _getUiSelectedModelId() || '(not set)';
         gwLog(`[Gateway] ⬆️ Sending message to session "${this.sessionKey}"`);
         gwLog(`[Gateway]    Model: ${model}`);
         gwLog(`[Gateway]    Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
@@ -821,6 +866,15 @@ class GatewayClient {
         }
 
         const normalizedSessionKey = normalizeSessionKey(this.sessionKey);
+
+        // Prevent stale server-side session model drift for image sends too.
+        const lockedModel = window?._configModelLocks?.[normalizedSessionKey];
+        if (lockedModel && typeof window?.enforceSessionModelLock === 'function') {
+            try {
+                await window.enforceSessionModelLock(normalizedSessionKey, lockedModel, 'pre-send-images');
+            } catch { }
+        }
+
         const sendKey = `images|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(text)}|${_buildGatewayImageSignature(imageDataUrls)}`;
         if (this._inFlightSend?.key === sendKey) {
             gwWarn('[Gateway] Suppressed duplicate in-flight image send');

@@ -55,7 +55,37 @@ const AGENT_COLORS = window.AGENT_COLORS = new Proxy({}, {
 
 function normalizeSessionKey(sessionKey) {
     if (!sessionKey || sessionKey === 'main') return 'agent:main:main';
-    return sessionKey;
+    const key = String(sessionKey);
+    const match = key.match(/^agent:([^:]+):(.+)$/);
+    if (!match) return key;
+
+    const rawAgentId = match[1].toLowerCase();
+    const legacyMap = {
+        exec: 'elon',
+        cto: 'orion',
+        coo: 'atlas',
+        cfo: 'sterling',
+        cmp: 'vector',
+        devops: 'forge',
+        ui: 'quill',
+        swe: 'chip',
+        youtube: 'snip',
+        sec: 'knox',
+        net: 'sentinel',
+        smm: 'nova',
+        docs: 'canon',
+        tax: 'ledger',
+        family: 'haven',
+        creative: 'luma',
+        art: 'luma',
+        halo: 'main'
+    };
+    const canonicalAgent = (typeof window.resolveAgentId === 'function')
+        ? window.resolveAgentId(rawAgentId)
+        : (legacyMap[rawAgentId] || rawAgentId);
+
+    if (!canonicalAgent || canonicalAgent === rawAgentId) return key;
+    return `agent:${canonicalAgent}:${match[2]}`;
 }
 
 function chatStorageKey(sessionKey) {

@@ -10,36 +10,49 @@ function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 // Agent persona names and role labels
 const AGENT_PERSONAS = {
     'main': { name: 'Halo', role: 'PA' },
-    'exec': { name: 'Elon', role: 'CoS' },
-    'cto': { name: 'Orion', role: 'CTO' },
-    'coo': { name: 'Atlas', role: 'COO' },
-    'cfo': { name: 'Sterling', role: 'CFO' },
-    'cmp': { name: 'Vector', role: 'CMP' },
+    'elon': { name: 'Elon', role: 'CoS' },
+    'orion': { name: 'Orion', role: 'CTO' },
+    'atlas': { name: 'Atlas', role: 'COO' },
+    'sterling': { name: 'Sterling', role: 'CFO' },
+    'vector': { name: 'Vector', role: 'CMP' },
     'dev': { name: 'Dev', role: 'ENG' },
-    'devops': { name: 'Forge', role: 'DEVOPS' },
-    'ui': { name: 'Quill', role: 'FE/UI' },
-    'swe': { name: 'Chip', role: 'SWE' },
-    'youtube': { name: 'Snip', role: 'YT' },
-    'sec': { name: 'Knox', role: 'SEC' },
-    'net': { name: 'Sentinel', role: 'NET' },
-    'smm': { name: 'Nova', role: 'SMM' },
-    'family': { name: 'Haven', role: 'FAM' },
-    'tax': { name: 'Ledger', role: 'TAX' },
-    'docs': { name: 'Canon', role: 'DOC' },
-    'art': { name: 'Luma', role: 'ART' }
+    'forge': { name: 'Forge', role: 'DEVOPS' },
+    'quill': { name: 'Quill', role: 'FE/UI' },
+    'chip': { name: 'Chip', role: 'SWE' },
+    'snip': { name: 'Snip', role: 'YT' },
+    'knox': { name: 'Knox', role: 'SEC' },
+    'sentinel': { name: 'Sentinel', role: 'NET' },
+    'nova': { name: 'Nova', role: 'SMM' },
+    'haven': { name: 'Haven', role: 'FAM' },
+    'ledger': { name: 'Ledger', role: 'TAX' },
+    'canon': { name: 'Canon', role: 'DOC' },
+    'luma': { name: 'Luma', role: 'ART' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function normalizeDashboardSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
 
-    // Auto-migrate legacy agent session keys (e.g. from before agent IDs were stabilized)
+    // Auto-migrate legacy role-based IDs to canonical name-based IDs.
     const legacyMigrateMap = {
-        'quill': 'ui',
-        'forge': 'devops',
-        'orion': 'cto',
-        'halo': 'main',
-        'atlas': 'coo'
+        'exec': 'elon',
+        'cto': 'orion',
+        'coo': 'atlas',
+        'cfo': 'sterling',
+        'cmp': 'vector',
+        'devops': 'forge',
+        'ui': 'quill',
+        'swe': 'chip',
+        'youtube': 'snip',
+        'sec': 'knox',
+        'net': 'sentinel',
+        'smm': 'nova',
+        'family': 'haven',
+        'tax': 'ledger',
+        'docs': 'canon',
+        'creative': 'luma',
+        'art': 'luma',
+        'halo': 'main'
     };
 
     let normalized = key;
@@ -75,9 +88,17 @@ window.currentSessionName = window.currentSessionName || null;
 function initCurrentSessionName() {
     const localSession = localStorage.getItem('gateway_session');
     const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
+    const preferredSession = localSession || gatewaySession || 'agent:main:main';
+    const normalizedSession = normalizeDashboardSessionKey(preferredSession);
 
     // localStorage is authoritative (user's explicit choice)
-    window.currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+    window.currentSessionName = normalizedSession;
+    if (preferredSession !== normalizedSession) {
+        try { localStorage.setItem('gateway_session', normalizedSession); } catch { }
+        if (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG) {
+            GATEWAY_CONFIG.sessionKey = normalizedSession;
+        }
+    }
 
     console.log('[initCurrentSessionName] localStorage:', localSession);
     console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
@@ -147,13 +168,26 @@ window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's 
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
 
-// Helper for legacy agent session keys (preserves chat history for old alias IDs)
+// Legacy role IDs and old aliases that should resolve to name-based canonical IDs.
 const LEGACY_AGENT_MAP = {
-    'chip': 'swe',
-    'quill': 'ui',
-    'forge': 'devops',
-    'snip': 'youtube',
-    'creative': 'art'
+    'exec': 'elon',
+    'cto': 'orion',
+    'coo': 'atlas',
+    'cfo': 'sterling',
+    'cmp': 'vector',
+    'devops': 'forge',
+    'ui': 'quill',
+    'swe': 'chip',
+    'youtube': 'snip',
+    'sec': 'knox',
+    'net': 'sentinel',
+    'smm': 'nova',
+    'family': 'haven',
+    'tax': 'ledger',
+    'docs': 'canon',
+    'creative': 'luma',
+    'art': 'luma',
+    'halo': 'main'
 };
 
 function resolveAgentId(id) {
@@ -162,6 +196,29 @@ function resolveAgentId(id) {
     return LEGACY_AGENT_MAP[id] || id;
 }
 window.resolveAgentId = resolveAgentId;
+
+function migrateLegacyAgentSessionPrefs() {
+    try {
+        const key = 'agent_last_sessions';
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+        let changed = false;
+        const migrated = {};
+        for (const [agentId, sessionKey] of Object.entries(parsed)) {
+            const canonicalAgent = resolveAgentId(agentId);
+            const canonicalSession = normalizeDashboardSessionKey(sessionKey);
+            if (canonicalAgent !== agentId || canonicalSession !== sessionKey) changed = true;
+            migrated[canonicalAgent] = canonicalSession;
+        }
+        if (changed) {
+            localStorage.setItem(key, JSON.stringify(migrated));
+            console.log('[Sessions] Migrated local agent session preferences to name-based IDs');
+        }
+    } catch { }
+}
+migrateLegacyAgentSessionPrefs();
 
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
@@ -244,6 +301,27 @@ function handleSubagentSessionAgent() {
 
 let _fetchSessionsInFlight = false;
 let _fetchSessionsQueued = false;
+
+function _sessionTimestamp(value) {
+    if (!value) return 0;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+}
+
+function canonicalizeSessionEntries(entries) {
+    const byKey = new Map();
+    for (const entry of (entries || [])) {
+        if (!entry || !entry.key) continue;
+        const canonicalKey = normalizeDashboardSessionKey(entry.key);
+        const normalized = { ...entry, key: canonicalKey };
+        const existing = byKey.get(canonicalKey);
+        if (!existing || _sessionTimestamp(normalized.updatedAt) >= _sessionTimestamp(existing.updatedAt)) {
+            byKey.set(canonicalKey, normalized);
+        }
+    }
+    return Array.from(byKey.values());
+}
+
 async function fetchSessions() {
     // Debounce: if already fetching, queue one follow-up call
     if (_fetchSessionsInFlight) { _fetchSessionsQueued = true; return availableSessions; }
@@ -251,7 +329,11 @@ async function fetchSessions() {
 
     try {
         // Preserve locally-added sessions that might not be in gateway yet
-        const localSessions = availableSessions.filter(s => s.sessionId === null);
+        const localSessions = canonicalizeSessionEntries(
+            availableSessions
+                .filter(s => s.sessionId === null)
+                .map(s => ({ ...s, key: normalizeDashboardSessionKey(s.key) }))
+        );
 
         // Try gateway first if connected (direct RPC call)
         if (gateway && gateway.isConnected()) {
@@ -259,10 +341,10 @@ async function fetchSessions() {
                 const result = await gateway.listSessions({});
                 let sessions = result?.sessions || [];
 
-                const gatewaySessions = sessions.map(s => {
+                const gatewaySessions = canonicalizeSessionEntries(sessions.map(s => {
                     const friendlyName = getFriendlySessionName(s.key);
                     return {
-                        key: s.key,
+                        key: normalizeDashboardSessionKey(s.key),
                         name: friendlyName,
                         displayName: friendlyName,
                         updatedAt: s.updatedAt,
@@ -270,11 +352,11 @@ async function fetchSessions() {
                         model: s.model || 'unknown',
                         sessionId: s.sessionId
                     };
-                });
+                }));
 
                 const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
                 const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
-                availableSessions = [...gatewaySessions, ...mergedLocalSessions];
+                availableSessions = canonicalizeSessionEntries([...gatewaySessions, ...mergedLocalSessions]);
 
                 sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
@@ -296,10 +378,10 @@ async function fetchSessions() {
         const data = await response.json();
         const rawServerSessions = data.sessions || [];
 
-        const serverSessions = rawServerSessions.map(s => {
+        const serverSessions = canonicalizeSessionEntries(rawServerSessions.map(s => {
             const friendlyName = getFriendlySessionName(s.key);
             return {
-                key: s.key,
+                key: normalizeDashboardSessionKey(s.key),
                 name: friendlyName,
                 displayName: s.displayName || friendlyName,
                 updatedAt: s.updatedAt,
@@ -307,11 +389,11 @@ async function fetchSessions() {
                 model: s.model || 'unknown',
                 sessionId: s.sessionId
             };
-        });
+        }));
 
         const serverKeys = new Set(serverSessions.map(s => s.key));
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
-        availableSessions = [...serverSessions, ...mergedLocalSessions];
+        availableSessions = canonicalizeSessionEntries([...serverSessions, ...mergedLocalSessions]);
 
         sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
@@ -1094,5 +1176,3 @@ async function checkRestartToast() {
         console.warn('[Dashboard] Restart toast check failed:', e);
     }
 }
-
-
