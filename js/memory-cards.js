@@ -634,6 +634,14 @@
             .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
             .slice(0, 5);
 
+        const agentSectionMap = {
+            net: { title: '📟 System', page: 'system', desc: 'System Messages & operations context' },
+            cmp: { title: '📦 Products', page: 'products', desc: 'Product catalog and roadmap context' },
+            cfo: { title: '💼 Business', page: 'business', desc: 'Business KPIs, finance, and planning' },
+            sec: { title: '🛡️ Security', page: 'security', desc: 'Security & access controls' }
+        };
+        const agentSection = agentSectionMap[agent.id] || null;
+
         container.innerHTML = ``;
 
         // Update the fixed toolbar with agent nav + actions
@@ -673,6 +681,14 @@
                         </div>
                     `).join('') : '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No sessions yet</div>'}
                 </div>
+
+                ${agentSection ? `
+                <div class="agent-dash-card">
+                    <div class="agent-dash-card-title">${agentSection.title}</div>
+                    <div style="color:var(--text-muted); font-size:12px; margin-bottom:10px;">${agentSection.desc}</div>
+                    <button class="btn btn-secondary btn-sm" onclick="showPage('${agentSection.page}')">Open ${agentSection.title.replace(/^\S+\s/, '')}</button>
+                </div>
+                ` : ''}
 
                 <!-- Memory Files Card -->
                 <div class="agent-dash-card agent-dash-card-wide">
