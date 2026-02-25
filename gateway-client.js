@@ -30,6 +30,8 @@ function normalizeSessionKey(key) {
         ui: 'quill',
         swe: 'chip',
         youtube: 'snip',
+        veo: 'snip',
+        veoflow: 'snip',
         sec: 'knox',
         net: 'sentinel',
         smm: 'nova',

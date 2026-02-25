@@ -35,9 +35,9 @@ Examples:
 | `quill` | Quill (FE/UI) |
 | `chip` | Chip (SWE) |
 | `sentinel` | Sentinel (NET) |
-| `snip` | Snip (YouTube) |
+| `snip` | Snip (YouTube + Veo) |
 | `knox` | Knox (SEC) |
-| `nova` | Nova (SMM) |
+| `nova` | Nova (SMM: X/FB/IG/LinkedIn/Threads/Pinterest) |
 | `haven` | Haven (FAM) |
 | `ledger` | Ledger (TAX) |
 | `canon` | Canon (DOC) |

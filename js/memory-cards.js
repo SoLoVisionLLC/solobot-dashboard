@@ -47,14 +47,14 @@
         'devops': { name: 'Forge', role: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' },
         'sec': { name: 'Knox', role: 'SEC', emoji: '🔒', reports: [], description: 'Security' },
         'net': { name: 'Sentinel', role: 'NET', emoji: '📡', reports: [], description: 'Networking & Infrastructure' },
-        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['smm', 'youtube'], description: 'Marketing & Product' },
+        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['smm', 'youtube'], description: 'Marketing & Product (Nova + Snip)' },
         'docs': { name: 'Canon', role: 'DOC', emoji: '📚', reports: [], description: 'Knowledge & Docs' },
         'art': { name: 'Luma', role: 'ART', emoji: '🎨', reports: [], description: 'Creative Director' },
         'tax': { name: 'Ledger', role: 'TAX', emoji: '📒', reports: [], description: 'Tax Compliance' },
         'ui': { name: 'Quill', role: 'FE/UI', emoji: '✒️', reports: [], description: 'Frontend / UI' },
         'swe': { name: 'Chip', role: 'SWE', emoji: '💻', reports: [], description: 'Software Engineer' },
-        'smm': { name: 'Nova', role: 'SMM', emoji: '📱', reports: [], description: 'Social Media' },
-        'youtube': { name: 'Snip', role: 'YT', emoji: '🎬', reports: [], description: 'Content' },
+        'smm': { name: 'Nova', role: 'SMM', emoji: '📱', reports: [], description: 'Social: X, Facebook, Instagram, LinkedIn, Threads, Pinterest' },
+        'youtube': { name: 'Snip', role: 'YT/VEO', emoji: '🎬', reports: [], description: 'YouTube + Veo' },
         'family': { name: 'Haven', role: 'FAM', emoji: '🏠', reports: [], description: 'Family & Household' }
     };
 
