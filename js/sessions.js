@@ -767,9 +767,17 @@ async function saveCurrentChat() {
 
 async function loadSessionHistory(sessionKey) {
     const loadVersion = sessionVersion;
+    const normalizedSessionKey = normalizeDashboardSessionKey(sessionKey);
+
+    function sessionLikelyHasHistory(targetSessionKey) {
+        const session = availableSessions.find(s => s.key === targetSessionKey);
+        if (!session) return false;
+        const tokens = Number(session.totalTokens || 0);
+        return Number.isFinite(tokens) && tokens > 0;
+    }
 
     // Helper: attempt to load from gateway
-    async function tryGatewayLoad() {
+    async function tryGatewayLoad(attempt = 1) {
         if (!gateway || !gateway.isConnected()) return false;
         try {
             const result = await gateway.loadHistory();
@@ -777,15 +785,28 @@ async function loadSessionHistory(sessionKey) {
                 sessLog(`[Dashboard] Ignoring stale history load for ${sessionKey}`);
                 return true; // Stale but don't retry
             }
-            if (result?.messages && result.messages.length > 0) {
+            const messages = Array.isArray(result?.messages) ? result.messages : [];
+            if (messages.length > 0) {
                 if (state.chat?.messages?.length > 0) {
-                    mergeHistoryMessages(result.messages);
+                    mergeHistoryMessages(messages);
                 } else {
-                    loadHistoryMessages(result.messages);
+                    loadHistoryMessages(messages);
                 }
-                sessLog(`[Dashboard] Loaded ${result.messages.length} messages from gateway for ${sessionKey}`);
+                sessLog(`[Dashboard] Loaded ${messages.length} messages from gateway for ${sessionKey}`);
                 return true;
             }
+
+            // Gateway session switch can race with immediate history fetch.
+            // If this session is known to have tokens, retry once before falling back.
+            if (attempt < 2 && sessionLikelyHasHistory(normalizedSessionKey)) {
+                sessLog(`[Dashboard] Empty history on attempt ${attempt} for ${sessionKey}; retrying once`);
+                await new Promise(r => setTimeout(r, 350));
+                if (loadVersion !== sessionVersion) return true;
+                return tryGatewayLoad(attempt + 1);
+            }
+
+            // Empty history is still a valid load result.
+            return true;
         } catch (e) {
             console.warn('[Dashboard] Gateway history failed:', e.message);
         }

@@ -1805,17 +1805,46 @@ function forceSyncActiveAgent(agentId) {
 }
 
 // Track last-used session per agent (persisted to localStorage)
+function sessionBelongsToAgent(sessionKey, agentId) {
+    if (!sessionKey || !agentId) return false;
+    const normalizedSession = normalizeDashboardSessionKey(sessionKey);
+    const match = normalizedSession.match(/^agent:([^:]+):/);
+    if (!match) return false;
+    const sessionAgent = window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1];
+    const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+    return sessionAgent === canonicalAgent;
+}
+
 function getLastAgentSession(agentId) {
     try {
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
-        return map[agentId] || null;
+        const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+        const rawSession = map[canonicalAgent] || map[agentId] || null;
+        if (!rawSession) return null;
+
+        const normalizedSession = normalizeDashboardSessionKey(rawSession);
+        if (!sessionBelongsToAgent(normalizedSession, canonicalAgent)) {
+            // Self-heal corrupted mapping so a click can never jump to another agent's session.
+            delete map[canonicalAgent];
+            delete map[agentId];
+            localStorage.setItem('agent_last_sessions', JSON.stringify(map));
+            chatLog(`[Sessions] Cleared invalid last-session mapping for ${canonicalAgent}: ${normalizedSession}`);
+            return null;
+        }
+        return normalizedSession;
     } catch { return null; }
 }
 
 function saveLastAgentSession(agentId, sessionKey) {
     try {
+        const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+        const normalizedSession = normalizeDashboardSessionKey(sessionKey);
+        if (!sessionBelongsToAgent(normalizedSession, canonicalAgent)) {
+            chatLog(`[Sessions] Skipping invalid last-session save for ${canonicalAgent}: ${normalizedSession}`);
+            return;
+        }
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
-        map[agentId] = sessionKey;
+        map[canonicalAgent] = normalizedSession;
         localStorage.setItem('agent_last_sessions', JSON.stringify(map));
     } catch { }
 }
@@ -1827,15 +1856,17 @@ function setupSidebarAgents() {
     const activateAgentFromEl = (el) => {
         const agentId = el.getAttribute('data-agent');
         if (!agentId) return;
+        const canonicalAgentId = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
 
         // IMMEDIATE UI feedback - show active state before switch completes
-        forceSyncActiveAgent(agentId);
+        forceSyncActiveAgent(canonicalAgentId);
 
         // Update current agent ID first so dropdown filters correctly
-        currentAgentId = agentId;
+        currentAgentId = canonicalAgentId;
 
         // Restore last session for this agent, or default to main
-        const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
+        const remembered = getLastAgentSession(canonicalAgentId);
+        const sessionKey = remembered || `agent:${canonicalAgentId}:main`;
         showPage('chat');
 
         // Fire-and-forget switch (queue in sessions.js handles ordering)
