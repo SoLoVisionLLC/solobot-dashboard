@@ -166,6 +166,14 @@ document.addEventListener('click', function (e) {
 
 // Session Management
 let availableSessions = [];
+window.availableSessions = availableSessions; // Shared session cache for other modules (agents dashboard, heatmap, sidebar, etc.)
+
+function setAvailableSessions(next) {
+    availableSessions = Array.isArray(next) ? next : [];
+    window.availableSessions = availableSessions;
+    return availableSessions;
+}
+
 window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's sessions we're viewing
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
@@ -360,7 +368,7 @@ async function fetchSessions() {
 
                 const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
                 const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
-                availableSessions = canonicalizeSessionEntries([...gatewaySessions, ...mergedLocalSessions]);
+                setAvailableSessions(canonicalizeSessionEntries([...gatewaySessions, ...mergedLocalSessions]));
 
                 sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
@@ -397,7 +405,7 @@ async function fetchSessions() {
 
         const serverKeys = new Set(serverSessions.map(s => s.key));
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
-        availableSessions = canonicalizeSessionEntries([...serverSessions, ...mergedLocalSessions]);
+        setAvailableSessions(canonicalizeSessionEntries([...serverSessions, ...mergedLocalSessions]));
 
         sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
@@ -546,7 +554,7 @@ window.deleteSession = async function (sessionKey, sessionName) {
             if (result && result.ok) {
                 showToast(`Session "${sessionName}" deleted`, 'success');
                 // Remove from local list
-                availableSessions = availableSessions.filter(s => s.key !== sessionKey);
+                setAvailableSessions(availableSessions.filter(s => s.key !== sessionKey));
                 populateSessionDropdown();
             } else {
                 showToast(`Failed to delete: ${result?.error || 'Unknown error'}`, 'error');
