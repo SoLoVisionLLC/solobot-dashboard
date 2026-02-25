@@ -13,6 +13,10 @@
     let currentDrilledAgent = null;
     let panzoomInstance = null;
     let isSpacePressed = false;
+    let agentMetricsRefreshTimer = null;
+    let sessionSwitchHookInstalled = false;
+    const cardDetailsCache = new Map();
+    const cardDetailsInflight = new Map();
 
     function sanitizeScale(rawScale, fallback = 1) {
         const n = Number(rawScale);
@@ -59,6 +63,34 @@
     };
 
     const ORG_ORDER = ['main', 'exec', 'cto', 'coo', 'cfo', 'dev', 'devops', 'sec', 'net', 'cmp', 'docs', 'art', 'tax', 'ui', 'swe', 'smm', 'youtube', 'family'];
+
+    const ORG_TO_CANONICAL = {
+        main: 'main',
+        exec: 'elon',
+        cto: 'orion',
+        coo: 'atlas',
+        cfo: 'sterling',
+        dev: 'dev',
+        devops: 'forge',
+        sec: 'knox',
+        net: 'sentinel',
+        cmp: 'vector',
+        docs: 'canon',
+        art: 'luma',
+        tax: 'ledger',
+        ui: 'quill',
+        swe: 'chip',
+        smm: 'nova',
+        youtube: 'snip',
+        family: 'haven'
+    };
+
+    function resolveAgentForOrgId(orgId, agentMap) {
+        const direct = agentMap[orgId];
+        if (direct) return direct;
+        const canonical = ORG_TO_CANONICAL[orgId];
+        return canonical ? agentMap[canonical] : null;
+    }
 
     function getMemoryLayout() {
         return localStorage.getItem('solobot-memory-layout') || 'org-tree';
@@ -112,6 +144,183 @@
         const days = Math.floor(hours / 24);
         if (days < 30) return `${days}d ago`;
         return new Date(dateStr).toLocaleDateString();
+    }
+
+    function setAgentMetricsStatus(agentId, status, metrics) {
+        const msgEl = document.getElementById(`agent-metric-msgs-${agentId}`);
+        const costEl = document.getElementById(`agent-metric-cost-${agentId}`);
+        if (!msgEl || !costEl) return;
+
+        if (status === 'loading') {
+            msgEl.textContent = '…';
+            costEl.textContent = '…';
+            msgEl.style.opacity = '0.7';
+            costEl.style.opacity = '0.7';
+            return;
+        }
+
+        msgEl.style.opacity = '';
+        costEl.style.opacity = '';
+
+        if (status === 'error') {
+            msgEl.textContent = '—';
+            costEl.textContent = '—';
+            msgEl.title = 'Metrics unavailable';
+            costEl.title = 'Metrics unavailable';
+            return;
+        }
+
+        const msgs = Number(metrics?.msgsToday);
+        const cost = Number(metrics?.estCostToday);
+
+        msgEl.textContent = Number.isFinite(msgs) ? String(msgs) : '—';
+        costEl.textContent = Number.isFinite(cost) ? `$${cost.toFixed(4)}` : '—';
+        msgEl.title = '';
+        costEl.title = '';
+    }
+
+    async function refreshAgentMetrics(agentId) {
+        if (!agentId) return;
+        setAgentMetricsStatus(agentId, 'loading');
+        try {
+            const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/metrics?range=today`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const metrics = await res.json();
+            setAgentMetricsStatus(agentId, 'ready', metrics);
+        } catch (e) {
+            console.warn('[Agents] metrics refresh failed:', e.message);
+            setAgentMetricsStatus(agentId, 'error');
+        }
+    }
+
+    function scheduleAgentMetricsRefresh(agentId) {
+        if (agentMetricsRefreshTimer) {
+            clearInterval(agentMetricsRefreshTimer);
+            agentMetricsRefreshTimer = null;
+        }
+        if (!agentId) return;
+        refreshAgentMetrics(agentId);
+        agentMetricsRefreshTimer = setInterval(() => {
+            if (!currentDrilledAgent || currentDrilledAgent.id !== agentId) return;
+            refreshAgentMetrics(agentId);
+        }, 45000);
+    }
+
+    function installSessionSwitchMetricsHook() {
+        if (sessionSwitchHookInstalled) return;
+        if (typeof window.switchToSession !== 'function') return;
+
+        const original = window.switchToSession;
+        if (original && original._memoryCardsMetricsWrapped) {
+            sessionSwitchHookInstalled = true;
+            return;
+        }
+
+        const wrapped = async function(...args) {
+            const result = await original.apply(this, args);
+            if (currentDrilledAgent?.id) {
+                refreshAgentMetrics(currentDrilledAgent.id);
+            }
+            return result;
+        };
+        wrapped._memoryCardsMetricsWrapped = true;
+        window.switchToSession = wrapped;
+        sessionSwitchHookInstalled = true;
+    }
+
+    function getStaleFlagFromDate(dateLike) {
+        if (!dateLike) return false;
+        const ts = new Date(dateLike).getTime();
+        if (!Number.isFinite(ts)) return false;
+        return (Date.now() - ts) > (2 * 60 * 60 * 1000);
+    }
+
+    function normalizeCardDetailsPayload(payload) {
+        if (!payload || typeof payload !== 'object') {
+            return { activeTaskCount: null, lastUpdateIso: null, isStale: false };
+        }
+
+        const activeTaskCount = Number.isFinite(Number(payload.activeTaskCount))
+            ? Number(payload.activeTaskCount)
+            : Number.isFinite(Number(payload?.meta?.activeTaskCount))
+                ? Number(payload.meta.activeTaskCount)
+                : null;
+
+        const lastUpdateIso = payload.lastUpdateIso
+            || payload.lastUpdateAt
+            || payload?.meta?.lastUpdateIso
+            || payload?.meta?.lastUpdateAt
+            || null;
+
+        const isStale = (typeof payload.isStale === 'boolean')
+            ? payload.isStale
+            : getStaleFlagFromDate(lastUpdateIso);
+
+        return { activeTaskCount, lastUpdateIso, isStale };
+    }
+
+    function applyOrgCardDetails(orgId, details) {
+        const tasksEl = document.getElementById(`org-meta-tasks-${orgId}`);
+        const updateEl = document.getElementById(`org-meta-update-${orgId}`);
+        if (!tasksEl || !updateEl) return;
+
+        const taskText = Number.isFinite(details?.activeTaskCount) ? String(details.activeTaskCount) : '—';
+        const updateText = details?.lastUpdateIso ? timeAgo(details.lastUpdateIso) : '—';
+
+        tasksEl.textContent = taskText;
+        updateEl.textContent = updateText;
+
+        const stale = !!details?.isStale;
+        updateEl.style.opacity = stale ? '0.72' : '';
+        updateEl.style.fontStyle = stale ? 'italic' : '';
+        updateEl.title = stale ? 'Stale: no updates in >2h' : '';
+    }
+
+    async function fetchOrgCardDetails(orgId, agentId) {
+        const cacheKey = `${orgId}:${agentId || ''}`;
+        if (cardDetailsCache.has(cacheKey)) {
+            return cardDetailsCache.get(cacheKey);
+        }
+        if (cardDetailsInflight.has(cacheKey)) {
+            return cardDetailsInflight.get(cacheKey);
+        }
+
+        const req = (async () => {
+            try {
+                const res = await fetch(`/api/agents/${encodeURIComponent(agentId || orgId)}/card-details`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const payload = await res.json();
+                const normalized = normalizeCardDetailsPayload(payload);
+                cardDetailsCache.set(cacheKey, normalized);
+                return normalized;
+            } catch (e) {
+                console.warn('[Agents] card-details fetch failed:', orgId, agentId, e.message);
+                const fallback = { activeTaskCount: null, lastUpdateIso: null, isStale: false };
+                cardDetailsCache.set(cacheKey, fallback);
+                return fallback;
+            } finally {
+                cardDetailsInflight.delete(cacheKey);
+            }
+        })();
+
+        cardDetailsInflight.set(cacheKey, req);
+        return req;
+    }
+
+    async function hydrateOrgCardDetails(levels) {
+        if (!levels) return;
+
+        const ids = [];
+        Object.values(levels).forEach(nodes => {
+            (nodes || []).forEach(({ id, agent }) => {
+                ids.push({ orgId: id, agentId: agent?.id || id });
+            });
+        });
+
+        await Promise.all(ids.map(async ({ orgId, agentId }) => {
+            const details = await fetchOrgCardDetails(orgId, agentId);
+            applyOrgCardDetails(orgId, details);
+        }));
     }
 
     function computeStats(agents) {
@@ -321,7 +530,7 @@
             const q = filter.toLowerCase();
             visibleIds = new Set(ORG_ORDER.filter(id => {
                 const org = ORG_TREE[id];
-                const agent = agentMap[id];
+                const agent = resolveAgentForOrgId(id, agentMap);
                 if (!org) return false;
                 if (org.name.toLowerCase().includes(q)) return true;
                 if (org.role.toLowerCase().includes(q)) return true;
@@ -333,13 +542,16 @@
         const stats = computeStats(agentsData);
         const today = new Date().toDateString();
 
+        // Refresh operational card details on each full tree render
+        cardDetailsCache.clear();
+
         const levels = {};
         ORG_ORDER.forEach(id => {
             if (!visibleIds.has(id)) return;
             const org = ORG_TREE[id];
             const depth = getDepth(id);
             if (!levels[depth]) levels[depth] = [];
-            levels[depth].push({ id, org, agent: agentMap[id] });
+            levels[depth].push({ id, org, agent: resolveAgentForOrgId(id, agentMap) });
         });
 
         const connectorPaths = generateConnectorPaths(levels);
@@ -394,6 +606,11 @@
         `;
 
         container.innerHTML = html;
+
+        // Populate operational metadata from authoritative backend endpoint
+        hydrateOrgCardDetails(levels).catch((e) => {
+            console.warn('[Agents] Failed to hydrate org card details:', e.message);
+        });
 
         // Initialize pan/zoom after render
         setTimeout(() => {
@@ -488,6 +705,11 @@
                     </div>
                     ${recentFiles.length ? `<div class="org-node-pills">${recentFiles.map(f => `<span class="agent-file-pill">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
                     <div class="org-node-meta">${fileCount} file${fileCount !== 1 ? 's' : ''} · ${lastMod ? timeAgo(lastMod) : 'No files'}</div>
+                    <div class="org-node-meta" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                        <span>🧩 Active tasks: <span id="org-meta-tasks-${id}">—</span></span>
+                        <span>·</span>
+                        <span>⏱ Last update: <span id="org-meta-update-${id}">—</span></span>
+                    </div>
                 </div>
             </div>
         `;
@@ -506,7 +728,7 @@
     function updateToolbarForAgent(agent, statusLabel, statusClass) {
         const tb = document.querySelector('.agents-toolbar');
         if (!tb) return;
-        const org = ORG_TREE[agent.id] || {};
+        const org = ORG_TREE[agent._orgId || agent.id] || {};
         tb.innerHTML = `
             <button class="btn btn-ghost btn-sm" onclick="window._memoryCards.backToGrid()" style="flex-shrink:0; white-space:nowrap;">← Agents</button>
             <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
@@ -566,9 +788,12 @@
             setTimeout(() => drillInto(agentId), 200);
             return;
         }
-        currentDrilledAgent = agentsData.find(a => a.id === agentId);
+        const orgId = String(agentId || '').toLowerCase();
+        const canonicalId = ORG_TO_CANONICAL[orgId] || orgId;
+        const found = agentsData.find(a => String(a.id || '').toLowerCase() === canonicalId);
+        currentDrilledAgent = found ? { ...found, _orgId: orgId } : null;
         if (!currentDrilledAgent) {
-            console.warn('[Agents] drillInto: agent not found:', agentId);
+            console.warn('[Agents] drillInto: agent not found:', agentId, 'canonical:', canonicalId);
             return;
         }
         // Push deep-link URL
@@ -581,6 +806,10 @@
 
     function backToGrid() {
         currentDrilledAgent = null;
+        if (agentMetricsRefreshTimer) {
+            clearInterval(agentMetricsRefreshTimer);
+            agentMetricsRefreshTimer = null;
+        }
         // Restore /agents URL
         if (window.location.pathname !== '/agents') {
             history.pushState({ page: 'agents', agentId: null }, '', '/agents');
@@ -593,7 +822,7 @@
     // ── Full Agent Dashboard (replaces simple file list) ──
     function renderDrilledView(container) {
         const agent = currentDrilledAgent;
-        const org = ORG_TREE[agent.id] || {};
+        const org = ORG_TREE[agent._orgId || agent.id] || {};
         const files = agent.files || [];
 
         // Determine live status from available sessions
@@ -609,16 +838,52 @@
         const statusClass = isActive ? 'success' : isRecent ? 'warning' : '';
         const lastSession = agentSessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0];
 
-        // Compute token/cost summary from activity log
+        // Compute token/cost summary from activity log (with resilient fallbacks)
         const activityLog = window.state?.activityLog || [];
         const agentPrefix = `agent:${agent.id}:`;
         const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        const todayStartMs = todayStart.getTime();
+
         const todayEvents = activityLog.filter(e => {
             const ts = e.timestamp ? new Date(e.timestamp).getTime() : 0;
-            return ts >= todayStart.getTime() && (e.session?.startsWith(agentPrefix) || e.agentId === agent.id);
+            return ts >= todayStartMs && (e.session?.startsWith(agentPrefix) || e.agentId === agent.id);
         });
-        const msgCount = todayEvents.filter(e => e.type === 'message' || e.type === 'chat').length;
-        const estCost = (todayEvents.reduce((sum, e) => sum + (e.tokens || 0), 0) * 0.000003).toFixed(4);
+
+        let msgCount = todayEvents.filter(e => e.type === 'message' || e.type === 'chat').length;
+        let tokenCount = todayEvents.reduce((sum, e) => sum + (e.tokens || 0), 0);
+
+        // Fallback #1: derive today's message count from cached chat sessions
+        if (msgCount === 0) {
+            try {
+                const chatSessions = window.state?.chat?.sessions || {};
+                for (const s of agentSessions) {
+                    const key = s.key;
+                    const messages = Array.isArray(chatSessions[key]) ? chatSessions[key] : [];
+                    for (const m of messages) {
+                        const ts = m?.timestamp
+                            ? new Date(m.timestamp).getTime()
+                            : (Number.isFinite(m?.time) ? Number(m.time) : 0);
+                        const role = String(m?.role || m?.from || '').toLowerCase();
+                        if (ts >= todayStartMs && (role === 'user' || role === 'assistant')) {
+                            msgCount += 1;
+                        }
+                    }
+                }
+            } catch (_) { /* no-op */ }
+        }
+
+        // Fallback #2: if no token telemetry events, estimate from today's session token totals
+        if (tokenCount === 0) {
+            tokenCount = agentSessions.reduce((sum, s) => {
+                const ts = s?.updatedAt ? new Date(s.updatedAt).getTime() : 0;
+                if (ts >= todayStartMs) {
+                    return sum + (Number(s?.totalTokens) || 0);
+                }
+                return sum;
+            }, 0);
+        }
+
+        const estCost = (tokenCount * 0.000003).toFixed(4);
 
         // File summary
         const sortedFiles = [...files].sort((a, b) => {
@@ -640,7 +905,7 @@
             cfo: { title: '💼 Business', page: 'business', desc: 'Business KPIs, finance, and planning' },
             sec: { title: '🛡️ Security', page: 'security', desc: 'Security & access controls' }
         };
-        const agentSection = agentSectionMap[agent.id] || null;
+        const agentSection = agentSectionMap[agent._orgId || agent.id] || null;
 
         container.innerHTML = ``;
 
@@ -657,8 +922,8 @@
                     <div class="agent-dash-stats">
                         <div class="agent-dash-stat"><span class="agent-dash-stat-val">${agentSessions.length}</span><span class="agent-dash-stat-label">Sessions</span></div>
                         <div class="agent-dash-stat"><span class="agent-dash-stat-val">${lastActivity ? timeAgo(lastActivity) : '—'}</span><span class="agent-dash-stat-label">Last Active</span></div>
-                        <div class="agent-dash-stat"><span class="agent-dash-stat-val">${msgCount}</span><span class="agent-dash-stat-label">Msgs Today</span></div>
-                        <div class="agent-dash-stat"><span class="agent-dash-stat-val">$${estCost}</span><span class="agent-dash-stat-label">Est. Cost Today</span></div>
+                        <div class="agent-dash-stat"><span class="agent-dash-stat-val" id="agent-metric-msgs-${agent.id}">…</span><span class="agent-dash-stat-label">Msgs Today</span></div>
+                        <div class="agent-dash-stat"><span class="agent-dash-stat-val" id="agent-metric-cost-${agent.id}">…</span><span class="agent-dash-stat-label">Est. Cost Today</span></div>
                     </div>
                     ${lastSession ? `<div class="agent-last-session">Last session: <strong>${escapeHtml(lastSession.displayName || lastSession.key)}</strong></div>` : ''}
                 </div>
@@ -724,6 +989,9 @@
             <!-- File Preview Panel (hidden until file selected) -->
             <div class="agent-drill-preview" id="agent-drill-preview" style="display:none;"></div>
         `;
+
+        // Load authoritative backend metrics (immediate + interval refresh)
+        scheduleAgentMetricsRefresh(agent.id);
 
         // Load model config async
         loadAgentModelConfig(agent.id);
@@ -1216,6 +1484,10 @@
         setTimeout(() => {
             applyMemoryLayout();
         }, 200);
+
+        // Session-switch-triggered metrics refresh
+        installSessionSwitchMetricsHook();
+        setTimeout(installSessionSwitchMetricsHook, 1500);
     });
 
     Object.assign(memoryCardsApi, {
@@ -1248,6 +1520,9 @@
                 minimap.classList.toggle('collapsed');
                 localStorage.setItem('solobot-minimap-collapsed', minimap.classList.contains('collapsed'));
             }
+        },
+        getCurrentAgentId: function () {
+            return currentDrilledAgent?.id || null;
         }
     });
 

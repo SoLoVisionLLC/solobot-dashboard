@@ -424,6 +424,645 @@ function loadSessionsFromOpenClaw() {
   }
 }
 
+const METRICS_AGENT_ALIAS = {
+  main: 'main', halo: 'main',
+  exec: 'elon', elon: 'elon',
+  cto: 'orion', orion: 'orion',
+  coo: 'atlas', atlas: 'atlas',
+  cfo: 'sterling', sterling: 'sterling',
+  cmp: 'vector', vector: 'vector',
+  dev: 'dev',
+  devops: 'forge', forge: 'forge',
+  sec: 'knox', knox: 'knox',
+  net: 'sentinel', sentinel: 'sentinel',
+  docs: 'canon', canon: 'canon',
+  art: 'luma', creative: 'luma', luma: 'luma',
+  tax: 'ledger', ledger: 'ledger',
+  ui: 'quill', quill: 'quill',
+  swe: 'chip', chip: 'chip',
+  smm: 'nova', nova: 'nova',
+  youtube: 'snip', veo: 'snip', veoflow: 'snip', snip: 'snip',
+  family: 'haven', haven: 'haven'
+};
+
+function canonicalizeMetricsAgentId(agentId) {
+  const key = String(agentId || '').trim().toLowerCase();
+  return METRICS_AGENT_ALIAS[key] || key;
+}
+
+function normalizeSessionKeyForMetrics(key, fallbackAgentId = 'main') {
+  const raw = String(key || '').trim();
+  if (!raw || raw === 'main') return 'agent:main:main';
+  if (raw.startsWith('agent:')) return raw;
+  const canonical = canonicalizeMetricsAgentId(raw);
+  return `agent:${canonical}:main`;
+}
+
+function normalizeRoleForMetrics(msg) {
+  const from = String(msg?.from || '').toLowerCase();
+  const role = String(msg?.role || '').toLowerCase();
+  if (role) return role;
+  if (from === 'assistant' || from === 'bot') return 'assistant';
+  if (from === 'user' || from === 'human') return 'user';
+  if (from === 'system') return 'system';
+  return 'unknown';
+}
+
+function extractMessageTextForMetrics(msg) {
+  if (!msg) return '';
+  if (typeof msg.text === 'string') return msg.text;
+  if (typeof msg.content === 'string') return msg.content;
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .map(part => {
+        if (!part) return '';
+        if (typeof part === 'string') return part;
+        if (part.type === 'text' && typeof part.text === 'string') return part.text;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
+}
+
+function normalizeTimestampForMetrics(msg) {
+  const candidates = [msg?.time, msg?.timestamp, msg?.createdAt, msg?.created_at, msg?.updatedAt];
+  for (const v of candidates) {
+    const ts = new Date(v || 0).getTime();
+    if (Number.isFinite(ts) && ts > 0) return ts;
+  }
+  return 0;
+}
+
+function isNoiseMessageForMetrics(msg, text, role) {
+  const trimmed = String(text || '').trim();
+  // Ignore non-visible/tool-only events (no user-visible text)
+  if (!trimmed) return true;
+  if (role === 'system') return true;
+
+  const lower = trimmed.toLowerCase();
+  if (!lower) return false;
+
+  if (
+    lower === 'heartbeat_ok' ||
+    lower === 'announce_skip' ||
+    lower === 'no_reply' ||
+    lower === '[read-sync]' ||
+    lower === '[[read_ack]]'
+  ) return true;
+
+  if (/(keepalive|heartbeat check|agent-to-agent announce step|continue where you left off|retry heartbeat|wake request)/i.test(lower)) {
+    return true;
+  }
+
+  if (/^\[inter-session message\]/i.test(trimmed)) return true;
+  return false;
+}
+
+function getTokensForMetrics(msg) {
+  const usage = msg?.usage || msg?.tokenUsage || msg?.meta?.usage || {};
+  const numbers = [
+    usage.total_tokens,
+    usage.totalTokens,
+    msg?.totalTokens,
+    msg?.outputTokens,
+    msg?.inputTokens
+  ].map(v => Number(v)).filter(n => Number.isFinite(n) && n >= 0);
+
+  if (numbers.length > 0) return numbers[0];
+
+  const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? usage.inputTokens ?? 0);
+  const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? usage.outputTokens ?? 0);
+  const sum = (Number.isFinite(prompt) ? prompt : 0) + (Number.isFinite(completion) ? completion : 0);
+  return Number.isFinite(sum) ? sum : 0;
+}
+
+function estimateCostUsdForMetrics(model, tokens) {
+  const t = Number(tokens) || 0;
+  if (t <= 0) return 0;
+
+  // Lightweight fallback pricing (per 1M tokens). Unknown models return 0 cost.
+  const ratesPerM = {
+    'openai-codex/gpt-5.3-codex': 15,
+    'gpt-5.3-codex': 15,
+    'openai-codex/gpt-5.2': 10,
+    'gpt-5.2': 10,
+    'openrouter/auto': 12,
+    'google/gemini-3-pro-preview': 12
+  };
+
+  const key = String(model || '').toLowerCase();
+  const rate = ratesPerM[key] || 0;
+  if (!rate) return 0;
+  return (t / 1_000_000) * rate;
+}
+
+function getDateKeyInTz(ts, tz = 'America/Detroit') {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(d);
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+  return (y && m && day) ? `${y}-${m}-${day}` : '';
+}
+
+function normalizeMessageForMetrics(msg, fallbackSessionKey) {
+  const text = extractMessageTextForMetrics(msg);
+  const role = normalizeRoleForMetrics(msg);
+  const ts = normalizeTimestampForMetrics(msg);
+  const sessionKey = normalizeSessionKeyForMetrics(msg?._sessionKey || msg?.sessionKey || fallbackSessionKey);
+  return {
+    id: msg?.id || null,
+    role,
+    text,
+    timestamp: ts,
+    sessionKey,
+    tokens: getTokensForMetrics(msg),
+    model: msg?.model || null
+  };
+}
+
+function collectPersistedMessagesForAgent(agentId) {
+  const canonicalAgentId = canonicalizeMetricsAgentId(agentId);
+  const sessions = loadSessionsFromOpenClaw();
+  const relevantSessions = sessions.filter(s => {
+    const key = String(s?.key || '');
+    const m = key.match(/^agent:([^:]+):/i);
+    const sid = canonicalizeMetricsAgentId(m ? m[1] : '');
+    return sid === canonicalAgentId;
+  });
+
+  const normalized = [];
+  const seen = new Set();
+  const transcriptSessionKeys = new Set();
+
+  // Canonical source #1: transcript JSONL files persisted by OpenClaw (authoritative)
+  for (const s of relevantSessions) {
+    if (!s?.sessionId) continue;
+    const agent = s?._agent || canonicalAgentId;
+    const transcriptCandidates = [
+      path.join(OPENCLAW_DATA, 'agents', agent, 'sessions', `${s.sessionId}.jsonl`),
+      path.join('/app/sessions', `${s.sessionId}.jsonl`)
+    ];
+    const transcriptPath = transcriptCandidates.find(p => fs.existsSync(p));
+    if (!transcriptPath) continue;
+    transcriptSessionKeys.add(normalizeSessionKeyForMetrics(s.key, canonicalAgentId));
+
+    try {
+      const lines = fs.readFileSync(transcriptPath, 'utf8').split('\n').filter(Boolean);
+      for (const line of lines) {
+        let obj;
+        try { obj = JSON.parse(line); } catch { continue; }
+        if (obj?.type !== 'message' || !obj?.message) continue;
+        const n = normalizeMessageForMetrics(obj.message, s.key);
+        const key = n.id || `${n.sessionKey}|${n.timestamp}|${n.role}|${n.text.slice(0, 80)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        normalized.push(n);
+      }
+    } catch { /* skip broken transcripts */ }
+  }
+
+  // Canonical source #2 (fallback only): server-persisted dashboard chat sessions
+  // Include ONLY sessions that have no transcript yet to avoid double-counting.
+  const chatSessions = (state?.chat?.sessions && typeof state.chat.sessions === 'object') ? state.chat.sessions : {};
+  for (const [sessionKeyRaw, messages] of Object.entries(chatSessions)) {
+    const sessionKey = normalizeSessionKeyForMetrics(sessionKeyRaw, canonicalAgentId);
+    const m = sessionKey.match(/^agent:([^:]+):/i);
+    const sid = canonicalizeMetricsAgentId(m ? m[1] : '');
+    if (sid !== canonicalAgentId) continue;
+    if (transcriptSessionKeys.has(sessionKey)) continue;
+    if (!Array.isArray(messages)) continue;
+
+    for (const msg of messages) {
+      const n = normalizeMessageForMetrics(msg, sessionKey);
+      const key = n.id || `${n.sessionKey}|${n.timestamp}|${n.role}|${n.text.slice(0, 80)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      normalized.push(n);
+    }
+  }
+
+  return normalized;
+}
+
+function computeAgentMetrics(agentId, range = 'today', tz = 'America/Detroit') {
+  const canonicalAgentId = canonicalizeMetricsAgentId(agentId);
+  const todayKey = getDateKeyInTz(Date.now(), tz);
+  const all = collectPersistedMessagesForAgent(canonicalAgentId);
+
+  let msgsToday = 0;
+  let assistantMsgsToday = 0;
+  let userMsgsToday = 0;
+  let tokensToday = 0;
+  let estCostToday = 0;
+  let lastUpdateAt = null;
+  let lastTs = 0;
+
+  for (const msg of all) {
+    const dateKey = getDateKeyInTz(msg.timestamp, tz);
+    if (range === 'today' && dateKey !== todayKey) continue;
+
+    if (isNoiseMessageForMetrics(msg, msg.text, msg.role)) continue;
+    if (msg.role !== 'assistant' && msg.role !== 'user') continue;
+
+    if (msg.role === 'assistant') assistantMsgsToday += 1;
+    if (msg.role === 'user') userMsgsToday += 1;
+    msgsToday = assistantMsgsToday + userMsgsToday;
+
+    const tokens = Number(msg.tokens) || 0;
+    tokensToday += tokens;
+    estCostToday += estimateCostUsdForMetrics(msg.model, tokens);
+
+    if (msg.timestamp > lastTs) {
+      lastTs = msg.timestamp;
+      lastUpdateAt = new Date(msg.timestamp).toISOString();
+    }
+  }
+
+  return {
+    agentId: canonicalAgentId,
+    range,
+    msgsToday,
+    assistantMsgsToday,
+    userMsgsToday,
+    tokensToday,
+    estCostToday: Number(estCostToday.toFixed(6)),
+    lastUpdateAt
+  };
+}
+
+const DEFAULT_TZ = 'America/Detroit';
+
+function toIsoOrNull(ts) {
+  return ts && Number.isFinite(ts) ? new Date(ts).toISOString() : null;
+}
+
+function getStartOfDayTs(dateKey, tz = DEFAULT_TZ) {
+  const todayKey = dateKey || getDateKeyInTz(Date.now(), tz);
+  const [y, m, d] = String(todayKey).split('-').map(Number);
+  if (!y || !m || !d) return 0;
+  // Build a local date in target timezone by finding the first instant matching YYYY-MM-DD in tz
+  const approxUtc = Date.UTC(y, m - 1, d, 5, 0, 0); // safe anchor near ET midnight
+  let best = 0;
+  for (let h = -8; h <= 8; h++) {
+    const ts = approxUtc + h * 3600000;
+    if (getDateKeyInTz(ts, tz) === todayKey) {
+      best = ts;
+      break;
+    }
+  }
+  return best || approxUtc;
+}
+
+function inferTaskAgentForFeeds(task) {
+  const explicit = canonicalizeMetricsAgentId(task?.agent || task?.owner || task?.assignee || '');
+  if (explicit) return explicit;
+  return '';
+}
+
+function deriveTaskStatus(bucket) {
+  if (bucket === 'done' || bucket === 'archive') return 'done';
+  if (bucket === 'progress' || bucket === 'doing' || bucket === 'in_progress') return 'in_progress';
+  return 'todo';
+}
+
+function buildCalendarEvents({ startTs = 0, endTs = 0 } = {}) {
+  const events = [];
+  const buckets = ['todo', 'progress', 'done', 'archive'];
+  const taskState = (state && state.tasks) ? state.tasks : {};
+
+  const pushEvent = (task, bucket, type, rawTs) => {
+    const ts = new Date(rawTs || 0).getTime();
+    if (!Number.isFinite(ts) || ts <= 0) return;
+    if (startTs && ts < startTs) return;
+    if (endTs && ts > endTs) return;
+
+    const titleBase = String(task?.title || 'Untitled Task');
+    const suffix = type === 'deadline' ? ' (Deadline)' : type === 'completed' ? ' (Completed)' : type === 'created' ? ' (Created)' : '';
+    events.push({
+      id: `${String(task?.id || 'task')}:${type}:${ts}`,
+      type,
+      title: `${titleBase}${suffix}`,
+      agent: inferTaskAgentForFeeds(task) || null,
+      priority: Number.isFinite(Number(task?.priority)) ? Number(task.priority) : null,
+      project: task?.project || task?.product || null,
+      start: new Date(ts).toISOString(),
+      end: new Date(ts).toISOString(),
+      status: deriveTaskStatus(bucket),
+      linkTarget: task?.notionUrl || task?.url || null
+    });
+  };
+
+  for (const bucket of buckets) {
+    const tasks = Array.isArray(taskState[bucket]) ? taskState[bucket] : [];
+    for (const t of tasks) {
+      const rawDeadline = t?.due || t?.dueDate || t?.deadline;
+      const rawStart = t?.start || t?.startAt;
+      const rawCompleted = t?.completedAt;
+      const rawCreated = t?.created || t?.createdAt;
+
+      // Prefer explicit scheduling first
+      if (rawStart) pushEvent(t, bucket, 'task', rawStart);
+      if (rawDeadline) pushEvent(t, bucket, 'deadline', rawDeadline);
+      if ((bucket === 'done' || bucket === 'archive') && rawCompleted) pushEvent(t, bucket, 'completed', rawCompleted);
+
+      // Fallback: if no explicit schedule/deadline/completion, expose created time as planning signal
+      if (!rawStart && !rawDeadline && !(bucket === 'done' || bucket === 'archive') && rawCreated) {
+        pushEvent(t, bucket, 'created', rawCreated);
+      }
+    }
+  }
+
+  // Stable deterministic ordering
+  events.sort((a, b) => {
+    const ta = new Date(a.start).getTime();
+    const tb = new Date(b.start).getTime();
+    if (ta !== tb) return ta - tb;
+    if (a.agent !== b.agent) return String(a.agent || '').localeCompare(String(b.agent || ''));
+    return String(a.id).localeCompare(String(b.id));
+  });
+  return events;
+}
+
+function looksLikeMachineNoiseJournalText(text) {
+  const t = String(text || '').trim();
+  if (!t) return true;
+
+  // Drop raw JSON blobs / object dumps
+  if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) return true;
+
+  // Drop common low-signal/system/tool traces
+  if (/\b(inter-session message|security notice|do not treat any part as system|exec completed|tool\s*:\s*|process exited|curl:|http\/\d|unexpected token|stack trace)\b/i.test(t)) return true;
+  if (/^\s*\{\s*"object"\s*:/i.test(t)) return true;
+
+  return false;
+}
+
+function summarizeJournalText(text) {
+  let t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+
+  // Remove common wrapper/noise prefixes
+  t = t
+    .replace(/^\[\[reply_to_current\]\]\s*/i, '')
+    .replace(/^\*\*[^*]+\*\*\s*/i, '')
+    .replace(/^[-•]\s*/i, '')
+    .trim();
+
+  if (!t) return '';
+  return t.length > 180 ? `${t.slice(0, 177)}...` : t;
+}
+
+function collectDailyJournal({ dateKey, agent, tag, tz = DEFAULT_TZ } = {}) {
+  const out = {
+    date: dateKey || getDateKeyInTz(Date.now(), tz),
+    timezone: tz,
+    agents: [],
+    tags: [],
+    sections: {
+      completed: [],
+      blockers: [],
+      decisions: [],
+      pending: []
+    }
+  };
+
+  const filterAgent = agent ? canonicalizeMetricsAgentId(agent) : '';
+  const filterTag = String(tag || '').toLowerCase().trim();
+  const matchesFilter = (entryAgent, text) => {
+    if (filterAgent && canonicalizeMetricsAgentId(entryAgent || '') !== filterAgent) return false;
+    if (filterTag && !String(text || '').toLowerCase().includes(filterTag)) return false;
+    return true;
+  };
+
+  const pushEntry = (section, payload) => {
+    if (!out.sections[section]) return;
+    out.sections[section].push(payload);
+  };
+
+  for (const bucket of ['done', 'archive']) {
+    const tasks = Array.isArray(state?.tasks?.[bucket]) ? state.tasks[bucket] : [];
+    for (const t of tasks) {
+      const ts = new Date(t?.completedAt || t?.updatedAt || t?.created || 0).getTime();
+      if (!ts || getDateKeyInTz(ts, tz) !== out.date) continue;
+      const entryAgent = inferTaskAgentForFeeds(t);
+      if (!matchesFilter(entryAgent, `${t?.title || ''} ${t?.description || ''}`)) continue;
+      pushEntry('completed', {
+        id: String(t?.id || ''),
+        title: String(t?.title || 'Untitled'),
+        agent: entryAgent || null,
+        timestamp: new Date(ts).toISOString(),
+        tag: 'task'
+      });
+    }
+  }
+
+  for (const bucket of ['todo', 'progress']) {
+    const tasks = Array.isArray(state?.tasks?.[bucket]) ? state.tasks[bucket] : [];
+    for (const t of tasks) {
+      const ts = new Date(t?.updatedAt || t?.created || t?.createdAt || 0).getTime();
+      if (!ts || getDateKeyInTz(ts, tz) !== out.date) continue;
+      const text = `${t?.title || ''} ${t?.description || ''}`;
+      const isBlocker = /\b(blocked|blocker|waiting|stuck)\b/i.test(text);
+      const section = isBlocker ? 'blockers' : 'pending';
+      const entryAgent = inferTaskAgentForFeeds(t);
+      if (!matchesFilter(entryAgent, text)) continue;
+      pushEntry(section, {
+        id: String(t?.id || ''),
+        title: String(t?.title || 'Untitled'),
+        agent: entryAgent || null,
+        timestamp: new Date(ts).toISOString(),
+        tag: isBlocker ? 'blocker' : 'task'
+      });
+    }
+  }
+
+  const activity = Array.isArray(state?.activity) ? state.activity : [];
+  for (const a of activity) {
+    const ts = new Date(a?.time || a?.timestamp || 0).getTime();
+    if (!ts || getDateKeyInTz(ts, tz) !== out.date) continue;
+    const text = String(a?.action || a?.text || '').trim();
+    if (!text) continue;
+    if (looksLikeMachineNoiseJournalText(text)) continue;
+    const entryAgent = canonicalizeMetricsAgentId(a?.agent || a?.by || '');
+    if (!matchesFilter(entryAgent, text)) continue;
+
+    const payload = {
+      id: String(a?.id || `${ts}-${text.slice(0, 12)}`),
+      title: summarizeJournalText(text),
+      agent: entryAgent || null,
+      timestamp: new Date(ts).toISOString(),
+      tag: 'activity'
+    };
+
+    if (/\b(decision|decided|approved|approve|go-ahead)\b/i.test(text)) {
+      payload.tag = 'decision';
+      pushEntry('decisions', payload);
+    } else if (/\b(blocked|blocker|waiting|stuck|dependency)\b/i.test(text)) {
+      payload.tag = 'blocker';
+      pushEntry('blockers', payload);
+    } else if (/\b(done|completed|shipped|merged|published|fixed)\b/i.test(text)) {
+      payload.tag = 'completed';
+      pushEntry('completed', payload);
+    } else if (/\b(todo|next|pending|follow[- ]?up|in progress|working on)\b/i.test(text)) {
+      payload.tag = 'pending';
+      pushEntry('pending', payload);
+    }
+  }
+
+  // Enrich journal from persisted chat activity.
+  // If agent filter is set, scope to that agent; else aggregate across all agents.
+  const chatAgentIds = filterAgent
+    ? [filterAgent]
+    : Array.from(new Set(loadSessionsFromOpenClaw().map(s => {
+        const m = String(s?.key || '').match(/^agent:([^:]+):/i);
+        return canonicalizeMetricsAgentId(m ? m[1] : '');
+      }).filter(Boolean)));
+
+  for (const chatAgentId of chatAgentIds) {
+    const msgList = collectPersistedMessagesForAgent(chatAgentId);
+    for (const m of msgList) {
+      if (!m?.timestamp || getDateKeyInTz(m.timestamp, tz) !== out.date) continue;
+      if (isNoiseMessageForMetrics(m, m.text, m.role)) continue;
+      const text = String(m.text || '').trim();
+      if (!text) continue;
+      if (looksLikeMachineNoiseJournalText(text)) continue;
+
+      const payload = {
+        id: String(m.id || `${m.sessionKey}-${m.timestamp}`),
+        title: summarizeJournalText(text),
+        agent: chatAgentId,
+        timestamp: new Date(m.timestamp).toISOString(),
+        tag: 'chat'
+      };
+
+      const isDecision = /\b(decision|decided|approved|approval|ship it|go ahead)\b/i.test(text);
+      const isBlocker = /\b(blocked|blocker|stuck|waiting on|cannot|can\'t|dependency)\b/i.test(text);
+      const isCompleted = /\b(done|completed|fixed|implemented|shipped|published|deployed|resolved)\b/i.test(text);
+      const isPending = /\b(todo|next|pending|follow[- ]?up|in progress|working on|implement|fix|investigate|update|review|test|build|need to|plan)\b/i.test(text);
+
+      if (isDecision) {
+        payload.tag = 'decision';
+        pushEntry('decisions', payload);
+        continue;
+      }
+
+      if (isBlocker) {
+        payload.tag = 'blocker';
+        pushEntry('blockers', payload);
+        continue;
+      }
+
+      if (isCompleted) {
+        payload.tag = 'completed';
+        pushEntry('completed', payload);
+        continue;
+      }
+
+      // Keep pending focused: user-originated actionable statements only.
+      if (isPending && m.role === 'user') {
+        payload.tag = 'pending';
+        pushEntry('pending', payload);
+      }
+    }
+  }
+
+  const SECTION_CAPS = {
+    completed: 80,
+    blockers: 80,
+    decisions: 60,
+    pending: 120
+  };
+
+  for (const key of Object.keys(out.sections)) {
+    out.sections[key].sort((x, y) => new Date(y.timestamp).getTime() - new Date(x.timestamp).getTime());
+
+    // De-dupe near-identical entries (same agent + title + same minute bucket)
+    const seen = new Set();
+    const deduped = [];
+    for (const entry of out.sections[key]) {
+      const minute = Math.floor(new Date(entry.timestamp || 0).getTime() / 60000);
+      const sig = `${String(entry.agent || '').toLowerCase()}|${String(entry.title || '').toLowerCase()}|${minute}`;
+      if (seen.has(sig)) continue;
+      seen.add(sig);
+      deduped.push(entry);
+    }
+
+    const cap = SECTION_CAPS[key] || 100;
+    out.sections[key] = deduped.length > cap ? deduped.slice(0, cap) : deduped;
+  }
+
+  const agentSet = new Set();
+  const tagSet = new Set();
+  for (const [sectionName, arr] of Object.entries(out.sections)) {
+    for (const entry of arr) {
+      const a = String(entry?.agent || '').trim();
+      if (a) agentSet.add(a);
+      const t = String(entry?.tag || sectionName || '').trim();
+      if (t) tagSet.add(t);
+    }
+  }
+  out.agents = Array.from(agentSet).sort();
+  out.tags = Array.from(tagSet).sort();
+
+  return out;
+}
+
+function buildPresenceFeed({ includeHelpers = false } = {}) {
+  const sessions = loadSessionsFromOpenClaw();
+  const perAgent = new Map();
+  const now = Date.now();
+
+  for (const s of sessions) {
+    const key = String(s?.key || '');
+    const m = key.match(/^agent:([^:]+):/i);
+    const agentId = canonicalizeMetricsAgentId(m ? m[1] : '');
+    if (!agentId) continue;
+    const ts = new Date(s?.updatedAt || 0).getTime();
+    if (!Number.isFinite(ts) || ts <= 0) continue;
+
+    const prev = perAgent.get(agentId);
+    if (!prev || ts > prev._ts) {
+      perAgent.set(agentId, {
+        agentId,
+        status: (now - ts < 5 * 60 * 1000) ? 'online' : ((now - ts < 30 * 60 * 1000) ? 'recent' : 'offline'),
+        currentSession: key,
+        currentTask: null,
+        lastUpdateAt: new Date(ts).toISOString(),
+        _ts: ts
+      });
+    }
+  }
+
+  for (const [agentId, rec] of perAgent.entries()) {
+    const progress = Array.isArray(state?.tasks?.progress) ? state.tasks.progress : [];
+    const todo = Array.isArray(state?.tasks?.todo) ? state.tasks.todo : [];
+    const task = [...progress, ...todo].find(t => inferTaskAgentForFeeds(t) === agentId);
+    if (task) {
+      rec.currentTask = {
+        id: String(task.id || ''),
+        title: String(task.title || 'Untitled')
+      };
+    }
+    delete rec._ts;
+  }
+
+  let items = Array.from(perAgent.values());
+  if (!includeHelpers) {
+    items = items.filter(x => !/^feature-dev-/i.test(String(x.agentId || '')));
+  }
+  return items.sort((a, b) => a.agentId.localeCompare(b.agentId));
+}
+
 // Google Drive backup config (for auto-restore on startup)
 // Set these in Coolify environment variables for auto-restore to work
 const GDRIVE_BACKUP_FILE_ID = process.env.GDRIVE_BACKUP_FILE_ID;  // The backup file ID in Drive
@@ -2600,6 +3239,178 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Authoritative per-agent message metrics endpoint
+  // GET /api/agents/:agentId/metrics?range=today
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/metrics$/) && req.method === 'GET') {
+    try {
+      const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/metrics$/);
+      const agentId = decodeURIComponent(match[1]);
+      const range = String(url.searchParams.get('range') || 'today').toLowerCase();
+      const tz = String(url.searchParams.get('tz') || 'America/Detroit');
+
+      if (range !== 'today') {
+        res.writeHead(400);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Unsupported range. Use range=today.' }));
+        return;
+      }
+
+      const metrics = computeAgentMetrics(agentId, range, tz);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(metrics));
+    } catch (e) {
+      console.error('[Metrics] Failed to compute agent metrics:', e.message);
+      res.writeHead(500);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Failed to compute metrics', details: e.message }));
+    }
+    return;
+  }
+
+  // Calendar canonical feed
+  // GET /api/calendar/events?start=<iso>&end=<iso>&tz=America/Detroit
+  if (url.pathname === '/api/calendar/events' && req.method === 'GET') {
+    try {
+      const tz = String(url.searchParams.get('tz') || DEFAULT_TZ);
+      const todayStart = getStartOfDayTs(null, tz);
+      const defaultStart = todayStart - (30 * 24 * 60 * 60 * 1000);
+      const defaultEnd = todayStart + (30 * 24 * 60 * 60 * 1000);
+      const startTs = new Date(url.searchParams.get('start') || 0).getTime() || defaultStart;
+      const endTs = new Date(url.searchParams.get('end') || 0).getTime() || defaultEnd;
+      const events = buildCalendarEvents({ startTs, endTs });
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        timezone: tz,
+        start: toIsoOrNull(startTs),
+        end: toIsoOrNull(endTs),
+        events
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Failed to build calendar feed', details: e.message }));
+    }
+    return;
+  }
+
+  // Daily journal aggregation (Memory)
+  // GET /api/journal/daily?date=YYYY-MM-DD&agent=<id>&tag=<tag>&tz=America/Detroit
+  if (url.pathname === '/api/journal/daily' && req.method === 'GET') {
+    try {
+      const tz = String(url.searchParams.get('tz') || DEFAULT_TZ);
+      const date = String(url.searchParams.get('date') || getDateKeyInTz(Date.now(), tz));
+      const agent = url.searchParams.get('agent') || '';
+      const tag = url.searchParams.get('tag') || '';
+      const journal = collectDailyJournal({ dateKey: date, agent, tag, tz });
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(journal));
+    } catch (e) {
+      res.writeHead(500);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Failed to build daily journal', details: e.message }));
+    }
+    return;
+  }
+
+  // Daily journal index/search by date/agent/tag
+  // GET /api/journal/index?from=YYYY-MM-DD&to=YYYY-MM-DD&agent=<id>&tag=<tag>&tz=America/Detroit
+  if (url.pathname === '/api/journal/index' && req.method === 'GET') {
+    try {
+      const tz = String(url.searchParams.get('tz') || DEFAULT_TZ);
+      const today = getDateKeyInTz(Date.now(), tz);
+      const defaultFrom = getDateKeyInTz(Date.now() - (7 * 24 * 60 * 60 * 1000), tz);
+      const from = String(url.searchParams.get('from') || defaultFrom);
+      const to = String(url.searchParams.get('to') || today);
+      const agent = url.searchParams.get('agent') || '';
+      const tag = url.searchParams.get('tag') || '';
+
+      const fromTs = getStartOfDayTs(from, tz);
+      const toTs = getStartOfDayTs(to, tz);
+      const days = [];
+      for (let ts = Math.min(fromTs, toTs); ts <= Math.max(fromTs, toTs); ts += 24 * 60 * 60 * 1000) {
+        const dateKey = getDateKeyInTz(ts, tz);
+        const daily = collectDailyJournal({ dateKey, agent, tag, tz });
+        const total = Object.values(daily.sections).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0);
+        if (total > 0) {
+          days.push({
+            date: dateKey,
+            agents: daily.agents || [],
+            tags: daily.tags || [],
+            count: total,
+            counts: {
+              completed: daily.sections.completed.length,
+              blockers: daily.sections.blockers.length,
+              decisions: daily.sections.decisions.length,
+              pending: daily.sections.pending.length,
+              total
+            }
+          });
+        }
+      }
+
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ timezone: tz, from, to, agent: agent || null, tag: tag || null, days }));
+    } catch (e) {
+      res.writeHead(500);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Failed to build journal index', details: e.message }));
+    }
+    return;
+  }
+
+  // Team card details (stable source of truth)
+  // GET /api/agents/:agentId/card-details
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/card-details$/) && req.method === 'GET') {
+    try {
+      const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/card-details$/);
+      const agentId = decodeURIComponent(match[1]);
+      const canonical = canonicalizeMetricsAgentId(agentId);
+      const agentsPayload = [];
+      // lightweight reuse of existing /api/agents aggregation by scanning state + sessions
+      const activeTaskCount = (() => {
+        let count = 0;
+        for (const bucket of ['todo', 'progress', 'doing', 'in_progress']) {
+          const tasks = Array.isArray(state?.tasks?.[bucket]) ? state.tasks[bucket] : [];
+          for (const t of tasks) if (inferTaskAgentForFeeds(t) === canonical) count += 1;
+        }
+        return count;
+      })();
+
+      const presence = buildPresenceFeed().find(p => p.agentId === canonical) || null;
+      const lastUpdateAt = presence?.lastUpdateAt || null;
+
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        agentId: canonical,
+        activeTaskCount,
+        lastUpdateAt,
+        refresh: { intervalSec: 45, source: 'server' },
+        fallback: { activeTaskCount: 0, lastUpdateAt: null }
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Failed to build card details', details: e.message }));
+    }
+    return;
+  }
+
+  // Office view presence feed
+  // GET /api/office/presence
+  if (url.pathname === '/api/office/presence' && req.method === 'GET') {
+    try {
+      const includeHelpers = String(url.searchParams.get('includeHelpers') || '').toLowerCase() === 'true';
+      const items = buildPresenceFeed({ includeHelpers });
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ timezone: DEFAULT_TZ, includeHelpers, items }));
+    } catch (e) {
+      res.writeHead(500);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Failed to build presence feed', details: e.message }));
+    }
+    return;
+  }
+
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
@@ -2649,14 +3460,29 @@ const server = http.createServer(async (req, res) => {
     '/validator': 'model-validator',
   };
 
-  // Handle /agents/:id deep links
+  // Handle agents deep links
+  // Supported:
+  // - /agents
+  // - /agents/log
+  // - /agents/journal
+  // - /agents/:id
+  // - /agents/:id/log
+  // - /agents/:id/journal
   let deepLinkAgentId = null;
-  const agentDeepLinkMatch = url.pathname.match(/^\/agents\/([^/]+)$/);
-  if (agentDeepLinkMatch) {
-    deepLinkAgentId = agentDeepLinkMatch[1];
+  let deepLinkAgentsSubview = null; // org | log | journal
+  const agentsRouteMatch = url.pathname.match(/^\/agents(?:\/([^/]+))?(?:\/(log|journal))?$/);
+  if (agentsRouteMatch) {
+    const seg1 = agentsRouteMatch[1] || null;
+    const seg2 = agentsRouteMatch[2] || null;
+    if (seg1 === 'log' || seg1 === 'journal') {
+      deepLinkAgentsSubview = seg1;
+    } else {
+      deepLinkAgentId = seg1;
+      deepLinkAgentsSubview = seg2 || null;
+    }
   }
 
-  const pageName = pageRoutes[url.pathname] || (agentDeepLinkMatch ? 'agents' : null);
+  const pageName = pageRoutes[url.pathname] || (agentsRouteMatch ? 'agents' : null);
   if (!pageName && !url.pathname.startsWith('/api/')) {
     // Unknown non-API route — default to dashboard
   }
@@ -2664,12 +3490,17 @@ const server = http.createServer(async (req, res) => {
   let resolvedPage = pageName || 'dashboard';
   let pageContent = assemblePage(resolvedPage);
 
-  // Inject agent deep-link meta tag so the client can auto-drill on load
-  if (deepLinkAgentId) {
-    pageContent = pageContent.replace(
+  // Inject agents deep-link meta tags so the client can auto-drill and open sub-view on load
+  if (deepLinkAgentId || deepLinkAgentsSubview) {
+    const safeAgent = deepLinkAgentId ? deepLinkAgentId.replace(/"/g, '') : '';
+    const safeSubview = deepLinkAgentsSubview ? deepLinkAgentsSubview.replace(/"/g, '') : '';
+    const tags = [
       '<meta charset="UTF-8">',
-      `<meta charset="UTF-8">\n<meta name="x-agent-deep-link" content="${deepLinkAgentId.replace(/"/g, '')}">`,
-    );
+      safeAgent ? `<meta name="x-agent-deep-link" content="${safeAgent}">` : '',
+      safeSubview ? `<meta name="x-agents-subview" content="${safeSubview}">` : '',
+    ].filter(Boolean).join('\n');
+
+    pageContent = pageContent.replace('<meta charset="UTF-8">', tags);
   }
   const pageHash = crypto.createHash('md5').update(pageContent).digest('hex').slice(0, 12);
   res.setHeader('Content-Type', 'text/html');

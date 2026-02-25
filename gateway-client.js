@@ -868,6 +868,8 @@ class GatewayClient {
         }
 
         const normalizedSessionKey = normalizeSessionKey(this.sessionKey);
+        const safeText = typeof text === 'string' ? text.trim() : '';
+        const normalizedImages = Array.isArray(imageDataUrls) ? imageDataUrls : [];
 
         // Prevent stale server-side session model drift for image sends too.
         const lockedModel = window?._configModelLocks?.[normalizedSessionKey];
@@ -877,7 +879,7 @@ class GatewayClient {
             } catch { }
         }
 
-        const sendKey = `images|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(text)}|${_buildGatewayImageSignature(imageDataUrls)}`;
+        const sendKey = `images|${normalizedSessionKey}|${_normalizeGatewayTextForSignature(safeText)}|${_buildGatewayImageSignature(normalizedImages)}`;
         if (this._inFlightSend?.key === sendKey) {
             gwWarn('[Gateway] Suppressed duplicate in-flight image send');
             return this._inFlightSend.promise;
@@ -885,15 +887,22 @@ class GatewayClient {
 
         // Build attachments array from all images
         const attachments = [];
-        for (const imageDataUrl of imageDataUrls) {
-            gwLog('[Gateway] Image data type:', typeof imageDataUrl, 'length:', imageDataUrl?.length, 'prefix:', String(imageDataUrl).substring(0, 40));
-            const matches = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+        for (const rawImage of normalizedImages) {
+            const imageDataUrl = typeof rawImage === 'string'
+                ? rawImage
+                : (rawImage && typeof rawImage === 'object' && typeof rawImage.data === 'string' ? rawImage.data : '');
+            gwLog('[Gateway] Image data type:', typeof rawImage, 'length:', imageDataUrl?.length, 'prefix:', String(imageDataUrl).substring(0, 40));
+            const matches = imageDataUrl.match(/^data:([^;]+);base64,([\s\S]*)$/);
             if (!matches) {
                 gwWarn('[Gateway] Skipping invalid image data URL');
                 continue;
             }
             const mimeType = matches[1];
-            const base64Data = matches[2];
+            const base64Data = (matches[2] || '').trim();
+            if (!base64Data) {
+                gwWarn('[Gateway] Skipping empty image payload');
+                continue;
+            }
             attachments.push({
                 type: 'image',
                 mimeType: mimeType,
@@ -902,11 +911,15 @@ class GatewayClient {
         }
 
         if (attachments.length === 0) {
+            if (safeText) {
+                gwWarn('[Gateway] No valid images found; falling back to text-only send');
+                return this.sendMessage(safeText);
+            }
             return Promise.reject(new Error('No valid images to send'));
         }
 
         const params = {
-            message: text || 'Attached image',
+            message: safeText || 'Attached image',
             sessionKey: normalizedSessionKey,
             idempotencyKey: crypto.randomUUID(),
             attachments: attachments

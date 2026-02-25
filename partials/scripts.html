@@ -1,5 +1,5 @@
 <script src="js/perf-guard.js?v=4.9.1"></script>
-<script src="gateway-client.js?v=4.9.7"></script>
+<script src="gateway-client.js?v=4.9.8"></script>
 <script src="docs-hub-memory-files.js?v=4.9.1"></script>
 <!-- Modular dashboard scripts (load order matters) -->
 <!-- BUNDLE OPTION: Run scripts/build.sh to create dist/bundle.js, then replace all script tags below with:
@@ -14,7 +14,7 @@
 <script src="js/sidebar-agents.js?v=4.9.6"></script>
 <script src="js/sessions.js?v=4.9.6"></script>
 <script src="js/notifications.js?v=4.9.5"></script>
-<script src="js/chat.js?v=4.9.4"></script>
+<script src="js/chat.js?v=4.9.6"></script>
 <!-- Model Validator - uses EXACT same pipeline as chat -->
 <script src="js/model-validator.js?v=4.9.6"></script>
 <script src="js/system.js?v=4.9.1"></script>
@@ -30,6 +30,7 @@
 <script src="js/memory-browser.js?v=4.9.1"></script>
 <script src="js/panzoom.min.js?v=4.9.1"></script>
 <script src="js/memory-cards.js?v=4.9.1"></script>
+<script src="js/daily-journal.js?v=4.9.1"></script>
 <script src="js/security.js?v=4.9.1"></script>
 <script src="js/skills-mgr.js?v=4.9.1"></script>
 <script src="js/subagent-monitor.js?v=4.9.1"></script>
@@ -92,17 +93,27 @@
         "test-results",
     ];
 
-    // Get page name and optional agent ID from URL path
+    // Get page name and optional agents deep-link metadata from URL path
     function getPageFromURL() {
         const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
 
-        // /agents/:id deep link
-        const agentMatch = rawPath.match(/^agents\/([^/]+)$/);
-        if (agentMatch) {
-            window._deepLinkAgentId = agentMatch[1]; // stash for auto-drill
+        window._deepLinkAgentId = null;
+        window._deepLinkAgentsSubview = null; // org | log | journal
+
+        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal
+        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal))?$/);
+        if (agentsMatch) {
+            const seg1 = agentsMatch[1] || null;
+            const seg2 = agentsMatch[2] || null;
+
+            if (seg1 === 'log' || seg1 === 'journal') {
+                window._deepLinkAgentsSubview = seg1;
+            } else {
+                window._deepLinkAgentId = seg1;
+                window._deepLinkAgentsSubview = seg2 || null;
+            }
             return 'agents';
         }
-        window._deepLinkAgentId = null;
 
         if (rawPath && VALID_PAGES.includes(rawPath)) return rawPath;
         return 'dashboard';
@@ -238,34 +249,59 @@
         const state = event.state;
         const pageName = state?.page || getPageFromURL();
         showPage(pageName, false);
-        // If popping back to an agent deep link, auto-drill
-        if (pageName === 'agents' && state?.agentId && window._memoryCards) {
-            setTimeout(() => window._memoryCards.drillInto(state.agentId), 100);
-        } else if (pageName === 'agents' && window._memoryCards) {
-            window._memoryCards.backToGrid();
+
+        if (pageName === 'agents') {
+            const agentId = state?.agentId || window._deepLinkAgentId || null;
+            const subview = state?.agentsView || window._deepLinkAgentsSubview || 'org';
+
+            if (agentId && window._memoryCards) {
+                setTimeout(() => window._memoryCards.drillInto(agentId), 100);
+            } else if (window._memoryCards) {
+                window._memoryCards.backToGrid();
+            }
+
+            // Apply agents subview after drill/back resolves
+            setTimeout(() => {
+                if (!window._dailyJournal) return;
+                if (subview === 'log') window._dailyJournal.showLog(false);
+                else if (subview === 'journal') window._dailyJournal.showJournalTimeline(false);
+                else window._dailyJournal.showOrg(false);
+            }, 180);
         }
     });
 
     // Initialize page from URL on load
     document.addEventListener('DOMContentLoaded', () => {
-        // Check for server-injected deep link (from /agents/:id URL)
+        // Check for server-injected deep link metadata
         const metaDeepLink = document.querySelector('meta[name="x-agent-deep-link"]');
+        const metaSubview = document.querySelector('meta[name="x-agents-subview"]');
         const deepLinkId = metaDeepLink?.content || window._deepLinkAgentId || null;
+        const deepLinkSubview = metaSubview?.content || window._deepLinkAgentsSubview || null;
 
         const initialPage = getPageFromURL();
         showPage(initialPage, false);
+
+        const applyAgentsSubview = () => {
+            if (!window._dailyJournal) return;
+            if (deepLinkSubview === 'log') window._dailyJournal.showLog(false);
+            else if (deepLinkSubview === 'journal') window._dailyJournal.showJournalTimeline(false);
+            else window._dailyJournal.showOrg(false);
+        };
 
         // Auto-drill into the agent after memory-cards has loaded agents
         if (deepLinkId) {
             const tryDrill = (attempts = 0) => {
                 if (window._memoryCards && typeof window._memoryCards.drillInto === 'function') {
                     window._memoryCards.drillInto(deepLinkId);
+                    setTimeout(applyAgentsSubview, 200);
                 } else if (attempts < 20) {
                     setTimeout(() => tryDrill(attempts + 1), 200);
                 }
             };
             // Give the org chart time to fetch agents data first
             setTimeout(() => tryDrill(), 600);
+        } else if (initialPage === 'agents' && deepLinkSubview) {
+            setTimeout(applyAgentsSubview, 200);
         }
     });
 

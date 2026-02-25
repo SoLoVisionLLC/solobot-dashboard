@@ -1,0 +1,201 @@
+### X attempt
+[32m✓[0m [1mLog in to X / X[0m
+  [2mhttps://x.com/i/flow/login?redirect_after_login=%2Fcompose%2Fpost[0m
+https://x.com/i/flow/login?redirect_after_login=%2Fcompose%2Fpost
+Log in to X / X
+[32m✓[0m Screenshot saved to [32m/home/solo/.openclaw/workspace/repos/solobot-dashboard/artifacts/manual-publish-2026-02-25/x-attempt.png[0m
+### Facebook attempt
+[32m✓[0m [1mFacebook[0m
+  [2mhttps://www.facebook.com/composer[0m
+https://www.facebook.com/composer
+Facebook
+- button "Facebook" [ref=e1]
+- textbox "Email or phone" [ref=e2]
+- textbox "Password" [ref=e3]
+- button "Log In" [ref=e4]
+- link "Forgot Account?" [ref=e5]
+- link "Go to Feed" [ref=e6]
+- button "Go back" [ref=e7]
+- link "Visit Help Center" [ref=e8]
+[32m✓[0m Screenshot saved to [32m/home/solo/.openclaw/workspace/repos/solobot-dashboard/artifacts/manual-publish-2026-02-25/facebook-attempt.png[0m
+### Instagram attempt
+[32m✓[0m [1mInstagram[0m
+  [2mhttps://www.instagram.com/accounts/login/?next=https%3A%2F%2Fwww.instagram.com%2Fcreate%2Fstyle%2F%3F__coig_login%3D1#[0m
+https://www.instagram.com/accounts/login/?next=https%3A%2F%2Fwww.instagram.com%2Fcreate%2Fstyle%2F%3F__coig_login%3D1#
+Instagram
+- textbox "Mobile number, username or email" [ref=e1]
+- textbox "Password" [ref=e2]
+- button "Log In" [ref=e3] [disabled]: Log in
+- link "Forgot password?" [ref=e4]
+- button "Log in with Facebook" [ref=e5]
+- link "Create new account" [ref=e6]
+- link "Meta" [ref=e7]
+- link "About" [ref=e8]
+- link "Blog" [ref=e9]
+- link "Jobs" [ref=e10]
+- link "Help" [ref=e11]
+- link "API" [ref=e12]
+- link "Privacy" [ref=e13]
+- link "Consumer Health Privacy" [ref=e14]
+- link "Terms" [ref=e15]
+- link "Locations" [ref=e16]
+- link "Instagram Lite" [ref=e17]
+- link "Meta AI" [ref=e18]
+- link "Threads" [ref=e19]
+- link "Contact Uploading & Non-Users" [ref=e20]
+- link "Meta Verified" [ref=e21]
+- combobox "Switch Display Language" [ref=e22]
+- option "Afrikaans" [ref=e23]
+- option "العربية" [ref=e24]
+- option "Čeština" [ref=e25]
+- option "Dansk" [ref=e26]
+- option "Deutsch" [ref=e27]
+- option "Ελληνικά" [ref=e28]
+- option "English" [ref=e29] [selected]
+- option "English (UK)" [ref=e30]
+- option "Español (España)" [ref=e31]
+- option "Español" [ref=e32]
+- option "فارسی" [ref=e33]
+- option "Suomi" [ref=e34]
+- option "Français" [ref=e35]
+- option "עברית" [ref=e36]
+- option "Bahasa Indonesia" [ref=e37]
+- option "Italiano" [ref=e38]
+- option "日本語" [ref=e39]
+- option "한국어" [ref=e40]
+[32m✓[0m Screenshot saved to [32m/home/solo/.openclaw/workspace/repos/solobot-dashboard/artifacts/manual-publish-2026-02-25/instagram-attempt.png[0m
+### LinkedIn attempt
+[32m✓[0m [1mLinkedIn Login, Sign in | LinkedIn[0m
+  [2mhttps://www.linkedin.com/uas/login?session_redirect=https%3A%2F%2Fwww.linkedin.com%2Fpost%2Fnew%2F[0m
+https://www.linkedin.com/uas/login?session_redirect=https%3A%2F%2Fwww.linkedin.com%2Fpost%2Fnew%2F
+LinkedIn Login, Sign in | LinkedIn
+- link "LinkedIn" [ref=e1]
+- button "Sign in with Apple" [ref=e2]
+- link "User Agreement" [ref=e3]
+- link "Privacy Policy" [ref=e4]
+- link "Cookie Policy" [ref=e5]
+- textbox "Email or phone" [ref=e6]
+- textbox "Password" [ref=e7]
+- button "Show" [ref=e8]
+- link "Forgot password?" [ref=e9]
+- checkbox "Keep me logged in" [ref=e10] [checked]
+- button "Sign in" [ref=e11]
+- link "Join now" [ref=e12]
+- link "User Agreement" [ref=e13] [nth=1]
+- link "Privacy Policy" [ref=e14] [nth=1]
+- link "Cookie Policy" [ref=e15] [nth=1]
+- link "User Agreement" [ref=e16] [nth=2]
+- link "Privacy Policy" [ref=e17] [nth=2]
+- link "Your California Privacy Choices" [ref=e18]
+- link "Community Guidelines" [ref=e19]
+- link "Cookie Policy" [ref=e20] [nth=2]
+- link "Copyright Policy" [ref=e21]
+- link "Send Feedback" [ref=e22]
+- button "Language" [ref=e23]
+[32m✓[0m Screenshot saved to [32m/home/solo/.openclaw/workspace/repos/solobot-dashboard/artifacts/manual-publish-2026-02-25/linkedin-attempt.png[0m
+### Threads attempt
+[32m✓[0m [1mThreads[0m
+  [2mhttps://www.threads.com/[0m
+- link "Threads" [ref=e1]
+- link "Home" [ref=e2]
+- link "Search" [ref=e3]
+- button "Create" [ref=e4]
+- button "Notifications" [ref=e5]
+- button "Profile" [ref=e6]
+- button "Pin" [ref=e7]
+- button "More More" [ref=e8]
+- link "Column title" [ref=e9]
+- link "electrek.co's profile picture" [ref=e10]
+- link "electrek.co" [ref=e11]
+- link "a day ago" [ref=e12]
+- button "More" [ref=e13]
+- link "electrek.co/2026…" [ref=e14]
+- link "Rivian just unlocked a new way for drivers to get paid to charge electrek.co Rivian just unlocked a new way for drivers to get paid to charge" [ref=e15]
+- button "Like 14" [ref=e16]
+- button "Comment 1" [ref=e17]
+- button "Repost" [ref=e18]
+- button "Share" [ref=e19]
+- link "itskevinhood's profile picture" [ref=e20]
+- link "itskevinhood" [ref=e21]
+- link "a day ago" [ref=e22] [nth=1]
+- button "More" [ref=e23] [nth=1]
+- button "Like 67" [ref=e24]
+- button "Comment 7" [ref=e25]
+- button "Repost 4" [ref=e26]
+- button "Share" [ref=e27] [nth=1]
+- link "nikkeiasia's profile picture" [ref=e28]
+- link "nikkeiasia" [ref=e29]
+- link "a day ago" [ref=e30] [nth=2]
+- button "More" [ref=e31] [nth=2]
+- link "trib.al/U9RdN…" [ref=e32]
+- link "Figure skater Alysa Liu's father on Olympic gold and what money can't buy asia.nikkei.com Figure skater Alysa Liu's father on Olympic gold and what money can't buy" [ref=e33]
+- button "Like 11" [ref=e34]
+- button "Comment" [ref=e35]
+- button "Repost" [ref=e36] [nth=1]
+- button "Share" [ref=e37] [nth=2]
+- link "postwook's profile picture" [ref=e38]
+- link "postwook" [ref=e39]
+- link "23 hours ago" [ref=e40]
+- button "More" [ref=e41] [nth=3]
+- button "Like 6" [ref=e42]
+- button "Comment" [ref=e43] [nth=1]
+- button "Repost" [ref=e44] [nth=2]
+- button "Share" [ref=e45] [nth=3]
+- link "techchatchelsea's profile picture" [ref=e46]
+- link "techchatchelsea" [ref=e47]
+- link "parenting threads" [ref=e48]
+- link "a day ago" [ref=e49] [nth=3]
+- button "More" [ref=e50] [nth=4]
+- button "Like 17" [ref=e51]
+- button "Comment" [ref=e52] [nth=2]
+- button "Repost" [ref=e53] [nth=3]
+- button "Share" [ref=e54] [nth=4]
+- button "Instagram Continue with Instagram" [ref=e55]
+- link "Log in with username instead" [ref=e56]
+- link "Threads Terms" [ref=e57]
+- link "Privacy Policy" [ref=e58]
+- link "Consumer Health Privacy Policy" [ref=e59]
+- link "Cookies Policy" [ref=e60]
+- button "Report a problem" [ref=e61]
+[32m✓[0m Done
+https://www.threads.com/
+- link "Threads" [ref=e1]
+- link "Home" [ref=e2]
+- link "Search" [ref=e3]
+- button "Create" [ref=e4]
+- button "Notifications" [ref=e5]
+- button "Profile" [ref=e6]
+- button "Pin" [ref=e7]
+- button "More More" [ref=e8]
+- button "Instagram Continue with Instagram Log in" [ref=e9]
+[32m✓[0m Screenshot saved to [32m/home/solo/.openclaw/workspace/repos/solobot-dashboard/artifacts/manual-publish-2026-02-25/threads-attempt.png[0m
+### Pinterest attempt
+[32m✓[0m [1mPinterest[0m
+  [2mhttps://www.pinterest.com/pin-creation-tool/[0m
+https://www.pinterest.com/pin-creation-tool/
+Pinterest
+- link "Skip to content" [ref=e1]
+- combobox "Search" [ref=e2]
+- button "Voice search" [ref=e3]
+- link "Your profile" [ref=e4]
+- button "Accounts" [ref=e5]
+- link "Home" [ref=e6]
+- link "Home" [ref=e7] [nth=1]
+- link "Explore" [ref=e8]
+- link "Your boards" [ref=e9]
+- button "Create" [ref=e10]
+- button "Updates" [ref=e11]
+- button "Messages" [ref=e12]
+- button "Settings & Support" [ref=e13]
+- button "Expand drafts sidebar" [ref=e14]
+- button "Create new Pin" [ref=e15] [disabled]
+- button "File Upload" [ref=e16]
+- link "Save from URL" [ref=e17]
+- textbox "Title" [ref=e18] [disabled]:
+- button "Loading editor" [ref=e19] [disabled]:
+- textbox "Link" [ref=e20] [disabled]:
+- button "Choose a board Open dropdown" [ref=e21] [disabled]:
+- combobox "Tagged topics (0)" [ref=e22] [disabled]
+- button "Add products" [ref=e23] [disabled]
+- button "More options Show more options arrow icon" [ref=e24] [disabled]:
+[32m✓[0m Screenshot saved to [32m/home/solo/.openclaw/workspace/repos/solobot-dashboard/artifacts/manual-publish-2026-02-25/pinterest-attempt.png[0m

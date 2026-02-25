@@ -501,6 +501,37 @@ function isTypingInInput(element) {
 // Image handling - supports multiple images
 let pendingImages = [];
 
+function getImageDataUri(value) {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && typeof value.data === 'string') return value.data;
+    return '';
+}
+
+function isValidImageDataUri(value) {
+    const dataUri = getImageDataUri(value);
+    if (!dataUri) return false;
+    const match = dataUri.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,([\s\S]*)$/);
+    if (!match) return false;
+    return match[1].trim().length > 0;
+}
+
+function sanitizeImageAttachments(items, sourceLabel = 'chat') {
+    const source = Array.isArray(items) ? items : [];
+    const valid = [];
+    let dropped = 0;
+    for (const item of source) {
+        if (isValidImageDataUri(item)) {
+            valid.push(item);
+        } else {
+            dropped += 1;
+        }
+    }
+    if (dropped > 0) {
+        chatLog(`[Chat] Skipped ${dropped} invalid image attachment(s) (${sourceLabel})`);
+    }
+    return { valid, dropped };
+}
+
 function handleImageSelect(event) {
     const files = event.target.files;
     for (const file of files) {
@@ -656,8 +687,16 @@ function processImageFile(file) {
     reader.onload = async (e) => {
         // Compress image if larger than 200KB
         let imageData = e.target.result;
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Invalid image data. Please select the file again.', 'warning');
+            return;
+        }
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
+        }
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Image processing failed. Please try another image.', 'warning');
+            return;
         }
 
         pendingImages.push({
@@ -723,9 +762,21 @@ async function sendChatMessage() {
     }
 
     // Get images to send
-    const imagesToSend = [...pendingImages];
-    const hasImages = imagesToSend.length > 0;
-    const sendSignature = buildChatSendSignature(text, imagesToSend.map(img => img?.data || img));
+    const rawImagesToSend = [...pendingImages];
+    const { valid: imagesToSend, dropped: droppedImages } = sanitizeImageAttachments(rawImagesToSend, 'chat-input');
+    if (droppedImages > 0) {
+        showToast(`Skipped ${droppedImages} invalid image attachment${droppedImages > 1 ? 's' : ''}.`, 'warning');
+    }
+    const imageDataArray = imagesToSend.map(img => getImageDataUri(img)).filter(Boolean);
+    const hasImages = imageDataArray.length > 0;
+    if (!text && !hasImages) {
+        clearImagePreviews();
+        addLocalChatMessage('Failed to send: selected image is empty or invalid.', 'system');
+        renderChat();
+        renderChatPage();
+        return;
+    }
+    const sendSignature = buildChatSendSignature(text, imageDataArray);
     if (shouldSuppressDuplicateSend(sendSignature)) {
         chatLog('[Chat] Suppressed duplicate send (chat-input)');
         return;
@@ -737,7 +788,6 @@ async function sendChatMessage() {
         // Show all images in local preview
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        const imageDataArray = imagesToSend.map(img => img.data);
         addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
@@ -760,7 +810,6 @@ async function sendChatMessage() {
         let result = null;
         if (hasImages) {
             // Send with image attachments (send all images)
-            const imageDataArray = imagesToSend.map(img => img.data);
             result = await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
             result = await gateway.sendMessage(text);
@@ -770,7 +819,7 @@ async function sendChatMessage() {
             trackPendingSend(result.runId, {
                 sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
                 text: hasImages ? (text || 'Image') : text,
-                images: hasImages ? imagesToSend.map(img => img.data).filter(Boolean) : []
+                images: hasImages ? imageDataArray : []
             });
         }
     } catch (err) {
@@ -1620,8 +1669,16 @@ function processChatPageImageFile(file) {
     reader.onload = async (e) => {
         // Compress image if larger than 200KB
         let imageData = e.target.result;
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Invalid image data. Please select the file again.', 'warning');
+            return;
+        }
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
+        }
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Image processing failed. Please try another image.', 'warning');
+            return;
         }
 
         chatPagePendingImages.push({
@@ -1852,9 +1909,21 @@ async function sendChatPageMessage() {
         return;
     }
 
-    const imagesToSend = [...chatPagePendingImages];
-    const hasImages = imagesToSend.length > 0;
-    const sendSignature = buildChatSendSignature(text, imagesToSend.map(img => img?.data || img));
+    const rawImagesToSend = [...chatPagePendingImages];
+    const { valid: imagesToSend, dropped: droppedImages } = sanitizeImageAttachments(rawImagesToSend, 'chat-page');
+    if (droppedImages > 0) {
+        showToast(`Skipped ${droppedImages} invalid image attachment${droppedImages > 1 ? 's' : ''}.`, 'warning');
+    }
+    const imageDataArray = imagesToSend.map(img => getImageDataUri(img)).filter(Boolean);
+    const hasImages = imageDataArray.length > 0;
+    if (!text && !hasImages) {
+        clearChatPageImagePreviews();
+        addLocalChatMessage('Failed: selected image is empty or invalid.', 'system');
+        renderChat();
+        renderChatPage();
+        return;
+    }
+    const sendSignature = buildChatSendSignature(text, imageDataArray);
     if (shouldSuppressDuplicateSend(sendSignature)) {
         chatLog('[Chat] Suppressed duplicate send (chat-page-input)');
         return;
@@ -1864,7 +1933,6 @@ async function sendChatPageMessage() {
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        const imageDataArray = imagesToSend.map(img => img.data);
         addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
@@ -1890,7 +1958,6 @@ async function sendChatPageMessage() {
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
-            const imageDataArray = imagesToSend.map(img => img.data);
             await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
             await gateway.sendMessage(text);

@@ -21,33 +21,101 @@
 
     <!-- Scrollable content: padded below the toolbar -->
     <div class="memory-page">
+        <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <button id="agents-view-org" class="btn btn-secondary btn-sm" onclick="window._dailyJournal && window._dailyJournal.showOrg()">🗺️ Team Canvas</button>
+            <button id="agents-view-log" class="btn btn-ghost btn-sm" onclick="window._dailyJournal && window._dailyJournal.showLog()">📒 Daily Log</button>
+            <button id="agents-view-journal" class="btn btn-ghost btn-sm" onclick="window._dailyJournal && window._dailyJournal.showJournalTimeline()">📝 Daily Journal</button>
+        </div>
 
-        <!-- Org Tree / Cards View -->
-        <div id="memory-cards-view" style="display: none;"></div>
+        <div id="agents-org-shell">
+            <!-- Org Tree / Cards View -->
+            <div id="memory-cards-view" style="display: none;"></div>
 
-        <!-- Classic / File Browser View -->
-        <div id="memory-classic-view">
-            <div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-bottom: 16px;">
-                <!-- File Tree Browser -->
-                <div
-                    style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 12px; max-height: 600px; overflow-y: auto;">
+            <!-- Classic / File Browser View -->
+            <div id="memory-classic-view">
+                <div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- File Tree Browser -->
                     <div
-                        style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase;">
-                        File Tree</div>
-                    <div style="margin-bottom: 8px;">
-                        <input type="text" id="memory-browser-search" class="input" placeholder="Search files…"
-                            oninput="searchMemoryFiles()" style="font-size: 12px; padding: 4px 8px; width: 100%;">
+                        style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 12px; max-height: 600px; overflow-y: auto;">
+                        <div
+                            style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); text-transform: uppercase;">
+                            File Tree</div>
+                        <div style="margin-bottom: 8px;">
+                            <input type="text" id="memory-browser-search" class="input" placeholder="Search files…"
+                                oninput="searchMemoryFiles()" style="font-size: 12px; padding: 4px 8px; width: 100%;">
+                        </div>
+                        <div id="memory-tree" style="font-size: 12px;"></div>
                     </div>
-                    <div id="memory-tree" style="font-size: 12px;"></div>
+                    <!-- File Preview -->
+                    <div id="memory-file-preview"
+                        style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); min-height: 200px;">
+                        <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px;">Select a
+                            file to preview</div>
+                    </div>
                 </div>
-                <!-- File Preview -->
-                <div id="memory-file-preview"
-                    style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); min-height: 200px;">
-                    <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px;">Select a
-                        file to preview</div>
+                <div id="memory-files-grid" class="docs-grid"></div>
+            </div>
+        </div>
+
+        <div id="agents-log-shell" style="display:none;">
+            <div style="background: var(--surface-1); border:1px solid var(--border-default); border-radius: var(--radius-lg); padding: 12px; margin-bottom: 12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:10px;">
+                <div>
+                    <label style="font-size:11px; color:var(--text-muted);">Date</label>
+                    <input id="journal-filter-date" type="date" class="input" style="width:100%;" />
+                </div>
+                <div>
+                    <label style="font-size:11px; color:var(--text-muted);">Agent</label>
+                    <select id="journal-filter-agent" class="input" style="width:100%;">
+                        <option value="">All agents</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:11px; color:var(--text-muted);">Tag</label>
+                    <input id="journal-filter-tag" type="text" class="input" placeholder="e.g. blocker" style="width:100%;" />
+                </div>
+                <div style="display:flex; align-items:end; gap:8px;">
+                    <button class="btn btn-primary btn-sm" onclick="window._dailyJournal && window._dailyJournal.search()">Search</button>
+                    <button class="btn btn-ghost btn-sm" onclick="window._dailyJournal && window._dailyJournal.clearFilters()">Reset</button>
                 </div>
             </div>
-            <div id="memory-files-grid" class="docs-grid"></div>
+
+            <div style="display:grid; grid-template-columns: minmax(220px, 320px) 1fr; gap:12px;">
+                <div style="background: var(--surface-1); border:1px solid var(--border-default); border-radius: var(--radius-lg); padding:10px; max-height:70vh; overflow:auto;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Log Days</div>
+                    <div id="journal-day-list"></div>
+                </div>
+                <div style="display:grid; gap:10px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); align-content:start;">
+                    <div class="agent-dash-card">
+                        <div class="agent-dash-card-title">✅ Completed</div>
+                        <div id="journal-section-completed" style="font-size:12px; color:var(--text-secondary);"></div>
+                    </div>
+                    <div class="agent-dash-card">
+                        <div class="agent-dash-card-title">⛔ Blockers</div>
+                        <div id="journal-section-blockers" style="font-size:12px; color:var(--text-secondary);"></div>
+                    </div>
+                    <div class="agent-dash-card">
+                        <div class="agent-dash-card-title">🧠 Decisions</div>
+                        <div id="journal-section-decisions" style="font-size:12px; color:var(--text-secondary);"></div>
+                    </div>
+                    <div class="agent-dash-card">
+                        <div class="agent-dash-card-title">📌 Pending follow-ups</div>
+                        <div id="journal-section-followups" style="font-size:12px; color:var(--text-secondary);"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="agents-journal-shell" style="display:none;">
+            <div style="display:grid; grid-template-columns: minmax(220px, 320px) 1fr; gap:12px; align-items:start;">
+                <div style="background: var(--surface-1); border:1px solid var(--border-default); border-radius: var(--radius-lg); padding:10px; max-height:72vh; overflow:auto;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Journal Days</div>
+                    <div id="journal-day-list-timeline"></div>
+                </div>
+                <div class="agent-dash-card" style="min-height:65vh;">
+                    <div class="agent-dash-card-title" id="journal-timeline-title">📝 Journal</div>
+                    <div id="journal-timeline-body" style="font-size:13px; color:var(--text-secondary); display:grid; gap:10px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
