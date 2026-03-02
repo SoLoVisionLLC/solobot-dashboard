@@ -373,7 +373,13 @@ async function fetchSessions() {
                 sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
                 handleSubagentSessionAgent();
+                try {
+            if (typeof populateSessionDropdown === 'function') {
                 populateSessionDropdown();
+            }
+        } catch (dropdownErr) {
+            sessLog(`[Dashboard] Non-fatal populateSessionDropdown error: ${dropdownErr?.message || dropdownErr}`);
+        }
                 if (typeof updateSidebarAgentsFromSessions === 'function') {
                     try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
                 }
@@ -603,7 +609,13 @@ async function executeSessionSwitch(sessionKey) {
     const switchStart = performance.now();
 
     try {
-        toggleChatPageSessionMenu();
+        try {
+            if (typeof toggleChatPageSessionMenu === 'function') {
+                toggleChatPageSessionMenu();
+            }
+        } catch (menuErr) {
+            sessLog(`[Dashboard] Non-fatal menu toggle error: ${menuErr?.message || menuErr}`);
+        }
 
         // Clear unread notifications for this session
         clearUnreadForSession(sessionKey);
@@ -645,7 +657,20 @@ async function executeSessionSwitch(sessionKey) {
         }
 
         // 4. Clear current chat display
-        await clearChatHistory(true, true);
+        try {
+            if (typeof clearChatHistory === 'function') {
+                await clearChatHistory(true, true);
+            } else {
+                state.chat.messages = [];
+                if (typeof renderChat === 'function') renderChat();
+                if (typeof renderChatPage === 'function') renderChatPage();
+            }
+        } catch (clearErr) {
+            sessLog(`[Dashboard] Non-fatal clearChatHistory error: ${clearErr?.message || clearErr}`);
+            state.chat.messages = [];
+            if (typeof renderChat === 'function') renderChat();
+            if (typeof renderChatPage === 'function') renderChatPage();
+        }
 
         // 4a. Check in-memory cache for instant switch
         const cached = getCachedSessionMessages(sessionKey);
