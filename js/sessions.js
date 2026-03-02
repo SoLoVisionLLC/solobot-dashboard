@@ -679,11 +679,22 @@ async function executeSessionSwitch(sessionKey) {
         populateSessionDropdown();
 
         // Persist active agent/session mapping immediately for correctness
-        if (agentMatch) {
-            setActiveSidebarAgent(agentMatch[1]);
-            saveLastAgentSession(agentMatch[1], sessionKey);
-        } else {
-            setActiveSidebarAgent(null);
+        try {
+            if (agentMatch) {
+                const canonicalAgent = (typeof resolveAgentId === 'function')
+                    ? resolveAgentId(agentMatch[1])
+                    : agentMatch[1];
+                if (typeof setActiveSidebarAgent === 'function') {
+                    setActiveSidebarAgent(canonicalAgent);
+                }
+                if (typeof saveLastAgentSession === 'function') {
+                    saveLastAgentSession(canonicalAgent, sessionKey);
+                }
+            } else if (typeof setActiveSidebarAgent === 'function') {
+                setActiveSidebarAgent(null);
+            }
+        } catch (agentUiErr) {
+            sessLog(`[Dashboard] Non-fatal agent UI sync error for ${sessionKey}: ${agentUiErr?.message || agentUiErr}`);
         }
 
         // Do not block switch completion on network history/model fetch.
@@ -695,7 +706,10 @@ async function executeSessionSwitch(sessionKey) {
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
-        showToast('Failed to switch session', 'error');
+        try {
+            sessLog(`[Dashboard] switch error for ${sessionKey}: ${e?.message || e}`);
+        } catch {}
+        showToast(`Failed to switch session: ${e?.message || 'unknown error'}`, 'error');
     } finally {
         _switchInFlight = false;
     }
