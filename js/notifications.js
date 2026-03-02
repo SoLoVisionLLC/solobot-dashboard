@@ -952,15 +952,11 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    // Merge chat: combine gateway history with ALL local messages
-    // Dedupe by ID first, then by exact text match (not snippet) to be safer
+    // Merge chat: combine gateway history with ALL local messages.
+    // Dedupe ONLY by ID. Text-based dedupe caused legit repeated messages
+    // (e.g., "yes", "ok", "thanks") to disappear after refresh/switch.
     const historyIds = new Set(chatMessages.map(m => m.id));
-    const historyExactTexts = new Set(chatMessages.map(m => (m.text || '').trim()));
-    const uniqueLocalMessages = allLocalChatMessages.filter(m => {
-        const normalizedText = (m.text || '').trim();
-        // Keep local message if: different ID AND (no text or text isn't already in history)
-        return !historyIds.has(m.id) && (!normalizedText || !historyExactTexts.has(normalizedText));
-    });
+    const uniqueLocalMessages = allLocalChatMessages.filter(m => !historyIds.has(m.id));
 
     // Patch history messages: if we have a local copy with a real model, prefer it
     // (history may return "openrouter/free" while local has the resolved model)
@@ -1149,12 +1145,7 @@ function mergeHistoryMessages(messages) {
                 }
 
                 // Skip if we already have this exact text content (trimmed, prevents duplicates when IDs differ)
-                if (isSystemMsg && existingSystemTexts.has(textContent)) {
-                    continue;
-                }
-                if (!isSystemMsg && existingTexts.has(textContent)) {
-                    continue;
-                }
+                // Keep repeated content messages; rely on ID/runId dedupe.
 
                 // Time guard: skip non-user assistant messages if we have any local message added within the last 5 seconds
                 // Uses client-side time (m.time) to avoid clock skew with server timestamps
