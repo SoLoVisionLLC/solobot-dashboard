@@ -571,35 +571,36 @@ window.deleteSession = async function (sessionKey, sessionName) {
 window.switchToSessionKey = window.switchToSession = async function (sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
 
-    // Enqueue switch request (FIFO)
+    // Keep only the latest requested session to avoid A→B→C lag (drop stale middle clicks).
     _sessionSwitchQueue.push({ sessionKey, timestamp: Date.now() });
+    if (_sessionSwitchQueue.length > 1) {
+        const latest = _sessionSwitchQueue[_sessionSwitchQueue.length - 1];
+        _sessionSwitchQueue = [latest];
+    }
 
-    // If switch already in progress, queue will be processed after current completes
+    // If switch already in progress, latest request will run after current completes.
     if (_switchInFlight) {
         return;
     }
 
-    // Process queue until empty (defeats rapid clicks by processing all)
     while (_sessionSwitchQueue.length > 0) {
-        const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
+        // Always execute the most recent queued request (LIFO for responsiveness)
+        const { sessionKey: nextKey } = _sessionSwitchQueue.pop();
+        _sessionSwitchQueue.length = 0; // hard-drop stale queued targets
 
-        // Skip if already on this session
         if (nextKey === currentSessionName) {
             populateSessionDropdown();
             continue;
         }
 
         await executeSessionSwitch(nextKey);
-
-        // Check if a newer request superseded this one
-        // If queue has items that came in AFTER we started this switch, process them
-        // If queue is empty or only has our own re-submit, we're done
     }
 }
 
 // Core switch execution (no queue handling)
 async function executeSessionSwitch(sessionKey) {
     _switchInFlight = true;
+    const switchStart = performance.now();
 
     try {
         toggleChatPageSessionMenu();
@@ -609,9 +610,8 @@ async function executeSessionSwitch(sessionKey) {
 
         showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
 
-        // FIRST: Save current chat messages BEFORE clearing state
-        // (order matters: save first, then clear)
-        await saveCurrentChat();
+        // Save current chat in the background (don't block UX switch path)
+        saveCurrentChat().catch(() => {});
         cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
 
         // THEN: nuke all rendering state synchronously
@@ -678,10 +678,7 @@ async function executeSessionSwitch(sessionKey) {
         }
         populateSessionDropdown();
 
-        // Wait for history (critical path)
-        await historyPromise;
-        await modelPromise;
-
+        // Persist active agent/session mapping immediately for correctness
         if (agentMatch) {
             setActiveSidebarAgent(agentMatch[1]);
             saveLastAgentSession(agentMatch[1], sessionKey);
@@ -689,6 +686,12 @@ async function executeSessionSwitch(sessionKey) {
             setActiveSidebarAgent(null);
         }
 
+        // Do not block switch completion on network history/model fetch.
+        historyPromise.catch((e) => sessLog(`[Dashboard] history refresh failed for ${sessionKey}: ${e?.message || e}`));
+        modelPromise.catch(() => {});
+
+        const switchMs = Math.round(performance.now() - switchStart);
+        sessLog(`[Dashboard] Session switch UI complete in ${switchMs}ms -> ${sessionKey}`);
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
