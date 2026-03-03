@@ -1,6 +1,7 @@
 // js/daily-journal.js — Agents page daily journal view
 (function () {
   'use strict';
+  console.log('[Agents] daily-journal loaded (memory subview enabled)');
 
   const api = window._dailyJournal || (window._dailyJournal = {});
 
@@ -589,6 +590,7 @@
     showOrg,
     showLog,
     showJournalTimeline,
+    showMemory,
     // backward-compat for older bindings
     showJournal: showLog,
     search,
