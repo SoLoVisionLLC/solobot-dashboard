@@ -781,76 +781,120 @@ function closeMemoryModal() {
 async function saveMemoryFile() {
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
-    
+
     if (!contentEl || !window.currentMemoryFile) return;
-    
+
     const newContent = contentEl.value;
     const filepath = window.currentMemoryFile.path;
-    
-    if (saveBtn) saveBtn.textContent = '⏳ Saving...';
-    
-    let success = false;
-    
-    // Try gateway RPC first
-    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
-        try {
-            console.log('[Memory] Saving file via gateway RPC...');
-            await window.gateway._request('memory.write', { 
-                path: filepath, 
-                content: newContent 
-            });
-            success = true;
-            console.log('[Memory] ✓ Saved file via gateway RPC');
-        } catch (e) {
-            console.warn('[Memory] Gateway RPC write failed, falling back to REST API:', e.message);
-        }
+    const isAgentFile = window.currentMemoryFile.type === 'agent';
+    const agentId = window.currentMemoryFile.agentId || null;
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⏳ Saving...';
     }
-    
-    // Fallback to REST API
-    if (!success) {
+
+    let success = false;
+
+    // Agent-scoped file save path
+    if (isAgentFile && agentId) {
         try {
-            const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+            const response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    content: newContent,
-                    updatedBy: 'user'  // Track that user made this edit
-                })
+                body: JSON.stringify({ content: newContent, updatedBy: 'user' })
             });
-            
             const data = await response.json();
-            
-            if (data.error) {
-                showToast(`Failed to save: ${data.error}`, 'error');
-                if (saveBtn) saveBtn.textContent = '💾 Save';
-                return;
-            }
+            if (data.error) throw new Error(data.error);
             success = true;
         } catch (e) {
-            showToast(`Failed to save: ${e.message}`, 'error');
-            if (saveBtn) saveBtn.textContent = '💾 Save';
+            showToast(`Failed to save agent file: ${e.message}`, 'error');
+            if (saveBtn) {
+                saveBtn.textContent = '💾 Save';
+                saveBtn.disabled = false;
+            }
             return;
         }
     }
-    
+
+    // Global memory file path (existing behavior)
+    if (!isAgentFile) {
+        // Try gateway RPC first
+        if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
+            try {
+                console.log('[Memory] Saving file via gateway RPC...');
+                await window.gateway._request('memory.write', {
+                    path: filepath,
+                    content: newContent
+                });
+                success = true;
+                console.log('[Memory] ✓ Saved file via gateway RPC');
+            } catch (e) {
+                console.warn('[Memory] Gateway RPC write failed, falling back to REST API:', e.message);
+            }
+        }
+
+        // Fallback to REST API
+        if (!success) {
+            try {
+                const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: newContent,
+                        updatedBy: 'user'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showToast(`Failed to save: ${data.error}`, 'error');
+                    if (saveBtn) {
+                        saveBtn.textContent = '💾 Save';
+                        saveBtn.disabled = false;
+                    }
+                    return;
+                }
+                success = true;
+            } catch (e) {
+                showToast(`Failed to save: ${e.message}`, 'error');
+                if (saveBtn) {
+                    saveBtn.textContent = '💾 Save';
+                    saveBtn.disabled = false;
+                }
+                return;
+            }
+        }
+    }
+
     if (success) {
         if (saveBtn) saveBtn.textContent = '✓ Saved!';
         setTimeout(() => {
-            if (saveBtn) saveBtn.textContent = '💾 Save';
-        }, 2000);
-        
+            if (saveBtn) {
+                saveBtn.textContent = '💾 Save';
+                saveBtn.disabled = false;
+            }
+        }, 1500);
+
         // Update stored content
         window.currentMemoryFile.content = newContent;
-        
+
         // Clear cache and refresh
         memoryFilesCache = [];
         lastFetchTime = 0;
-        
-        // Reload version history
-        loadVersionHistory(filepath);
-        
-        // Refresh file list in background
-        renderMemoryFiles(document.getElementById('memory-search')?.value || '');
+
+        if (!isAgentFile) {
+            // Reload version history
+            loadVersionHistory(filepath);
+
+            // Refresh file list in background
+            renderMemoryFiles(document.getElementById('memory-search')?.value || '');
+        } else if (typeof window._memoryCards?.openAgentMemory === 'function') {
+            // Refresh agent memory pane
+            const aid = agentId || window._memoryCards.getCurrentAgentId?.();
+            if (aid) window._memoryCards.openAgentMemory(aid, { updateURL: false, forceAgentsPage: false });
+        }
     }
 }
 
@@ -914,35 +958,60 @@ async function viewAgentFile(agentId, filename) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
-    
+    const historyList = document.getElementById('version-history-list');
+
     if (titleEl) titleEl.textContent = `${agentId}/${filename}`;
-    if (contentEl) contentEl.value = 'Loading...';
-    if (saveBtn) saveBtn.style.display = 'none'; // Read-only for sub-agent files
-    
+    if (contentEl) {
+        contentEl.value = 'Loading...';
+        contentEl.disabled = true;
+    }
+    if (saveBtn) {
+        saveBtn.style.display = '';
+        saveBtn.disabled = true;
+        saveBtn.textContent = '💾 Save';
+    }
+
     showModal('memory-file-modal');
-    
+
     try {
         const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}`);
         const data = await resp.json();
-        
+
         if (data.error) {
-            contentEl.value = `Error: ${data.error}`;
+            if (contentEl) contentEl.value = `Error: ${data.error}`;
             return;
         }
-        
+
         // Fix single-line markdown
         let content = data.content || '';
         const lineCount = content.split('\n').length;
         if (content.length > 200 && lineCount <= 3) {
             content = fixSingleLineMarkdown(content);
         }
-        
+
         if (titleEl) titleEl.innerHTML = `${escapeHtmlLocal(data.name)} <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">— Agent: ${escapeHtmlLocal(agentId)}</span>`;
-        if (contentEl) contentEl.value = content;
-        
-        window.currentMemoryFile = null; // Not editable
+        if (contentEl) {
+            contentEl.value = content;
+            contentEl.disabled = false;
+        }
+        if (saveBtn) saveBtn.disabled = false;
+
+        if (historyList) {
+            historyList.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; padding: var(--space-3)">Version history unavailable for agent files.</div>';
+        }
+
+        window.currentMemoryFile = {
+            path: filename,
+            content,
+            type: 'agent',
+            agentId,
+        };
     } catch (e) {
-        contentEl.value = `Failed to load: ${e.message}`;
+        if (contentEl) contentEl.value = `Failed to load: ${e.message}`;
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = '💾 Save';
+        }
     }
 }
 
