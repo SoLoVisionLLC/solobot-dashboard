@@ -740,7 +740,7 @@
             <span class="agent-status-badge ${statusClass}" style="flex-shrink:0;">${statusLabel}</span>
             <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
             <button class="btn btn-primary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.switchToAgentChat('${agent.id}')">💬 Chat</button>
-            <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.openAgentMemory('${agent.id}')">🧠 Memory</button>
+            <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agent.id}')">🧠 Memory</button>
             <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" id="agent-ping-btn-${agent.id}" onclick="window._memoryCards.pingAgent('${agent.id}')">⚡ Ping</button>
             <input type="text" id="memory-search" class="input agents-toolbar-search" placeholder="🔍 Search…"
                 oninput="window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)"
@@ -959,7 +959,7 @@
                 <div class="agent-dash-card agent-dash-card-wide">
                     <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center;">
                         <span>📁 Memory Files (${files.length})</span>
-                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemory('${agent.id}')">View All →</button>
+                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agent.id}')">View All →</button>
                     </div>
                     <div class="agent-files-compact">
                         ${sortedFiles.slice(0, 8).map(f => `
@@ -1356,7 +1356,7 @@
                     </div>
                 `;
             } else {
-                el.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:4px 0;">No IDENTITY.md found. <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemory('${agentId}')">Browse files →</button></div>`;
+                el.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:4px 0;">No IDENTITY.md found. <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agentId}')">Browse files →</button></div>`;
             }
         } catch (e) {
             el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Could not load identity</div>`;
@@ -1392,8 +1392,19 @@
         }
     }
 
+    function openAgentMemoryFromUi(evt, agentId) {
+        try {
+            if (evt) {
+                evt.preventDefault();
+                evt.stopPropagation();
+            }
+        } catch (_) {}
+        return openAgentMemory(agentId, { updateURL: true, forceAgentsPage: true });
+    }
+
     function openAgentMemory(agentId, opts = {}) {
         const updateURL = opts.updateURL !== false;
+        const forceAgentsPage = opts.forceAgentsPage !== false;
 
         // Keep drilled agent context for agents subviews (log/journal/memory)
         const orgId = String(agentId || '').toLowerCase();
@@ -1404,6 +1415,9 @@
         }
 
         // Ensure agents page/org shell is visible and switch to classic file view
+        if (forceAgentsPage && typeof showPage === 'function') {
+            showPage('agents', false);
+        }
         if (typeof window._dailyJournal?.showMemory === 'function') {
             window._dailyJournal.showMemory(false);
         }
@@ -1528,6 +1542,7 @@
         switchToAgentChat,
         switchToSession,
         openAgentMemory,
+        openAgentMemoryFromUi,
         toggleIdentityExpand,
         customizeFallbacks,
         revertFallbacksToGlobal,
