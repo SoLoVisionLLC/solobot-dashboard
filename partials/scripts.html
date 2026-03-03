@@ -29,8 +29,8 @@
 <script src="js/analytics.js?v=4.9.1"></script>
 <script src="js/memory-browser.js?v=4.9.1"></script>
 <script src="js/panzoom.min.js?v=4.9.1"></script>
-<script src="js/memory-cards.js?v=4.9.1"></script>
-<script src="js/daily-journal.js?v=4.9.1"></script>
+<script src="js/memory-cards.js?v=4.9.2"></script>
+<script src="js/daily-journal.js?v=4.9.2"></script>
 <script src="js/security.js?v=4.9.1"></script>
 <script src="js/skills-mgr.js?v=4.9.1"></script>
 <script src="js/subagent-monitor.js?v=4.9.1"></script>
@@ -98,10 +98,10 @@
         const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
 
         window._deepLinkAgentId = null;
-        window._deepLinkAgentsSubview = null; // org | log | journal
+        window._deepLinkAgentsSubview = null; // org | log | journal | memory
 
         // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal
-        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal))?$/);
+        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal|memory))?$/);
         if (agentsMatch) {
             const seg1 = agentsMatch[1] || null;
             const seg2 = agentsMatch[2] || null;
@@ -265,6 +265,12 @@
                 if (!window._dailyJournal) return;
                 if (subview === 'log') window._dailyJournal.showLog(false);
                 else if (subview === 'journal') window._dailyJournal.showJournalTimeline(false);
+                else if (subview === 'memory') {
+                    window._dailyJournal.showMemory(false);
+                    if (agentId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
+                        window._memoryCards.openAgentMemory(agentId, { updateURL: false });
+                    }
+                }
                 else window._dailyJournal.showOrg(false);
             }, 180);
         }
@@ -285,6 +291,12 @@
             if (!window._dailyJournal) return;
             if (deepLinkSubview === 'log') window._dailyJournal.showLog(false);
             else if (deepLinkSubview === 'journal') window._dailyJournal.showJournalTimeline(false);
+            else if (deepLinkSubview === 'memory') {
+                window._dailyJournal.showMemory(false);
+                if (deepLinkId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
+                    window._memoryCards.openAgentMemory(deepLinkId, { updateURL: false });
+                }
+            }
             else window._dailyJournal.showOrg(false);
         };
 

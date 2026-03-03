@@ -1392,16 +1392,35 @@
         }
     }
 
-    function openAgentMemory(agentId) {
-        // Switch to classic view filtered to this agent's files
+    function openAgentMemory(agentId, opts = {}) {
+        const updateURL = opts.updateURL !== false;
+
+        // Keep drilled agent context for agents subviews (log/journal/memory)
+        const orgId = String(agentId || '').toLowerCase();
+        const canonicalId = ORG_TO_CANONICAL[orgId] || orgId;
+        const found = agentsData.find(a => String(a.id || '').toLowerCase() === canonicalId);
+        if (found) {
+            currentDrilledAgent = { ...found, _orgId: orgId };
+        }
+
+        // Ensure agents page/org shell is visible and switch to classic file view
+        if (typeof window._dailyJournal?.showMemory === 'function') {
+            window._dailyJournal.showMemory(false);
+        }
         if (window._memoryCards) window._memoryCards.setLayout('classic');
+
         const searchEl = document.getElementById('memory-search');
         if (searchEl) {
             searchEl.value = agentId;
             if (typeof renderMemoryFiles === 'function') renderMemoryFiles(agentId);
         }
-        // Back out of drill-down
-        currentDrilledAgent = null;
+
+        if (updateURL) {
+            const nextPath = `/agents/${agentId}/memory`;
+            if (window.location.pathname !== nextPath) {
+                history.pushState({ page: 'agents', agentId, agentsView: 'memory' }, '', nextPath);
+            }
+        }
     }
 
     async function previewFile(filename) {

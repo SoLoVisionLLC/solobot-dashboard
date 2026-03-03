@@ -6,7 +6,7 @@
 
   let lastIndex = [];
   let selectedDate = null;
-  let currentView = 'org'; // org | log | journal
+  let currentView = 'org'; // org | log | journal | memory
   let lastDaily = null;
   let timelineMode = 'detailed'; // brief | detailed
 
@@ -30,6 +30,7 @@
     set('agents-view-org', currentView === 'org');
     set('agents-view-log', currentView === 'log');
     set('agents-view-journal', currentView === 'journal');
+    set('agents-view-memory', currentView === 'memory');
   }
 
   function applyContextAgentFilter() {
@@ -50,6 +51,7 @@
     if (view === 'org') return agentId ? `/agents/${agentId}` : '/agents';
     if (view === 'log') return agentId ? `/agents/${agentId}/log` : '/agents/log';
     if (view === 'journal') return agentId ? `/agents/${agentId}/journal` : '/agents/journal';
+    if (view === 'memory') return agentId ? `/agents/${agentId}/memory` : '/agents';
     return '/agents';
   }
 
@@ -119,6 +121,18 @@
       if (targetDate) loadDaily(targetDate);
       else if (lastDaily) renderTimeline(lastDaily);
     }
+  }
+
+  function showMemory(updateURL = true) {
+    currentView = 'memory';
+    const org = $('agents-org-shell');
+    const log = $('agents-log-shell');
+    const journal = $('agents-journal-shell');
+    if (org) org.style.display = '';
+    if (log) log.style.display = 'none';
+    if (journal) journal.style.display = 'none';
+    syncViewButtons();
+    if (updateURL) pushAgentsHistory('memory');
   }
 
   function normalizeIndex(payload) {
