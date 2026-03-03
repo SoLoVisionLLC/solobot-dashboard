@@ -1460,17 +1460,82 @@
             return;
         }
 
-        ctx.list.innerHTML = filtered.map((f, idx) => {
-            const icon = f.name && f.name.endsWith('.md') ? '📝' : '📄';
-            const date = f.modified ? timeAgo(f.modified) : '—';
-            return `
-                <button class="agent-memory-item" type="button" data-idx="${idx}" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
-                    <span class="agent-memory-row-icon">${icon}</span>
-                    <span class="agent-memory-item-name">${escapeHtml(f.name)}</span>
-                    <span class="agent-memory-item-meta">${date}</span>
-                </button>
-            `;
-        }).join('');
+        const CORE_SECTION_ORDER = ['AGENTT', 'HEARTBEAT', 'MEMORY', 'IDENTITY', 'IDENITY', 'USER', 'SOUL', 'TOOLS', 'RUNNING_CONTEXT'];
+
+        const sectionMatchers = {
+            AGENTT: ['AGENTT', 'AGENT'],
+            HEARTBEAT: ['HEARTBEAT'],
+            MEMORY: ['MEMORY'],
+            IDENTITY: ['IDENTITY'],
+            IDENITY: ['IDENITY', 'IDENTITY'],
+            USER: ['USER'],
+            SOUL: ['SOUL'],
+            TOOLS: ['TOOLS'],
+            RUNNING_CONTEXT: ['RUNNING CONTEXT', 'RUNNING_CONTEXT', 'RUNNINGCONTEXT']
+        };
+
+        function detectSection(fileName = '') {
+            const n = String(fileName).toUpperCase();
+            const keys = Object.keys(sectionMatchers);
+            const found = keys.find((key) => {
+                const aliases = sectionMatchers[key] || [];
+                return aliases.some(alias => {
+                    const normalized = String(alias).toUpperCase().replace(/\s+/g, '');
+                    const needle = String(alias).toUpperCase();
+                    const hay = n.replace(/\//g, '');
+                    return hay.includes(needle) || n.replace(/[^A-Z0-9_]/g, '').includes(normalized);
+                });
+            });
+
+            if (found && sectionMatchers.hasOwnProperty(found)) return found;
+            return 'OTHER';
+        }
+
+        const grouped = {};
+        filtered.forEach((f) => {
+            const section = detectSection(f.name);
+            const target = section === 'OTHER' ? 'OTHER' : section;
+            if (!grouped[target]) grouped[target] = [];
+            grouped[target].push(f);
+        });
+
+        const sectionsToRender = [
+            ...CORE_SECTION_ORDER,
+            ...(grouped.OTHER ? ['OTHER'] : []),
+        ].filter(Boolean);
+
+        const renderedSections = sectionsToRender
+            .filter(sec => (grouped[sec] || []).length > 0)
+            .map((sec) => {
+                const items = grouped[sec] || [];
+                const sectionLabel = sec === 'IDENITY' ? 'IDENTITY' : (sec === 'RUNNING_CONTEXT' ? 'RUNNING CONTEXT' : sec);
+                const rows = items.map((f) => {
+                    const icon = f.name && f.name.endsWith('.md') ? '📝' : '📄';
+                    const date = f.modified ? timeAgo(f.modified) : '—';
+                    return `
+                        <button class="agent-memory-item" type="button" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
+                            <span class="agent-memory-row-icon">${icon}</span>
+                            <span class="agent-memory-item-name">${escapeHtml(f.name)}</span>
+                            <span class="agent-memory-item-meta">${date}</span>
+                        </button>
+                    `;
+                }).join('');
+
+                const countText = items.length === 1 ? '1 file' : `${items.length} files`;
+                return `
+                    <div class="agent-memory-section">
+                        <div class="agent-memory-section-title">${sectionLabel} <span>(${countText})</span></div>
+                        <div class="agent-memory-section-list">${rows}</div>
+                    </div>
+                `;
+            }).join('');
+
+        if (!renderedSections.length) {
+            ctx.list.innerHTML = '<div class="agent-memory-empty">No memory files for this agent.</div>';
+            return;
+        }
+
+        ctx.list.innerHTML = `<div class="agent-memory-sections">${renderedSections}</div>`;
     }
 
     function renderWorkspacePreview(fileMeta) {
