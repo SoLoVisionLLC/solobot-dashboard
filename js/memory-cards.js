@@ -1477,6 +1477,7 @@
 
         // STRICT core whitelist only (no partial matching)
         const coreStems = new Set([
+            'AGENTS',
             'AGENTT',
             'HEARTBEAT',
             'MEMORY',
