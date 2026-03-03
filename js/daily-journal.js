@@ -10,6 +10,7 @@
   let currentView = 'org'; // org | log | journal | memory
   let lastDaily = null;
   let timelineMode = 'detailed'; // brief | detailed
+  let showMemoryInFlight = false;
 
   const AGENTS = ['main', 'elon', 'orion', 'atlas', 'sterling', 'dev', 'forge', 'knox', 'sentinel', 'vector', 'canon', 'luma', 'ledger', 'quill', 'chip', 'nova', 'snip', 'family'];
 
@@ -125,6 +126,8 @@
   }
 
   function showMemory(updateURL = true) {
+    if (showMemoryInFlight) return;
+    showMemoryInFlight = true;
     currentView = 'memory';
     const org = $('agents-org-shell');
     const log = $('agents-log-shell');
@@ -146,6 +149,7 @@
 
     syncViewButtons();
     if (updateURL) pushAgentsHistory('memory');
+    showMemoryInFlight = false;
   }
 
   function normalizeIndex(payload) {

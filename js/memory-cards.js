@@ -1418,9 +1418,7 @@
         if (forceAgentsPage && typeof showPage === 'function') {
             showPage('agents', false);
         }
-        if (typeof window._dailyJournal?.showMemory === 'function') {
-            window._dailyJournal.showMemory(false);
-        }
+        // daily-journal.showMemory may call openAgentMemory; avoid recursion here.
         if (window._memoryCards) window._memoryCards.setLayout('classic');
 
         const searchEl = document.getElementById('memory-search');
