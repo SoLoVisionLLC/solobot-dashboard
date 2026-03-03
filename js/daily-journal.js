@@ -132,6 +132,16 @@
     if (org) org.style.display = '';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
+
+    // Force agent-specific memory pane when an agent is in context.
+    const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || null;
+    if (agentId && typeof window._memoryCards?.openAgentMemory === 'function') {
+      window._memoryCards.openAgentMemory(agentId, { updateURL: false, forceAgentsPage: false });
+    } else if (typeof window._memoryCards?.setLayout === 'function') {
+      window._memoryCards.setLayout('classic');
+      if (typeof window.renderMemoryFilesForPage === 'function') window.renderMemoryFilesForPage('');
+    }
+
     syncViewButtons();
     if (updateURL) pushAgentsHistory('memory');
   }
