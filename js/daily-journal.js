@@ -134,7 +134,9 @@
     if (journal) journal.style.display = 'none';
 
     // Force agent-specific memory pane when an agent is in context.
-    const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || null;
+    const pathMatch = window.location.pathname.match(/^\/agents\/([^/]+)/);
+    const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || (pathMatch ? pathMatch[1] : null) || null;
+    console.log('[Agents] showMemory context agent:', agentId, 'path:', window.location.pathname);
     if (agentId && typeof window._memoryCards?.openAgentMemory === 'function') {
       window._memoryCards.openAgentMemory(agentId, { updateURL: false, forceAgentsPage: false });
     } else if (typeof window._memoryCards?.setLayout === 'function') {

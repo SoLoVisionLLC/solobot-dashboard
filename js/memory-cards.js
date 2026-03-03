@@ -740,7 +740,6 @@
             <span class="agent-status-badge ${statusClass}" style="flex-shrink:0;">${statusLabel}</span>
             <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
             <button class="btn btn-primary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.switchToAgentChat('${agent.id}')">💬 Chat</button>
-            <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agent.id}')">🧠 Memory</button>
             <button class="btn btn-secondary btn-sm" style="flex-shrink:0;" id="agent-ping-btn-${agent.id}" onclick="window._memoryCards.pingAgent('${agent.id}')">⚡ Ping</button>
             <input type="text" id="memory-search" class="input agents-toolbar-search" placeholder="🔍 Search…"
                 oninput="window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)"
