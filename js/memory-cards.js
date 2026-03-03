@@ -5,6 +5,7 @@
 
     // Guard against early inline handler access before full API registration.
     const memoryCardsApi = window._memoryCards || (window._memoryCards = {});
+    const $ = (id) => document.getElementById(id);
     if (typeof memoryCardsApi.wasDragging !== 'boolean') {
         memoryCardsApi.wasDragging = false;
     }
