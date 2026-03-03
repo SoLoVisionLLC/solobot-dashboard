@@ -68,7 +68,15 @@
     }
   }
 
-  function showOrg(updateURL = true) {
+    function setAgentsMemoryViewport(enabled) {
+    const page = document.getElementById('page-agents');
+    const cls = 'agents-memory-viewport';
+    if (!page) return;
+    if (enabled) page.classList.add(cls);
+    else page.classList.remove(cls);
+  }
+
+function showOrg(updateURL = true) {
     currentView = 'org';
     const org = $('agents-org-shell');
     const memory = $('agents-memory-shell');
@@ -78,6 +86,7 @@
     if (memory) memory.style.display = 'none';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
+    setAgentsMemoryViewport(false);
     syncViewButtons();
     if (updateURL) pushAgentsHistory('org');
   }
@@ -92,6 +101,7 @@
     if (memory) memory.style.display = 'none';
     if (log) log.style.display = '';
     if (journal) journal.style.display = 'none';
+    setAgentsMemoryViewport(false);
     syncViewButtons();
     if (updateURL) pushAgentsHistory('log');
 
@@ -116,6 +126,7 @@
     if (memory) memory.style.display = 'none';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = '';
+    setAgentsMemoryViewport(false);
     syncViewButtons();
     if (updateURL) pushAgentsHistory('journal');
 
@@ -143,6 +154,7 @@
     if (memory) memory.style.display = '';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
+    setAgentsMemoryViewport(true);
 
     const pathMatch = window.location.pathname.match(/^\/agents\/([^/]+)/);
     const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || (pathMatch ? pathMatch[1] : null) || null;
