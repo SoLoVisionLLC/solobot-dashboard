@@ -798,17 +798,76 @@ async function saveMemoryFile() {
 
     // Agent-scoped file save path
     if (isAgentFile && agentId) {
+        let lastErr = null;
+
+        // 1) Agent API write path
         try {
             const response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content: newContent, updatedBy: 'user' })
             });
-            const data = await response.json();
-            if (data.error) throw new Error(data.error);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json().catch(() => ({}));
+            if (data && data.error) throw new Error(data.error);
             success = true;
         } catch (e) {
-            showToast(`Failed to save agent file: ${e.message}`, 'error');
+            lastErr = e;
+        }
+
+        // 2) Gateway fallback using memory.write with candidate paths
+        if (!success && window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
+            const candidates = [
+                window.currentMemoryFile?.fullPath,
+                `agents/${agentId}/${filepath}`,
+                `memory/${agentId}/${filepath}`,
+                `${agentId}/${filepath}`,
+                filepath,
+            ].filter(Boolean);
+
+            for (const path of candidates) {
+                try {
+                    await window.gateway._request('memory.write', { path, content: newContent });
+                    success = true;
+                    window.currentMemoryFile.fullPath = path;
+                    break;
+                } catch (e) {
+                    lastErr = e;
+                }
+            }
+        }
+
+        // 3) REST fallback using /api/memory/<path>
+        if (!success) {
+            const candidates = [
+                window.currentMemoryFile?.fullPath,
+                `agents/${agentId}/${filepath}`,
+                `memory/${agentId}/${filepath}`,
+                `${agentId}/${filepath}`,
+                filepath,
+            ].filter(Boolean);
+
+            for (const path of candidates) {
+                try {
+                    const response = await fetch(`/api/memory/${encodeURIComponent(path)}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: newContent, updatedBy: 'user' })
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json().catch(() => ({}));
+                    if (data && data.error) throw new Error(data.error);
+                    success = true;
+                    window.currentMemoryFile.fullPath = path;
+                    break;
+                } catch (e) {
+                    lastErr = e;
+                }
+            }
+        }
+
+        if (!success) {
+            showToast(`Failed to save agent file: ${lastErr?.message || 'Unknown error'}`, 'error');
             if (saveBtn) {
                 saveBtn.textContent = '💾 Save';
                 saveBtn.disabled = false;
@@ -1002,6 +1061,7 @@ async function viewAgentFile(agentId, filename) {
 
         window.currentMemoryFile = {
             path: filename,
+            fullPath: data.path || data.filepath || null,
             content,
             type: 'agent',
             agentId,
