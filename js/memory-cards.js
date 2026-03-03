@@ -1428,7 +1428,35 @@
         if (searchEl) {
             searchEl.value = agentId;
         }
-        if (typeof renderMemoryFilesForPage === 'function') {
+        // Force classic memory UI shell for agent-specific browsing
+        const classicView = document.getElementById('memory-classic-view');
+        const cardsView = document.getElementById('memory-cards-view');
+        if (classicView) classicView.style.display = '';
+        if (cardsView) cardsView.style.display = 'none';
+
+        // Render agent-specific files directly (prevents fallback to generic org view)
+        const filesGrid = document.getElementById('memory-files-grid');
+        const preview = document.getElementById('memory-file-preview');
+        if (filesGrid && currentDrilledAgent && Array.isArray(currentDrilledAgent.files)) {
+            const files = [...currentDrilledAgent.files].sort((a, b) => {
+                const am = a?.modified ? new Date(a.modified).getTime() : 0;
+                const bm = b?.modified ? new Date(b.modified).getTime() : 0;
+                return bm - am;
+            });
+            filesGrid.innerHTML = files.length ? files.map(f => `
+                <div class="doc-card memory-file" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
+                    <div class="doc-card-header">
+                        <span class="doc-icon">${f.name.endsWith('.md') ? '📝' : '📄'}</span>
+                        <h4>${escapeHtml(f.name)}</h4>
+                    </div>
+                    <div class="doc-meta">${f.modified ? timeAgo(f.modified) : ''}</div>
+                </div>
+            `).join('') : '<div class="empty-state"><p>⚠️ No agent files found</p></div>';
+
+            if (preview) {
+                preview.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px;">Viewing <strong>${escapeHtml(agentId)}</strong> memory files. Select a file to preview.</div>`;
+            }
+        } else if (typeof renderMemoryFilesForPage === 'function') {
             renderMemoryFilesForPage(agentId);
         } else if (typeof renderMemoryFiles === 'function') {
             renderMemoryFiles(agentId);
