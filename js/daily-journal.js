@@ -53,7 +53,7 @@
     if (view === 'org') return agentId ? `/agents/${agentId}` : '/agents';
     if (view === 'log') return agentId ? `/agents/${agentId}/log` : '/agents/log';
     if (view === 'journal') return agentId ? `/agents/${agentId}/journal` : '/agents/journal';
-    if (view === 'memory') return agentId ? `/agents/${agentId}/memory` : '/agents';
+    if (view === 'memory') return agentId ? `/agents/${agentId}/memory` : '/agents/memory';
     return '/agents';
   }
 
@@ -71,9 +71,11 @@
   function showOrg(updateURL = true) {
     currentView = 'org';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
     if (org) org.style.display = '';
+    if (memory) memory.style.display = 'none';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
     syncViewButtons();
@@ -83,9 +85,11 @@
   function showLog(updateURL = true) {
     currentView = 'log';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
     if (org) org.style.display = 'none';
+    if (memory) memory.style.display = 'none';
     if (log) log.style.display = '';
     if (journal) journal.style.display = 'none';
     syncViewButtons();
@@ -105,9 +109,11 @@
   function showJournalTimeline(updateURL = true) {
     currentView = 'journal';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
     if (org) org.style.display = 'none';
+    if (memory) memory.style.display = 'none';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = '';
     syncViewButtons();
@@ -130,20 +136,27 @@
     showMemoryInFlight = true;
     currentView = 'memory';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
-    if (org) org.style.display = '';
+    if (org) org.style.display = 'none';
+    if (memory) memory.style.display = '';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
 
-    // Force agent-specific memory pane when an agent is in context.
     const pathMatch = window.location.pathname.match(/^\/agents\/([^/]+)/);
     const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || (pathMatch ? pathMatch[1] : null) || null;
-    console.log('[Agents] showMemory context agent:', agentId, 'path:', window.location.pathname);
     if (agentId && typeof window._memoryCards?.openAgentMemory === 'function') {
       window._memoryCards.openAgentMemory(agentId, { updateURL: false, forceAgentsPage: false });
-    } else if (typeof window._memoryCards?.setLayout === 'function') {
-      window._memoryCards.setLayout('classic');
+    } else if (memory) {
+      // Fallback: show classic global memory layout inside org shell.
+      memory.style.display = 'none';
+      if (org) org.style.display = '';
+      const cardsLayout = $('memory-cards-view');
+      const classicLayout = $('memory-classic-view');
+      if (cardsLayout) cardsLayout.style.display = 'none';
+      if (classicLayout) classicLayout.style.display = '';
+      if (typeof window._memoryCards?.setLayout === 'function') window._memoryCards.setLayout('classic');
       if (typeof window.renderMemoryFilesForPage === 'function') window.renderMemoryFilesForPage('');
     }
 

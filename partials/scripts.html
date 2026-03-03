@@ -100,13 +100,13 @@
         window._deepLinkAgentId = null;
         window._deepLinkAgentsSubview = null; // org | log | journal | memory
 
-        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal
+        // /agents, /agents/log, /agents/journal, /agents/memory, /agents/:id, /agents/:id/log, /agents/:id/journal, /agents/:id/memory
         const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal|memory))?$/);
         if (agentsMatch) {
             const seg1 = agentsMatch[1] || null;
             const seg2 = agentsMatch[2] || null;
 
-            if (seg1 === 'log' || seg1 === 'journal') {
+            if (seg1 === 'log' || seg1 === 'journal' || seg1 === 'memory') {
                 window._deepLinkAgentsSubview = seg1;
             } else {
                 window._deepLinkAgentId = seg1;

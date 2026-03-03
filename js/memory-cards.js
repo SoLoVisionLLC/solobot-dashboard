@@ -11,6 +11,9 @@
 
     let agentsData = [];
     let currentDrilledAgent = null;
+    let agentMemoryRenderToken = 0;
+    let agentMemoryFiles = [];
+    let agentMemorySearch = "";
     let panzoomInstance = null;
     let isSpacePressed = false;
     let agentMetricsRefreshTimer = null;
@@ -957,18 +960,23 @@
                 <!-- Memory Files Card -->
                 <div class="agent-dash-card agent-dash-card-wide">
                     <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>📁 Memory Files (${files.length})</span>
-                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agent.id}')">View All →</button>
+                        <span>📁 Memory Workspace (${files.length})</span>
+                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agent.id}')">Open Workspace</button>
                     </div>
-                    <div class="agent-files-compact">
-                        ${sortedFiles.slice(0, 8).map(f => `
-                            <div class="agent-file-compact-row" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
-                                <span class="agent-file-compact-icon">${f.name.endsWith('.md') ? '📝' : '📄'}</span>
-                                <span class="agent-file-compact-name">${escapeHtml(f.name)}</span>
-                                <span class="agent-file-compact-date">${f.modified ? timeAgo(f.modified) : ''}</span>
-                            </div>
-                        `).join('') || '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No files found</div>'}
-                        ${files.length > 8 ? `<div style="color:var(--text-muted); font-size:11px; padding:6px 0;">+${files.length - 8} more — click "View All"</div>` : ''}
+                    <div style="display:grid; gap:8px;">
+                        <div style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+                            <input id="agent-memory-quick-${agent.id}" type="text" class="input" value="" placeholder="Filter files…" style="max-width:280px;" oninput="window._memoryCards.filterAgentMemoryFiles(this.value, '${agent.id}')" />
+                            <span style="font-size:11px; color:var(--text-muted);">${files.length} file${files.length === 1 ? '' : 's'} synced</span>
+                        </div>
+                        <div id="agent-memory-compact-${agent.id}" style="display:grid; gap:6px; max-height:220px; overflow:auto; padding-right:4px;">
+                            ${sortedFiles.slice(0, 6).map(f => `
+                                <button class="agent-memory-row" type="button" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
+                                    <span class="agent-memory-row-icon">${f.name.endsWith('.md') ? '📝' : '📄'}</span>
+                                    <span class="agent-memory-row-name">${escapeHtml(f.name)}</span>
+                                    <span class="agent-memory-row-meta">${f.modified ? timeAgo(f.modified) : '—'}</span>
+                                </button>
+                            `).join('') || '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No files found</div>'}
+                        </div>
                     </div>
                 </div>
 
@@ -1402,61 +1410,137 @@
         return openAgentMemory(agentId, { updateURL: true, forceAgentsPage: true });
     }
 
+    function formatMemorySize(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return '';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let n = bytes;
+        let i = 0;
+        while (n >= 1024 && i < units.length - 1) {
+            n /= 1024;
+            i += 1;
+        }
+        return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+    }
+
+    function getAgentWorkspaceIds() {
+        return {
+            shell: $('agents-memory-shell'),
+            list: $('agent-memory-file-list'),
+            summary: $('agent-memory-file-summary'),
+            selected: $('agent-memory-selected'),
+            selectedMeta: $('agent-memory-selected-meta'),
+            preview: $('agent-memory-preview-body'),
+            actions: $('agent-memory-actions'),
+            filter: $('agents-memory-filter'),
+            subtitle: $('agents-memory-subtitle'),
+        };
+    }
+
+    function renderAgentWorkspaceState(agent, files, query = '') {
+        const ctx = getAgentWorkspaceIds();
+        if (!ctx.shell || !ctx.list || !ctx.summary) return false;
+
+        const normalized = [...files].map(f => ({
+            ...f,
+            modifiedTs: f.modified ? new Date(f.modified).getTime() : 0,
+        })).sort((a, b) => (b.modifiedTs || 0) - (a.modifiedTs || 0));
+
+        const q = String(query || '').trim().toLowerCase();
+        const filtered = q
+            ? normalized.filter(f => String(f.name || '').toLowerCase().includes(q))
+            : normalized;
+
+        agentMemoryFiles = normalized;
+        ctx.summary.textContent = `${agent.id ? agent.id.toUpperCase() : 'AGENT'} • ${filtered.length} shown · ${normalized.length} total`;
+        if (ctx.subtitle) ctx.subtitle.textContent = `${agent.isDefault ? 'Global' : 'Agent'} memory scope loaded`; 
+
+        if (!normalized.length) {
+            ctx.list.innerHTML = '<div class="agent-memory-empty">No memory files for this agent.</div>';
+            return;
+        }
+
+        ctx.list.innerHTML = filtered.map((f, idx) => {
+            const icon = f.name && f.name.endsWith('.md') ? '📝' : '📄';
+            const date = f.modified ? timeAgo(f.modified) : '—';
+            return `
+                <button class="agent-memory-item" type="button" data-idx="${idx}" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
+                    <span class="agent-memory-row-icon">${icon}</span>
+                    <span class="agent-memory-item-name">${escapeHtml(f.name)}</span>
+                    <span class="agent-memory-item-meta">${date}</span>
+                </button>
+            `;
+        }).join('');
+    }
+
+    function renderWorkspacePreview(fileMeta) {
+        const ctx = getAgentWorkspaceIds();
+        if (!ctx.preview || !ctx.selected || !ctx.selectedMeta || !ctx.actions) return;
+        const name = fileMeta?.name || 'Unknown';
+        ctx.selected.textContent = name;
+        ctx.selectedMeta.textContent = `${fileMeta.modified ? `Updated ${timeAgo(fileMeta.modified)}` : 'No update stamp'}${fileMeta.size ? ` • ${formatMemorySize(fileMeta.size)}` : ''}`;
+        ctx.actions.innerHTML = `
+            <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${escapeHtml(fileMeta.agentId || '')}')">Open workspace</button>
+            <button class="btn btn-secondary btn-xs" onclick="window._memoryCards && (window._memoryCards.previewFileFromWorkspace ? window._memoryCards.previewFileFromWorkspace('${escapeHtml(name)}') : null)">↻ Reload</button>
+            <button class="btn btn-primary btn-xs" onclick="${(fileMeta && fileMeta.agentIsDefault ? `viewMemoryFile('${escapeHtml(name)}')` : `viewAgentFile('${escapeHtml(fileMeta.agentId || '')}', '${escapeHtml(name)}')`)}">✏️ Edit</button>
+        `;
+        ctx.preview.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Loading preview...</div>`;
+    }
+
+    function filterAgentMemoryFiles(query, forcedAgentId) {
+        const token = ++agentMemoryRenderToken;
+        const ctxAgentId = forcedAgentId || currentDrilledAgent?.id || currentDrilledAgent?.name;
+        const agent = agentsData.find(a => String(a.id || '').toLowerCase() === String(ctxAgentId || '').toLowerCase()) || currentDrilledAgent;
+        if (!agent) return;
+        const files = Array.isArray(agent.files) ? [...agent.files] : [];
+        const q = String(query || '').trim();
+        if (agentMemoryRenderToken !== token) return;
+        agentMemorySearch = q;
+        renderAgentWorkspaceState(agent, files, q);
+    }
+
     function openAgentMemory(agentId, opts = {}) {
         const updateURL = opts.updateURL !== false;
         const forceAgentsPage = opts.forceAgentsPage !== false;
 
-        // Keep drilled agent context for agents subviews (log/journal/memory)
         const orgId = String(agentId || '').toLowerCase();
         const canonicalId = ORG_TO_CANONICAL[orgId] || orgId;
         const found = agentsData.find(a => String(a.id || '').toLowerCase() === canonicalId);
-        if (found) {
-            currentDrilledAgent = { ...found, _orgId: orgId };
+        if (!found) {
+            if (typeof renderMemoryFilesForPage === 'function') renderMemoryFilesForPage('');
+            return;
         }
+        currentDrilledAgent = { ...found, _orgId: orgId };
 
-        // Ensure agents page/org shell is visible and switch to classic file view
         if (forceAgentsPage && typeof showPage === 'function') {
             showPage('agents', false);
         }
-        // daily-journal.showMemory may call openAgentMemory; avoid recursion here.
-        if (window._memoryCards) window._memoryCards.setLayout('classic');
 
-        const searchEl = document.getElementById('memory-search');
-        if (searchEl) {
-            searchEl.value = agentId;
-        }
-        // Force classic memory UI shell for agent-specific browsing
-        const classicView = document.getElementById('memory-classic-view');
-        const cardsView = document.getElementById('memory-cards-view');
-        if (classicView) classicView.style.display = '';
-        if (cardsView) cardsView.style.display = 'none';
+        const ctx = getAgentWorkspaceIds();
+        const orgShell = $('agents-org-shell');
+        const logShell = $('agents-log-shell');
+        const journalShell = $('agents-journal-shell');
+        if (ctx.shell) ctx.shell.style.display = '';
+        if (orgShell) orgShell.style.display = 'none';
+        if (logShell) logShell.style.display = 'none';
+        if (journalShell) journalShell.style.display = 'none';
 
-        // Render agent-specific files directly (prevents fallback to generic org view)
-        const filesGrid = document.getElementById('memory-files-grid');
-        const preview = document.getElementById('memory-file-preview');
-        if (filesGrid && currentDrilledAgent && Array.isArray(currentDrilledAgent.files)) {
-            const files = [...currentDrilledAgent.files].sort((a, b) => {
+        const searchEl = $('memory-search');
+        if (searchEl) searchEl.value = agentId;
+
+        const workspaceFiles = Array.isArray(found.files) ? [...found.files] : [];
+        renderAgentWorkspaceState(found, workspaceFiles, agentMemorySearch);
+        if (workspaceFiles[0]) {
+            const firstFile = workspaceFiles.sort((a, b) => {
                 const am = a?.modified ? new Date(a.modified).getTime() : 0;
                 const bm = b?.modified ? new Date(b.modified).getTime() : 0;
                 return bm - am;
-            });
-            filesGrid.innerHTML = files.length ? files.map(f => `
-                <div class="doc-card memory-file" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
-                    <div class="doc-card-header">
-                        <span class="doc-icon">${f.name.endsWith('.md') ? '📝' : '📄'}</span>
-                        <h4>${escapeHtml(f.name)}</h4>
-                    </div>
-                    <div class="doc-meta">${f.modified ? timeAgo(f.modified) : ''}</div>
-                </div>
-            `).join('') : '<div class="empty-state"><p>⚠️ No agent files found</p></div>';
-
-            if (preview) {
-                preview.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px;">Viewing <strong>${escapeHtml(agentId)}</strong> memory files. Select a file to preview.</div>`;
-            }
-        } else if (typeof renderMemoryFilesForPage === 'function') {
-            renderMemoryFilesForPage(agentId);
-        } else if (typeof renderMemoryFiles === 'function') {
-            renderMemoryFiles(agentId);
+            })[0];
+            previewFileFromWorkspace(firstFile.name);
+        } else if (ctx.preview) {
+            ctx.preview.innerHTML = '<div style="color:var(--text-muted); font-size:13px; text-align:center;">No files available</div>';
+            if (ctx.selected) ctx.selected.textContent = 'No file selected';
+            if (ctx.selectedMeta) ctx.selectedMeta.textContent = '';
+            if (ctx.actions) ctx.actions.innerHTML = '';
         }
 
         if (updateURL) {
@@ -1467,12 +1551,26 @@
         }
     }
 
+    function previewFileFromWorkspace(filename) {
+        const file = (agentMemoryFiles || []).find(f => String(f.name) === String(filename));
+        if (!file) return;
+        if (typeof previewFile === 'function') {
+            return previewFile(file.name);
+        }
+    }
+
     async function previewFile(filename) {
         const agent = currentDrilledAgent;
-        const previewEl = document.getElementById('agent-drill-preview');
-        if (!previewEl) return;
+        const mainPreview = $('agent-drill-preview');
+        const workspacePreview = $('agent-memory-preview-body');
 
-        previewEl.innerHTML = '<div class="loading-state">Loading...</div>';
+        if (!agent) return;
+
+        const shell = getAgentWorkspaceIds();
+        const target = workspacePreview || mainPreview;
+        if (!target) return;
+
+        target.innerHTML = '<div class=\"loading-state\">Loading...</div>';
 
         try {
             let content, filePath;
@@ -1488,15 +1586,24 @@
                 content = data.content || data.error || 'Empty file';
             }
 
-            previewEl.innerHTML = `
-                <div class="agent-preview-header">
-                    <span class="agent-preview-filename">${escapeHtml(filename)}</span>
-                    <button class="btn btn-sm btn-secondary" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(filePath)}')` : `viewAgentFile('${escapeHtml(agent.id)}', '${escapeHtml(filename)}')`}">✏️ Edit</button>
+            const loadedMeta = (agentMemoryFiles || []).find(f => String(f.name) === String(filename)) || {};
+            const fileTag = filename.endsWith('.md') ? '📝' : '📄';
+            loadedMeta.agentId = agent.id;
+            loadedMeta.agentIsDefault = !!agent.isDefault;
+
+            renderWorkspacePreview(loadedMeta);
+            target.innerHTML = `
+                <div class=\"agent-preview-header\">
+                    <span class=\"agent-preview-filename\">${fileTag} ${escapeHtml(filename)}</span>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost btn-xs" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(filePath)}')` : `viewAgentFile('${escapeHtml(agent.id)}', '${escapeHtml(filename)}')`}">✏️ Edit</button>
+                        <button class="btn btn-secondary btn-xs" onclick="window._memoryCards && window._memoryCards.previewFileFromWorkspace('${escapeHtml(filename)}')">↻ Reload</button>
+                    </div>
                 </div>
                 <div class="agent-preview-content"><pre>${escapeHtml(content)}</pre></div>
             `;
         } catch (e) {
-            previewEl.innerHTML = `<div class="empty-state">Error loading file: ${escapeHtml(e.message)}</div>`;
+            target.innerHTML = `<div class="empty-state">Error loading file: ${escapeHtml(e.message)}</div>`;
         }
     }
 
@@ -1573,6 +1680,8 @@
         switchToSession,
         openAgentMemory,
         openAgentMemoryFromUi,
+        previewFileFromWorkspace,
+        filterAgentMemoryFiles,
         toggleIdentityExpand,
         customizeFallbacks,
         revertFallbacksToGlobal,

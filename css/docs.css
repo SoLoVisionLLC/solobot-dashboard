@@ -1223,3 +1223,181 @@ body.space-panning {
 #page-agents {
     padding: 108px 24px 24px 24px;
 }
+/* ── Agent Memory Workspace (agents/:agentId/memory) ── */
+.agent-memory-shell {
+    display: grid;
+    gap: 12px;
+}
+
+.agent-memory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 10px 12px;
+}
+
+.agent-memory-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.agent-memory-layout {
+    display: grid;
+    grid-template-columns: minmax(250px, 320px) 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.agent-memory-sidebar {
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 10px;
+    max-height: 65vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.agent-memory-summary {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--surface-2);
+}
+
+.agent-memory-file-list {
+    display: grid;
+    gap: 6px;
+    overflow: auto;
+    min-height: 0;
+}
+
+.agent-memory-item {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 9px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.agent-memory-item:hover {
+    border-color: var(--border-emphasis);
+    background: var(--surface-3);
+}
+
+.agent-memory-item-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.agent-memory-item-meta {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.agent-memory-preview {
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    min-height: 65vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+}
+
+.agent-memory-preview-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.agent-memory-selected-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.agent-memory-preview-body {
+    padding: 12px;
+    overflow: auto;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.agent-memory-preview-body pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+}
+
+.agent-memory-row {
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    padding: 7px 8px;
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.agent-memory-row:hover {
+    border-color: var(--border-default);
+    background: var(--surface-2);
+}
+
+.agent-memory-row-icon {
+    font-size: 12px;
+}
+
+.agent-memory-row-name {
+    font-size: 12px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.agent-memory-row-meta {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.agent-memory-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 6px 8px;
+}
+
+@media (max-width: 900px) {
+    .agent-memory-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .agent-memory-preview {
+        min-height: 48vh;
+    }
+}
