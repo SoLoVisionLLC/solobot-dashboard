@@ -1357,6 +1357,29 @@ body.space-panning {
     font-size: 10px;
 }
 
+.agent-memory-section-toggle {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    cursor: pointer;
+    border-radius: 8px;
+}
+
+.agent-memory-section-toggle:hover {
+    color: var(--text-primary);
+}
+
+.agent-memory-section-toggle-icon {
+    font-size: 10px;
+}
+
 .agent-memory-section-list {
     display: grid;
     gap: 6px;

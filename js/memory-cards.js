@@ -15,6 +15,7 @@
     let agentMemoryRenderToken = 0;
     let agentMemoryFiles = [];
     let agentMemorySearch = "";
+    let showDailySectionExpanded = false;
     let panzoomInstance = null;
     let isSpacePressed = false;
     let agentMetricsRefreshTimer = null;
@@ -1460,82 +1461,85 @@
             return;
         }
 
-        const CORE_SECTION_ORDER = ['AGENTT', 'HEARTBEAT', 'MEMORY', 'IDENTITY', 'IDENITY', 'USER', 'SOUL', 'TOOLS', 'RUNNING_CONTEXT'];
+        const coreFileNames = ['AGENTT', 'AGENT', 'HEARTBEAT', 'MEMORY', 'IDENTITY', 'IDENITY', 'USER', 'SOUL', 'TOOLS', 'RUNNING_CONTEXT', 'RUNNING CONTEXT', 'RUNNINGCONTEXT'];
+        const dailyFileNames = ['DAILY', 'RUNNING_CONTEXT', 'RUNNING CONTEXT', 'RUNNINGCONTEXT', 'DAILY_CONTEXT'];
 
-        const sectionMatchers = {
-            AGENTT: ['AGENTT', 'AGENT'],
-            HEARTBEAT: ['HEARTBEAT'],
-            MEMORY: ['MEMORY'],
-            IDENTITY: ['IDENTITY'],
-            IDENITY: ['IDENITY', 'IDENTITY'],
-            USER: ['USER'],
-            SOUL: ['SOUL'],
-            TOOLS: ['TOOLS'],
-            RUNNING_CONTEXT: ['RUNNING CONTEXT', 'RUNNING_CONTEXT', 'RUNNINGCONTEXT']
-        };
+        const coreFiles = [];
+        const dailyFiles = [];
+        const otherFiles = [];
 
-        function detectSection(fileName = '') {
-            const n = String(fileName).toUpperCase();
-            const keys = Object.keys(sectionMatchers);
-            const found = keys.find((key) => {
-                const aliases = sectionMatchers[key] || [];
-                return aliases.some(alias => {
-                    const normalized = String(alias).toUpperCase().replace(/\s+/g, '');
-                    const needle = String(alias).toUpperCase();
-                    const hay = n.replace(/\//g, '');
-                    return hay.includes(needle) || n.replace(/[^A-Z0-9_]/g, '').includes(normalized);
-                });
-            });
-
-            if (found && sectionMatchers.hasOwnProperty(found)) return found;
-            return 'OTHER';
-        }
-
-        const grouped = {};
         filtered.forEach((f) => {
-            const section = detectSection(f.name);
-            const target = section === 'OTHER' ? 'OTHER' : section;
-            if (!grouped[target]) grouped[target] = [];
-            grouped[target].push(f);
+            const name = String(f?.name || '').toUpperCase();
+            const clean = name.replace(/[^A-Z0-9_]/g, '');
+            if (coreFileNames.some((k) => clean.includes(k.replace(/[^A-Z0-9_]/g, '')) || name.includes(k))) {
+                coreFiles.push(f);
+                return;
+            }
+            if (dailyFileNames.some((k) => clean.includes(k.replace(/[^A-Z0-9_]/g, '')) || name.includes(k))) {
+                dailyFiles.push(f);
+                return;
+            }
+            otherFiles.push(f);
         });
 
-        const sectionsToRender = [
-            ...CORE_SECTION_ORDER,
-            ...(grouped.OTHER ? ['OTHER'] : []),
-        ].filter(Boolean);
+        const renderRows = (items) => items.map((f) => {
+            const icon = f.name && f.name.endsWith('.md') ? '📝' : '📄';
+            const date = f.modified ? timeAgo(f.modified) : '—';
+            return `
+                <button class="agent-memory-item" type="button" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
+                    <span class="agent-memory-row-icon">${icon}</span>
+                    <span class="agent-memory-item-name">${escapeHtml(f.name)}</span>
+                    <span class="agent-memory-item-meta">${date}</span>
+                </button>
+            `;
+        }).join('');
 
-        const renderedSections = sectionsToRender
-            .filter(sec => (grouped[sec] || []).length > 0)
-            .map((sec) => {
-                const items = grouped[sec] || [];
-                const sectionLabel = sec === 'IDENITY' ? 'IDENTITY' : (sec === 'RUNNING_CONTEXT' ? 'RUNNING CONTEXT' : sec);
-                const rows = items.map((f) => {
-                    const icon = f.name && f.name.endsWith('.md') ? '📝' : '📄';
-                    const date = f.modified ? timeAgo(f.modified) : '—';
-                    return `
-                        <button class="agent-memory-item" type="button" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
-                            <span class="agent-memory-row-icon">${icon}</span>
-                            <span class="agent-memory-item-name">${escapeHtml(f.name)}</span>
-                            <span class="agent-memory-item-meta">${date}</span>
-                        </button>
-                    `;
-                }).join('');
+        const coreCount = coreFiles.length;
+        const otherCount = otherFiles.length;
+        const dailyCount = dailyFiles.length;
 
-                const countText = items.length === 1 ? '1 file' : `${items.length} files`;
-                return `
-                    <div class="agent-memory-section">
-                        <div class="agent-memory-section-title">${sectionLabel} <span>(${countText})</span></div>
-                        <div class="agent-memory-section-list">${rows}</div>
-                    </div>
-                `;
-            }).join('');
+        const coreSection = coreCount
+            ? `<div class="agent-memory-section">
+                <div class="agent-memory-section-title">CORE FILES <span>(${coreCount} file${coreCount === 1 ? '' : 's'})</span></div>
+                <div class="agent-memory-section-list">${renderRows(coreFiles)}</div>
+            </div>`
+            : '';
 
-        if (!renderedSections.length) {
+        const dailyRows = renderRows(dailyFiles);
+        const dailySection = dailyCount
+            ? `<div class="agent-memory-section">
+                <button class="agent-memory-section-toggle" type="button" onclick="window._memoryCards.toggleDailyFiles()">
+                    <span>DAILY MEMORY (${dailyCount} file${dailyCount === 1 ? '' : 's'})</span>
+                    <span class="agent-memory-section-toggle-icon">${showDailySectionExpanded ? '▾' : '▸'}</span>
+                </button>
+                <div class="agent-memory-section-list" style="display:${showDailySectionExpanded ? 'grid' : 'none'};">${dailyRows}</div>
+            </div>`
+            : '';
+
+        const otherSection = otherCount
+            ? `<div class="agent-memory-section">
+                <div class="agent-memory-section-title">OTHER FILES <span>(${otherCount} file${otherCount === 1 ? '' : 's'})</span></div>
+                <div class="agent-memory-section-list">${renderRows(otherFiles)}</div>
+            </div>`
+            : '';
+
+        const renderedSections = `${coreSection}${dailySection}${otherSection}`;
+
+        if (!renderedSections.trim()) {
             ctx.list.innerHTML = '<div class="agent-memory-empty">No memory files for this agent.</div>';
             return;
         }
 
         ctx.list.innerHTML = `<div class="agent-memory-sections">${renderedSections}</div>`;
+    }
+
+
+    function toggleDailyFiles() {
+        showDailySectionExpanded = !showDailySectionExpanded;
+        if (currentDrilledAgent) {
+            const files = Array.isArray(currentDrilledAgent.files) ? [...currentDrilledAgent.files] : [];
+            renderAgentWorkspaceState(currentDrilledAgent, files, agentMemorySearch);
+        }
     }
 
     function renderWorkspacePreview(fileMeta) {
@@ -1576,6 +1580,7 @@
             return;
         }
         currentDrilledAgent = { ...found, _orgId: orgId };
+        showDailySectionExpanded = false;
 
         if (forceAgentsPage && typeof showPage === 'function') {
             showPage('agents', false);
@@ -1748,6 +1753,7 @@
         openAgentMemoryFromUi,
         previewFileFromWorkspace,
         filterAgentMemoryFiles,
+        toggleDailyFiles,
         toggleIdentityExpand,
         customizeFallbacks,
         revertFallbacksToGlobal,
