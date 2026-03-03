@@ -1399,6 +1399,7 @@
                 evt.stopPropagation();
             }
         } catch (_) {}
+        console.log('[Agents] openAgentMemoryFromUi click', agentId);
         return openAgentMemory(agentId, { updateURL: true, forceAgentsPage: true });
     }
 
@@ -1426,7 +1427,11 @@
         const searchEl = document.getElementById('memory-search');
         if (searchEl) {
             searchEl.value = agentId;
-            if (typeof renderMemoryFiles === 'function') renderMemoryFiles(agentId);
+        }
+        if (typeof renderMemoryFilesForPage === 'function') {
+            renderMemoryFilesForPage(agentId);
+        } else if (typeof renderMemoryFiles === 'function') {
+            renderMemoryFiles(agentId);
         }
 
         if (updateURL) {
