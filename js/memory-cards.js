@@ -1461,25 +1461,52 @@
             return;
         }
 
-        const coreFileNames = ['AGENTT', 'AGENT', 'HEARTBEAT', 'MEMORY', 'IDENTITY', 'IDENITY', 'USER', 'SOUL', 'TOOLS', 'RUNNING_CONTEXT', 'RUNNING CONTEXT', 'RUNNINGCONTEXT'];
-        const dailyFileNames = ['DAILY', 'RUNNING_CONTEXT', 'RUNNING CONTEXT', 'RUNNINGCONTEXT', 'DAILY_CONTEXT'];
-
         const coreFiles = [];
         const dailyFiles = [];
         const otherFiles = [];
 
+        const normalize = (str) => String(str || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const getBaseName = (name = '') => {
+            const parts = String(name).split('/');
+            return parts[parts.length - 1] || String(name);
+        };
+        const getStem = (name = '') => {
+            const base = getBaseName(name);
+            return base.replace(/\.[^.]+$/, '');
+        };
+
+        // STRICT core whitelist only (no partial matching)
+        const coreStems = new Set([
+            'AGENTT',
+            'HEARTBEAT',
+            'MEMORY',
+            'IDENTITY',
+            'IDENITY',
+            'USER',
+            'SOUL',
+            'TOOLS',
+            'RUNNING_CONTEXT',
+            'RUNNING CONTEXT',
+            'RUNNINGCONTEXT'
+        ].map(normalize));
+
+        const isCore = (name) => coreStems.has(normalize(getStem(name)));
+
+        // Daily memory: date-based memory files and explicit daily markers
+        const isDaily = (name) => {
+            const raw = String(name || '').toUpperCase();
+            const stem = String(getStem(name || '')).toUpperCase();
+            if (/^MEMORY\/(19|20)\d{2}-\d{2}-\d{2}\.MD$/.test(raw)) return true;
+            if (/^(19|20)\d{2}-\d{2}-\d{2}$/.test(stem)) return true;
+            if (stem.startsWith('DAILY') || stem.includes('DAILY_CONTEXT') || stem.includes('RUNNING_CONTEXT_DAILY')) return true;
+            return false;
+        };
+
         filtered.forEach((f) => {
-            const name = String(f?.name || '').toUpperCase();
-            const clean = name.replace(/[^A-Z0-9_]/g, '');
-            if (coreFileNames.some((k) => clean.includes(k.replace(/[^A-Z0-9_]/g, '')) || name.includes(k))) {
-                coreFiles.push(f);
-                return;
-            }
-            if (dailyFileNames.some((k) => clean.includes(k.replace(/[^A-Z0-9_]/g, '')) || name.includes(k))) {
-                dailyFiles.push(f);
-                return;
-            }
-            otherFiles.push(f);
+            const name = f?.name || '';
+            if (isCore(name)) coreFiles.push(f);
+            else if (isDaily(name)) dailyFiles.push(f);
+            else otherFiles.push(f);
         });
 
         const renderRows = (items) => items.map((f) => {
