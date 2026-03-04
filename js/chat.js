@@ -1000,15 +1000,24 @@ function renderChat() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceState = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabel = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatus = !streamingText && (
+        isProcessing || (_presenceState && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceState.state))
+    );
+    if (_showCompactStatus) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.innerHTML = `
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabel}</span>
         `;
         container.appendChild(typingIndicator);
     }
@@ -1443,8 +1452,17 @@ function renderChatPage() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceStateCP = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabelCP = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatusCP = !streamingText && (
+        isProcessing || (_presenceStateCP && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceStateCP.state))
+    );
+    if (_showCompactStatusCP) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.style.cssText = 'margin: 12px 0 12px 12px;';
@@ -1452,7 +1470,7 @@ function renderChatPage() {
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabelCP}</span>
         `;
         container.appendChild(typingIndicator);
     }

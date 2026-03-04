@@ -3,6 +3,7 @@
   const STALL_MS = 30000;
   const IDLE_AFTER_DONE_MS = 12000;
   const MAX_EVENTS = 80;
+  const SHOW_PANEL = false;
   const states = new Map();
 
   function now() { return Date.now(); }
@@ -114,6 +115,11 @@
   }
 
   function ensurePanel() {
+    if (!SHOW_PANEL) {
+      const old = document.getElementById('agent-presence-panel');
+      if (old) old.remove();
+      return null;
+    }
     const root = document.querySelector('#page-chat .chat-page-wrapper');
     if (!root) return null;
     let panel = document.getElementById('agent-presence-panel');
@@ -171,7 +177,22 @@
       if (evt.kind === 'tool') ingestTool(evt);
     },
     render,
-    getStates() { return [...states.values()]; }
+    getStates() { return [...states.values()]; },
+    getSessionState(sessionKey) { return getState(sessionKey || window.currentSessionName || 'main'); },
+    getSessionLabel(sessionKey) {
+      const s = getState(sessionKey || window.currentSessionName || 'main');
+      if (!s) return 'Thinking...';
+      const labels = {
+        running: 'Working…',
+        waiting_tool: 'Using tools…',
+        waiting_user: 'Waiting for your input…',
+        stalled: 'No activity (possible stall)…',
+        error: 'Error encountered…',
+        done: 'Finishing up…',
+        idle: 'Thinking...'
+      };
+      return labels[s.state] || 'Thinking...';
+    }
   };
 
   setInterval(runTicker, 1000);
