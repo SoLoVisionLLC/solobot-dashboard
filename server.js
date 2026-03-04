@@ -2130,7 +2130,13 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Expires', '0');
     try {
       const content = fs.readFileSync(filePath, 'utf8');
-      return res.end(JSON.stringify({ name: filename, content, path: filename }));
+      const stat = fs.statSync(filePath);
+      const traceId = String(url.searchParams.get('trace') || req.headers['x-debug-trace'] || '');
+      const contentHash = crypto.createHash('sha256').update(content).digest('hex');
+      if (traceId) {
+        console.log(`[AgentFile][GET][trace=${traceId}] agent=${agentId} file=${filename} bytes=${Buffer.byteLength(content, 'utf8')} mtime=${stat.mtime.toISOString()} hash=${contentHash}`);
+      }
+      return res.end(JSON.stringify({ name: filename, content, path: filename, debug: { traceId, mtime: stat.mtime.toISOString(), bytes: Buffer.byteLength(content, 'utf8'), hash: contentHash } }));
     } catch (e) {
       res.writeHead(404);
       return res.end(JSON.stringify({ error: 'File not found', path: filePath }));
@@ -2174,17 +2180,31 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ error: 'content must be a string' }));
         }
 
+        const traceId = String(req.headers['x-debug-trace'] || url.searchParams.get('trace') || `${Date.now()}-${Math.random().toString(16).slice(2,8)}`);
+
         // Ensure target dir exists
         const dir = path.dirname(filePath);
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }
 
+        const beforeExists = fs.existsSync(filePath);
+        const beforeContent = beforeExists ? fs.readFileSync(filePath, 'utf8') : '';
+        const beforeHash = beforeExists ? crypto.createHash('sha256').update(beforeContent).digest('hex') : null;
+
         fs.writeFileSync(filePath, content, 'utf8');
+
+        const afterContent = fs.readFileSync(filePath, 'utf8');
+        const afterStat = fs.statSync(filePath);
+        const afterHash = crypto.createHash('sha256').update(afterContent).digest('hex');
+        const requestedHash = crypto.createHash('sha256').update(content).digest('hex');
+        const verified = afterContent === content;
+
+        console.log(`[AgentFile][PUT][trace=${traceId}] agent=${agentId} file=${filename} before=${beforeHash || 'none'} requested=${requestedHash} after=${afterHash} verified=${verified} mtime=${afterStat.mtime.toISOString()} bytes=${Buffer.byteLength(content, 'utf8')}`);
 
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        return res.end(JSON.stringify({ ok: true, saved: filename, path: filename }));
+        return res.end(JSON.stringify({ ok: true, saved: filename, path: filename, debug: { traceId, requestedHash, beforeHash, afterHash, verified, mtime: afterStat.mtime.toISOString(), bytes: Buffer.byteLength(content, 'utf8') } }));
       } catch (e) {
         res.writeHead(500);
         return res.end(JSON.stringify({ error: e.message }));

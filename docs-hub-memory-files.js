@@ -799,12 +799,16 @@ async function saveMemoryFile() {
     // Agent-scoped file save path
     if (isAgentFile && agentId) {
         let lastErr = null;
+        const traceId = `agent-save-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
+        const targetUrl = `/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`;
 
         // 1) Agent API write path
         try {
-            const response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`, {
+            console.info('[MemorySave][Agent] PUT start', { traceId, agentId, filepath, bytes: newContent.length, targetUrl });
+            const response = await fetch(`${targetUrl}?trace=${encodeURIComponent(traceId)}&t=${Date.now()}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Trace': traceId },
                 body: JSON.stringify({ content: newContent, updatedBy: 'user' })
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -812,14 +816,28 @@ async function saveMemoryFile() {
             if (data && data.error) throw new Error(data.error);
 
             // Read-after-write verification to prevent false "saved" state
-            const verify = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}?t=${Date.now()}`, { cache: 'no-store' });
+            const verify = await fetch(`${targetUrl}?trace=${encodeURIComponent(traceId)}&verify=1&t=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'X-Debug-Trace': traceId }
+            });
             if (!verify.ok) throw new Error(`Verify HTTP ${verify.status}`);
             const verifyData = await verify.json().catch(() => ({}));
             if (typeof verifyData?.content !== 'string') throw new Error('Verify failed: invalid read response');
-            if (verifyData.content !== newContent) throw new Error('Verify failed: persisted content mismatch');
+            if (verifyData.content !== newContent) {
+                console.error('[MemorySave][Agent] verify mismatch', {
+                    traceId,
+                    requestedLength: newContent.length,
+                    actualLength: (verifyData?.content || '').length,
+                    putDebug: data?.debug,
+                    getDebug: verifyData?.debug,
+                });
+                throw new Error(`Verify failed: persisted content mismatch (trace ${traceId})`);
+            }
 
+            console.info('[MemorySave][Agent] PUT+verify ok', { traceId, putDebug: data?.debug, getDebug: verifyData?.debug });
             success = true;
         } catch (e) {
+            console.error('[MemorySave][Agent] failed', { traceId, agentId, filepath, error: e?.message || String(e) });
             lastErr = e;
         }
 
