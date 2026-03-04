@@ -803,6 +803,7 @@ async function saveMemoryFile() {
         const targetUrl = `/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`;
 
         // 1) Agent API write path
+        let putData = null;
         try {
             console.info('[MemorySave][Agent] PUT start', { traceId, agentId, filepath, bytes: newContent.length, targetUrl });
             const response = await fetch(`${targetUrl}?trace=${encodeURIComponent(traceId)}&t=${Date.now()}`, {
@@ -812,8 +813,8 @@ async function saveMemoryFile() {
                 body: JSON.stringify({ content: newContent, updatedBy: 'user' })
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json().catch(() => ({}));
-            if (data && data.error) throw new Error(data.error);
+            putData = await response.json().catch(() => ({}));
+            if (putData && putData.error) throw new Error(putData.error);
 
             // Read-after-write verification to prevent false "saved" state
             const verify = await fetch(`${targetUrl}?trace=${encodeURIComponent(traceId)}&verify=1&t=${Date.now()}`, {
@@ -823,21 +824,34 @@ async function saveMemoryFile() {
             if (!verify.ok) throw new Error(`Verify HTTP ${verify.status}`);
             const verifyData = await verify.json().catch(() => ({}));
             if (typeof verifyData?.content !== 'string') throw new Error('Verify failed: invalid read response');
-            if (verifyData.content !== newContent) {
+            const normalizeEol = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const requestedNorm = normalizeEol(newContent);
+            const actualNorm = normalizeEol(verifyData.content);
+            if (actualNorm !== requestedNorm) {
                 console.error('[MemorySave][Agent] verify mismatch', {
                     traceId,
                     requestedLength: newContent.length,
                     actualLength: (verifyData?.content || '').length,
-                    putDebug: data?.debug,
+                    requestedNormLength: requestedNorm.length,
+                    actualNormLength: actualNorm.length,
+                    putDebug: putData?.debug,
                     getDebug: verifyData?.debug,
                 });
                 throw new Error(`Verify failed: persisted content mismatch (trace ${traceId})`);
             }
 
-            console.info('[MemorySave][Agent] PUT+verify ok', { traceId, putDebug: data?.debug, getDebug: verifyData?.debug });
+            console.info('[MemorySave][Agent] PUT+verify ok', { traceId, putDebug: putData?.debug, getDebug: verifyData?.debug });
             success = true;
         } catch (e) {
-            console.error('[MemorySave][Agent] failed', { traceId, agentId, filepath, error: e?.message || String(e) });
+            const serverDebugMissing = !putData?.debug;
+            console.error('[MemorySave][Agent] failed', {
+                traceId,
+                agentId,
+                filepath,
+                error: e?.message || String(e),
+                serverDebugMissing,
+                hint: serverDebugMissing ? 'Dashboard server likely not on diagnostics build yet' : undefined,
+            });
             lastErr = e;
         }
 
