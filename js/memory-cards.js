@@ -1680,7 +1680,7 @@
                 content = data.content || data.error || 'Empty file';
             } else {
                 filePath = filename;
-                const res = await fetch(`/api/agents/${encodeURIComponent(agent.id)}/files/${encodeURIComponent(filename)}`);
+                const res = await fetch(`/api/agents/${encodeURIComponent(agent.id)}/files/${encodeURIComponent(filename)}?t=${Date.now()}`, { cache: 'no-store' });
                 const data = await res.json();
                 content = data.content || data.error || 'Empty file';
             }

@@ -2125,6 +2125,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     try {
       const content = fs.readFileSync(filePath, 'utf8');
       return res.end(JSON.stringify({ name: filename, content, path: filename }));
@@ -2180,6 +2183,7 @@ const server = http.createServer(async (req, res) => {
         fs.writeFileSync(filePath, content, 'utf8');
 
         res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         return res.end(JSON.stringify({ ok: true, saved: filename, path: filename }));
       } catch (e) {
         res.writeHead(500);

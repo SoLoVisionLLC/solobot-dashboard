@@ -812,7 +812,7 @@ async function saveMemoryFile() {
             if (data && data.error) throw new Error(data.error);
 
             // Read-after-write verification to prevent false "saved" state
-            const verify = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`);
+            const verify = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}?t=${Date.now()}`, { cache: 'no-store' });
             if (!verify.ok) throw new Error(`Verify HTTP ${verify.status}`);
             const verifyData = await verify.json().catch(() => ({}));
             if (typeof verifyData?.content !== 'string') throw new Error('Verify failed: invalid read response');
@@ -996,7 +996,7 @@ async function viewAgentFile(agentId, filename) {
     showModal('memory-file-modal');
 
     try {
-        const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}`);
+        const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}?t=${Date.now()}`, { cache: 'no-store' });
         const data = await resp.json();
 
         if (data.error) {
