@@ -828,12 +828,25 @@ async function saveMemoryFile() {
             const requestedNorm = normalizeEol(newContent);
             const actualNorm = normalizeEol(verifyData.content);
             if (actualNorm !== requestedNorm) {
+                let mismatchAt = -1;
+                const max = Math.min(requestedNorm.length, actualNorm.length);
+                for (let i = 0; i < max; i++) {
+                    if (requestedNorm[i] !== actualNorm[i]) { mismatchAt = i; break; }
+                }
+                if (mismatchAt === -1) mismatchAt = max;
+                const s = Math.max(0, mismatchAt - 24);
+                const e = mismatchAt + 24;
+                const reqSnippet = requestedNorm.slice(s, e);
+                const actSnippet = actualNorm.slice(s, e);
                 console.error('[MemorySave][Agent] verify mismatch', {
                     traceId,
                     requestedLength: newContent.length,
                     actualLength: (verifyData?.content || '').length,
                     requestedNormLength: requestedNorm.length,
                     actualNormLength: actualNorm.length,
+                    mismatchAt,
+                    reqSnippet,
+                    actSnippet,
                     putDebug: putData?.debug,
                     getDebug: verifyData?.debug,
                 });
@@ -850,7 +863,7 @@ async function saveMemoryFile() {
                 filepath,
                 error: e?.message || String(e),
                 serverDebugMissing,
-                hint: serverDebugMissing ? 'Dashboard server likely not on diagnostics build yet' : undefined,
+                hint: serverDebugMissing ? 'Dashboard server likely not on diagnostics build yet (frontend and backend out of sync)' : undefined,
             });
             lastErr = e;
         }
