@@ -2127,11 +2127,66 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     try {
       const content = fs.readFileSync(filePath, 'utf8');
-      return res.end(JSON.stringify({ name: filename, content }));
+      return res.end(JSON.stringify({ name: filename, content, path: filename }));
     } catch (e) {
       res.writeHead(404);
       return res.end(JSON.stringify({ error: 'File not found', path: filePath }));
     }
+  }
+
+  // Write sub-agent file
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'PUT') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+
+    // Resolve workspace path using the same convention as /api/agents
+    let agentWorkspace;
+    if (agentId === 'main') {
+      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+    } else {
+      agentWorkspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+      if (!fs.existsSync(agentWorkspace)) {
+        // Legacy fallback
+        agentWorkspace = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+      }
+    }
+
+    const filePath = path.resolve(agentWorkspace, filename);
+
+    // Security: ensure path is within workspace
+    const resolvedWorkspace = path.resolve(agentWorkspace);
+    if (!filePath.startsWith(resolvedWorkspace)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { content } = JSON.parse(body);
+        if (typeof content !== 'string') {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'content must be a string' }));
+        }
+
+        // Ensure target dir exists
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+
+        fs.writeFileSync(filePath, content, 'utf8');
+
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({ ok: true, saved: filename, path: filename }));
+      } catch (e) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
   }
 
   // ========== Skills Files API ==========
