@@ -810,6 +810,14 @@ async function saveMemoryFile() {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json().catch(() => ({}));
             if (data && data.error) throw new Error(data.error);
+
+            // Read-after-write verification to prevent false "saved" state
+            const verify = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`);
+            if (!verify.ok) throw new Error(`Verify HTTP ${verify.status}`);
+            const verifyData = await verify.json().catch(() => ({}));
+            if (typeof verifyData?.content !== 'string') throw new Error('Verify failed: invalid read response');
+            if (verifyData.content !== newContent) throw new Error('Verify failed: persisted content mismatch');
+
             success = true;
         } catch (e) {
             lastErr = e;
