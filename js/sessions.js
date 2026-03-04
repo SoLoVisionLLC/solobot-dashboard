@@ -971,8 +971,13 @@ function initGateway() {
         },
         onToolEvent: (event) => {
             // Add tool event to terminal in real-time
-            if (event.phase === 'start' && event.summary) {
-                addTerminalLog(event.summary, 'info', event.timestamp);
+            if ((event.phase === 'start' || event.phase === 'complete' || event.phase === 'end' || event.phase === 'done') && event.summary) {
+                addTerminalLog(event.phase === 'start' ? event.summary : `✅ ${event.summary}`, 'info', event.timestamp);
+            }
+        },
+        onPresenceEvent: (event) => {
+            if (window.AgentPresence && typeof window.AgentPresence.ingestEvent === 'function') {
+                window.AgentPresence.ingestEvent(event);
             }
         },
         onCrossSessionMessage: (msg) => {
