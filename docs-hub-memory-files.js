@@ -823,59 +823,14 @@ async function saveMemoryFile() {
             lastErr = e;
         }
 
-        // 2) Gateway fallback using memory.write with candidate paths
-        if (!success && window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
-            const candidates = [
-                window.currentMemoryFile?.fullPath,
-                `agents/${agentId}/${filepath}`,
-                `memory/${agentId}/${filepath}`,
-                `${agentId}/${filepath}`,
-                filepath,
-            ].filter(Boolean);
-
-            for (const path of candidates) {
-                try {
-                    await window.gateway._request('memory.write', { path, content: newContent });
-                    success = true;
-                    window.currentMemoryFile.fullPath = path;
-                    break;
-                } catch (e) {
-                    lastErr = e;
-                }
-            }
-        }
-
-        // 3) REST fallback using /api/memory/<path>
+        // IMPORTANT: Do NOT fallback agent-file writes to gateway memory.write or /api/memory.
+        // Those paths can target a different storage namespace and produce false-positive saves.
         if (!success) {
-            const candidates = [
-                window.currentMemoryFile?.fullPath,
-                `agents/${agentId}/${filepath}`,
-                `memory/${agentId}/${filepath}`,
-                `${agentId}/${filepath}`,
-                filepath,
-            ].filter(Boolean);
-
-            for (const path of candidates) {
-                try {
-                    const response = await fetch(`/api/memory/${encodeURIComponent(path)}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ content: newContent, updatedBy: 'user' })
-                    });
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    const data = await response.json().catch(() => ({}));
-                    if (data && data.error) throw new Error(data.error);
-                    success = true;
-                    window.currentMemoryFile.fullPath = path;
-                    break;
-                } catch (e) {
-                    lastErr = e;
-                }
-            }
-        }
-
-        if (!success) {
-            showToast(`Failed to save agent file: ${lastErr?.message || 'Unknown error'}`, 'error');
+            const errMsg = String(lastErr?.message || 'Unknown error');
+            const hint = /HTTP\s+404/.test(errMsg)
+                ? ' (Agent file write endpoint unavailable on this deployment; update/redeploy dashboard server.)'
+                : '';
+            showToast(`Failed to save agent file: ${errMsg}${hint}`, 'error');
             if (saveBtn) {
                 saveBtn.textContent = '💾 Save';
                 saveBtn.disabled = false;
