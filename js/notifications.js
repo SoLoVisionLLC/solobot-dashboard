@@ -108,6 +108,32 @@ function extractHistoryTextFromPart(part) {
     return '';
 }
 
+function resolveInterSessionMeta(primary, secondary = null) {
+    const sourceSession = String(primary?.sourceSession || secondary?.sourceSession || '').trim();
+    const sourceAgentRaw = String(primary?.sourceAgent || primary?.sourceAgentId || secondary?.sourceAgent || secondary?.sourceAgentId || '').trim();
+    const sourceAgentName = String(primary?.sourceAgentName || secondary?.sourceAgentName || '').trim();
+
+    let sourceAgent = sourceAgentRaw;
+    if (!sourceAgent && sourceSession) {
+        const m = sourceSession.match(/^agent:([^:]+):/i);
+        if (m) sourceAgent = m[1];
+    }
+    if (!sourceSession && !sourceAgent && !sourceAgentName) return null;
+
+    const canonicalAgent = (typeof window.resolveAgentId === 'function')
+        ? window.resolveAgentId(sourceAgent || 'main')
+        : (sourceAgent || 'main');
+    const displayName = sourceAgentName || (typeof getAgentDisplayName === 'function' ? getAgentDisplayName(canonicalAgent) : canonicalAgent);
+
+    return {
+        _sourceSession: sourceSession || null,
+        _sourceAgent: canonicalAgent || null,
+        _sourceAgentName: displayName || null,
+        _agentId: canonicalAgent || (window.currentAgentId || 'main'),
+        _isInterSession: true
+    };
+}
+
 function extractHistoryText(container) {
     if (!container) return '';
     let text = '';
@@ -690,7 +716,7 @@ function handleChatEvent(event) {
     if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
         window.ModelValidator.handleGatewayEvent(event);
     }
-    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind } = event;
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind, sourceSession, sourceAgent, sourceAgentId, sourceAgentName } = event;
 
     // HARD GATE: only render events for the active session. Period.
     // Cross-session notifications are handled separately by onCrossSessionMessage.
@@ -751,12 +777,15 @@ function handleChatEvent(event) {
             return;
         }
 
+        const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+        const from = interMeta ? 'solobot' : 'user';
+
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
-            m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
+            m.from === from && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
         );
         if (!isDuplicate) {
-            addLocalChatMessage(content, 'user');
+            addLocalChatMessage(content, from, null, null, null, interMeta);
         }
         return;
     }
@@ -825,7 +854,8 @@ function handleChatEvent(event) {
                 });
                 const recentDuplicate = hasRecentFinalFingerprint(finalFingerprint);
                 if (!runtimeDuplicate && !recentDuplicate) {
-                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider);
+                    const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider, interMeta);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
                     rememberFinalFingerprint(finalFingerprint);
@@ -941,7 +971,11 @@ function loadHistoryMessages(messages) {
             runId: msg.runId || msg.message?.runId || null,
             // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
             _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-            _agentId: window.currentAgentId || 'main'
+            _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
+            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
+            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
+            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
+            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
         };
 
         // Classify and route
@@ -1171,7 +1205,11 @@ function mergeHistoryMessages(messages) {
                     provider: msg.provider || null,
                     runId: msg.runId || msg.message?.runId || null,
                     _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-                    _agentId: window.currentAgentId || 'main'
+                    _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
+            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
+            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
+            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
+            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
                 };
 
                 // Classify and route

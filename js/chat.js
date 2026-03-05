@@ -830,10 +830,10 @@ async function sendChatMessage() {
     }
 }
 
-function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null) {
+function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null, meta = null) {
     // DEFENSIVE: Hard session gate - validate incoming messages match current session
     // Check if this message already has a session tag from outside
-    const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
+    const incomingSession = (meta?._sessionKey || imageOrModel?._sessionKey || '').toLowerCase();
     const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
 
     if (incomingSession && currentSession && incomingSession !== currentSession) {
@@ -879,8 +879,12 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         images: images, // New array field
         model: messageModel, // Store which AI model generated this response
         provider: provider, // Store which provider (e.g., 'google', 'anthropic')
-        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
-        _agentId: window.currentAgentId || 'main' // Fix #3: Store agent at message creation time for correct display later
+        _sessionKey: meta?._sessionKey || window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
+        _agentId: meta?._agentId || window.currentAgentId || 'main', // attribution owner
+        _sourceSession: meta?._sourceSession || null,
+        _sourceAgent: meta?._sourceAgent || null,
+        _sourceAgentName: meta?._sourceAgentName || null,
+        _isInterSession: !!(meta?._isInterSession)
     };
 
     const isSystem = isSystemMessage(text, from);
@@ -1035,7 +1039,8 @@ function createChatMessageElement(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
 
     // Create message container
@@ -1109,6 +1114,14 @@ function createChatMessageElement(msg) {
             modelBadge.title = bestModel;
             header.appendChild(modelBadge);
         }
+    }
+
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: var(--space-2);';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
     }
 
     // Message content
@@ -1488,13 +1501,14 @@ function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
 
     // Message wrapper
     const wrapper = document.createElement('div');
-    wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
+    wrapper.className = `chat-page-message ${isUser ? 'user' : (isSystem ? 'system' : 'solobot')}${msg.isStreaming ? ' streaming' : ''}`;
     wrapper.setAttribute('data-msg-id', msg.id || '');
 
     // Avatar (for bot and user messages, not system)
@@ -1508,7 +1522,7 @@ function createChatPageMessage(msg) {
             avatar.textContent = 'U';
         } else {
             // Bot avatar - agent-specific image and color
-            const agentId = currentAgentId || 'main';
+            const agentId = msg._agentId || currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
 
             // Get avatar path (fallback to main for agents without custom avatars)
@@ -1596,6 +1610,14 @@ function createChatPageMessage(msg) {
     }
 
     bubble.appendChild(header);
+
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: 6px;';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
+    }
 
     // Content
     const content = document.createElement('div');
