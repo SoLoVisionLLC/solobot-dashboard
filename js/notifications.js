@@ -1007,8 +1007,10 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
-    console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local)`);
+    const mergedMessages = [...chatMessages, ...uniqueLocalMessages];
+    const migratedSystem = mergedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+    state.chat.messages = mergedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+    console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local, migrated ${migratedSystem.length} to system)`);
 
     // Sort chat by time and trim
     state.chat.messages.sort((a, b) => a.time - b.time);
@@ -1017,7 +1019,7 @@ function loadHistoryMessages(messages) {
     }
 
     // Merge system messages with existing (they're local noise, but good to show from history too)
-    state.system.messages = [...state.system.messages, ...systemMessages];
+    state.system.messages = [...state.system.messages, ...systemMessages, ...migratedSystem];
     state.system.messages.sort((a, b) => a.time - b.time);
     if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
         state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);

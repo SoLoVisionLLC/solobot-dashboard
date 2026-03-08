@@ -137,8 +137,7 @@ function loadPersistedMessages() {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const sessionTag = normalizeSessionKey(GATEWAY_CONFIG.sessionKey).toLowerCase();
-                // Strict session isolation: untagged messages are dropped to prevent bleed.
-                state.chat.messages = parsed
+                const scopedMessages = parsed
                     .map(m => {
                         if (!m || typeof m !== 'object') return null;
                         const msgSession = resolveMessageSessionKey(m);
@@ -146,11 +145,22 @@ function loadPersistedMessages() {
                         return { ...m, _sessionKey: msgSession };
                     })
                     .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
+
+                const migratedSystem = scopedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+                state.chat.messages = scopedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+                if (migratedSystem.length > 0) {
+                    state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
+                    persistSystemMessages();
+                }
+
                 // Migrate legacy key to session-scoped
                 if (legacyChat && !savedChat) {
                     localStorage.setItem(currentKey, JSON.stringify(state.chat.messages));
                 }
-                if (state.chat.messages.length > 0) return;
+                if (state.chat.messages.length > 0 || migratedSystem.length > 0) {
+                    localStorage.setItem(currentKey, JSON.stringify(state.chat.messages));
+                    return;
+                }
             }
         }
 
@@ -188,12 +198,18 @@ async function loadChatFromServer() {
             .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
 
         if (filtered.length > 0) {
-            state.chat.messages = filtered;
+            const migratedSystem = filtered.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+            state.chat.messages = filtered.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+            if (migratedSystem.length > 0) {
+                state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
+                persistSystemMessages();
+            }
             localStorage.setItem(chatStorageKey(), JSON.stringify(state.chat.messages));
             // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
             // Re-render if on chat page
             if (typeof renderChatMessages === 'function') renderChatMessages();
             if (typeof renderChatPage === 'function') renderChatPage();
+            if (typeof renderSystemPage === 'function') renderSystemPage();
         }
     } catch (e) {
         // Silently fail - not critical
