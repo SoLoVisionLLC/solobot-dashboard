@@ -887,7 +887,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         _isInterSession: !!(meta?._isInterSession)
     };
 
-    const isSystem = isSystemMessage(text, from);
+    const isSystem = isSystemMessage(text, from) || !!(message._isInterSession || message._sourceSession || message._sourceAgent);
 
     // Route to appropriate message array
     if (isSystem) {

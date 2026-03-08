@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-08T10:59:55Z
+// Generated: 2026-03-08T12:16:23Z
 // Modules: 25
 
 
@@ -5644,7 +5644,7 @@ function loadHistoryMessages(messages) {
         };
 
         // Classify and route
-        if (isSystemMessage(content.text, message.from)) {
+        if (isSystemMessage(content.text, message.from) || message._isInterSession || message._sourceSession || message._sourceAgent) {
             systemMessages.push(message);
         } else {
             chatMessages.push(message);
@@ -5838,7 +5838,8 @@ function mergeHistoryMessages(messages) {
 
             // Only add if we have content and it's not a duplicate
             if (textContent) {
-                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot');
+                const interMeta = resolveInterSessionMeta(msg, msg.message);
+                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot') || !!interMeta;
 
                 // Skip if runId matches a real-time message we already have
                 if (msg.runId && existingRunIds.has(msg.runId)) {
@@ -5872,11 +5873,11 @@ function mergeHistoryMessages(messages) {
                     provider: msg.provider || null,
                     runId: msg.runId || msg.message?.runId || null,
                     _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-                    _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
-            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
-            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
-            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
-            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
+                    _agentId: interMeta?._agentId || (window.currentAgentId || 'main'),
+            _sourceSession: interMeta?._sourceSession || null,
+            _sourceAgent: interMeta?._sourceAgent || null,
+            _sourceAgentName: interMeta?._sourceAgentName || null,
+            _isInterSession: !!interMeta
                 };
 
                 // Classify and route
@@ -9548,6 +9549,73 @@ function initCronPage() {
     cronInterval = setInterval(loadCronJobs, 30000);
 }
 
+function formatCronSchedule(schedule) {
+    if (!schedule) return '--';
+    if (typeof schedule === 'string') return schedule;
+
+    if (schedule.kind === 'cron') {
+        return schedule.tz ? `${schedule.expr || '--'} (${schedule.tz})` : (schedule.expr || '--');
+    }
+    if (schedule.kind === 'every') {
+        const ms = Number(schedule.everyMs || 0);
+        if (!ms) return 'every --';
+        const seconds = Math.floor(ms / 1000);
+        if (seconds < 60) return `every ${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `every ${minutes}m`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `every ${hours}h`;
+        const days = Math.floor(hours / 24);
+        return `every ${days}d`;
+    }
+    if (schedule.kind === 'at') {
+        try {
+            return `at ${new Date(schedule.at).toLocaleString()}`;
+        } catch {
+            return `at ${schedule.at || '--'}`;
+        }
+    }
+
+    return JSON.stringify(schedule);
+}
+
+function getCronState(job) {
+    return job?.state || {};
+}
+
+function formatNextRun(job) {
+    const state = getCronState(job);
+    const next = state.nextRunAtMs || job.nextRunAtMs || job.nextRun;
+    if (!next) return '--';
+    return new Date(next).toLocaleString();
+}
+
+function formatLastRun(job) {
+    const state = getCronState(job);
+    const last = state.lastRunAtMs || job.lastRunAtMs || job.lastRun;
+    if (!last) return 'Never';
+    if (typeof timeAgo === 'function') return timeAgo(Number(last));
+    return new Date(last).toLocaleString();
+}
+
+function getLastStatus(job) {
+    const state = getCronState(job);
+    return state.lastRunStatus || state.lastStatus || job.lastRunStatus || job.lastStatus || '--';
+}
+
+function getLastError(job) {
+    const state = getCronState(job);
+    return state.lastError || job.lastError || null;
+}
+
+function getPayloadSummary(job) {
+    const payload = job?.payload;
+    if (!payload) return '';
+    if (payload.kind === 'systemEvent') return payload.text || '';
+    if (payload.kind === 'agentTurn') return payload.message || '';
+    return '';
+}
+
 async function loadCronJobs() {
     const container = document.getElementById('cron-jobs-list');
     if (!container) return;
@@ -9558,12 +9626,12 @@ async function loadCronJobs() {
     }
 
     try {
-        const result = await gateway._request('cron.list', {});
-        cronJobs = result?.jobs || result || [];
+        const result = await gateway._request('cron.list', { includeDisabled: true });
+        cronJobs = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
         renderCronJobs();
     } catch (e) {
         console.warn('[Cron] Failed to fetch jobs:', e.message);
-        container.innerHTML = '<div class="empty-state">Could not load cron jobs. The cron RPC may not be available.</div>';
+        container.innerHTML = `<div class="empty-state">Could not load cron jobs: ${escapeHtml(e.message || 'Unknown error')}</div>`;
     }
 }
 
@@ -9578,26 +9646,38 @@ function renderCronJobs() {
 
     container.innerHTML = cronJobs.map((job, idx) => {
         const enabled = job.enabled !== false;
-        const lastStatus = job.lastRunStatus || job.lastStatus || '--';
-        const statusClass = lastStatus === 'success' ? 'success' : lastStatus === 'error' ? 'error' : '';
-        const nextRun = job.nextRun ? new Date(job.nextRun).toLocaleString() : '--';
-        const lastRun = job.lastRun ? timeAgo(new Date(job.lastRun).getTime()) : 'Never';
+        const lastStatus = getLastStatus(job);
+        const statusClass = lastStatus === 'ok' || lastStatus === 'success'
+            ? 'success'
+            : lastStatus === 'error' || lastStatus === 'failed'
+                ? 'error'
+                : '';
+        const nextRun = formatNextRun(job);
+        const lastRun = formatLastRun(job);
+        const scheduleText = formatCronSchedule(job.schedule || job.cron);
+        const errorText = getLastError(job);
+        const payloadPreview = getPayloadSummary(job);
+        const state = getCronState(job);
 
         return `
         <div class="cron-job-card" style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                 <div style="flex: 1; min-width: 0;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <span style="font-weight: 600; font-size: 14px;">${escapeHtml(job.name || job.id || 'Unnamed Job')}</span>
                         ${!enabled ? '<span class="badge" style="background: var(--surface-2); font-size: 10px;">Disabled</span>' : ''}
-                        ${statusClass ? `<span class="badge badge-${statusClass}" style="font-size: 10px;">${lastStatus}</span>` : ''}
+                        ${statusClass ? `<span class="badge badge-${statusClass}" style="font-size: 10px;">${escapeHtml(lastStatus)}</span>` : ''}
+                        ${job.sessionTarget ? `<span class="badge" style="font-size: 10px;">${escapeHtml(job.sessionTarget)}</span>` : ''}
                     </div>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                        <code style="background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 11px;">${escapeHtml(job.schedule || job.cron || '--')}</code>
-                        <span style="margin-left: 8px;">Next: ${nextRun}</span>
-                        <span style="margin-left: 8px;">Last: ${lastRun}</span>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <code style="background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 11px;">${escapeHtml(scheduleText)}</code>
+                        <span>Next: ${escapeHtml(nextRun)}</span>
+                        <span>Last: ${escapeHtml(lastRun)}</span>
+                        ${state.lastDurationMs ? `<span>Duration: ${escapeHtml(String(state.lastDurationMs))}ms</span>` : ''}
                     </div>
-                    ${job.description ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(job.description)}</div>` : ''}
+                    ${job.description ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${escapeHtml(job.description)}</div>` : ''}
+                    ${payloadPreview ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(payloadPreview)}</div>` : ''}
+                    ${errorText ? `<div style="font-size: 11px; color: var(--error); margin-top: 4px;">Last error: ${escapeHtml(errorText)}</div>` : ''}
                 </div>
                 <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
                     <button onclick="toggleCronJob('${job.id || idx}', ${!enabled})" class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px;" title="${enabled ? 'Disable' : 'Enable'}">
@@ -9618,7 +9698,7 @@ function renderCronJobs() {
 
 async function toggleCronJob(jobId, enable) {
     try {
-        await gateway._request('cron.toggle', { id: jobId, enabled: enable });
+        await gateway._request('cron.update', { jobId, patch: { enabled: enable } });
         showToast(`Job ${enable ? 'enabled' : 'disabled'}`, 'success');
         loadCronJobs();
     } catch (e) {
@@ -9628,7 +9708,7 @@ async function toggleCronJob(jobId, enable) {
 
 async function runCronJob(jobId) {
     try {
-        await gateway._request('cron.run', { id: jobId });
+        await gateway._request('cron.run', { jobId, mode: 'force' });
         showToast('Job triggered', 'success');
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
@@ -9647,20 +9727,33 @@ async function showCronHistory(jobId) {
     el.classList.remove('hidden');
 
     try {
-        const result = await gateway._request('cron.runs', { id: jobId, limit: 10 });
+        const result = await gateway._request('cron.runs', { jobId, limit: 10 });
         const runs = result?.runs || [];
         if (runs.length === 0) {
             el.innerHTML = '<div style="font-size: 11px; color: var(--text-muted);">No run history</div>';
             return;
         }
         el.innerHTML = runs.map(r => {
-            const status = r.status || 'unknown';
-            const time = r.startedAt ? new Date(r.startedAt).toLocaleString() : '--';
-            const cls = status === 'success' ? 'color: var(--success)' : status === 'error' ? 'color: var(--error)' : '';
-            return `<div style="font-size: 11px; padding: 2px 0;"><span style="${cls}">${status}</span> — ${time}${r.duration ? ` (${r.duration}ms)` : ''}</div>`;
+            const status = r.status || r.result || 'unknown';
+            const time = r.startedAtMs
+                ? new Date(r.startedAtMs).toLocaleString()
+                : r.startedAt
+                    ? new Date(r.startedAt).toLocaleString()
+                    : '--';
+            const duration = r.durationMs || r.duration || null;
+            const error = r.error || r.errorMessage || null;
+            const cls = status === 'ok' || status === 'success'
+                ? 'color: var(--success)'
+                : status === 'error' || status === 'failed'
+                    ? 'color: var(--error)'
+                    : '';
+            return `<div style="font-size: 11px; padding: 4px 0;">
+                <div><span style="${cls}">${escapeHtml(String(status))}</span> — ${escapeHtml(time)}${duration ? ` (${escapeHtml(String(duration))}ms)` : ''}</div>
+                ${error ? `<div style="color: var(--text-muted); margin-top: 2px;">${escapeHtml(String(error))}</div>` : ''}
+            </div>`;
         }).join('');
     } catch (e) {
-        el.innerHTML = '<div style="font-size: 11px; color: var(--error);">Failed to load history</div>';
+        el.innerHTML = `<div style="font-size: 11px; color: var(--error);">Failed to load history: ${escapeHtml(e.message || 'Unknown error')}</div>`;
     }
 }
 
@@ -9676,16 +9769,32 @@ window.closeAddCronModal = function() {
 
 window.submitNewCronJob = async function() {
     const name = document.getElementById('cron-new-name')?.value?.trim();
-    const schedule = document.getElementById('cron-new-schedule')?.value?.trim();
+    const scheduleExpr = document.getElementById('cron-new-schedule')?.value?.trim();
     const command = document.getElementById('cron-new-command')?.value?.trim();
 
-    if (!name || !schedule) {
-        showToast('Name and schedule are required', 'warning');
+    if (!name || !scheduleExpr || !command) {
+        showToast('Name, schedule, and message are required', 'warning');
         return;
     }
 
+    const job = {
+        name,
+        schedule: {
+            kind: 'cron',
+            expr: scheduleExpr,
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        },
+        sessionTarget: 'main',
+        wakeMode: 'now',
+        payload: {
+            kind: 'systemEvent',
+            text: command
+        },
+        enabled: true
+    };
+
     try {
-        await gateway._request('cron.add', { name, schedule, command });
+        await gateway._request('cron.add', job);
         showToast('Cron job added', 'success');
         closeAddCronModal();
         loadCronJobs();
@@ -10917,7 +11026,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         _isInterSession: !!(meta?._isInterSession)
     };
 
-    const isSystem = isSystemMessage(text, from);
+    const isSystem = isSystemMessage(text, from) || !!(message._isInterSession || message._sourceSession || message._sourceAgent);
 
     // Route to appropriate message array
     if (isSystem) {

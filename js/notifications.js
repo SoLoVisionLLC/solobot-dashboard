@@ -1057,7 +1057,7 @@ function loadHistoryMessages(messages) {
         };
 
         // Classify and route
-        if (isSystemMessage(content.text, message.from)) {
+        if (isSystemMessage(content.text, message.from) || message._isInterSession || message._sourceSession || message._sourceAgent) {
             systemMessages.push(message);
         } else {
             chatMessages.push(message);
@@ -1251,7 +1251,8 @@ function mergeHistoryMessages(messages) {
 
             // Only add if we have content and it's not a duplicate
             if (textContent) {
-                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot');
+                const interMeta = resolveInterSessionMeta(msg, msg.message);
+                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot') || !!interMeta;
 
                 // Skip if runId matches a real-time message we already have
                 if (msg.runId && existingRunIds.has(msg.runId)) {
@@ -1285,11 +1286,11 @@ function mergeHistoryMessages(messages) {
                     provider: msg.provider || null,
                     runId: msg.runId || msg.message?.runId || null,
                     _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-                    _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
-            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
-            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
-            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
-            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
+                    _agentId: interMeta?._agentId || (window.currentAgentId || 'main'),
+            _sourceSession: interMeta?._sourceSession || null,
+            _sourceAgent: interMeta?._sourceAgent || null,
+            _sourceAgentName: interMeta?._sourceAgentName || null,
+            _isInterSession: !!interMeta
                 };
 
                 // Classify and route
