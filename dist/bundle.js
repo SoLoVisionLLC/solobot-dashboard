@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-22T15:38:38Z
+// Generated: 2026-03-08T09:38:56Z
 // Modules: 25
 
 
@@ -61,12 +61,50 @@ const AGENT_COLORS = window.AGENT_COLORS = new Proxy({}, {
 
 function normalizeSessionKey(sessionKey) {
     if (!sessionKey || sessionKey === 'main') return 'agent:main:main';
-    return sessionKey;
+    const key = String(sessionKey);
+    const match = key.match(/^agent:([^:]+):(.+)$/);
+    if (!match) return key;
+
+    const rawAgentId = match[1].toLowerCase();
+    const legacyMap = {
+        exec: 'elon',
+        cto: 'orion',
+        coo: 'atlas',
+        cfo: 'sterling',
+        cmp: 'vector',
+        devops: 'forge',
+        ui: 'quill',
+        swe: 'chip',
+        youtube: 'snip',
+        veo: 'snip',
+        veoflow: 'snip',
+        sec: 'knox',
+        net: 'sentinel',
+        smm: 'nova',
+        docs: 'canon',
+        tax: 'ledger',
+        family: 'haven',
+        creative: 'luma',
+        art: 'luma',
+        halo: 'main'
+    };
+    const canonicalAgent = (typeof window.resolveAgentId === 'function')
+        ? window.resolveAgentId(rawAgentId)
+        : (legacyMap[rawAgentId] || rawAgentId);
+
+    if (!canonicalAgent || canonicalAgent === rawAgentId) return key;
+    return `agent:${canonicalAgent}:${match[2]}`;
 }
 
 function chatStorageKey(sessionKey) {
     const key = normalizeSessionKey(sessionKey || GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
     return 'solobot-chat-' + key;
+}
+
+function resolveMessageSessionKey(message) {
+    const raw = message?._sessionKey || message?.sessionKey || '';
+    if (!raw || typeof raw !== 'string') return '';
+    return normalizeSessionKey(raw);
 }
 
 // In-memory session message cache (avoids full reload on agent switch)
@@ -104,16 +142,19 @@ function loadPersistedMessages() {
         if (chatData) {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                // Fix #1: Session-guard messages — drop any tagged with a different session
-                // This prevents stale messages from a previously-visited session appearing on hard refresh
-                const sessionTag = GATEWAY_CONFIG.sessionKey.toLowerCase();
-                state.chat.messages = parsed.filter(m => {
-                    if (!m._sessionKey) return true; // Legacy untagged — keep (conservative)
-                    return m._sessionKey.toLowerCase() === sessionTag;
-                });
+                const sessionTag = normalizeSessionKey(GATEWAY_CONFIG.sessionKey).toLowerCase();
+                // Strict session isolation: untagged messages are dropped to prevent bleed.
+                state.chat.messages = parsed
+                    .map(m => {
+                        if (!m || typeof m !== 'object') return null;
+                        const msgSession = resolveMessageSessionKey(m);
+                        if (!msgSession) return null;
+                        return { ...m, _sessionKey: msgSession };
+                    })
+                    .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
                 // Migrate legacy key to session-scoped
                 if (legacyChat && !savedChat) {
-                    localStorage.setItem(currentKey, chatData);
+                    localStorage.setItem(currentKey, JSON.stringify(state.chat.messages));
                 }
                 if (state.chat.messages.length > 0) return;
             }
@@ -131,8 +172,29 @@ async function loadChatFromServer() {
     try {
         const response = await fetch('/api/state');
         const serverState = await response.json();
-        if (serverState.chat?.messages?.length > 0) {
-            state.chat.messages = serverState.chat.messages;
+        const sessionKey = normalizeSessionKey(GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
+        const sessionTag = sessionKey.toLowerCase();
+
+        const hasSessionMap = !!(serverState.chat?.sessions && typeof serverState.chat.sessions === 'object');
+        const sessionMessages = Array.isArray(serverState.chat?.sessions?.[sessionKey])
+            ? serverState.chat.sessions[sessionKey]
+            : [];
+        const fallbackMessages = Array.isArray(serverState.chat?.messages)
+            ? serverState.chat.messages
+            : [];
+
+        const sourceMessages = hasSessionMap ? sessionMessages : fallbackMessages;
+        const filtered = sourceMessages
+            .map(m => {
+                if (!m || typeof m !== 'object') return null;
+                const msgSession = resolveMessageSessionKey(m);
+                if (!msgSession) return null;
+                return { ...m, _sessionKey: msgSession };
+            })
+            .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
+
+        if (filtered.length > 0) {
+            state.chat.messages = filtered;
             localStorage.setItem(chatStorageKey(), JSON.stringify(state.chat.messages));
             // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
             // Re-render if on chat page
@@ -162,13 +224,14 @@ function persistChatMessages() {
         // Limit to 50 messages to prevent localStorage quota exceeded
         const chatToSave = state.chat.messages.slice(-200);
         // Use session-scoped key so each agent's chat is stored separately
-        const key = chatStorageKey();
+        const sessionKey = normalizeSessionKey(currentSessionName || GATEWAY_CONFIG.sessionKey);
+        const key = chatStorageKey(sessionKey);
         localStorage.setItem(key, JSON.stringify(chatToSave));
         // Also update in-memory cache
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
+        cacheSessionMessages(sessionKey, chatToSave);
 
         // Also sync to server for persistence across deploys
-        syncChatToServer(chatToSave);
+        syncChatToServer(chatToSave, sessionKey);
     } catch (e) {
         // Silently fail - not critical
     }
@@ -176,23 +239,23 @@ function persistChatMessages() {
 
 // Sync chat messages to server (debounced)
 let chatSyncTimeout = null;
-function syncChatToServer(messages) {
+function syncChatToServer(messages, sessionKey) {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
     chatSyncTimeout = setTimeout(async () => {
         try {
             await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
+                body: JSON.stringify({
+                    messages,
+                    sessionKey: normalizeSessionKey(sessionKey || currentSessionName || GATEWAY_CONFIG.sessionKey)
+                })
             });
         } catch (e) {
             // Silently fail - not critical
         }
     }, 2000); // Debounce 2 seconds
 }
-
-// Load persisted messages immediately
-loadPersistedMessages();
 
 // Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
 const GATEWAY_CONFIG = {
@@ -202,6 +265,9 @@ const GATEWAY_CONFIG = {
     sessionKey: normalizeSessionKey(localStorage.getItem('gateway_session') || 'agent:main:main'),
     maxMessages: 500
 };
+
+// Load persisted messages after gateway config is initialized.
+loadPersistedMessages();
 
 // Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
@@ -455,8 +521,6 @@ function initDashboardTasks() {
     console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
 
-
-
 // === utils.js ===
 // js/utils.js — Utility functions (time formatting, etc)
 
@@ -637,9 +701,23 @@ function closeConfirmModal(result) {
 
 // Toast notification - replaces alert()
 function showToast(message, type = 'info', duration = 4000) {
+    // Centralized notification rendering via showNotificationToast for a single look/feel.
+    const normalized = String(message ?? '');
+    const title = type === 'error' ? 'Warning' :
+                  type === 'warning' ? 'Notice' :
+                  type === 'success' ? 'Status' :
+                  'Info';
+
+    if (typeof showNotificationToast === 'function') {
+        // showNotificationToast keeps all notification UI centralized in one style.
+        showNotificationToast(title, normalized, null, null, duration);
+        return;
+    }
+
+    // Fallback to legacy toast styling if notifications module is not loaded yet.
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
     const toast = document.createElement('div');
     toast.style.cssText = `
         padding: 12px 20px;
@@ -651,18 +729,18 @@ function showToast(message, type = 'info', duration = 4000) {
         max-width: 350px;
         word-wrap: break-word;
     `;
-    
+
     // Set color based on type
-    switch(type) {
+    switch (type) {
         case 'success': toast.style.background = 'var(--success)'; break;
         case 'error': toast.style.background = 'var(--error)'; break;
         case 'warning': toast.style.background = '#f59e0b'; break;
         default: toast.style.background = 'var(--accent)'; break;
     }
-    
-    toast.textContent = message;
+
+    toast.textContent = normalized;
     container.appendChild(toast);
-    
+
     // Auto-remove after duration
     setTimeout(() => {
         toast.style.animation = 'fadeOut 0.3s ease';
@@ -2076,7 +2154,7 @@ function renderAgentStatuses(sessions) {
 
     // Group sessions by agent
     const agents = {};
-    const knownAgents = ['main', 'exec', 'coo', 'cfo', 'cmp', 'dev', 'family', 'tax', 'sec', 'smm'];
+    const knownAgents = ['main', 'elon', 'atlas', 'sterling', 'vector', 'dev', 'haven', 'ledger', 'knox', 'nova'];
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
@@ -2994,7 +3072,7 @@ document.addEventListener('DOMContentLoaded', () => {
 let currentMemoryFile = null;
 
 // View a memory file in the modal
-window.viewMemoryFile = async function(filePath) {
+if (typeof window.viewMemoryFile !== 'function') window.viewMemoryFile = async function(filePath) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
@@ -3050,7 +3128,7 @@ window.viewMemoryFile = async function(filePath) {
 };
 
 // Save memory file changes
-window.saveMemoryFile = async function() {
+if (typeof window.saveMemoryFile !== 'function') window.saveMemoryFile = async function() {
     if (!currentMemoryFile) return;
     
     const contentEl = document.getElementById('memory-file-content');
@@ -3103,7 +3181,7 @@ window.saveMemoryFile = async function() {
 };
 
 // Close memory modal
-window.closeMemoryModal = function() {
+if (typeof window.closeMemoryModal !== 'function') window.closeMemoryModal = function() {
     currentMemoryFile = null;
     hideModal('memory-file-modal');
 };
@@ -3414,6 +3492,12 @@ function isSystemMessage(text, from) {
     return false;
 }
 
+function normalizeGuardedModel(modelId) {
+    const resolved = resolveFullModelId(modelId);
+    if (!resolved) return { model: resolved, redirected: false };
+    return { model: resolved, redirected: false };
+}
+
 // Provider and Model selection functions
 window.changeProvider = function () {
     const providerSelect = document.getElementById('provider-select');
@@ -3517,7 +3601,7 @@ window.refreshModels = async function () {
             await populateProviderDropdown();
             // Update model dropdown for current provider (use currentProvider variable as fallback)
             const providerSelect = document.getElementById('provider-select');
-            const provider = providerSelect?.value || currentProvider || 'anthropic';
+            const provider = providerSelect?.value || currentProvider || 'openai-codex';
             await updateModelDropdown(provider);
 
             // Also refresh current model info from server
@@ -3551,7 +3635,10 @@ window.refreshModels = async function () {
  */
 window.changeSessionModel = async function () {
     const modelSelect = document.getElementById('model-select');
-    const selectedModel = modelSelect?.value;
+    const selectedModelRaw = modelSelect?.value;
+    let selectedModel = selectedModelRaw === 'global/default'
+        ? selectedModelRaw
+        : resolveFullModelId(selectedModelRaw);
 
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
@@ -3564,6 +3651,16 @@ window.changeSessionModel = async function () {
     } else if (!selectedModel.includes('/')) {
         showToast('Invalid model format. Please select a valid model.', 'warning');
         return;
+    }
+
+    if (selectedModel !== 'global/default') {
+        const guard = normalizeGuardedModel(selectedModel);
+        if (guard.redirected) {
+            selectedModel = guard.model;
+            if (modelSelect) modelSelect.value = selectedModel;
+            showToast(`gpt-5.3-codex is unavailable in this OAuth profile. Using ${selectedModel.split('/').pop()} instead.`, 'warning');
+            console.warn(`[Dashboard] Model guard redirected ${guard.original} -> ${selectedModel}`);
+        }
     }
 
     if (!gateway || !gateway.isConnected()) {
@@ -3694,7 +3791,7 @@ window.changeSessionModel = async function () {
 window.changeGlobalModel = async function () {
     const modelSelect = document.getElementById('setting-model');
     const providerSelect = document.getElementById('setting-provider');
-    const selectedModel = modelSelect?.value;
+    let selectedModel = modelSelect?.value;
     const selectedProvider = providerSelect?.value;
 
     if (!selectedModel) {
@@ -3705,6 +3802,14 @@ window.changeGlobalModel = async function () {
     if (!selectedModel.includes('/')) {
         showToast('Invalid model format. Please select a valid model.', 'warning');
         return;
+    }
+
+    const guard = normalizeGuardedModel(selectedModel);
+    if (guard.redirected) {
+        selectedModel = guard.model;
+        if (modelSelect) modelSelect.value = selectedModel;
+        showToast(`gpt-5.3-codex is unavailable in this OAuth profile. Global default set to ${selectedModel.split('/').pop()}.`, 'warning');
+        console.warn(`[Dashboard] Global model guard redirected ${guard.original} -> ${selectedModel}`);
     }
 
     if (selectedModel.includes('ERROR')) {
@@ -4071,7 +4176,7 @@ function resolveFullModelId(modelStr) {
 
     // Well-known provider prefixes
     const knownPrefixes = {
-        'claude': 'anthropic',
+        'claude': 'openrouter',
         'gpt': 'openai-codex',
         'o1': 'openai',
         'o3': 'openai',
@@ -4084,6 +4189,7 @@ function resolveFullModelId(modelStr) {
 
     return modelStr;
 }
+window.resolveFullModelId = resolveFullModelId;
 
 /**
  * Extracts the provider from a full model ID correctly, handling edge cases
@@ -4132,8 +4238,9 @@ function syncModelDisplay(model, provider) {
         }
     }
 
-    // Resolve bare model names to full provider/model IDs
-    model = resolveFullModelId(model);
+    // Resolve bare model names to full provider/model IDs and guard blocked models.
+    const guarded = normalizeGuardedModel(model);
+    model = guarded.model;
 
     if (model === currentModel && provider === currentProvider) return;
 
@@ -4193,6 +4300,32 @@ function syncModelDisplay(model, provider) {
 
 // Track models loaded from config to prevent gateway overrides
 window._configModelLocks = window._configModelLocks || {};
+window._sessionModelEnforcement = window._sessionModelEnforcement || {};
+
+// Ensure the gateway session model matches the locked config model.
+// This prevents drift when a session was previously patched to a different provider/model.
+window.enforceSessionModelLock = async function enforceSessionModelLock(sessionKey, model, reason = 'config-lock') {
+    if (!sessionKey || !model || model === 'global/default') return;
+    const normalizedModel = resolveFullModelId(model);
+    if (!normalizedModel) return;
+
+    const gw = window.gateway || (typeof gateway !== 'undefined' ? gateway : null);
+    if (!gw || typeof gw.isConnected !== 'function' || !gw.isConnected()) return;
+
+    const now = Date.now();
+    const prev = window._sessionModelEnforcement[sessionKey];
+    if (prev && prev.model === normalizedModel && (now - prev.ts) < 10000) {
+        return;
+    }
+    window._sessionModelEnforcement[sessionKey] = { model: normalizedModel, ts: now };
+
+    try {
+        await gw.patchSession(sessionKey, { model: normalizedModel });
+        console.log(`[Dashboard] Enforced session model for ${sessionKey}: ${normalizedModel} (${reason})`);
+    } catch (e) {
+        console.warn(`[Dashboard] Failed to enforce session model for ${sessionKey}: ${e?.message || e}`);
+    }
+};
 
 // Apply per-session model override — openclaw.json is SOURCE OF TRUTH
 async function applySessionModelOverride(sessionKey) {
@@ -4230,9 +4363,31 @@ async function applySessionModelOverride(sessionKey) {
     }
 
     if (sessionModel) {
-        sessionModel = resolveFullModelId(sessionModel);
+        const guard = normalizeGuardedModel(sessionModel);
+        sessionModel = guard.model;
+
+        if (guard.redirected) {
+            console.warn(`[Dashboard] Session model guard redirected ${guard.original} -> ${sessionModel} for ${sessionKey}`);
+            if (window._configModelLocks) {
+                window._configModelLocks[sessionKey] = sessionModel;
+            }
+
+            // Best-effort: patch active session immediately so chat sends stop failing.
+            try {
+                if (gateway && gateway.isConnected()) {
+                    gateway.request('sessions.patch', { key: sessionKey, model: sessionModel });
+                }
+            } catch (_) { }
+        }
+
         const provider = window.getProviderFromModelId(sessionModel) || currentProvider;
         syncModelDisplay(sessionModel, provider);
+
+        // Always enforce the lock on the actual gateway session entry.
+        // Display lock alone is not enough because chat.send uses server-side session model.
+        if (typeof window.enforceSessionModelLock === 'function') {
+            window.enforceSessionModelLock(sessionKey, sessionModel, 'session-switch').catch(() => { });
+        }
     } else {
         console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
     }
@@ -4270,11 +4425,14 @@ function selectModelInDropdowns(model) {
 document.addEventListener('DOMContentLoaded', async function () {
     try {
         // Optimistically load from localStorage first to prevent UI flashes (e.g. "openrouter/free" flash)
-        let modelId = localStorage.getItem('selected_model');
+        let modelId = resolveFullModelId(localStorage.getItem('selected_model'));
         let provider = localStorage.getItem('selected_provider');
 
         if (modelId) {
             provider = provider || window.getProviderFromModelId(modelId);
+            // Persist normalized full model IDs so stale short IDs do not get reused.
+            localStorage.setItem('selected_model', modelId);
+            if (provider) localStorage.setItem('selected_provider', provider);
             window.currentModel = modelId;
             window.currentProvider = provider;
 
@@ -4369,8 +4527,6 @@ const defaultSettings = {
     showDocs: true
 };
 
-
-
 // === notifications.js ===
 // js/notifications.js — Cross-session notifications, unread badges, toasts
 
@@ -4381,6 +4537,211 @@ const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
 const NOTIFICATION_DEBUG = false;
 function notifLog(...args) { if (NOTIFICATION_DEBUG) console.log(...args); }
+const NOTIFICATIONS_RUNTIME_MARK = '2026-02-22.3';
+if (window.__notificationsRuntimeMark !== NOTIFICATIONS_RUNTIME_MARK) {
+    window.__notificationsRuntimeMark = NOTIFICATIONS_RUNTIME_MARK;
+    console.log(`[Notifications] notifications.js loaded (${NOTIFICATIONS_RUNTIME_MARK})`);
+}
+const FINAL_DEDUPE_WINDOW_MS = 15000;
+const recentFinalFingerprints = new Map(); // fingerprint -> timestamp
+let _streamingRunId = null;
+const TRANSIENT_RETRY_DELAY_MS = 1400;
+const MAX_TRANSIENT_RETRIES_PER_RUN = 1;
+const _retryScheduledForRun = new Set();
+
+function isTransientGatewayError(errorMessage, errorKind) {
+    if (errorKind === 'upstream_transient') return true;
+    const msg = String(errorMessage || '').toLowerCase();
+    if (!msg) return false;
+    if (msg.includes('502 bad gateway')) return true;
+    if (msg.includes('cloudflare')) return true;
+    return msg.includes('<html') && msg.includes('bad gateway');
+}
+
+function clearPendingSendByRunId(runId) {
+    if (!runId) return;
+    const map = window._chatPendingSends;
+    if (map instanceof Map) map.delete(runId);
+    _retryScheduledForRun.delete(runId);
+}
+
+function tryRetryTransientSend({ runId, sessionKey, errorMessage, errorKind }) {
+    if (!runId) return;
+    if (!isTransientGatewayError(errorMessage, errorKind)) return;
+    if (_retryScheduledForRun.has(runId)) return;
+
+    const map = window._chatPendingSends;
+    if (!(map instanceof Map)) return;
+    const pending = map.get(runId);
+    if (!pending) return;
+
+    const activeSession = String(currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const pendingSession = String(pending.sessionKey || sessionKey || '').toLowerCase();
+    if (!activeSession || !pendingSession || activeSession !== pendingSession) return;
+    if (Number(pending.retries || 0) >= MAX_TRANSIENT_RETRIES_PER_RUN) return;
+
+    _retryScheduledForRun.add(runId);
+    showToast('Transient gateway outage detected. Retrying once...', 'warning');
+
+    setTimeout(async () => {
+        const latest = map.get(runId);
+        if (!latest) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+        if (Number(latest.retries || 0) >= MAX_TRANSIENT_RETRIES_PER_RUN) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+        if (!gateway || !gateway.isConnected()) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+
+        latest.retries = Number(latest.retries || 0) + 1;
+        map.set(runId, latest);
+
+        try {
+            let retryResult = null;
+            if (Array.isArray(latest.images) && latest.images.length > 0) {
+                retryResult = await gateway.sendMessageWithImages(latest.text || 'Image', latest.images);
+            } else {
+                retryResult = await gateway.sendMessage(latest.text || '');
+            }
+            if (retryResult?.runId) {
+                map.set(retryResult.runId, {
+                    ...latest,
+                    createdAt: Date.now()
+                });
+            }
+            map.delete(runId);
+            showToast('Retry sent after temporary upstream error.', 'success');
+        } catch (err) {
+            console.error('[Notifications] Auto-retry failed:', err);
+            showToast('Retry failed. Please send once more.', 'warning');
+        } finally {
+            _retryScheduledForRun.delete(runId);
+        }
+    }, TRANSIENT_RETRY_DELAY_MS);
+}
+
+function normalizeMessageText(text) {
+    return String(text || '').replace(/\r\n/g, '\n');
+}
+
+function extractHistoryTextFromPart(part) {
+    if (!part || typeof part !== 'object') return '';
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.input_text === 'string') return part.input_text;
+    if (typeof part.output_text === 'string') return part.output_text;
+    if (typeof part.content === 'string' && part.type !== 'image') return part.content;
+    return '';
+}
+
+function resolveInterSessionMeta(primary, secondary = null) {
+    const sourceSession = String(primary?.sourceSession || secondary?.sourceSession || '').trim();
+    const sourceAgentRaw = String(primary?.sourceAgent || primary?.sourceAgentId || secondary?.sourceAgent || secondary?.sourceAgentId || '').trim();
+    const sourceAgentName = String(primary?.sourceAgentName || secondary?.sourceAgentName || '').trim();
+
+    let sourceAgent = sourceAgentRaw;
+    if (!sourceAgent && sourceSession) {
+        const m = sourceSession.match(/^agent:([^:]+):/i);
+        if (m) sourceAgent = m[1];
+    }
+    if (!sourceSession && !sourceAgent && !sourceAgentName) return null;
+
+    const canonicalAgent = (typeof window.resolveAgentId === 'function')
+        ? window.resolveAgentId(sourceAgent || 'main')
+        : (sourceAgent || 'main');
+    const displayName = sourceAgentName || (typeof getAgentDisplayName === 'function' ? getAgentDisplayName(canonicalAgent) : canonicalAgent);
+
+    return {
+        _sourceSession: sourceSession || null,
+        _sourceAgent: canonicalAgent || null,
+        _sourceAgentName: displayName || null,
+        _agentId: canonicalAgent || (window.currentAgentId || 'main'),
+        _isInterSession: true
+    };
+}
+
+function extractHistoryText(container) {
+    if (!container) return '';
+    let text = '';
+
+    if (Array.isArray(container.content)) {
+        for (const part of container.content) {
+            text += extractHistoryTextFromPart(part);
+        }
+    } else if (typeof container.content === 'string') {
+        text += container.content;
+    }
+
+    // Some providers return output blocks with nested content parts.
+    if (Array.isArray(container.output)) {
+        for (const block of container.output) {
+            if (!block || typeof block !== 'object') continue;
+            if (typeof block.text === 'string') text += block.text;
+            if (typeof block.output_text === 'string') text += block.output_text;
+            if (Array.isArray(block.content)) {
+                for (const part of block.content) {
+                    text += extractHistoryTextFromPart(part);
+                }
+            }
+        }
+    }
+
+    if (!text && typeof container.output_text === 'string') text = container.output_text;
+    if (!text && typeof container.text === 'string') text = container.text;
+    return (text || '').trim();
+}
+
+function mergeStreamingDelta(previousText, incomingText) {
+    const prev = normalizeMessageText(previousText);
+    const next = normalizeMessageText(incomingText);
+    if (!next) return prev;
+    if (!prev) return next;
+
+    // Cumulative snapshot (ideal path): replace with latest full snapshot
+    if (next.startsWith(prev)) return next;
+    // Out-of-order shorter snapshot: keep longer one
+    if (prev.startsWith(next)) return prev;
+    // Duplicate chunk already present
+    if (prev.includes(next)) return prev;
+
+    // Token/chunk streaming fallback: append chunk
+    return prev + next;
+}
+
+function pruneRecentFinalFingerprints(now = Date.now()) {
+    for (const [key, ts] of recentFinalFingerprints.entries()) {
+        if (now - ts > FINAL_DEDUPE_WINDOW_MS) {
+            recentFinalFingerprints.delete(key);
+        }
+    }
+}
+
+function buildFinalFingerprint({ runId, sessionKey, text, images }) {
+    const session = String(sessionKey || '').toLowerCase();
+    if (runId) return `run:${session}:${runId}`;
+
+    const normalizedText = String(text || '').trim();
+    const imageCount = Array.isArray(images) ? images.length : 0;
+    const firstImageSig = imageCount > 0 && typeof images[0] === 'string'
+        ? images[0].slice(0, 32)
+        : '';
+    return `text:${session}:${normalizedText}:${imageCount}:${firstImageSig}`;
+}
+
+function hasRecentFinalFingerprint(fingerprint) {
+    const now = Date.now();
+    pruneRecentFinalFingerprints(now);
+    return recentFinalFingerprints.has(fingerprint);
+}
+
+function rememberFinalFingerprint(fingerprint) {
+    pruneRecentFinalFingerprints();
+    recentFinalFingerprints.set(fingerprint, Date.now());
+}
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -4499,14 +4860,22 @@ function navigateToSession(sessionKey) {
 }
 
 // In-app toast notification — always visible, no browser permission needed
-function showNotificationToast(title, body, sessionKey) {
+function showNotificationToast(title, body, sessionKey, onClick = null, duration = 12000) {
     // Create toast container if it doesn't exist
-    let container = document.getElementById('notification-toast-container');
+    let container = document.getElementById('toast-container') || document.getElementById('notification-toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-toast-container';
-        container.style.cssText = 'position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
+        container.style.cssText = 'position: fixed; bottom: 96px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
         document.body.appendChild(container);
+    }
+
+    // Keep all notification toasts in the same visible corner.
+    if (container.id === 'toast-container') {
+        container.style.position = 'fixed';
+        container.style.bottom = '96px';
+        container.style.right = '20px';
+        container.style.flexDirection = 'column';
     }
 
     // Determine agent color from session key
@@ -4539,16 +4908,20 @@ function showNotificationToast(title, body, sessionKey) {
             <strong style="color: var(--text-primary, #e0e0e0); font-size: 13px;">${title}</strong>
             <span style="margin-left: auto; color: var(--text-muted, #666); font-size: 11px; cursor: pointer;" class="toast-close">✕</span>
         </div>
-        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
+        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body?.replace(/</g, '&lt;') || ''}</div>
     `;
 
-    // Click toast → navigate to session
+    // Click toast → navigate to session (for message notifications) or call custom action (for system/gateway notices)
     toast.addEventListener('click', (e) => {
         if (e.target.classList?.contains('toast-close')) {
             dismissToast(toast);
             return;
         }
-        navigateToSession(sessionKey);
+        if (typeof onClick === 'function') {
+            onClick();
+        } else if (sessionKey) {
+            navigateToSession(sessionKey);
+        }
         dismissToast(toast);
     });
 
@@ -4561,8 +4934,8 @@ function showNotificationToast(title, body, sessionKey) {
         toast.style.transform = 'translateX(0)';
     });
 
-    // Auto-dismiss after 12 seconds
-    const timer = setTimeout(() => dismissToast(toast), 12000);
+    // Auto-dismiss after specified duration
+    const timer = setTimeout(() => dismissToast(toast), duration);
     toast._dismissTimer = timer;
 
     // Limit to 4 toasts max
@@ -4621,6 +4994,14 @@ function playNotificationSound() {
 }
 
 function updateUnreadBadges() {
+    // Build agent -> department map from sidebar DOM (for collapsed group badges)
+    const agentDeptMap = new Map();
+    document.querySelectorAll('.sidebar-agent[data-agent][data-dept]').forEach(el => {
+        const agentId = el.getAttribute('data-agent');
+        const dept = el.getAttribute('data-dept');
+        if (agentId && dept) agentDeptMap.set(agentId, dept);
+    });
+
     // Update session dropdown badges
     document.querySelectorAll('.session-option, [data-session-key]').forEach(el => {
         const key = el.dataset?.sessionKey || el.getAttribute('data-session-key');
@@ -4667,6 +5048,47 @@ function updateUnreadBadges() {
             dot.textContent = agentUnread > 99 ? '99+' : agentUnread;
         } else if (dot) {
             dot.remove();
+        }
+    });
+
+    // Update department/group header badges (so collapsed groups still show unread)
+    const unreadByDept = new Map();
+    for (const [key, count] of unreadSessions) {
+        const match = String(key || '').match(/^agent:([^:]+):/);
+        const rawAgentId = match ? match[1] : 'main';
+        const agentId = (window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId) || 'main';
+        const dept = agentDeptMap.get(agentId);
+        if (!dept) continue;
+        unreadByDept.set(dept, (unreadByDept.get(dept) || 0) + (count || 0));
+    }
+
+    document.querySelectorAll('.sidebar-agent-group[data-dept]').forEach(groupEl => {
+        const dept = groupEl.getAttribute('data-dept');
+        const header = groupEl.querySelector('.sidebar-agent-group-header');
+        if (!dept || !header) return;
+
+        const groupUnread = unreadByDept.get(dept) || 0;
+        let badge = header.querySelector('.group-unread-badge');
+        const countBadge = header.querySelector('.sidebar-agent-group-count');
+
+        if (groupUnread > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'group-unread-badge';
+                badge.style.cssText = 'margin-left: auto; margin-right: 6px; background: var(--brand-red, #BC2026); color: white; border-radius: 999px; min-width: 18px; height: 18px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; pointer-events: none;';
+
+                // Keep unread badge inside header, but before the normal group-count pill.
+                if (countBadge) {
+                    header.insertBefore(badge, countBadge);
+                } else {
+                    header.appendChild(badge);
+                }
+            }
+            badge.textContent = groupUnread > 99 ? '99+' : groupUnread;
+            groupEl.classList.add('has-unread');
+        } else {
+            if (badge) badge.remove();
+            groupEl.classList.remove('has-unread');
         }
     });
 
@@ -4751,18 +5173,18 @@ function disconnectFromGateway() {
 // Restart gateway directly via WebSocket RPC (no bot involved)
 window.requestGatewayRestart = async function () {
     if (!gateway || !gateway.isConnected()) {
-        showToast('Not connected to gateway', 'warning');
+        showNotificationToast('Gateway', 'Not connected to gateway', null, null, 5000);
         return;
     }
 
-    showToast('Restarting gateway...', 'info');
+    showNotificationToast('Gateway', 'Restarting gateway...', null, null, 5000);
 
     try {
         await gateway.restartGateway('manual restart from dashboard');
-        showToast('Gateway restart initiated. Reconnecting...', 'success');
+        showNotificationToast('Gateway', 'Gateway restart initiated. Reconnecting...', null, null, 5000);
     } catch (err) {
         console.error('[Dashboard] Gateway restart failed:', err);
-        showToast('Restart failed: ' + err.message, 'error');
+        showNotificationToast('Gateway', 'Restart failed: ' + err.message, null, null, 5000);
     }
 };
 
@@ -4824,7 +5246,7 @@ function handleChatEvent(event) {
     if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
         window.ModelValidator.handleGatewayEvent(event);
     }
-    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind, sourceSession, sourceAgent, sourceAgentId, sourceAgentName } = event;
 
     // HARD GATE: only render events for the active session. Period.
     // Cross-session notifications are handled separately by onCrossSessionMessage.
@@ -4885,12 +5307,15 @@ function handleChatEvent(event) {
             return;
         }
 
+        const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+        const from = interMeta ? 'solobot' : 'user';
+
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
-            m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
+            m.from === from && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
         );
         if (!isDuplicate) {
-            addLocalChatMessage(content, 'user');
+            addLocalChatMessage(content, from, null, null, null, interMeta);
         }
         return;
     }
@@ -4901,14 +5326,20 @@ function handleChatEvent(event) {
         case 'thinking':
             // AI has started processing - show typing indicator
             isProcessing = true;
-            streamingText = '';  // Clear any stale streaming text
+            streamingText = ''; // Clear stale stream from previous runs
+            _streamingRunId = runId || null;
             renderChat();
             renderChatPage();
             break;
 
         case 'delta':
-            // Streaming response - content is cumulative, so REPLACE not append
-            streamingText = content;
+            // Some providers send cumulative snapshots, others send token chunks.
+            // Merge robustly so final content doesn't collapse to partial text.
+            if (runId && _streamingRunId && runId !== _streamingRunId) {
+                streamingText = '';
+            }
+            if (runId) _streamingRunId = runId;
+            streamingText = mergeStreamingDelta(streamingText, content);
             _streamingSessionKey = sessionKey || currentSessionName || '';
             isProcessing = true;
             renderChat();
@@ -4916,30 +5347,52 @@ function handleChatEvent(event) {
             break;
 
         case 'final':
+            clearPendingSendByRunId(runId);
             // Final response from assistant
-            // Prefer streamingText if available for consistency (avoid content mismatch)
-            const finalContent = streamingText || content;
+            const streamedText = normalizeMessageText(streamingText);
+            const payloadText = normalizeMessageText(content);
+
+            // Prefer the longer/more complete variant on final.
+            let finalContent = '';
+            if (payloadText && streamedText) {
+                finalContent = payloadText.length >= streamedText.length ? payloadText : streamedText;
+            } else {
+                finalContent = payloadText || streamedText;
+            }
+
             // Skip gateway-injected internal messages
             if (finalContent && /^\s*\[read-sync\]\s*(\n\s*\[\[read_ack\]\])?\s*$/s.test(finalContent)) {
                 streamingText = '';
+                _streamingRunId = null;
                 isProcessing = false;
                 lastProcessingEndTime = Date.now();
                 break;
             }
-            if (finalContent && role !== 'user') {
+
+            if ((finalContent || images?.length > 0) && role !== 'user') {
                 // Check for duplicate - by runId first, then by trimmed text within 10 seconds
                 const trimmed = finalContent.trim();
-                const isDuplicate = state.chat.messages.some(m =>
+                const runtimeDuplicate = state.chat.messages.some(m =>
                     (runId && m.runId === runId) ||
-                    (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
+                    (trimmed && m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
-                if (!isDuplicate) {
-                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider);
+                const finalFingerprint = buildFinalFingerprint({
+                    runId,
+                    sessionKey,
+                    text: trimmed,
+                    images
+                });
+                const recentDuplicate = hasRecentFinalFingerprint(finalFingerprint);
+                if (!runtimeDuplicate && !recentDuplicate) {
+                    const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider, interMeta);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
+                    rememberFinalFingerprint(finalFingerprint);
                 }
             }
             streamingText = '';
+            _streamingRunId = null;
             isProcessing = false;
             lastProcessingEndTime = Date.now();
             // Schedule a history refresh (guarded, won't spam)
@@ -4949,6 +5402,7 @@ function handleChatEvent(event) {
             break;
 
         case 'error':
+            tryRetryTransientSend({ runId, sessionKey, errorMessage, errorKind });
             addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
             streamingText = '';
             isProcessing = false;
@@ -4966,10 +5420,9 @@ function loadHistoryMessages(messages) {
     const allLocalChatMessages = state.chat.messages.filter(m => {
         // Skip non-local messages (have real IDs from server)
         if (!m.id?.startsWith('m')) return false;
-        // If the message was tagged with a session, only keep if it matches
-        // If NOT tagged, assume it's from current session (conservative - old messages)
-        if (m._sessionKey && m._sessionKey.toLowerCase() !== currentKey) return false;
-        return true;
+        // Strict isolation: untagged messages are treated as unsafe legacy data and dropped.
+        const msgSession = (m._sessionKey || m.sessionKey || '').toLowerCase();
+        return !!msgSession && !!currentKey && msgSession === currentKey;
     });
 
     const chatMessages = [];
@@ -4982,10 +5435,8 @@ function loadHistoryMessages(messages) {
 
         if (Array.isArray(container.content)) {
             for (const part of container.content) {
-                if (part.type === 'text') {
-                    text += part.text || '';
-                } else if (part.type === 'input_text') {
-                    text += part.text || part.input_text || '';
+                if (part.type === 'text' || part.type === 'input_text' || part.type === 'output_text') {
+                    text += extractHistoryTextFromPart(part);
                 } else if (part.type === 'image') {
                     // Image attachment - reconstruct data URI
                     if (part.content && part.mimeType) {
@@ -5003,9 +5454,8 @@ function loadHistoryMessages(messages) {
                     images.push(part.image_url.url);
                 }
             }
-        } else if (typeof container.content === 'string') {
-            text = container.content;
         }
+        if (!text) text = extractHistoryText(container);
 
         // Check for attachments array (our send format)
         if (Array.isArray(container.attachments)) {
@@ -5016,11 +5466,15 @@ function loadHistoryMessages(messages) {
             }
         }
 
-        if (!text && typeof container.text === 'string') text = container.text;
         return { text: (text || '').trim(), images };
     };
 
     messages.forEach(msg => {
+        const historySession = String(msg?.sessionKey || msg?.message?.sessionKey || '').toLowerCase();
+        if (historySession && currentKey && historySession !== currentKey) {
+            return;
+        }
+
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
@@ -5044,9 +5498,14 @@ function loadHistoryMessages(messages) {
             images: content.images, // All images
             time: msg.timestamp || Date.now(),
             model: msg.model, // Preserve model from gateway history
+            runId: msg.runId || msg.message?.runId || null,
             // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
             _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-            _agentId: window.currentAgentId || 'main'
+            _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
+            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
+            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
+            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
+            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
         };
 
         // Classify and route
@@ -5057,19 +5516,19 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    // Merge chat: combine gateway history with ALL local messages
-    // Dedupe by ID first, then by exact text match (not snippet) to be safer
+    // Merge chat: combine gateway history with ALL local messages.
+    // Dedupe ONLY by ID. Text-based dedupe caused legit repeated messages
+    // (e.g., "yes", "ok", "thanks") to disappear after refresh/switch.
     const historyIds = new Set(chatMessages.map(m => m.id));
-    const historyExactTexts = new Set(chatMessages.map(m => m.text));
-    const uniqueLocalMessages = allLocalChatMessages.filter(m => {
-        // Keep local message if: different ID AND different exact text
-        return !historyIds.has(m.id) && !historyExactTexts.has(m.text);
-    });
+    const uniqueLocalMessages = allLocalChatMessages.filter(m => !historyIds.has(m.id));
 
     // Patch history messages: if we have a local copy with a real model, prefer it
     // (history may return "openrouter/free" while local has the resolved model)
     const localByText = {};
-    allLocalChatMessages.forEach(m => { if (m.text) localByText[m.text.trim()] = m; });
+    allLocalChatMessages.forEach(m => {
+        const key = (m.text || '').trim();
+        if (key) localByText[key] = m;
+    });
     chatMessages.forEach(m => {
         const local = localByText[m.text?.trim()];
         if (local?.model && (!m.model || m.model === 'openrouter/free' || m.model === 'unknown')) {
@@ -5115,6 +5574,12 @@ function _doHistoryRefresh() {
     if (Date.now() - lastProcessingEndTime < 1500) return;
     if (_historyRefreshInFlight) return; // Prevent overlapping calls
     if (Date.now() - _lastHistoryLoadTime < HISTORY_MIN_INTERVAL) return; // Rate limit
+    const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const gatewaySession = (gateway.sessionKey || '').toLowerCase();
+    if (activeSession && gatewaySession && activeSession !== gatewaySession) {
+        notifLog(`[Notifications] _doHistoryRefresh: Skipped (gateway session mismatch ${gatewaySession} vs ${activeSession})`);
+        return;
+    }
     _historyRefreshInFlight = true;
     _lastHistoryLoadTime = Date.now();
     const pollVersion = sessionVersion;
@@ -5124,6 +5589,12 @@ function _doHistoryRefresh() {
         _historyRefreshInFlight = false;
         if (pollVersion !== sessionVersion) {
             notifLog(`[Notifications] _doHistoryRefresh: Skipped (version mismatch ${pollVersion} vs ${sessionVersion})`);
+            return;
+        }
+        const currentActive = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+        const currentGateway = (gateway.sessionKey || '').toLowerCase();
+        if (currentActive && currentGateway && currentActive !== currentGateway) {
+            notifLog(`[Notifications] _doHistoryRefresh: Skipped merge (post-load mismatch ${currentGateway} vs ${currentActive})`);
             return;
         }
         if (result?.messages) {
@@ -5178,36 +5649,33 @@ function mergeHistoryMessages(messages) {
         return;
     }
 
+    const existingChatMessages = state.chat.messages.filter(m => {
+        const msgSession = (m?._sessionKey || m?.sessionKey || '').toLowerCase();
+        return !!msgSession && msgSession === activeSession;
+    });
+
     // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
-    const existingIds = new Set(state.chat.messages.map(m => m.id));
+    const existingIds = new Set(existingChatMessages.map(m => m.id));
     const existingSystemIds = new Set(state.system.messages.map(m => m.id));
     // Also track existing text content (trimmed) to prevent duplicates when IDs differ
     // (local messages use 'm' + Date.now(), history messages have server IDs)
-    const existingTexts = new Set(state.chat.messages.map(m => (m.text || '').trim()));
+    const existingTexts = new Set(existingChatMessages.map(m => (m.text || '').trim()));
     const existingSystemTexts = new Set(state.system.messages.map(m => (m.text || '').trim()));
     // Track runIds from real-time messages for dedup
-    const existingRunIds = new Set(state.chat.messages.filter(m => m.runId).map(m => m.runId));
+    const existingRunIds = new Set(existingChatMessages.filter(m => m.runId).map(m => m.runId));
     let newChatCount = 0;
     let newSystemCount = 0;
 
-    const extractContentText = (container) => {
-        if (!container) return '';
-        let text = '';
-        if (Array.isArray(container.content)) {
-            for (const part of container.content) {
-                if (part.type === 'text') text += part.text || '';
-                if (part.type === 'input_text') text += part.text || part.input_text || '';
-            }
-        } else if (typeof container.content === 'string') {
-            text = container.content;
-        }
-        if (!text && typeof container.text === 'string') text = container.text;
-        return (text || '').trim();
-    };
+    const extractContentText = (container) => extractHistoryText(container);
 
     for (const msg of messages) {
+        const historySession = String(msg?.sessionKey || msg?.message?.sessionKey || '').toLowerCase();
+        if (historySession && historySession !== activeSession) {
+            continue;
+        }
+
         const msgId = msg.id || 'm' + msg.timestamp;
 
         // Skip if already exists in either array (by ID)
@@ -5241,22 +5709,17 @@ function mergeHistoryMessages(messages) {
                 }
 
                 // Skip if we already have this exact text content (trimmed, prevents duplicates when IDs differ)
-                if (isSystemMsg && existingSystemTexts.has(textContent)) {
-                    continue;
-                }
-                if (!isSystemMsg && existingTexts.has(textContent)) {
-                    continue;
-                }
+                // Keep repeated content messages; rely on ID/runId dedupe.
 
                 // Time guard: skip non-user assistant messages if we have any local message added within the last 5 seconds
                 // Uses client-side time (m.time) to avoid clock skew with server timestamps
                 if (msg.role !== 'user') {
-                    const hasRecentLocal = state.chat.messages.some(m =>
+                    const hasRecentLocal = existingChatMessages.some(m =>
                         m.from === 'solobot' && (Date.now() - m.time) < 5000
                     );
                     if (hasRecentLocal && !existingIds.has(msgId)) {
                         // Check if this message's text matches a recent local one (likely the same)
-                        const recentMatch = state.chat.messages.some(m =>
+                        const recentMatch = existingChatMessages.some(m =>
                             m.from === 'solobot' && (Date.now() - m.time) < 5000 && m.text?.trim() === textContent
                         );
                         if (recentMatch) continue;
@@ -5269,7 +5732,14 @@ function mergeHistoryMessages(messages) {
                     text: textContent,
                     time: msg.timestamp || Date.now(),
                     model: msg.model || null,
-                    provider: msg.provider || null
+                    provider: msg.provider || null,
+                    runId: msg.runId || msg.message?.runId || null,
+                    _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+                    _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
+            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
+            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
+            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
+            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
                 };
 
                 // Classify and route
@@ -5279,7 +5749,9 @@ function mergeHistoryMessages(messages) {
                     newSystemCount++;
                 } else {
                     state.chat.messages.push(message);
+                    existingChatMessages.push(message);
                     existingIds.add(msgId);
+                    if (message.runId) existingRunIds.add(message.runId);
                     existingTexts.add(textContent); // already trimmed by extractContentText
                     newChatCount++;
                 }
@@ -5334,8 +5806,6 @@ function mergeHistoryMessages(messages) {
         }
     }
 }
-
-
 
 // === security.js ===
 // js/security.js — Security & Access Log page
@@ -5499,36 +5969,51 @@ function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 // Agent persona names and role labels
 const AGENT_PERSONAS = {
     'main': { name: 'Halo', role: 'PA' },
-    'exec': { name: 'Elon', role: 'CoS' },
-    'cto': { name: 'Orion', role: 'CTO' },
-    'coo': { name: 'Atlas', role: 'COO' },
-    'cfo': { name: 'Sterling', role: 'CFO' },
-    'cmp': { name: 'Vector', role: 'CMP' },
+    'elon': { name: 'Elon', role: 'CoS' },
+    'orion': { name: 'Orion', role: 'CTO' },
+    'atlas': { name: 'Atlas', role: 'COO' },
+    'sterling': { name: 'Sterling', role: 'CFO' },
+    'vector': { name: 'Vector', role: 'CMP' },
     'dev': { name: 'Dev', role: 'ENG' },
-    'devops': { name: 'Forge', role: 'DEVOPS' },
-    'ui': { name: 'Quill', role: 'FE/UI' },
-    'swe': { name: 'Chip', role: 'SWE' },
-    'youtube': { name: 'Snip', role: 'YT' },
-    'sec': { name: 'Knox', role: 'SEC' },
-    'net': { name: 'Sentinel', role: 'NET' },
-    'smm': { name: 'Nova', role: 'SMM' },
-    'family': { name: 'Haven', role: 'FAM' },
-    'tax': { name: 'Ledger', role: 'TAX' },
-    'docs': { name: 'Canon', role: 'DOC' },
-    'art': { name: 'Luma', role: 'ART' }
+    'forge': { name: 'Forge', role: 'DEVOPS' },
+    'quill': { name: 'Quill', role: 'FE/UI' },
+    'chip': { name: 'Chip', role: 'SWE' },
+    'snip': { name: 'Snip', role: 'YT/VEO' },
+    'knox': { name: 'Knox', role: 'SEC' },
+    'sentinel': { name: 'Sentinel', role: 'NET' },
+    'nova': { name: 'Nova', role: 'SMM (X/FB/IG/LI/Threads/Pinterest)' },
+    'haven': { name: 'Haven', role: 'FAM' },
+    'ledger': { name: 'Ledger', role: 'TAX' },
+    'canon': { name: 'Canon', role: 'DOC' },
+    'luma': { name: 'Luma', role: 'ART' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function normalizeDashboardSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
 
-    // Auto-migrate legacy agent session keys (e.g. from before agent IDs were stabilized)
+    // Auto-migrate legacy role-based IDs to canonical name-based IDs.
     const legacyMigrateMap = {
-        'quill': 'ui',
-        'forge': 'devops',
-        'orion': 'cto',
-        'halo': 'main',
-        'atlas': 'coo'
+        'exec': 'elon',
+        'cto': 'orion',
+        'coo': 'atlas',
+        'cfo': 'sterling',
+        'cmp': 'vector',
+        'devops': 'forge',
+        'ui': 'quill',
+        'swe': 'chip',
+        'youtube': 'snip',
+        'veo': 'snip',
+        'veoflow': 'snip',
+        'sec': 'knox',
+        'net': 'sentinel',
+        'smm': 'nova',
+        'family': 'haven',
+        'tax': 'ledger',
+        'docs': 'canon',
+        'creative': 'luma',
+        'art': 'luma',
+        'halo': 'main'
     };
 
     let normalized = key;
@@ -5564,9 +6049,17 @@ window.currentSessionName = window.currentSessionName || null;
 function initCurrentSessionName() {
     const localSession = localStorage.getItem('gateway_session');
     const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
+    const preferredSession = localSession || gatewaySession || 'agent:main:main';
+    const normalizedSession = normalizeDashboardSessionKey(preferredSession);
 
     // localStorage is authoritative (user's explicit choice)
-    window.currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+    window.currentSessionName = normalizedSession;
+    if (preferredSession !== normalizedSession) {
+        try { localStorage.setItem('gateway_session', normalizedSession); } catch { }
+        if (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG) {
+            GATEWAY_CONFIG.sessionKey = normalizedSession;
+        }
+    }
 
     console.log('[initCurrentSessionName] localStorage:', localSession);
     console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
@@ -5632,17 +6125,40 @@ document.addEventListener('click', function (e) {
 
 // Session Management
 let availableSessions = [];
+window.availableSessions = availableSessions; // Shared session cache for other modules (agents dashboard, heatmap, sidebar, etc.)
+
+function setAvailableSessions(next) {
+    availableSessions = Array.isArray(next) ? next : [];
+    window.availableSessions = availableSessions;
+    return availableSessions;
+}
+
 window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's sessions we're viewing
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
 
-// Helper for legacy agent session keys (preserves chat history for old alias IDs)
+// Legacy role IDs and old aliases that should resolve to name-based canonical IDs.
 const LEGACY_AGENT_MAP = {
-    'chip': 'swe',
-    'quill': 'ui',
-    'forge': 'devops',
-    'snip': 'youtube',
-    'creative': 'art'
+    'exec': 'elon',
+    'cto': 'orion',
+    'coo': 'atlas',
+    'cfo': 'sterling',
+    'cmp': 'vector',
+    'devops': 'forge',
+    'ui': 'quill',
+    'swe': 'chip',
+    'youtube': 'snip',
+    'veo': 'snip',
+    'veoflow': 'snip',
+    'sec': 'knox',
+    'net': 'sentinel',
+    'smm': 'nova',
+    'family': 'haven',
+    'tax': 'ledger',
+    'docs': 'canon',
+    'creative': 'luma',
+    'art': 'luma',
+    'halo': 'main'
 };
 
 function resolveAgentId(id) {
@@ -5651,6 +6167,29 @@ function resolveAgentId(id) {
     return LEGACY_AGENT_MAP[id] || id;
 }
 window.resolveAgentId = resolveAgentId;
+
+function migrateLegacyAgentSessionPrefs() {
+    try {
+        const key = 'agent_last_sessions';
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+        let changed = false;
+        const migrated = {};
+        for (const [agentId, sessionKey] of Object.entries(parsed)) {
+            const canonicalAgent = resolveAgentId(agentId);
+            const canonicalSession = normalizeDashboardSessionKey(sessionKey);
+            if (canonicalAgent !== agentId || canonicalSession !== sessionKey) changed = true;
+            migrated[canonicalAgent] = canonicalSession;
+        }
+        if (changed) {
+            localStorage.setItem(key, JSON.stringify(migrated));
+            console.log('[Sessions] Migrated local agent session preferences to name-based IDs');
+        }
+    } catch { }
+}
+migrateLegacyAgentSessionPrefs();
 
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
@@ -5733,6 +6272,27 @@ function handleSubagentSessionAgent() {
 
 let _fetchSessionsInFlight = false;
 let _fetchSessionsQueued = false;
+
+function _sessionTimestamp(value) {
+    if (!value) return 0;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+}
+
+function canonicalizeSessionEntries(entries) {
+    const byKey = new Map();
+    for (const entry of (entries || [])) {
+        if (!entry || !entry.key) continue;
+        const canonicalKey = normalizeDashboardSessionKey(entry.key);
+        const normalized = { ...entry, key: canonicalKey };
+        const existing = byKey.get(canonicalKey);
+        if (!existing || _sessionTimestamp(normalized.updatedAt) >= _sessionTimestamp(existing.updatedAt)) {
+            byKey.set(canonicalKey, normalized);
+        }
+    }
+    return Array.from(byKey.values());
+}
+
 async function fetchSessions() {
     // Debounce: if already fetching, queue one follow-up call
     if (_fetchSessionsInFlight) { _fetchSessionsQueued = true; return availableSessions; }
@@ -5740,7 +6300,11 @@ async function fetchSessions() {
 
     try {
         // Preserve locally-added sessions that might not be in gateway yet
-        const localSessions = availableSessions.filter(s => s.sessionId === null);
+        const localSessions = canonicalizeSessionEntries(
+            availableSessions
+                .filter(s => s.sessionId === null)
+                .map(s => ({ ...s, key: normalizeDashboardSessionKey(s.key) }))
+        );
 
         // Try gateway first if connected (direct RPC call)
         if (gateway && gateway.isConnected()) {
@@ -5748,10 +6312,10 @@ async function fetchSessions() {
                 const result = await gateway.listSessions({});
                 let sessions = result?.sessions || [];
 
-                const gatewaySessions = sessions.map(s => {
+                const gatewaySessions = canonicalizeSessionEntries(sessions.map(s => {
                     const friendlyName = getFriendlySessionName(s.key);
                     return {
-                        key: s.key,
+                        key: normalizeDashboardSessionKey(s.key),
                         name: friendlyName,
                         displayName: friendlyName,
                         updatedAt: s.updatedAt,
@@ -5759,16 +6323,22 @@ async function fetchSessions() {
                         model: s.model || 'unknown',
                         sessionId: s.sessionId
                     };
-                });
+                }));
 
                 const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
                 const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
-                availableSessions = [...gatewaySessions, ...mergedLocalSessions];
+                setAvailableSessions(canonicalizeSessionEntries([...gatewaySessions, ...mergedLocalSessions]));
 
                 sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
                 handleSubagentSessionAgent();
+                try {
+            if (typeof populateSessionDropdown === 'function') {
                 populateSessionDropdown();
+            }
+        } catch (dropdownErr) {
+            sessLog(`[Dashboard] Non-fatal populateSessionDropdown error: ${dropdownErr?.message || dropdownErr}`);
+        }
                 if (typeof updateSidebarAgentsFromSessions === 'function') {
                     try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
                 }
@@ -5785,10 +6355,10 @@ async function fetchSessions() {
         const data = await response.json();
         const rawServerSessions = data.sessions || [];
 
-        const serverSessions = rawServerSessions.map(s => {
+        const serverSessions = canonicalizeSessionEntries(rawServerSessions.map(s => {
             const friendlyName = getFriendlySessionName(s.key);
             return {
-                key: s.key,
+                key: normalizeDashboardSessionKey(s.key),
                 name: friendlyName,
                 displayName: s.displayName || friendlyName,
                 updatedAt: s.updatedAt,
@@ -5796,11 +6366,11 @@ async function fetchSessions() {
                 model: s.model || 'unknown',
                 sessionId: s.sessionId
             };
-        });
+        }));
 
         const serverKeys = new Set(serverSessions.map(s => s.key));
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
-        availableSessions = [...serverSessions, ...mergedLocalSessions];
+        setAvailableSessions(canonicalizeSessionEntries([...serverSessions, ...mergedLocalSessions]));
 
         sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
@@ -5949,7 +6519,7 @@ window.deleteSession = async function (sessionKey, sessionName) {
             if (result && result.ok) {
                 showToast(`Session "${sessionName}" deleted`, 'success');
                 // Remove from local list
-                availableSessions = availableSessions.filter(s => s.key !== sessionKey);
+                setAvailableSessions(availableSessions.filter(s => s.key !== sessionKey));
                 populateSessionDropdown();
             } else {
                 showToast(`Failed to delete: ${result?.error || 'Unknown error'}`, 'error');
@@ -5966,55 +6536,62 @@ window.deleteSession = async function (sessionKey, sessionName) {
 window.switchToSessionKey = window.switchToSession = async function (sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
 
-    // Enqueue switch request (FIFO)
+    // Keep only the latest requested session to avoid A→B→C lag (drop stale middle clicks).
     _sessionSwitchQueue.push({ sessionKey, timestamp: Date.now() });
+    if (_sessionSwitchQueue.length > 1) {
+        const latest = _sessionSwitchQueue[_sessionSwitchQueue.length - 1];
+        _sessionSwitchQueue = [latest];
+    }
 
-    // If switch already in progress, queue will be processed after current completes
+    // If switch already in progress, latest request will run after current completes.
     if (_switchInFlight) {
         return;
     }
 
-    // Process queue until empty (defeats rapid clicks by processing all)
     while (_sessionSwitchQueue.length > 0) {
-        const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
+        // Always execute the most recent queued request (LIFO for responsiveness)
+        const { sessionKey: nextKey } = _sessionSwitchQueue.pop();
+        _sessionSwitchQueue.length = 0; // hard-drop stale queued targets
 
-        // Skip if already on this session
         if (nextKey === currentSessionName) {
             populateSessionDropdown();
             continue;
         }
 
         await executeSessionSwitch(nextKey);
-
-        // Check if a newer request superseded this one
-        // If queue has items that came in AFTER we started this switch, process them
-        // If queue is empty or only has our own re-submit, we're done
     }
 }
 
 // Core switch execution (no queue handling)
 async function executeSessionSwitch(sessionKey) {
     _switchInFlight = true;
+    const switchStart = performance.now();
 
     try {
-        toggleChatPageSessionMenu();
+        try {
+            if (typeof toggleChatPageSessionMenu === 'function') {
+                toggleChatPageSessionMenu();
+            }
+        } catch (menuErr) {
+            sessLog(`[Dashboard] Non-fatal menu toggle error: ${menuErr?.message || menuErr}`);
+        }
 
         // Clear unread notifications for this session
         clearUnreadForSession(sessionKey);
 
         showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
 
-        // FIRST: nuke all rendering state synchronously — before any async work
+        // Save current chat in the background (don't block UX switch path)
+        saveCurrentChat().catch(() => {});
+        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
+
+        // THEN: nuke all rendering state synchronously
         streamingText = '';
         _streamingSessionKey = '';
         isProcessing = false;
         state.chat.messages = [];
         renderChat();
         renderChatPage();
-
-        // 1. Save current chat and cache it for fast switching back
-        await saveCurrentChat();
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
 
         // 2. Increment session version to invalidate any in-flight history loads
         sessionVersion++;
@@ -6039,7 +6616,20 @@ async function executeSessionSwitch(sessionKey) {
         }
 
         // 4. Clear current chat display
-        await clearChatHistory(true, true);
+        try {
+            if (typeof clearChatHistory === 'function') {
+                await clearChatHistory(true, true);
+            } else {
+                state.chat.messages = [];
+                if (typeof renderChat === 'function') renderChat();
+                if (typeof renderChatPage === 'function') renderChatPage();
+            }
+        } catch (clearErr) {
+            sessLog(`[Dashboard] Non-fatal clearChatHistory error: ${clearErr?.message || clearErr}`);
+            state.chat.messages = [];
+            if (typeof renderChat === 'function') renderChat();
+            if (typeof renderChatPage === 'function') renderChatPage();
+        }
 
         // 4a. Check in-memory cache for instant switch
         const cached = getCachedSessionMessages(sessionKey);
@@ -6072,21 +6662,38 @@ async function executeSessionSwitch(sessionKey) {
         }
         populateSessionDropdown();
 
-        // Wait for history (critical path)
-        await historyPromise;
-        await modelPromise;
-
-        if (agentMatch) {
-            setActiveSidebarAgent(agentMatch[1]);
-            saveLastAgentSession(agentMatch[1], sessionKey);
-        } else {
-            setActiveSidebarAgent(null);
+        // Persist active agent/session mapping immediately for correctness
+        try {
+            if (agentMatch) {
+                const canonicalAgent = (typeof resolveAgentId === 'function')
+                    ? resolveAgentId(agentMatch[1])
+                    : agentMatch[1];
+                if (typeof setActiveSidebarAgent === 'function') {
+                    setActiveSidebarAgent(canonicalAgent);
+                }
+                if (typeof saveLastAgentSession === 'function') {
+                    saveLastAgentSession(canonicalAgent, sessionKey);
+                }
+            } else if (typeof setActiveSidebarAgent === 'function') {
+                setActiveSidebarAgent(null);
+            }
+        } catch (agentUiErr) {
+            sessLog(`[Dashboard] Non-fatal agent UI sync error for ${sessionKey}: ${agentUiErr?.message || agentUiErr}`);
         }
 
+        // Do not block switch completion on network history/model fetch.
+        historyPromise.catch((e) => sessLog(`[Dashboard] history refresh failed for ${sessionKey}: ${e?.message || e}`));
+        modelPromise.catch(() => {});
+
+        const switchMs = Math.round(performance.now() - switchStart);
+        sessLog(`[Dashboard] Session switch UI complete in ${switchMs}ms -> ${sessionKey}`);
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
-        showToast('Failed to switch session', 'error');
+        try {
+            sessLog(`[Dashboard] switch error for ${sessionKey}: ${e?.message || e}`);
+        } catch {}
+        showToast(`Failed to switch session: ${e?.message || 'unknown error'}`, 'error');
     } finally {
         _switchInFlight = false;
     }
@@ -6161,9 +6768,17 @@ async function saveCurrentChat() {
 
 async function loadSessionHistory(sessionKey) {
     const loadVersion = sessionVersion;
+    const normalizedSessionKey = normalizeDashboardSessionKey(sessionKey);
+
+    function sessionLikelyHasHistory(targetSessionKey) {
+        const session = availableSessions.find(s => s.key === targetSessionKey);
+        if (!session) return false;
+        const tokens = Number(session.totalTokens || 0);
+        return Number.isFinite(tokens) && tokens > 0;
+    }
 
     // Helper: attempt to load from gateway
-    async function tryGatewayLoad() {
+    async function tryGatewayLoad(attempt = 1) {
         if (!gateway || !gateway.isConnected()) return false;
         try {
             const result = await gateway.loadHistory();
@@ -6171,15 +6786,28 @@ async function loadSessionHistory(sessionKey) {
                 sessLog(`[Dashboard] Ignoring stale history load for ${sessionKey}`);
                 return true; // Stale but don't retry
             }
-            if (result?.messages && result.messages.length > 0) {
+            const messages = Array.isArray(result?.messages) ? result.messages : [];
+            if (messages.length > 0) {
                 if (state.chat?.messages?.length > 0) {
-                    mergeHistoryMessages(result.messages);
+                    mergeHistoryMessages(messages);
                 } else {
-                    loadHistoryMessages(result.messages);
+                    loadHistoryMessages(messages);
                 }
-                sessLog(`[Dashboard] Loaded ${result.messages.length} messages from gateway for ${sessionKey}`);
+                sessLog(`[Dashboard] Loaded ${messages.length} messages from gateway for ${sessionKey}`);
                 return true;
             }
+
+            // Gateway session switch can race with immediate history fetch.
+            // If this session is known to have tokens, retry once before falling back.
+            if (attempt < 2 && sessionLikelyHasHistory(normalizedSessionKey)) {
+                sessLog(`[Dashboard] Empty history on attempt ${attempt} for ${sessionKey}; retrying once`);
+                await new Promise(r => setTimeout(r, 350));
+                if (loadVersion !== sessionVersion) return true;
+                return tryGatewayLoad(attempt + 1);
+            }
+
+            // Empty history is still a valid load result.
+            return true;
         } catch (e) {
             console.warn('[Dashboard] Gateway history failed:', e.message);
         }
@@ -6302,8 +6930,13 @@ function initGateway() {
         },
         onToolEvent: (event) => {
             // Add tool event to terminal in real-time
-            if (event.phase === 'start' && event.summary) {
-                addTerminalLog(event.summary, 'info', event.timestamp);
+            if ((event.phase === 'start' || event.phase === 'complete' || event.phase === 'end' || event.phase === 'done') && event.summary) {
+                addTerminalLog(event.phase === 'start' ? event.summary : `✅ ${event.summary}`, 'info', event.timestamp);
+            }
+        },
+        onPresenceEvent: (event) => {
+            if (window.AgentPresence && typeof window.AgentPresence.ingestEvent === 'function') {
+                window.AgentPresence.ingestEvent(event);
             }
         },
         onCrossSessionMessage: (msg) => {
@@ -6570,7 +7203,7 @@ async function checkRestartToast() {
         if (!response.ok) return;
         const state = await response.json();
         if (state.restartPending) {
-            showToast('Gateway restarted successfully', 'success');
+            showNotificationToast('Gateway', 'Gateway restarted successfully');
             delete state.restartPending;
             await fetch('/api/sync', {
                 method: 'POST',
@@ -6582,8 +7215,6 @@ async function checkRestartToast() {
         console.warn('[Dashboard] Restart toast check failed:', e);
     }
 }
-
-
 
 // === sidebar-agents.js ===
 // js/sidebar-agents.js — Dynamic sidebar Agents list (hide/reorder)
@@ -6597,6 +7228,66 @@ async function checkRestartToast() {
 const SIDEBAR_AGENTS_ORDER_KEY = 'sidebar_agents_order_v1';
 const SIDEBAR_AGENTS_HIDDEN_KEY = 'sidebar_agents_hidden_v1';
 const SIDEBAR_AGENTS_PREFS_KEY = 'sidebar_agents_prefs_v1';
+
+// Grouping / departments
+const SIDEBAR_AGENT_DEPT_OVERRIDES_KEY = 'sidebar_agents_dept_overrides_v1';
+const SIDEBAR_AGENT_GROUP_COLLAPSED_KEY = 'sidebar_agents_group_collapsed_v1';
+const SIDEBAR_AGENT_ORDER_BY_DEPT_KEY = 'sidebar_agents_order_by_dept_v1';
+
+// Legacy/alias role IDs mapped to canonical name IDs used by session routing.
+const AGENT_ID_ALIASES = {
+    exec: 'elon',
+    cto: 'orion',
+    coo: 'atlas',
+    cfo: 'sterling',
+    cmp: 'vector',
+    devops: 'forge',
+    ui: 'quill',
+    swe: 'chip',
+    youtube: 'snip',
+    veo: 'snip',
+    veoflow: 'snip',
+    sec: 'knox',
+    net: 'sentinel',
+    smm: 'nova',
+    docs: 'canon',
+    tax: 'ledger',
+    family: 'haven',
+    creative: 'luma',
+    art: 'luma',
+    halo: 'main'
+};
+
+// Departments requested by user (canonical org grouping)
+const DEFAULT_DEPARTMENTS = {
+    main: 'Executive',
+    elon: 'Executive',
+
+    orion: 'Technology',
+    dev: 'Technology',
+    forge: 'Technology',
+    quill: 'Technology',
+    chip: 'Technology',
+    sentinel: 'Technology',
+    knox: 'Technology',
+
+    atlas: 'Operations',
+    canon: 'Operations',
+
+    vector: 'Marketing & Product',
+    nova: 'Marketing & Product',
+    snip: 'Marketing & Product',
+    luma: 'Marketing & Product',
+
+    sterling: 'Finance',
+    ledger: 'Finance',
+
+    haven: 'Family / Household'
+};
+
+const DEPARTMENT_ORDER = ['Executive', 'Technology', 'Operations', 'Marketing & Product', 'Finance', 'Family / Household', 'Other'];
+
+const ALLOWED_AGENT_IDS = new Set(Object.keys(DEFAULT_DEPARTMENTS));
 
 function getSidebarAgentsPrefs() {
     try {
@@ -6628,6 +7319,7 @@ function setSidebarAgentsHiddenSet(set) {
 }
 
 function getSidebarAgentsOrder() {
+    // Legacy global order (kept for backwards compatibility)
     try {
         const arr = JSON.parse(localStorage.getItem(SIDEBAR_AGENTS_ORDER_KEY) || '[]');
         return Array.isArray(arr) ? arr : [];
@@ -6642,6 +7334,68 @@ function setSidebarAgentsOrder(order) {
     } catch { }
 }
 
+function getSidebarDeptOverrides() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+        return {};
+    }
+}
+
+function setSidebarDeptOverrides(map) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY, JSON.stringify(map || {}));
+    } catch { }
+}
+
+function getSidebarCollapsedGroupsSet() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY) || '[]');
+        return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function setSidebarCollapsedGroupsSet(set) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY, JSON.stringify(Array.from(set || [])));
+    } catch { }
+}
+
+function getSidebarOrderByDept() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+        return {};
+    }
+}
+
+function setSidebarOrderByDept(map) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY, JSON.stringify(map || {}));
+    } catch { }
+}
+
+function normalizeAgentId(agentId) {
+    const raw = (agentId || '').toLowerCase().trim();
+    return AGENT_ID_ALIASES[raw] || raw;
+}
+
+function getAgentDepartment(agentId) {
+    const overrides = getSidebarDeptOverrides();
+    const normalized = normalizeAgentId(agentId);
+    return overrides[normalized] || DEFAULT_DEPARTMENTS[normalized] || 'Other';
+}
+
+function setAgentDepartment(agentId, dept) {
+    const overrides = getSidebarDeptOverrides();
+    overrides[normalizeAgentId(agentId)] = dept;
+    setSidebarDeptOverrides(overrides);
+}
+
 function getSidebarAgentsContainer() {
     return document.getElementById('sidebar-agents-list');
 }
@@ -6652,33 +7406,46 @@ function getSidebarAgentElements() {
     return Array.from(container.querySelectorAll('.sidebar-agent[data-agent]'));
 }
 
-function applySidebarAgentsOrder() {
+function getSidebarGroupElements() {
     const container = getSidebarAgentsContainer();
-    if (!container) return;
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('.sidebar-agent-group[data-dept]'));
+}
 
-    const order = getSidebarAgentsOrder();
-    if (!order.length) return;
+function getGroupListEl(dept) {
+    const container = getSidebarAgentsContainer();
+    if (!container) return null;
+    return container.querySelector(`.sidebar-agent-group[data-dept="${CSS.escape(dept)}"] .sidebar-agent-group-list`);
+}
 
-    const map = new Map();
-    for (const el of getSidebarAgentElements()) {
-        map.set(el.getAttribute('data-agent'), el);
+function applySidebarAgentsOrder() {
+    // Apply ordering within each department group.
+    const byDept = getSidebarOrderByDept();
+
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        if (!dept || !listEl) continue;
+
+        const desired = Array.isArray(byDept[dept]) ? byDept[dept] : [];
+        if (!desired.length) continue;
+
+        const els = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]'));
+        const map = new Map(els.map(el => [el.getAttribute('data-agent'), el]));
+
+        for (const id of desired) {
+            const el = map.get(id);
+            if (el) listEl.appendChild(el);
+            map.delete(id);
+        }
+        for (const el of map.values()) listEl.appendChild(el);
+
+        // Save normalized order for this group
+        const normalized = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]')).map(el => el.getAttribute('data-agent'));
+        byDept[dept] = normalized;
     }
 
-    // Append in saved order first
-    for (const id of order) {
-        const el = map.get(id);
-        if (el) container.appendChild(el);
-        map.delete(id);
-    }
-
-    // Append any new agents not in saved order
-    for (const el of map.values()) {
-        container.appendChild(el);
-    }
-
-    // Save normalized order (includes any new agents)
-    const normalized = getSidebarAgentElements().map(el => el.getAttribute('data-agent'));
-    setSidebarAgentsOrder(normalized);
+    setSidebarOrderByDept(byDept);
 }
 
 function applySidebarAgentsHidden() {
@@ -6735,11 +7502,23 @@ function updateSidebarAgentsFromSessions(availableSessions) {
 
 let sidebarAgentsDragging = false;
 
+function persistDeptOrdersFromDOM() {
+    const byDept = {};
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        if (!dept || !listEl) continue;
+        byDept[dept] = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]'))
+            .map(el => el.getAttribute('data-agent'));
+    }
+    setSidebarOrderByDept(byDept);
+}
+
 function setupSidebarAgentsDragAndDrop() {
     const els = getSidebarAgentElements();
     if (!els.length) return;
 
-    // Add a drag handle (if not present) and make elements draggable
+    // Make agent elements draggable + ensure handle
     for (const el of els) {
         el.setAttribute('draggable', 'true');
         el.classList.add('draggable');
@@ -6749,7 +7528,6 @@ function setupSidebarAgentsDragAndDrop() {
             handle.className = 'agent-drag-handle';
             handle.title = 'Drag to reorder';
             handle.textContent = '⠿';
-            // Prevent handle clicks from triggering agent switch
             handle.addEventListener('click', (e) => e.stopPropagation());
             handle.addEventListener('mousedown', (e) => e.stopPropagation());
             el.insertBefore(handle, el.firstChild);
@@ -6765,9 +7543,7 @@ function setupSidebarAgentsDragAndDrop() {
         el.addEventListener('dragend', () => {
             sidebarAgentsDragging = false;
             el.classList.remove('dragging');
-            // Persist current DOM order
-            const order = getSidebarAgentElements().map(x => x.getAttribute('data-agent'));
-            setSidebarAgentsOrder(order);
+            persistDeptOrdersFromDOM();
         });
 
         el.addEventListener('dragover', (e) => {
@@ -6777,16 +7553,65 @@ function setupSidebarAgentsDragAndDrop() {
 
         el.addEventListener('drop', (e) => {
             e.preventDefault();
-            const container = getSidebarAgentsContainer();
-            if (!container) return;
-
             const draggedId = e.dataTransfer.getData('text/plain');
-            const draggedEl = container.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
+            if (!draggedId) return;
+
+            const draggedEl = document.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
             if (!draggedEl || draggedEl === el) return;
 
-            // Insert dragged before drop target
-            container.insertBefore(draggedEl, el);
+            // If dropped onto an agent, insert before it (within that agent's department list)
+            const targetDept = el.getAttribute('data-dept') || getAgentDepartment(el.getAttribute('data-agent'));
+            const listEl = getGroupListEl(targetDept);
+            if (!listEl) return;
+
+            // Re-home if moved across departments
+            if (draggedEl.getAttribute('data-dept') !== targetDept) {
+                setAgentDepartment(draggedId, targetDept);
+            }
+
+            listEl.insertBefore(draggedEl, el);
+            draggedEl.setAttribute('data-dept', targetDept);
+            persistDeptOrdersFromDOM();
         });
+    }
+
+    // Allow dropping into empty space within a department group
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        const headerEl = groupEl.querySelector('.sidebar-agent-group-header');
+        if (!dept || !listEl) continue;
+
+        const onDropIntoGroup = (e) => {
+            e.preventDefault();
+            const draggedId = e.dataTransfer.getData('text/plain');
+            if (!draggedId) return;
+            const draggedEl = document.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
+            if (!draggedEl) return;
+
+            if (draggedEl.getAttribute('data-dept') !== dept) {
+                setAgentDepartment(draggedId, dept);
+            }
+
+            listEl.appendChild(draggedEl);
+            draggedEl.setAttribute('data-dept', dept);
+            persistDeptOrdersFromDOM();
+        };
+
+        listEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        listEl.addEventListener('drop', onDropIntoGroup);
+
+        // Header drop = quick move to group (Notion-ish)
+        if (headerEl) {
+            headerEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+            headerEl.addEventListener('drop', onDropIntoGroup);
+        }
     }
 
     // Guard: if user clicks while dragging, ignore
@@ -6883,7 +7708,12 @@ function renderSidebarAgentsModal() {
 }
 
 function resetSidebarAgentsOrder() {
-    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch { }
+    try {
+        localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY);
+    } catch { }
     // Reload page for clean order restore
     location.reload();
 }
@@ -6909,12 +7739,22 @@ function resolveAvatarUrl(agentId) {
 }
 
 function agentDisplayName(agent) {
-    const id = agent.id || agent.name;
+    const id = normalizeAgentId(agent.id || agent.name);
     const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
     if (persona) return `${persona.name} (${persona.role})`;
-    if (agent.isDefault) return 'Halo (PA)';
-    const name = agent.name || agent.id;
+    if (agent.isDefault || id === 'main') return 'Halo (PA)';
+    const name = agent.name || id;
     return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function sanitizeAgentEmoji(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return '';
+    // Reject template/noise phrases leaking from uninitialized IDENTITY.md files.
+    if (/your signature|pick one|workspace-relative|data uri|ghost in the machine/i.test(v)) return '';
+    // Keep short values only (emoji, small token).
+    if (v.length > 8) return '';
+    return v;
 }
 
 async function loadSidebarAgents() {
@@ -6928,35 +7768,147 @@ async function loadSidebarAgents() {
 
         // Include main agent (it's excluded from /api/agents since it uses the shared workspace)
         // Add it at the front if not present
-        const hasMain = agents.some(a => a.isDefault || a.id === 'main');
-        const allAgents = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+        const hasMain = agents.some(a => normalizeAgentId(a.id) === 'main' || a.isDefault);
+        const allAgentsRaw = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+
+        // Normalize IDs, dedupe alias/canonical duplicates, and drop unknown/noise IDs.
+        // This prevents stray workspace names or template text from becoming sidebar agents.
+        const dedupedByCanonicalId = new Map();
+        for (const agent of allAgentsRaw) {
+            const canonicalId = normalizeAgentId(agent.id);
+            if (!ALLOWED_AGENT_IDS.has(canonicalId)) continue;
+
+            const existing = dedupedByCanonicalId.get(canonicalId);
+            const normalizedAgent = {
+                ...agent,
+                id: canonicalId,
+                isDefault: canonicalId === 'main' || agent.isDefault === true
+            };
+
+            // Prefer canonical/native entries over alias entries when both exist
+            if (!existing || existing.id !== canonicalId || agent.id === canonicalId) {
+                dedupedByCanonicalId.set(canonicalId, normalizedAgent);
+            }
+        }
+
+        const allAgents = Array.from(dedupedByCanonicalId.values());
 
         // Sort: default first, then by id
         allAgents.sort((a, b) => {
             if (a.isDefault) return -1;
             if (b.isDefault) return 1;
-            return a.id.localeCompare(b.id);
+            return (a.id || '').localeCompare(b.id || '');
         });
 
-        container.innerHTML = allAgents.map(agent => {
-            const avatarUrl = resolveAvatarUrl(agent.id);
-            const displayName = agentDisplayName(agent);
-            const emoji = agent.emoji || '';
-            const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+        // Group agents by department
+        const groups = {};
+        for (const agent of allAgents) {
+            const dept = getAgentDepartment(agent.id);
+            groups[dept] = groups[dept] || [];
+            groups[dept].push(agent);
+        }
+
+        // Stable group order (Notion-ish)
+        const groupNames = Array.from(new Set([
+            ...DEPARTMENT_ORDER,
+            ...Object.keys(groups).sort()
+        ])).filter((d) => groups[d] && groups[d].length > 0);
+
+        // Apply stored per-dept ordering, or default sort by id
+        const orderByDept = getSidebarOrderByDept();
+        for (const dept of groupNames) {
+            const desired = Array.isArray(orderByDept[dept]) ? orderByDept[dept] : [];
+            if (!desired.length) {
+                groups[dept].sort((a, b) => {
+                    if (a.isDefault) return -1;
+                    if (b.isDefault) return 1;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
+                continue;
+            }
+
+            const map = new Map(groups[dept].map(a => [a.id, a]));
+            const ordered = [];
+            for (const id of desired) {
+                const a = map.get(id);
+                if (a) ordered.push(a);
+                map.delete(id);
+            }
+            for (const a of map.values()) ordered.push(a);
+            groups[dept] = ordered;
+        }
+
+        const collapsed = getSidebarCollapsedGroupsSet();
+
+        container.innerHTML = groupNames.map((dept) => {
+            const isCollapsed = collapsed.has(dept);
+            const listHtml = groups[dept].map(agent => {
+                const avatarUrl = resolveAvatarUrl(agent.id);
+                const displayName = agentDisplayName(agent);
+                const emoji = sanitizeAgentEmoji(agent.emoji);
+                const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+
+                return `
+                    <div class="sidebar-agent" data-agent="${agent.id}" data-dept="${dept}">
+                        <img class="agent-avatar"
+                             src="${avatarUrl}"
+                             alt="${agent.id}"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
+                            ${emoji || fallbackInitial}
+                        </span>
+                        <span class="sidebar-item-text">${displayName}</span>
+                    </div>
+                `;
+            }).join('');
 
             return `
-                <div class="sidebar-agent" data-agent="${agent.id}">
-                    <img class="agent-avatar"
-                         src="${avatarUrl}"
-                         alt="${agent.id}"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                    <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
-                        ${emoji || fallbackInitial}
-                    </span>
-                    <span class="sidebar-item-text">${displayName}</span>
+                <div class="sidebar-agent-group" data-dept="${dept}">
+                    <div class="sidebar-agent-group-header" role="button" tabindex="0" title="Toggle ${dept}">
+                        <span class="sidebar-agent-group-caret">${isCollapsed ? '▶' : '▼'}</span>
+                        <span class="sidebar-agent-group-title">${dept}</span>
+                        <span class="sidebar-agent-group-count">${groups[dept].length}</span>
+                    </div>
+                    <div class="sidebar-agent-group-list" style="${isCollapsed ? 'display:none;' : ''}">
+                        ${listHtml}
+                    </div>
                 </div>
             `;
         }).join('');
+
+        // Group collapse handlers
+        for (const groupEl of getSidebarGroupElements()) {
+            const dept = groupEl.getAttribute('data-dept');
+            const header = groupEl.querySelector('.sidebar-agent-group-header');
+            const list = groupEl.querySelector('.sidebar-agent-group-list');
+            const caret = groupEl.querySelector('.sidebar-agent-group-caret');
+            if (!dept || !header || !list || !caret) continue;
+
+            const toggle = () => {
+                const set = getSidebarCollapsedGroupsSet();
+                const nowCollapsed = !set.has(dept);
+                if (nowCollapsed) set.add(dept); else set.delete(dept);
+                setSidebarCollapsedGroupsSet(set);
+                const isCollapsedNow = set.has(dept);
+                list.style.display = isCollapsedNow ? 'none' : '';
+                caret.textContent = isCollapsedNow ? '▶' : '▼';
+            };
+
+            header.addEventListener('click', (e) => {
+                // Don't collapse when dropping onto header
+                if (sidebarAgentsDragging) return;
+                e.preventDefault();
+                e.stopPropagation();
+                toggle();
+            });
+
+            header.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                }
+            });
+        }
 
         // Re-init after dynamic load
         applySidebarAgentsOrder();
@@ -6970,6 +7922,11 @@ async function loadSidebarAgents() {
 
         if (window.availableSessions) {
             updateSidebarAgentActivityIndicators(window.availableSessions);
+        }
+
+        // Re-apply unread badges after sidebar re-render (notifications.js)
+        if (typeof updateUnreadBadges === 'function') {
+            updateUnreadBadges();
         }
 
         console.log(`[Sidebar] Loaded ${allAgents.length} agents dynamically`);
@@ -7807,7 +8764,7 @@ function renderStatus() {
 
     const providerEl = document.getElementById('provider-name');
     if (providerEl) {
-        providerEl.textContent = state.provider || 'anthropic';
+        providerEl.textContent = state.provider || 'openai-codex';
     }
 
     if (state.currentTask) {
@@ -7918,16 +8875,16 @@ async function openSettingsModal() {
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
-        // Fallback
-        document.getElementById('current-provider-display').textContent = 'anthropic';
-        document.getElementById('current-model-display').textContent = 'anthropic/claude-opus-4-5';
-        document.getElementById('setting-provider').value = 'anthropic';
-        await updateModelDropdown('anthropic');
+        // Fallback (approved providers only)
+        document.getElementById('current-provider-display').textContent = 'openai-codex';
+        document.getElementById('current-model-display').textContent = 'openai-codex/gpt-5.3-codex';
+        document.getElementById('setting-provider').value = 'openai-codex';
+        await updateModelDropdown('openai-codex');
         
         // Set fallback model after dropdown is populated
         const settingModelSelect = document.getElementById('setting-model');
         if (settingModelSelect) {
-            settingModelSelect.value = 'anthropic/claude-opus-4-5';
+            settingModelSelect.value = 'openai-codex/gpt-5.3-codex';
         }
     }
 
@@ -8675,8 +9632,8 @@ async function loadHealthModels() {
     }
 }
 
-// Test a single model by creating a dedicated session, patching its model, and sending a test message
-// Now waits for the actual LLM response event via WebSocket
+// Test a single model using EXACT same path as chat (same session, same WebSocket, same auth)
+// Uses gateway.sendTestMessage() which mirrors sendMessage() but with a model override
 async function testSingleModel(modelId) {
     const startTime = Date.now();
 
@@ -8690,61 +9647,52 @@ async function testSingleModel(modelId) {
             };
         }
 
-        // Create a unique health-check session for this model
+        // Create a unique health-check session for this model to ensure isolation
         const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+        console.log(`[Health] Testing model ${modelId} using session ${healthSessionKey}`);
 
-        // Step 1: Patch the session to use the target model
-        console.log(`[Health] Setting model for session ${healthSessionKey} to ${modelId}`);
+        // Patch session to use the target model (ensures gateway uses correct model)
         try {
-            await gateway._request('sessions.patch', {
-                key: healthSessionKey,
-                model: modelId
-            }, 10000); // 10s timeout for patch
-        } catch (patchError) {
-            console.error(`[Health] Failed to patch session model: ${patchError.message}`);
-            return {
-                success: false,
-                error: `Model config failed: ${patchError.message}`,
-                latencyMs: Date.now() - startTime
-            };
+            await gateway.patchSession(healthSessionKey, { model: modelId });
+        } catch (patchErr) {
+            console.warn(`[Health] Session patch failed (may not exist yet): ${patchErr.message}`);
         }
 
-        // Step 2: Create a promise that waits for the actual LLM response event
+        // Wait for the response event on this specific session
         const responsePromise = new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
-                if (pendingHealthChecks.has(healthSessionKey)) {
-                    pendingHealthChecks.delete(healthSessionKey);
-                    reject(new Error('Response timeout (60s)'));
-                }
-            }, 60000); // 60s timeout for LLM response
-
-            pendingHealthChecks.set(healthSessionKey, {
+                reject(new Error('Response timeout (60s)'));
+            }, 60000);
+            
+            // Store resolver so chat event handler can call it
+            window._healthCheckResolvers = window._healthCheckResolvers || {};
+            window._healthCheckResolvers[healthSessionKey] = {
                 resolve: (res) => {
                     clearTimeout(timer);
+                    delete window._healthCheckResolvers[healthSessionKey];
                     resolve(res);
                 },
                 reject: (err) => {
                     clearTimeout(timer);
+                    delete window._healthCheckResolvers[healthSessionKey];
                     reject(err);
                 }
-            });
+            };
         });
 
-        // Step 3: Send a test message using that session
-        console.log(`[Health] Sending test message to ${modelId}`);
-        await gateway._request('chat.send', {
-            message: 'Respond with exactly: OK',
-            sessionKey: healthSessionKey,
-            idempotencyKey: crypto.randomUUID()
-        }, 10000); // 10s timeout for the SEND REQUEST itself
+        // Send test message via chat.send - same path as regular chat
+        const result = await gateway.sendTestMessage('OK', modelId, healthSessionKey);
+        console.log(`[Health] Message sent, runId: ${result?.runId}, waiting for response...`);
 
-        // Step 4: Wait for the ACTUAL response event
-        const result = await responsePromise;
+        // Wait for actual LLM response
+        const response = await responsePromise;
         const latencyMs = Date.now() - startTime;
-
+        
+        console.log(`[Health] ✅ Model ${modelId} responded: ${response?.content?.substring(0, 50)}...`);
+        
         return {
             success: true,
-            response: result?.content || 'OK',
+            response: response?.content || 'OK',
             latencyMs
         };
 
@@ -8950,6 +9898,27 @@ if (typeof originalShowPage === 'function') {
 
 const CHAT_DEBUG = false;
 function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
+const CHAT_RUNTIME_MARK = '2026-02-22.3';
+if (window.__chatRuntimeMark !== CHAT_RUNTIME_MARK) {
+    window.__chatRuntimeMark = CHAT_RUNTIME_MARK;
+    console.log(`[Chat] chat.js loaded (${CHAT_RUNTIME_MARK})`);
+}
+window._chatPendingSends = window._chatPendingSends || new Map();
+
+function trackPendingSend(runId, payload) {
+    if (!runId || !payload) return;
+    const map = window._chatPendingSends;
+    if (!(map instanceof Map)) return;
+    map.set(runId, {
+        ...payload,
+        retries: Number(payload.retries || 0),
+        createdAt: Date.now()
+    });
+    if (map.size > 100) {
+        const oldest = [...map.entries()].sort((a, b) => (a[1]?.createdAt || 0) - (b[1]?.createdAt || 0)).slice(0, map.size - 100);
+        for (const [key] of oldest) map.delete(key);
+    }
+}
 
 /**
  * Converts plain text to HTML with clickable links.
@@ -9428,6 +10397,37 @@ function isTypingInInput(element) {
 // Image handling - supports multiple images
 let pendingImages = [];
 
+function getImageDataUri(value) {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && typeof value.data === 'string') return value.data;
+    return '';
+}
+
+function isValidImageDataUri(value) {
+    const dataUri = getImageDataUri(value);
+    if (!dataUri) return false;
+    const match = dataUri.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,([\s\S]*)$/);
+    if (!match) return false;
+    return match[1].trim().length > 0;
+}
+
+function sanitizeImageAttachments(items, sourceLabel = 'chat') {
+    const source = Array.isArray(items) ? items : [];
+    const valid = [];
+    let dropped = 0;
+    for (const item of source) {
+        if (isValidImageDataUri(item)) {
+            valid.push(item);
+        } else {
+            dropped += 1;
+        }
+    }
+    if (dropped > 0) {
+        chatLog(`[Chat] Skipped ${dropped} invalid image attachment(s) (${sourceLabel})`);
+    }
+    return { valid, dropped };
+}
+
 function handleImageSelect(event) {
     const files = event.target.files;
     for (const file of files) {
@@ -9452,6 +10452,42 @@ function handlePaste(event) {
 }
 
 let chatInputSelection = { start: 0, end: 0 };
+let _chatSendInFlight = false;
+let _lastChatSendSignature = '';
+let _lastChatSendAt = 0;
+
+function buildChatSendSignature(text, images) {
+    const normalizedText = String(text || '').replace(/\s+/g, ' ').trim();
+    const sessionKey = String(currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const imageList = Array.isArray(images) ? images : [];
+    const imageSig = imageList.map((img) => {
+        const data = typeof img === 'string' ? img : img?.data;
+        if (typeof data !== 'string') return '0:';
+        return `${data.length}:${data.slice(-16)}`;
+    }).join('|');
+    return `${sessionKey}|${normalizedText}|${imageList.length}|${imageSig}`;
+}
+
+function shouldSuppressDuplicateSend(signature) {
+    const now = Date.now();
+    if (signature !== _lastChatSendSignature) return false;
+
+    // Immediate double-click / enter+click duplicate
+    if (now - _lastChatSendAt < 1200) return true;
+    // Same payload while previous send is still in-flight
+    if (_chatSendInFlight && now - _lastChatSendAt < 10000) return true;
+    return false;
+}
+
+function markChatSendStart(signature) {
+    _chatSendInFlight = true;
+    _lastChatSendSignature = signature;
+    _lastChatSendAt = Date.now();
+}
+
+function markChatSendEnd() {
+    _chatSendInFlight = false;
+}
 
 function handleChatInputKeydown(event) {
     const input = event.target;
@@ -9547,8 +10583,16 @@ function processImageFile(file) {
     reader.onload = async (e) => {
         // Compress image if larger than 200KB
         let imageData = e.target.result;
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Invalid image data. Please select the file again.', 'warning');
+            return;
+        }
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
+        }
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Image processing failed. Please try another image.', 'warning');
+            return;
         }
 
         pendingImages.push({
@@ -9614,15 +10658,32 @@ async function sendChatMessage() {
     }
 
     // Get images to send
-    const imagesToSend = [...pendingImages];
-    const hasImages = imagesToSend.length > 0;
+    const rawImagesToSend = [...pendingImages];
+    const { valid: imagesToSend, dropped: droppedImages } = sanitizeImageAttachments(rawImagesToSend, 'chat-input');
+    if (droppedImages > 0) {
+        showToast(`Skipped ${droppedImages} invalid image attachment${droppedImages > 1 ? 's' : ''}.`, 'warning');
+    }
+    const imageDataArray = imagesToSend.map(img => getImageDataUri(img)).filter(Boolean);
+    const hasImages = imageDataArray.length > 0;
+    if (!text && !hasImages) {
+        clearImagePreviews();
+        addLocalChatMessage('Failed to send: selected image is empty or invalid.', 'system');
+        renderChat();
+        renderChatPage();
+        return;
+    }
+    const sendSignature = buildChatSendSignature(text, imageDataArray);
+    if (shouldSuppressDuplicateSend(sendSignature)) {
+        chatLog('[Chat] Suppressed duplicate send (chat-input)');
+        return;
+    }
+    markChatSendStart(sendSignature);
 
     // Add to local display
     if (hasImages) {
         // Show all images in local preview
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        const imageDataArray = imagesToSend.map(img => img.data);
         addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
@@ -9642,23 +10703,33 @@ async function sendChatMessage() {
     // Send via Gateway WebSocket
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
+        let result = null;
         if (hasImages) {
             // Send with image attachments (send all images)
-            const imageDataArray = imagesToSend.map(img => img.data);
-            await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
+            result = await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
-            await gateway.sendMessage(text);
+            result = await gateway.sendMessage(text);
+        }
+
+        if (result?.runId) {
+            trackPendingSend(result.runId, {
+                sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+                text: hasImages ? (text || 'Image') : text,
+                images: hasImages ? imageDataArray : []
+            });
         }
     } catch (err) {
         console.error('Failed to send message:', err);
         addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
+    } finally {
+        markChatSendEnd();
     }
 }
 
-function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null) {
+function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null, meta = null) {
     // DEFENSIVE: Hard session gate - validate incoming messages match current session
     // Check if this message already has a session tag from outside
-    const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
+    const incomingSession = (meta?._sessionKey || imageOrModel?._sessionKey || '').toLowerCase();
     const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
 
     if (incomingSession && currentSession && incomingSession !== currentSession) {
@@ -9696,7 +10767,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
     chatLog(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
-        id: 'm' + Date.now(),
+        id: 'm' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
         from,
         text,
         time: Date.now(),
@@ -9704,8 +10775,12 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         images: images, // New array field
         model: messageModel, // Store which AI model generated this response
         provider: provider, // Store which provider (e.g., 'google', 'anthropic')
-        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
-        _agentId: window.currentAgentId || 'main' // Fix #3: Store agent at message creation time for correct display later
+        _sessionKey: meta?._sessionKey || window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
+        _agentId: meta?._agentId || window.currentAgentId || 'main', // attribution owner
+        _sourceSession: meta?._sourceSession || null,
+        _sourceAgent: meta?._sourceAgent || null,
+        _sourceAgentName: meta?._sourceAgentName || null,
+        _isInterSession: !!(meta?._isInterSession)
     };
 
     const isSystem = isSystemMessage(text, from);
@@ -9751,10 +10826,14 @@ function syncChatToVPS() {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
     chatSyncTimeout = setTimeout(async () => {
         try {
+            const sessionKey = normalizeSessionKey(currentSessionName || GATEWAY_CONFIG?.sessionKey || 'agent:main:main');
             await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: state.chat.messages.slice(-100) })
+                body: JSON.stringify({
+                    messages: state.chat.messages.slice(-100),
+                    sessionKey
+                })
             });
         } catch (e) {
             // Chat sync failed - not critical
@@ -9773,7 +10852,7 @@ function renderChat() {
     }
     // Removed verbose log: renderChat called frequently
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
     const isConnected = gateway?.isConnected();
 
     // Save scroll state BEFORE clearing
@@ -9799,7 +10878,7 @@ function renderChat() {
     messages.forEach(msg => {
         // Defensive: Skip messages from other sessions
         const msgSession = (msg._sessionKey || '').toLowerCase();
-        if (msgSession && activeKey && msgSession !== activeKey) {
+        if (!msgSession || !activeKey || msgSession !== activeKey) {
             chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKey}`);
             return;
         }
@@ -9821,15 +10900,24 @@ function renderChat() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceState = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabel = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatus = !streamingText && (
+        isProcessing || (_presenceState && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceState.state))
+    );
+    if (_showCompactStatus) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.innerHTML = `
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabel}</span>
         `;
         container.appendChild(typingIndicator);
     }
@@ -9843,11 +10931,21 @@ function renderChat() {
     }
 }
 
+function shouldHideFromMainChat(msg) {
+    if (!msg) return false;
+    return !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+}
+
+function getMainChatRenderableMessages(messages) {
+    return (messages || []).filter(msg => !shouldHideFromMainChat(msg));
+}
+
 function createChatMessageElement(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
 
     // Create message container
@@ -9921,6 +11019,14 @@ function createChatMessageElement(msg) {
             modelBadge.title = bestModel;
             header.appendChild(modelBadge);
         }
+    }
+
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: var(--space-2);';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
     }
 
     // Message content
@@ -10152,7 +11258,7 @@ function renderChatPage() {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
 
     // Avoid clearing selection: if user is selecting text in chat, skip re-render
     const selection = window.getSelection();
@@ -10239,7 +11345,7 @@ function renderChatPage() {
             // Defensive: Skip messages from other sessions
             const msg = messages[i];
             const msgSession = (msg._sessionKey || '').toLowerCase();
-            if (msgSession && activeKeyCP && msgSession !== activeKeyCP) {
+            if (!msgSession || !activeKeyCP || msgSession !== activeKeyCP) {
                 chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKeyCP}`);
                 continue;
             }
@@ -10264,8 +11370,17 @@ function renderChatPage() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceStateCP = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabelCP = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatusCP = !streamingText && (
+        isProcessing || (_presenceStateCP && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceStateCP.state))
+    );
+    if (_showCompactStatusCP) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.style.cssText = 'margin: 12px 0 12px 12px;';
@@ -10273,7 +11388,7 @@ function renderChatPage() {
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabelCP}</span>
         `;
         container.appendChild(typingIndicator);
     }
@@ -10291,13 +11406,14 @@ function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
 
     // Message wrapper
     const wrapper = document.createElement('div');
-    wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
+    wrapper.className = `chat-page-message ${isUser ? 'user' : (isSystem ? 'system' : 'solobot')}${msg.isStreaming ? ' streaming' : ''}`;
     wrapper.setAttribute('data-msg-id', msg.id || '');
 
     // Avatar (for bot and user messages, not system)
@@ -10311,7 +11427,7 @@ function createChatPageMessage(msg) {
             avatar.textContent = 'U';
         } else {
             // Bot avatar - agent-specific image and color
-            const agentId = currentAgentId || 'main';
+            const agentId = msg._agentId || currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
 
             // Get avatar path (fallback to main for agents without custom avatars)
@@ -10399,6 +11515,14 @@ function createChatPageMessage(msg) {
     }
 
     bubble.appendChild(header);
+
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: 6px;';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
+    }
 
     // Content
     const content = document.createElement('div');
@@ -10490,8 +11614,16 @@ function processChatPageImageFile(file) {
     reader.onload = async (e) => {
         // Compress image if larger than 200KB
         let imageData = e.target.result;
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Invalid image data. Please select the file again.', 'warning');
+            return;
+        }
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
+        }
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Image processing failed. Please try another image.', 'warning');
+            return;
         }
 
         chatPagePendingImages.push({
@@ -10618,17 +11750,46 @@ function forceSyncActiveAgent(agentId) {
 }
 
 // Track last-used session per agent (persisted to localStorage)
+function sessionBelongsToAgent(sessionKey, agentId) {
+    if (!sessionKey || !agentId) return false;
+    const normalizedSession = normalizeDashboardSessionKey(sessionKey);
+    const match = normalizedSession.match(/^agent:([^:]+):/);
+    if (!match) return false;
+    const sessionAgent = window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1];
+    const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+    return sessionAgent === canonicalAgent;
+}
+
 function getLastAgentSession(agentId) {
     try {
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
-        return map[agentId] || null;
+        const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+        const rawSession = map[canonicalAgent] || map[agentId] || null;
+        if (!rawSession) return null;
+
+        const normalizedSession = normalizeDashboardSessionKey(rawSession);
+        if (!sessionBelongsToAgent(normalizedSession, canonicalAgent)) {
+            // Self-heal corrupted mapping so a click can never jump to another agent's session.
+            delete map[canonicalAgent];
+            delete map[agentId];
+            localStorage.setItem('agent_last_sessions', JSON.stringify(map));
+            chatLog(`[Sessions] Cleared invalid last-session mapping for ${canonicalAgent}: ${normalizedSession}`);
+            return null;
+        }
+        return normalizedSession;
     } catch { return null; }
 }
 
 function saveLastAgentSession(agentId, sessionKey) {
     try {
+        const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+        const normalizedSession = normalizeDashboardSessionKey(sessionKey);
+        if (!sessionBelongsToAgent(normalizedSession, canonicalAgent)) {
+            chatLog(`[Sessions] Skipping invalid last-session save for ${canonicalAgent}: ${normalizedSession}`);
+            return;
+        }
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
-        map[agentId] = sessionKey;
+        map[canonicalAgent] = normalizedSession;
         localStorage.setItem('agent_last_sessions', JSON.stringify(map));
     } catch { }
 }
@@ -10640,15 +11801,17 @@ function setupSidebarAgents() {
     const activateAgentFromEl = (el) => {
         const agentId = el.getAttribute('data-agent');
         if (!agentId) return;
+        const canonicalAgentId = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
 
         // IMMEDIATE UI feedback - show active state before switch completes
-        forceSyncActiveAgent(agentId);
+        forceSyncActiveAgent(canonicalAgentId);
 
         // Update current agent ID first so dropdown filters correctly
-        currentAgentId = agentId;
+        currentAgentId = canonicalAgentId;
 
         // Restore last session for this agent, or default to main
-        const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
+        const remembered = getLastAgentSession(canonicalAgentId);
+        const sessionKey = remembered || `agent:${canonicalAgentId}:main`;
         showPage('chat');
 
         // Fire-and-forget switch (queue in sessions.js handles ordering)
@@ -10722,13 +11885,30 @@ async function sendChatPageMessage() {
         return;
     }
 
-    const imagesToSend = [...chatPagePendingImages];
-    const hasImages = imagesToSend.length > 0;
+    const rawImagesToSend = [...chatPagePendingImages];
+    const { valid: imagesToSend, dropped: droppedImages } = sanitizeImageAttachments(rawImagesToSend, 'chat-page');
+    if (droppedImages > 0) {
+        showToast(`Skipped ${droppedImages} invalid image attachment${droppedImages > 1 ? 's' : ''}.`, 'warning');
+    }
+    const imageDataArray = imagesToSend.map(img => getImageDataUri(img)).filter(Boolean);
+    const hasImages = imageDataArray.length > 0;
+    if (!text && !hasImages) {
+        clearChatPageImagePreviews();
+        addLocalChatMessage('Failed: selected image is empty or invalid.', 'system');
+        renderChat();
+        renderChatPage();
+        return;
+    }
+    const sendSignature = buildChatSendSignature(text, imageDataArray);
+    if (shouldSuppressDuplicateSend(sendSignature)) {
+        chatLog('[Chat] Suppressed duplicate send (chat-page-input)');
+        return;
+    }
+    markChatSendStart(sendSignature);
 
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        const imageDataArray = imagesToSend.map(img => img.data);
         addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
@@ -10754,7 +11934,6 @@ async function sendChatPageMessage() {
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
-            const imageDataArray = imagesToSend.map(img => img.data);
             await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
             await gateway.sendMessage(text);
@@ -10764,6 +11943,8 @@ async function sendChatPageMessage() {
         addLocalChatMessage(`Failed: ${err.message}`, 'system');
         renderChat();
         renderChatPage();
+    } finally {
+        markChatSendEnd();
     }
 }
 
@@ -10863,7 +12044,3 @@ function clearChatSearchHighlights() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
 });
-
-
-
-

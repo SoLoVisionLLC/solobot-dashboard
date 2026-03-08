@@ -956,7 +956,7 @@ function renderChat() {
     }
     // Removed verbose log: renderChat called frequently
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
     const isConnected = gateway?.isConnected();
 
     // Save scroll state BEFORE clearing
@@ -1033,6 +1033,15 @@ function renderChat() {
         // Restore position by maintaining same distance from bottom
         container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
     }
+}
+
+function shouldHideFromMainChat(msg) {
+    if (!msg) return false;
+    return !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+}
+
+function getMainChatRenderableMessages(messages) {
+    return (messages || []).filter(msg => !shouldHideFromMainChat(msg));
 }
 
 function createChatMessageElement(msg) {
@@ -1353,7 +1362,7 @@ function renderChatPage() {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
 
     // Avoid clearing selection: if user is selecting text in chat, skip re-render
     const selection = window.getSelection();
