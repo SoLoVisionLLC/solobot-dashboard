@@ -9,18 +9,18 @@
 <script src="js/ui.js?v=4.9.1"></script>
 <script src="js/focus-timer.js?v=4.9.1"></script>
 <script src="js/quick-stats.js?v=4.9.1"></script>
-<script src="js/keyboard.js?v=4.9.1"></script>
-<script src="js/models.js?v=4.9.7"></script>
+<script src="js/keyboard.js?v=4.9.2"></script>
+<script src="js/models.js?v=4.9.8"></script>
 <script src="js/sidebar-agents.js?v=4.9.6"></script>
 <script src="js/sessions.js?v=4.9.8"></script>
 <script src="js/agent-presence.js?v=4.10.0"></script>
 <script src="js/notifications.js?v=4.9.8"></script>
-<script src="js/chat.js?v=4.9.9"></script>
+<script src="js/chat.js?v=4.9.10"></script>
 <!-- Model Validator - uses EXACT same pipeline as chat -->
 <script src="js/model-validator.js?v=4.9.6"></script>
 <script src="js/system.js?v=4.9.1"></script>
 <script src="js/tasks.js?v=4.9.1"></script>
-<script src="js/ui-handlers.js?v=4.9.1"></script>
+<script src="js/ui-handlers.js?v=4.9.2"></script>
 <script src="js/memory.js?v=4.9.10"></script>
 <script src="js/health.js?v=4.9.1"></script>
 <script src="js/agents.js?v=4.9.6"></script>
@@ -30,8 +30,8 @@
 <script src="js/analytics.js?v=4.9.1"></script>
 <script src="js/memory-browser.js?v=4.9.1"></script>
 <script src="js/panzoom.min.js?v=4.9.1"></script>
-<script src="js/memory-cards.js?v=4.9.10"></script>
-<script src="js/daily-journal.js?v=4.9.9"></script>
+<script src="js/memory-cards.js?v=4.9.11"></script>
+<script src="js/daily-journal.js?v=4.9.10"></script>
 <script src="js/security.js?v=4.9.1"></script>
 <script src="js/skills-mgr.js?v=4.9.1"></script>
 <script src="js/subagent-monitor.js?v=4.9.1"></script>
@@ -99,10 +99,19 @@
         const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
 
         window._deepLinkAgentId = null;
-        window._deepLinkAgentsSubview = null; // org | log | journal | memory
+        window._deepLinkAgentsSubview = null; // org | log | journal
 
-        // /agents, /agents/log, /agents/journal, /agents/memory, /agents/:id, /agents/:id/log, /agents/:id/journal, /agents/:id/memory
-        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal|memory))?$/);
+        const legacyAgentsMemoryMatch = rawPath.match(/^agents(?:\/([^/]+))?\/memory$/);
+        if (legacyAgentsMemoryMatch) {
+            const legacyAgentId = legacyAgentsMemoryMatch[1] || null;
+            const canonicalPath = legacyAgentId ? `/agents/${legacyAgentId}` : '/agents';
+            history.replaceState({ page: 'agents', agentId: legacyAgentId, agentsView: 'org' }, '', canonicalPath);
+            window._deepLinkAgentId = legacyAgentId;
+            return 'agents';
+        }
+
+        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal
+        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal))?$/);
         if (agentsMatch) {
             const seg1 = agentsMatch[1] || null;
             const seg2 = agentsMatch[2] || null;
@@ -266,12 +275,6 @@
                 if (!window._dailyJournal) return;
                 if (subview === 'log') window._dailyJournal.showLog(false);
                 else if (subview === 'journal') window._dailyJournal.showJournalTimeline(false);
-                else if (subview === 'memory') {
-                    window._dailyJournal.showMemory(false);
-                    if (agentId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
-                        window._memoryCards.openAgentMemory(agentId, { updateURL: false });
-                    }
-                }
                 else window._dailyJournal.showOrg(false);
             }, 180);
         }
@@ -292,12 +295,6 @@
             if (!window._dailyJournal) return;
             if (deepLinkSubview === 'log') window._dailyJournal.showLog(false);
             else if (deepLinkSubview === 'journal') window._dailyJournal.showJournalTimeline(false);
-            else if (deepLinkSubview === 'memory') {
-                window._dailyJournal.showMemory(false);
-                if (deepLinkId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
-                    window._memoryCards.openAgentMemory(deepLinkId, { updateURL: false });
-                }
-            }
             else window._dailyJournal.showOrg(false);
         };
 
@@ -318,19 +315,17 @@
         }
     });
 
-    // Render memory files for the Memory page
+    // Render the Agents org chart page
     async function renderMemoryFilesForPage(
         filter = "",
     ) {
-        // Apply layout toggle on render
         if (window._memoryCards) {
             window._memoryCards.applyLayout();
-            // org-tree and cards both render via _memoryCards — don't fall through to classic render
-            if (window._memoryCards.getLayout() !== 'classic') {
-                return;
+            if (typeof window._memoryCards.renderAgentCardsView === 'function') {
+                window._memoryCards.renderAgentCardsView(filter || '');
             }
         }
-
+        return;
 
         const container = document.getElementById(
             "memory-files-grid",

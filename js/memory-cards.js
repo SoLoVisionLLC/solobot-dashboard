@@ -98,27 +98,21 @@
     }
 
     function getMemoryLayout() {
-        return localStorage.getItem('solobot-memory-layout') || 'org-tree';
+        const saved = localStorage.getItem('solobot-memory-layout');
+        return saved === 'classic' ? 'org-tree' : (saved || 'org-tree');
     }
 
     function setMemoryLayout(layout) {
-        localStorage.setItem('solobot-memory-layout', layout);
+        const normalized = layout === 'classic' ? 'org-tree' : layout;
+        localStorage.setItem('solobot-memory-layout', normalized);
         applyMemoryLayout();
     }
 
     function applyMemoryLayout() {
         const layout = getMemoryLayout();
-        const classicView = document.getElementById('memory-classic-view');
         const cardsView = document.getElementById('memory-cards-view');
-        const toggleBtnGrid = document.getElementById('memory-toggle-grid');
-        const toggleBtnList = document.getElementById('memory-toggle-list');
-        const settingsToggle = document.getElementById('setting-memory-layout');
 
-        if (classicView) classicView.style.display = layout === 'classic' ? '' : 'none';
-        if (cardsView) cardsView.style.display = layout === 'org-tree' || layout === 'cards' ? '' : 'none';
-        if (toggleBtnGrid) toggleBtnGrid.classList.toggle('active', layout !== 'classic');
-        if (toggleBtnList) toggleBtnList.classList.toggle('active', layout === 'classic');
-        if (settingsToggle) settingsToggle.value = layout;
+        if (cardsView) cardsView.style.display = '';
 
         if (layout === 'org-tree' || layout === 'cards') {
             renderAgentCardsView();
@@ -749,17 +743,7 @@
             <input type="text" id="memory-search" class="input agents-toolbar-search" placeholder="🔍 Search…"
                 oninput="window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)"
                 style="margin-left:auto;">
-            <div class="memory-layout-toggle" style="flex-shrink:0;">
-                <button id="memory-toggle-grid" title="Org Chart" onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
-                <button id="memory-toggle-list" title="List View" onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
-            </div>
         `;
-        // Keep active button state correct
-        const layout = getMemoryLayout();
-        const g = tb.querySelector('#memory-toggle-grid');
-        const l = tb.querySelector('#memory-toggle-list');
-        if (g) g.classList.toggle('active', layout !== 'classic');
-        if (l) l.classList.toggle('active', layout === 'classic');
     }
 
     function updateToolbarDefault() {
@@ -767,23 +751,14 @@
         if (!tb) return;
         tb.innerHTML = `
             <input type="text" id="memory-search" class="input agents-toolbar-search"
-                placeholder="🔍  Search agents or files…"
-                oninput="if(window._memoryCards && window._memoryCards.getLayout()==='classic'){renderMemoryFiles(this.value)}else{window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)}">
+                placeholder="🔍  Search agents…"
+                oninput="window._memoryCards && window._memoryCards.renderAgentCardsView(this.value)">
             <button class="btn btn-secondary btn-sm" onclick="syncMemoryFilesNow()">🔄 Sync</button>
-            <div id="sync-status" class="sync-status" style="white-space:nowrap; flex-shrink:0;">
+            <div id="sync-status" class="sync-status" style="white-space:nowrap; flex-shrink:0; margin-left:auto;">
                 <span class="status-dot success"></span>
                 <span id="last-memory-sync" style="font-size:11px; color:var(--text-muted);">--</span>
             </div>
-            <div class="memory-layout-toggle" style="margin-left:auto; flex-shrink:0;">
-                <button id="memory-toggle-grid" title="Org Chart" onclick="window._memoryCards && window._memoryCards.setLayout('org-tree')">⊞</button>
-                <button id="memory-toggle-list" title="List View" onclick="window._memoryCards && window._memoryCards.setLayout('classic')">☰</button>
-            </div>
         `;
-        const layout = getMemoryLayout();
-        const g = tb.querySelector('#memory-toggle-grid');
-        const l = tb.querySelector('#memory-toggle-list');
-        if (g) g.classList.toggle('active', layout !== 'classic');
-        if (l) l.classList.toggle('active', layout === 'classic');
     }
 
     function drillInto(agentId) {
@@ -1643,9 +1618,9 @@
         }
 
         if (updateURL) {
-            const nextPath = `/agents/${agentId}/memory`;
+            const nextPath = `/agents/${agentId}`;
             if (window.location.pathname !== nextPath) {
-                history.pushState({ page: 'agents', agentId, agentsView: 'memory' }, '', nextPath);
+                history.pushState({ page: 'agents', agentId, agentsView: 'org' }, '', nextPath);
             }
         }
     }

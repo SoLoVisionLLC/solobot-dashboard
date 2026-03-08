@@ -86,6 +86,11 @@ function isSystemMessage(text, from) {
     // Heartbeat prompts
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
 
+    // Memory/housekeeping prompts injected by automation should not appear as user chat
+    if (trimmed.startsWith('Write lasting notes to memory/')) return true;
+    if (trimmed.includes('Reply with NO_REPLY if nothing durable.')) return true;
+    if (trimmed.includes('Current time:') && trimmed.includes('America/Detroit')) return true;
+
     // Short heartbeat patterns
     if (from === 'solobot' && trimmed.length < 200) {
         const exactStartPatterns = [

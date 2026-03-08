@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-08T09:38:56Z
+// Generated: 2026-03-08T10:46:23Z
 // Modules: 25
 
 
@@ -2763,7 +2763,6 @@ const commands = [
     { id: 'chat', icon: '💬', title: 'Go to Chat', desc: 'Open chat page', shortcut: 'C', action: () => showPage('chat') },
     { id: 'system', icon: '🔧', title: 'System Messages', desc: 'View system/debug messages', shortcut: 'S', action: () => showPage('system') },
     { id: 'health', icon: '🏥', title: 'Model Health', desc: 'Check model status', shortcut: 'H', action: () => showPage('health') },
-    { id: 'memory', icon: '🧠', title: 'Memory Lane', desc: 'Browse memory files', shortcut: 'M', action: () => showPage('memory') },
     { id: 'settings', icon: '⚙️', title: 'Settings', desc: 'Open settings modal', shortcut: ',', action: () => openSettingsModal() },
     { id: 'theme', icon: '🎨', title: 'Themes', desc: 'Open theme picker', shortcut: 'T', action: () => toggleTheme() },
     { id: 'new-session', icon: '➕', title: 'New Session', desc: 'Create a new chat session', shortcut: 'N', action: () => createNewSession() },
@@ -2996,9 +2995,6 @@ document.addEventListener('keydown', (e) => {
             break;
         case 'h':
             showPage('health');
-            break;
-        case 'm':
-            showPage('memory');
             break;
         case 'd':
             showPage('dashboard');
@@ -3472,6 +3468,11 @@ function isSystemMessage(text, from) {
 
     // Heartbeat prompts
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
+
+    // Memory/housekeeping prompts injected by automation should not appear as user chat
+    if (trimmed.startsWith('Write lasting notes to memory/')) return true;
+    if (trimmed.includes('Reply with NO_REPLY if nothing durable.')) return true;
+    if (trimmed.includes('Current time:') && trimmed.includes('America/Detroit')) return true;
 
     // Short heartbeat patterns
     if (from === 'solobot' && trimmed.length < 200) {
@@ -8848,10 +8849,6 @@ function hideModal(id) {
 async function openSettingsModal() {
     showModal('settings-modal');
 
-    // Init memory layout setting
-    const layoutSel = document.getElementById('setting-memory-layout');
-    if (layoutSel && window._memoryCards) layoutSel.value = window._memoryCards.getLayout();
-
     try {
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
@@ -10933,7 +10930,9 @@ function renderChat() {
 
 function shouldHideFromMainChat(msg) {
     if (!msg) return false;
-    return !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    if (msg._isInterSession || msg._sourceSession || msg._sourceAgent) return true;
+    if (typeof isSystemMessage === 'function' && isSystemMessage(msg.text, msg.from)) return true;
+    return false;
 }
 
 function getMainChatRenderableMessages(messages) {

@@ -1037,7 +1037,9 @@ function renderChat() {
 
 function shouldHideFromMainChat(msg) {
     if (!msg) return false;
-    return !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    if (msg._isInterSession || msg._sourceSession || msg._sourceAgent) return true;
+    if (typeof isSystemMessage === 'function' && isSystemMessage(msg.text, msg.from)) return true;
+    return false;
 }
 
 function getMainChatRenderableMessages(messages) {
