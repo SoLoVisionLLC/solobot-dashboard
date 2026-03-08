@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-08T10:50:55Z
+// Generated: 2026-03-08T10:59:55Z
 // Modules: 25
 
 
@@ -110,6 +110,32 @@ function resolveMessageSessionKey(message) {
 // In-memory session message cache (avoids full reload on agent switch)
 const _sessionMessageCache = new Map();
 
+function dedupeStateMessages(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    const kept = [];
+    const seen = new Set();
+
+    for (const msg of list) {
+        if (!msg || typeof msg !== 'object') continue;
+        const text = String(msg.text || '').trim();
+        const imageCount = Array.isArray(msg.images) ? msg.images.length : (msg.image ? 1 : 0);
+        if (!text && imageCount === 0) continue;
+
+        const session = String(msg._sessionKey || msg.sessionKey || '').toLowerCase();
+        const from = String(msg.from || msg.role || '').toLowerCase();
+        const runId = String(msg.runId || '');
+        const key = runId
+            ? `run:${session}:${from}:${runId}`
+            : `text:${session}:${from}:${text}:${imageCount}`;
+
+        if (seen.has(key)) continue;
+        seen.add(key);
+        kept.push(msg);
+    }
+
+    return kept;
+}
+
 function cacheSessionMessages(sessionKey, messages) {
     if (!sessionKey || !messages) return;
     _sessionMessageCache.set(sessionKey, messages.slice(-100));
@@ -148,12 +174,19 @@ function loadPersistedMessages() {
                         if (!m || typeof m !== 'object') return null;
                         const msgSession = resolveMessageSessionKey(m);
                         if (!msgSession) return null;
-                        return { ...m, _sessionKey: msgSession };
+                        const normalized = { ...m, _sessionKey: msgSession };
+                        const hasText = !!String(normalized.text || '').trim();
+                        const hasImage = Array.isArray(normalized.images) ? normalized.images.length > 0 : !!normalized.image;
+                        if (!hasText && !hasImage) return null;
+                        return normalized;
                     })
                     .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
 
-                const migratedSystem = scopedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
-                state.chat.messages = scopedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+                const dedupedScopedMessages = typeof collapseDuplicateMessages === 'function'
+                    ? collapseDuplicateMessages(scopedMessages)
+                    : dedupeStateMessages(scopedMessages);
+                const migratedSystem = dedupedScopedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+                state.chat.messages = dedupedScopedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
                 if (migratedSystem.length > 0) {
                     state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
                     persistSystemMessages();
@@ -199,13 +232,20 @@ async function loadChatFromServer() {
                 if (!m || typeof m !== 'object') return null;
                 const msgSession = resolveMessageSessionKey(m);
                 if (!msgSession) return null;
-                return { ...m, _sessionKey: msgSession };
+                const normalized = { ...m, _sessionKey: msgSession };
+                const hasText = !!String(normalized.text || '').trim();
+                const hasImage = Array.isArray(normalized.images) ? normalized.images.length > 0 : !!normalized.image;
+                if (!hasText && !hasImage) return null;
+                return normalized;
             })
             .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
 
         if (filtered.length > 0) {
-            const migratedSystem = filtered.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
-            state.chat.messages = filtered.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+            const dedupedFiltered = typeof collapseDuplicateMessages === 'function'
+                ? collapseDuplicateMessages(filtered)
+                : dedupeStateMessages(filtered);
+            const migratedSystem = dedupedFiltered.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+            state.chat.messages = dedupedFiltered.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
             if (migratedSystem.length > 0) {
                 state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
                 persistSystemMessages();
@@ -4737,16 +4777,93 @@ function pruneRecentFinalFingerprints(now = Date.now()) {
     }
 }
 
-function buildFinalFingerprint({ runId, sessionKey, text, images }) {
+function buildFinalFingerprint({ runId, sessionKey, text, images, from = 'solobot' }) {
     const session = String(sessionKey || '').toLowerCase();
-    if (runId) return `run:${session}:${runId}`;
+    const sender = String(from || 'solobot').toLowerCase();
+    if (runId) return `run:${session}:${sender}:${runId}`;
 
     const normalizedText = String(text || '').trim();
     const imageCount = Array.isArray(images) ? images.length : 0;
     const firstImageSig = imageCount > 0 && typeof images[0] === 'string'
         ? images[0].slice(0, 32)
         : '';
-    return `text:${session}:${normalizedText}:${imageCount}:${firstImageSig}`;
+    return `text:${session}:${sender}:${normalizedText}:${imageCount}:${firstImageSig}`;
+}
+
+function canonicalMessageFingerprint(msg = {}) {
+    const session = String(msg._sessionKey || msg.sessionKey || currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const sender = String(msg.from || msg.role || '').toLowerCase();
+    const text = String(msg.text || '').trim();
+    const images = Array.isArray(msg.images) ? msg.images : (msg.image ? [msg.image] : []);
+    return buildFinalFingerprint({
+        runId: msg.runId,
+        sessionKey: session,
+        text,
+        images,
+        from: sender
+    });
+}
+
+function shouldKeepDistinctDuplicate(existing, msg) {
+    const existingText = String(existing?.text || '').trim();
+    const msgText = String(msg?.text || '').trim();
+    if (!existingText || !msgText) return false;
+    if (existingText !== msgText) return true;
+
+    const isShort = existingText.length < 25 && !existingText.includes('\n');
+    const existingTime = Number(existing?.time || 0);
+    const msgTime = Number(msg?.time || 0);
+    const farApart = Math.abs(msgTime - existingTime) > 15 * 60 * 1000;
+
+    return isShort && farApart;
+}
+
+function collapseDuplicateMessages(messages = []) {
+    const sorted = [...messages].sort((a, b) => (a.time || 0) - (b.time || 0));
+    const kept = [];
+    const seen = new Map();
+
+    for (const msg of sorted) {
+        if (!msg) continue;
+        const text = String(msg.text || '').trim();
+        const imageCount = Array.isArray(msg.images) ? msg.images.length : (msg.image ? 1 : 0);
+        if (!text && imageCount === 0) continue;
+
+        const fp = canonicalMessageFingerprint(msg);
+        const existing = seen.get(fp);
+        if (!existing) {
+            seen.set(fp, msg);
+            kept.push(msg);
+            continue;
+        }
+
+        const existingTime = Number(existing.time || 0);
+        const msgTime = Number(msg.time || 0);
+        const existingId = String(existing.id || '');
+        const msgId = String(msg.id || '');
+        const localVsServerPair = (!!msgId && !msgId.startsWith('m') && existingId.startsWith('m'))
+            || (!!existingId && !existingId.startsWith('m') && msgId.startsWith('m'));
+        const withinWindow = Math.abs(msgTime - existingTime) <= 15000;
+
+        if (!withinWindow && !localVsServerPair && shouldKeepDistinctDuplicate(existing, msg)) {
+            const variantKey = `${fp}:${msgTime}`;
+            seen.set(variantKey, msg);
+            kept.push(msg);
+            continue;
+        }
+
+        const preferCurrent = (!!msg.runId && !existing.runId)
+            || (!!msgId && !msgId.startsWith('m') && existingId.startsWith('m'))
+            || ((msg.images?.length || 0) > (existing.images?.length || 0));
+
+        if (preferCurrent) {
+            const idx = kept.indexOf(existing);
+            if (idx >= 0) kept[idx] = msg;
+            seen.set(fp, msg);
+        }
+    }
+
+    return kept;
 }
 
 function hasRecentFinalFingerprint(fingerprint) {
@@ -5397,7 +5514,8 @@ function handleChatEvent(event) {
                     runId,
                     sessionKey,
                     text: trimmed,
-                    images
+                    images,
+                    from: 'solobot'
                 });
                 const recentDuplicate = hasRecentFinalFingerprint(finalFingerprint);
                 if (!runtimeDuplicate && !recentDuplicate) {
@@ -5554,9 +5672,9 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    const mergedMessages = [...chatMessages, ...uniqueLocalMessages];
+    const mergedMessages = collapseDuplicateMessages([...chatMessages, ...uniqueLocalMessages]);
     const migratedSystem = mergedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
-    state.chat.messages = mergedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+    state.chat.messages = collapseDuplicateMessages(mergedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from))));
     console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local, migrated ${migratedSystem.length} to system)`);
 
     // Sort chat by time and trim
@@ -5781,7 +5899,8 @@ function mergeHistoryMessages(messages) {
     if (newChatCount > 0 || newSystemCount > 0) {
         notifLog(`[Notifications] mergeHistoryMessages: Merged ${newChatCount} chat, ${newSystemCount} system messages for session ${activeSession}`);
 
-        // Sort and trim chat
+        // Sort, dedupe, and trim chat
+        state.chat.messages = collapseDuplicateMessages(state.chat.messages);
         state.chat.messages.sort((a, b) => a.time - b.time);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);

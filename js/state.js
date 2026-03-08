@@ -104,6 +104,32 @@ function resolveMessageSessionKey(message) {
 // In-memory session message cache (avoids full reload on agent switch)
 const _sessionMessageCache = new Map();
 
+function dedupeStateMessages(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    const kept = [];
+    const seen = new Set();
+
+    for (const msg of list) {
+        if (!msg || typeof msg !== 'object') continue;
+        const text = String(msg.text || '').trim();
+        const imageCount = Array.isArray(msg.images) ? msg.images.length : (msg.image ? 1 : 0);
+        if (!text && imageCount === 0) continue;
+
+        const session = String(msg._sessionKey || msg.sessionKey || '').toLowerCase();
+        const from = String(msg.from || msg.role || '').toLowerCase();
+        const runId = String(msg.runId || '');
+        const key = runId
+            ? `run:${session}:${from}:${runId}`
+            : `text:${session}:${from}:${text}:${imageCount}`;
+
+        if (seen.has(key)) continue;
+        seen.add(key);
+        kept.push(msg);
+    }
+
+    return kept;
+}
+
 function cacheSessionMessages(sessionKey, messages) {
     if (!sessionKey || !messages) return;
     _sessionMessageCache.set(sessionKey, messages.slice(-100));
@@ -142,12 +168,19 @@ function loadPersistedMessages() {
                         if (!m || typeof m !== 'object') return null;
                         const msgSession = resolveMessageSessionKey(m);
                         if (!msgSession) return null;
-                        return { ...m, _sessionKey: msgSession };
+                        const normalized = { ...m, _sessionKey: msgSession };
+                        const hasText = !!String(normalized.text || '').trim();
+                        const hasImage = Array.isArray(normalized.images) ? normalized.images.length > 0 : !!normalized.image;
+                        if (!hasText && !hasImage) return null;
+                        return normalized;
                     })
                     .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
 
-                const migratedSystem = scopedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
-                state.chat.messages = scopedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+                const dedupedScopedMessages = typeof collapseDuplicateMessages === 'function'
+                    ? collapseDuplicateMessages(scopedMessages)
+                    : dedupeStateMessages(scopedMessages);
+                const migratedSystem = dedupedScopedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+                state.chat.messages = dedupedScopedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
                 if (migratedSystem.length > 0) {
                     state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
                     persistSystemMessages();
@@ -193,13 +226,20 @@ async function loadChatFromServer() {
                 if (!m || typeof m !== 'object') return null;
                 const msgSession = resolveMessageSessionKey(m);
                 if (!msgSession) return null;
-                return { ...m, _sessionKey: msgSession };
+                const normalized = { ...m, _sessionKey: msgSession };
+                const hasText = !!String(normalized.text || '').trim();
+                const hasImage = Array.isArray(normalized.images) ? normalized.images.length > 0 : !!normalized.image;
+                if (!hasText && !hasImage) return null;
+                return normalized;
             })
             .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
 
         if (filtered.length > 0) {
-            const migratedSystem = filtered.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
-            state.chat.messages = filtered.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+            const dedupedFiltered = typeof collapseDuplicateMessages === 'function'
+                ? collapseDuplicateMessages(filtered)
+                : dedupeStateMessages(filtered);
+            const migratedSystem = dedupedFiltered.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+            state.chat.messages = dedupedFiltered.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
             if (migratedSystem.length > 0) {
                 state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
                 persistSystemMessages();
