@@ -78,7 +78,19 @@ function getFriendlySessionName(key) {
         const sessionSuffix = match[2];
         const persona = AGENT_PERSONAS[agentId];
         const name = persona ? persona.name : agentId.toUpperCase();
-        return sessionSuffix === 'main' ? name : `${name} (${sessionSuffix})`;
+
+        if (sessionSuffix === 'main') return name;
+
+        const cronMatch = sessionSuffix.match(/^cron:([a-f0-9-]{8,})$/i);
+        if (cronMatch) {
+            const jobId = cronMatch[1];
+            const cronName = typeof window.getCronFriendlyNameById === 'function'
+                ? window.getCronFriendlyNameById(jobId)
+                : null;
+            return cronName ? `${name} (${cronName})` : `${name} (cron:${jobId.slice(0, 8)}…)`;
+        }
+
+        return `${name} (${sessionSuffix})`;
     }
     return key;
 }
@@ -460,19 +472,22 @@ function populateSessionDropdown() {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
         const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const friendlyFallback = getFriendlySessionName(s.key);
+        const rawLabel = s.displayName || s.name || s.key || 'unnamed';
+        const sessionLabel = (rawLabel && /\bcron:[a-f0-9-]{8,}\b/i.test(rawLabel)) ? friendlyFallback : (rawLabel || friendlyFallback);
 
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" data-session-key="${s.key}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
-                <div class="session-name">${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
+                <div class="session-name">${escapeHtml(sessionLabel)}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
                 <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
             </div>
             <span class="session-model">${s.model}</span>
             <div class="session-actions">
-                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Rename session">
+                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(sessionLabel)}')" title="Rename session">
                     ✏️
                 </button>
-                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Delete session" style="color: var(--error);">
+                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(sessionLabel)}')" title="Delete session" style="color: var(--error);">
                     🗑️
                 </button>
             </div>
@@ -525,9 +540,10 @@ window.editSessionName = function (sessionKey, currentName) {
                 populateSessionDropdown();
                 if (sessionKey === currentSessionName) {
                     const nameEl = document.getElementById('chat-page-session-name');
-                    // Even if displayName changes, keep the visible label as the session key
+                    // Keep human-friendly label in header (cron sessions resolve to cron job name)
                     if (nameEl) {
-                        nameEl.textContent = sessionKey;
+                        const headerLabel = session.displayName || getFriendlySessionName(sessionKey);
+                        nameEl.textContent = headerLabel;
                         nameEl.title = sessionKey;
                     }
                 }
@@ -698,7 +714,7 @@ async function executeSessionSwitch(sessionKey) {
         // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
-            nameEl.textContent = sessionKey;
+            nameEl.textContent = getFriendlySessionName(sessionKey);
             nameEl.title = sessionKey;
         }
         populateSessionDropdown();
@@ -919,13 +935,14 @@ function initGateway() {
 
             // Update session name displays
             const nameEl = document.getElementById('current-session-name');
+            const friendlySessionLabel = getFriendlySessionName(intendedSession);
             if (nameEl) {
-                nameEl.textContent = intendedSession;
+                nameEl.textContent = friendlySessionLabel;
                 nameEl.title = intendedSession;
             }
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) {
-                chatPageNameEl.textContent = intendedSession;
+                chatPageNameEl.textContent = friendlySessionLabel;
                 chatPageNameEl.title = intendedSession;
             }
 

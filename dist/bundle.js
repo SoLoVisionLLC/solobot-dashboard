@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-10T14:42:06Z
+// Generated: 2026-03-10T15:21:37Z
 // Modules: 25
 
 
@@ -6183,7 +6183,19 @@ function getFriendlySessionName(key) {
         const sessionSuffix = match[2];
         const persona = AGENT_PERSONAS[agentId];
         const name = persona ? persona.name : agentId.toUpperCase();
-        return sessionSuffix === 'main' ? name : `${name} (${sessionSuffix})`;
+
+        if (sessionSuffix === 'main') return name;
+
+        const cronMatch = sessionSuffix.match(/^cron:([a-f0-9-]{8,})$/i);
+        if (cronMatch) {
+            const jobId = cronMatch[1];
+            const cronName = typeof window.getCronFriendlyNameById === 'function'
+                ? window.getCronFriendlyNameById(jobId)
+                : null;
+            return cronName ? `${name} (${cronName})` : `${name} (cron:${jobId.slice(0, 8)}…)`;
+        }
+
+        return `${name} (${sessionSuffix})`;
     }
     return key;
 }
@@ -6565,19 +6577,22 @@ function populateSessionDropdown() {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
         const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const friendlyFallback = getFriendlySessionName(s.key);
+        const rawLabel = s.displayName || s.name || s.key || 'unnamed';
+        const sessionLabel = (rawLabel && /\bcron:[a-f0-9-]{8,}\b/i.test(rawLabel)) ? friendlyFallback : (rawLabel || friendlyFallback);
 
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" data-session-key="${s.key}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
-                <div class="session-name">${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
+                <div class="session-name">${escapeHtml(sessionLabel)}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
                 <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
             </div>
             <span class="session-model">${s.model}</span>
             <div class="session-actions">
-                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Rename session">
+                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(sessionLabel)}')" title="Rename session">
                     ✏️
                 </button>
-                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Delete session" style="color: var(--error);">
+                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(sessionLabel)}')" title="Delete session" style="color: var(--error);">
                     🗑️
                 </button>
             </div>
@@ -6630,9 +6645,10 @@ window.editSessionName = function (sessionKey, currentName) {
                 populateSessionDropdown();
                 if (sessionKey === currentSessionName) {
                     const nameEl = document.getElementById('chat-page-session-name');
-                    // Even if displayName changes, keep the visible label as the session key
+                    // Keep human-friendly label in header (cron sessions resolve to cron job name)
                     if (nameEl) {
-                        nameEl.textContent = sessionKey;
+                        const headerLabel = session.displayName || getFriendlySessionName(sessionKey);
+                        nameEl.textContent = headerLabel;
                         nameEl.title = sessionKey;
                     }
                 }
@@ -6803,7 +6819,7 @@ async function executeSessionSwitch(sessionKey) {
         // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
-            nameEl.textContent = sessionKey;
+            nameEl.textContent = getFriendlySessionName(sessionKey);
             nameEl.title = sessionKey;
         }
         populateSessionDropdown();
@@ -7024,13 +7040,14 @@ function initGateway() {
 
             // Update session name displays
             const nameEl = document.getElementById('current-session-name');
+            const friendlySessionLabel = getFriendlySessionName(intendedSession);
             if (nameEl) {
-                nameEl.textContent = intendedSession;
+                nameEl.textContent = friendlySessionLabel;
                 nameEl.title = intendedSession;
             }
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) {
-                chatPageNameEl.textContent = intendedSession;
+                chatPageNameEl.textContent = friendlySessionLabel;
                 chatPageNameEl.title = intendedSession;
             }
 
@@ -9594,6 +9611,7 @@ let cronListFilter = 'all';
 let cronListQuery = '';
 let cronVisibleCount = 24;
 const CRON_CACHE_KEY = 'cronListCache.v1';
+const CRON_NAME_MAP_KEY = 'cronJobNameMap.v1';
 
 function initCronPage() {
     const searchInput = document.getElementById('cron-search-input');
@@ -9696,6 +9714,32 @@ function getPayloadSummary(job) {
 function getJobById(jobId) {
     return cronJobs.find(job => String(job.id) === String(jobId));
 }
+
+function persistCronNameMap() {
+    try {
+        const map = {};
+        for (const job of cronJobs) {
+            if (!job || !job.id) continue;
+            map[String(job.id)] = String(job.name || job.id);
+        }
+        localStorage.setItem(CRON_NAME_MAP_KEY, JSON.stringify(map));
+    } catch (e) {
+        console.warn('[Cron] Failed to persist cron name map:', e?.message || e);
+    }
+}
+
+window.getCronFriendlyNameById = function (jobId) {
+    if (!jobId) return null;
+    try {
+        const raw = localStorage.getItem(CRON_NAME_MAP_KEY);
+        if (!raw) return null;
+        const map = JSON.parse(raw);
+        const value = map && map[String(jobId)];
+        return value ? String(value) : null;
+    } catch {
+        return null;
+    }
+};
 
 function summarizeRuns(runs = []) {
     const sorted = [...runs].sort((a, b) => Number(b.runAtMs || b.ts || 0) - Number(a.runAtMs || a.ts || 0));
@@ -10202,6 +10246,7 @@ async function loadCronJobs({ silent = false, skipDiagnostics = false } = {}) {
     try {
         const result = await gateway._request('cron.list', { includeDisabled: true });
         cronJobs = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
+        persistCronNameMap();
         if (activeCronJobId && !getJobById(activeCronJobId)) {
             activeCronJobId = null;
             renderEmptyDetailState('The previously selected job is no longer available.');
