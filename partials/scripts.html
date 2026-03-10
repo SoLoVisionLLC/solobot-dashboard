@@ -30,8 +30,8 @@
 <script src="js/analytics.js?v=4.9.1"></script>
 <script src="js/memory-browser.js?v=4.9.1"></script>
 <script src="js/panzoom.min.js?v=4.9.1"></script>
-<script src="js/memory-cards.js?v=4.9.12"></script>
-<script src="js/daily-journal.js?v=4.9.10"></script>
+<script src="js/memory-cards.js?v=4.9.13"></script>
+<script src="js/daily-journal.js?v=4.9.11"></script>
 <script src="js/security.js?v=4.9.1"></script>
 <script src="js/skills-mgr.js?v=4.9.1"></script>
 <script src="js/subagent-monitor.js?v=4.9.1"></script>
@@ -99,19 +99,16 @@
         const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
 
         window._deepLinkAgentId = null;
-        window._deepLinkAgentsSubview = null; // org | log | journal
+        window._deepLinkAgentsSubview = null; // org | log | journal | memory
 
-        const legacyAgentsMemoryMatch = rawPath.match(/^agents(?:\/([^/]+))?\/memory$/);
-        if (legacyAgentsMemoryMatch) {
-            const legacyAgentId = legacyAgentsMemoryMatch[1] || null;
-            const canonicalPath = legacyAgentId ? `/agents/${legacyAgentId}` : '/agents';
-            history.replaceState({ page: 'agents', agentId: legacyAgentId, agentsView: 'org' }, '', canonicalPath);
-            window._deepLinkAgentId = legacyAgentId;
+        // Legacy global memory path (no agent): canonicalize to /agents
+        if (rawPath === 'agents/memory') {
+            history.replaceState({ page: 'agents', agentId: null, agentsView: 'org' }, '', '/agents');
             return 'agents';
         }
 
-        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal
-        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal))?$/);
+        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal, /agents/:id/memory
+        const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal|memory))?$/);
         if (agentsMatch) {
             const seg1 = agentsMatch[1] || null;
             const seg2 = agentsMatch[2] || null;
@@ -275,6 +272,12 @@
                 if (!window._dailyJournal) return;
                 if (subview === 'log') window._dailyJournal.showLog(false);
                 else if (subview === 'journal') window._dailyJournal.showJournalTimeline(false);
+                else if (subview === 'memory') {
+                    window._dailyJournal.showMemory(true);
+                    if (agentId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
+                        window._memoryCards.openAgentMemory(agentId, { updateURL: true, forceAgentsPage: false });
+                    }
+                }
                 else window._dailyJournal.showOrg(false);
             }, 180);
         }
@@ -282,19 +285,27 @@
 
     // Initialize page from URL on load
     document.addEventListener('DOMContentLoaded', () => {
-        // Check for server-injected deep link metadata
+        // Parse URL first so window._deepLink* is populated before resolving metadata
+        const initialPage = getPageFromURL();
+
+        // Check for server-injected deep link metadata (override URL when present)
         const metaDeepLink = document.querySelector('meta[name="x-agent-deep-link"]');
         const metaSubview = document.querySelector('meta[name="x-agents-subview"]');
         const deepLinkId = metaDeepLink?.content || window._deepLinkAgentId || null;
         const deepLinkSubview = metaSubview?.content || window._deepLinkAgentsSubview || null;
 
-        const initialPage = getPageFromURL();
         showPage(initialPage, false);
 
         const applyAgentsSubview = () => {
             if (!window._dailyJournal) return;
             if (deepLinkSubview === 'log') window._dailyJournal.showLog(false);
             else if (deepLinkSubview === 'journal') window._dailyJournal.showJournalTimeline(false);
+            else if (deepLinkSubview === 'memory') {
+                window._dailyJournal.showMemory(true);
+                if (deepLinkId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
+                    window._memoryCards.openAgentMemory(deepLinkId, { updateURL: true, forceAgentsPage: false });
+                }
+            }
             else window._dailyJournal.showOrg(false);
         };
 

@@ -1791,9 +1791,9 @@
         }
 
         if (updateURL) {
-            const nextPath = `/agents/${agentId}`;
+            const nextPath = `/agents/${agentId}/memory`;
             if (window.location.pathname !== nextPath) {
-                history.pushState({ page: 'agents', agentId, agentsView: 'org' }, '', nextPath);
+                history.pushState({ page: 'agents', agentId, agentsView: 'memory' }, '', nextPath);
             }
         }
     }
