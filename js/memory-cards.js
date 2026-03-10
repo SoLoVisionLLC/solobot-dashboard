@@ -814,6 +814,7 @@
         const fileCount = files.length;
         const isDefault = agent?.isDefault;
         const isDrillable = Boolean(agent && org.drillable !== false);
+        const isFounderNode = id === 'solo';
         const sortedFiles = [...files].sort((left, right) => {
             if (!left.modified) return 1;
             if (!right.modified) return -1;
@@ -830,6 +831,9 @@
             state.isContext ? 'is-context' : ''
         ].filter(Boolean).join(' ');
 
+        const directReports = ORG_TREE.solo?.reports?.length || 0;
+        const executiveLeads = ORG_TREE.exec?.reports?.length || 0;
+
         const operationalSummary = isDrillable
             ? `
                 <div class="org-node-stats">
@@ -844,10 +848,10 @@
             `
             : `
                 <div class="org-node-stats">
-                    <span class="org-node-stat-chip"><strong>Leadership</strong> node</span>
-                    <span class="org-node-stat-chip"><strong>Chart</strong> anchor</span>
+                    <span class="org-node-stat-chip"><strong>${directReports}</strong> direct reports</span>
+                    <span class="org-node-stat-chip"><strong>${executiveLeads}</strong> executive leads</span>
                 </div>
-                <div class="org-node-foot org-node-foot-static">${escapeHtml(org.description || '')}</div>
+                <div class="org-node-foot org-node-foot-static">Strategy · priorities · approvals</div>
             `;
 
         const clickAttr = isDrillable ? `onclick="window._memoryCards.drillInto('${id}')"` : '';
@@ -861,6 +865,10 @@
             `
             : `<span class="org-node-avatar">${org.emoji || '•'}</span>`;
 
+        const roleLine = isFounderNode
+            ? escapeHtml(org.description || org.role)
+            : `${escapeHtml(org.role)}${org.description ? ` · ${escapeHtml(org.description)}` : ''}`;
+
         return `
             <div class="${nodeClasses}" ${clickAttr} data-agent="${id}" style="${getOrgGridStyle(id)}">
                 <div class="org-node-card">
@@ -872,7 +880,7 @@
                         ${escapeHtml(org.name)}
                         ${isDefault ? '<span class="agent-card-badge">DEFAULT</span>' : ''}
                     </div>
-                    <div class="org-node-role">${escapeHtml(org.role)}${org.description ? ` · ${escapeHtml(org.description)}` : ''}</div>
+                    <div class="org-node-role">${roleLine}</div>
                     ${operationalSummary}
                 </div>
             </div>
