@@ -17,8 +17,14 @@ let cronActivityFilter = 'all';
 let cronSortBy = 'nextRun';
 let cronSortDirection = 'asc';
 let cronAdvancedControlsOpen = false;
+let cronListLoadPromise = null;
+let cronLastLoadedAt = 0;
 const CRON_CACHE_KEY = 'cronListCache.v1';
 const CRON_NAME_MAP_KEY = 'cronJobNameMap.v1';
+const CRON_MIN_REFRESH_INTERVAL_MS = 15000;
+const CRON_REQUEST_TIMEOUT_MS = 10000;
+const CRON_DETAIL_INITIAL_RUN_LIMIT = 12;
+const CRON_DETAIL_FULL_RUN_LIMIT = 40;
 
 function initCronPage() {
     const searchInput = document.getElementById('cron-search-input');
@@ -86,13 +92,36 @@ function initCronPage() {
     updateCronFilterChips();
     updateCronSortDirectionButton();
     updateCronAdvancedControlsUI();
-    renderEmptyDetailState();
-    setCronDetailDrawerOpen(false);
-    populateCronAgentFilterOptions();
-    loadCronJobs();
-    syncCronViewFromURL();
+    const hydratedFromCache = hydrateCronJobsFromCache();
+    if (!hydratedFromCache) {
+        populateCronAgentFilterOptions();
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const hasDeepLinkedJob = window.location.pathname === '/cron' && params.has('job');
+    if (hasDeepLinkedJob) {
+        renderEmptyDetailState();
+        setCronDetailDrawerOpen(false);
+        syncCronViewFromURL();
+    } else {
+        activeCronJobId = null;
+        activeCronTimeline = [];
+        renderEmptyDetailState();
+        setCronDetailDrawerOpen(false);
+    }
+
+    const shouldRefresh = !cronJobs.length || (Date.now() - cronLastLoadedAt > CRON_MIN_REFRESH_INTERVAL_MS);
+    if (shouldRefresh) {
+        loadCronJobs({ silent: hydratedFromCache });
+    } else {
+        renderCronJobs();
+    }
+
     if (cronInterval) clearInterval(cronInterval);
     cronInterval = setInterval(() => {
+        const cronPage = document.getElementById('page-cron');
+        if (!cronPage || !cronPage.classList.contains('active')) return;
+
         if (activeCronJobId && cronDetailDrawerOpen) {
             openCronDetailView(activeCronJobId, { refresh: true, pushState: false });
         } else {
@@ -223,11 +252,33 @@ function summarizeRuns(runs = []) {
     };
 }
 
+function getCachedCronRuns(jobId) {
+    const cached = cronRunCache.get(jobId);
+    if (Array.isArray(cached)) return cached;
+    if (cached && Array.isArray(cached.runs)) return cached.runs;
+    return [];
+}
+
+function getCachedCronRunLimit(jobId) {
+    const cached = cronRunCache.get(jobId);
+    if (Array.isArray(cached)) return cached.length;
+    if (cached && Number.isFinite(Number(cached.limit))) return Number(cached.limit);
+    if (cached && Array.isArray(cached.runs)) return cached.runs.length;
+    return 0;
+}
+
 async function fetchCronRuns(jobId, { refresh = false, limit = 20 } = {}) {
-    if (!refresh && cronRunCache.has(jobId)) return cronRunCache.get(jobId);
-    const result = await gateway._request('cron.runs', { jobId, limit });
+    const cachedRuns = getCachedCronRuns(jobId);
+    const cachedLimit = getCachedCronRunLimit(jobId);
+    if (!refresh && cachedRuns.length && cachedLimit >= limit) return cachedRuns;
+
+    const result = await gateway._request('cron.runs', { jobId, limit }, CRON_REQUEST_TIMEOUT_MS);
     const runs = result?.entries || result?.runs || [];
-    cronRunCache.set(jobId, runs);
+    cronRunCache.set(jobId, {
+        runs,
+        limit,
+        ts: Date.now()
+    });
     cronDiagnostics.set(jobId, summarizeRuns(runs));
     return runs;
 }
@@ -514,6 +565,17 @@ function writeCronCache(jobs) {
     } catch {}
 }
 
+function hydrateCronJobsFromCache() {
+    const cached = readCronCache();
+    if (!cached || !Array.isArray(cached.jobs) || !cached.jobs.length) return false;
+
+    cronJobs = cached.jobs;
+    cronLastLoadedAt = Number(cached.ts || 0);
+    populateCronAgentFilterOptions();
+    renderCronJobs();
+    return true;
+}
+
 function getVisibleCronJobs() {
     const filtered = cronJobs.filter(job =>
         matchesCronListFilter(job) &&
@@ -534,6 +596,13 @@ function updateCronListMeta(total = cronJobs.length, visible = getVisibleCronJob
         ? `${total} jobs`
         : `${visible} of ${total} jobs shown`;
     meta.textContent = countText;
+}
+
+function truncateForList(value, maxChars = 220) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
 function updateCronFilterChips() {
@@ -624,6 +693,18 @@ function renderSummaryCard(label, value, tone = 'default', subtext = '') {
         </div>`;
 }
 
+function renderCronDetailSummary(job, diagnostics) {
+    const state = getCronState(job);
+    return [
+        renderSummaryCard('Last run', formatDateTime(diagnostics.latest?.runAtMs || diagnostics.latest?.ts), (diagnostics.latest?.status || '').toLowerCase() === 'error' ? 'error' : 'default', diagnostics.latest?.status || '--'),
+        renderSummaryCard('Last failed attempt', diagnostics.latestFailure ? formatDateTime(diagnostics.latestFailure.runAtMs || diagnostics.latestFailure.ts) : 'None in recent history', diagnostics.latestFailure ? 'error' : 'success', diagnostics.latestFailure?.provider || ''),
+        renderSummaryCard('Last successful attempt', diagnostics.latestSuccess ? formatDateTime(diagnostics.latestSuccess.runAtMs || diagnostics.latestSuccess.ts) : 'None in recent history', diagnostics.latestSuccess ? 'success' : 'default', diagnostics.latestSuccess?.provider || ''),
+        renderSummaryCard('History window', `${diagnostics.totalCount} attempts`, 'default', `${diagnostics.failureCount} failed · ${diagnostics.successCount} successful`),
+        renderSummaryCard('Consecutive errors', String(state.consecutiveErrors || 0), (state.consecutiveErrors || 0) > 0 ? 'error' : 'success', `Current status: ${getLastStatus(job)}`),
+        renderSummaryCard('Next run', formatNextRun(job), 'default', job.enabled !== false ? 'Enabled' : 'Disabled')
+    ].join('');
+}
+
 function downloadJson(filename, data) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -655,7 +736,7 @@ function buildCronListExport() {
         jobs: cronJobs.map((job) => ({
             ...job,
             diagnostics: cronDiagnostics.get(job.id) || null,
-            recentRuns: cronRunCache.get(job.id) || []
+            recentRuns: getCachedCronRuns(job.id)
         }))
     };
 }
@@ -732,8 +813,8 @@ function renderDetailTimeline(runs = []) {
 
     timeline.innerHTML = runs.map((entry, index) => {
         const tone = getRunStatusTone(entry.status);
-        const summary = entry.summary || '';
-        const error = entry.error || entry.deliveryError || entry.errorMessage || '';
+        const summary = truncateForList(entry.summary || '', 900);
+        const error = truncateForList(entry.error || entry.deliveryError || entry.errorMessage || '', 700);
         const usage = entry.usage
             ? Object.entries(entry.usage).map(([k, v]) => `${k}: ${v}`).join(' • ')
             : '';
@@ -799,6 +880,7 @@ async function openCronDetailView(jobId, { refresh = false, pushState = true } =
     const timeline = document.getElementById('cron-detail-timeline');
     if (!detailView || !listView || !timeline) return;
 
+    const detailStartedAt = performance.now();
     const loadToken = ++cronDetailLoadToken;
     activeCronJobId = jobId;
     listView.classList.remove('hidden');
@@ -813,13 +895,19 @@ async function openCronDetailView(jobId, { refresh = false, pushState = true } =
 
     if (pushState) setCronDetailURL(jobId);
 
+    const initialRunLimit = refresh ? Math.min(CRON_DETAIL_FULL_RUN_LIMIT, 24) : CRON_DETAIL_INITIAL_RUN_LIMIT;
+    const initialRunsPromise = fetchCronRuns(jobId, { refresh, limit: initialRunLimit });
+
     let job = getJobById(jobId);
+    let listReadyAt = performance.now();
     if (!job) {
         await loadCronJobs({ silent: true, skipDiagnostics: true });
         if (loadToken !== cronDetailLoadToken) return;
         job = getJobById(jobId);
+        listReadyAt = performance.now();
     }
     if (!job) {
+        initialRunsPromise.catch(() => {});
         if (loadToken !== cronDetailLoadToken) return;
         activeCronJobId = null;
         setCronDetailDrawerOpen(false);
@@ -837,20 +925,33 @@ async function openCronDetailView(jobId, { refresh = false, pushState = true } =
     document.getElementById('cron-detail-export-btn').onclick = () => exportCronTimelineJson();
 
     try {
-        const runs = await fetchCronRuns(job.id, { refresh, limit: 50 });
+        const runs = await initialRunsPromise;
         if (loadToken !== cronDetailLoadToken) return;
         activeCronTimeline = runs;
         const diagnostics = cronDiagnostics.get(job.id) || summarizeRuns(runs);
-        document.getElementById('cron-detail-summary').innerHTML = [
-            renderSummaryCard('Last run', formatDateTime(diagnostics.latest?.runAtMs || diagnostics.latest?.ts), (diagnostics.latest?.status || '').toLowerCase() === 'error' ? 'error' : 'default', diagnostics.latest?.status || '--'),
-            renderSummaryCard('Last failed attempt', diagnostics.latestFailure ? formatDateTime(diagnostics.latestFailure.runAtMs || diagnostics.latestFailure.ts) : 'None in recent history', diagnostics.latestFailure ? 'error' : 'success', diagnostics.latestFailure?.provider || ''),
-            renderSummaryCard('Last successful attempt', diagnostics.latestSuccess ? formatDateTime(diagnostics.latestSuccess.runAtMs || diagnostics.latestSuccess.ts) : 'None in recent history', diagnostics.latestSuccess ? 'success' : 'default', diagnostics.latestSuccess?.provider || ''),
-            renderSummaryCard('History window', `${diagnostics.totalCount} attempts`, 'default', `${diagnostics.failureCount} failed · ${diagnostics.successCount} successful`),
-            renderSummaryCard('Consecutive errors', String(getCronState(job).consecutiveErrors || 0), (getCronState(job).consecutiveErrors || 0) > 0 ? 'error' : 'success', `Current status: ${getLastStatus(job)}`),
-            renderSummaryCard('Next run', formatNextRun(job), 'default', job.enabled !== false ? 'Enabled' : 'Disabled')
-        ].join('');
+        document.getElementById('cron-detail-summary').innerHTML = renderCronDetailSummary(job, diagnostics);
         renderDetailMeta(job, runs, diagnostics);
         renderDetailTimeline(runs);
+        console.log(`[Perf][Cron] detail open for ${job.id}: list ready ${Math.round(listReadyAt - detailStartedAt)}ms, initial runs ${Math.round(performance.now() - listReadyAt)}ms`);
+
+        const cachedLimit = getCachedCronRunLimit(job.id);
+        if (!refresh && cachedLimit < CRON_DETAIL_FULL_RUN_LIMIT) {
+            setTimeout(async () => {
+                try {
+                    const fullRuns = await fetchCronRuns(job.id, { refresh: true, limit: CRON_DETAIL_FULL_RUN_LIMIT });
+                    if (loadToken !== cronDetailLoadToken) return;
+                    if (String(activeCronJobId) !== String(job.id) || !cronDetailDrawerOpen) return;
+
+                    activeCronTimeline = fullRuns;
+                    const fullDiagnostics = cronDiagnostics.get(job.id) || summarizeRuns(fullRuns);
+                    document.getElementById('cron-detail-summary').innerHTML = renderCronDetailSummary(job, fullDiagnostics);
+                    renderDetailMeta(job, fullRuns, fullDiagnostics);
+                    renderDetailTimeline(fullRuns);
+                } catch (backgroundErr) {
+                    console.warn('[Cron] Background timeline expansion failed:', backgroundErr?.message || backgroundErr);
+                }
+            }, 0);
+        }
     } catch (e) {
         if (loadToken !== cronDetailLoadToken) return;
         timeline.innerHTML = `<div class="empty-state">Failed to load run timeline: ${escapeHtml(e.message || 'Unknown error')}</div>`;
@@ -944,38 +1045,58 @@ window.exportCronTimelineJson = function() {
 
 async function loadCronJobs({ silent = false, skipDiagnostics = false } = {}) {
     const container = document.getElementById('cron-jobs-list');
-    if (!container) return;
+    if (!container) return cronJobs;
+
+    if (cronListLoadPromise) {
+        return cronListLoadPromise;
+    }
 
     const startedAt = performance.now();
 
-    if (!silent) {
+    if (!silent && !cronJobs.length) {
         container.innerHTML = '<div class="empty-state">Loading cron jobs...</div>';
     }
 
     if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div class="empty-state">Connect to gateway to manage cron jobs</div>';
-        return;
+        if (!cronJobs.length) {
+            container.innerHTML = '<div class="empty-state">Connect to gateway to manage cron jobs</div>';
+        }
+        return cronJobs;
     }
 
-    try {
-        const result = await gateway._request('cron.list', { includeDisabled: true });
-        cronJobs = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
-        persistCronNameMap();
-        populateCronAgentFilterOptions();
-        if (activeCronJobId && !getJobById(activeCronJobId)) {
-            activeCronJobId = null;
-            renderEmptyDetailState('The previously selected job is no longer available.');
-            setCronDetailDrawerOpen(false);
+    cronListLoadPromise = (async () => {
+        try {
+            const result = await gateway._request('cron.list', { includeDisabled: true }, CRON_REQUEST_TIMEOUT_MS);
+            cronJobs = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
+            cronLastLoadedAt = Date.now();
+            writeCronCache(cronJobs);
+            persistCronNameMap();
+            populateCronAgentFilterOptions();
+            if (activeCronJobId && !getJobById(activeCronJobId)) {
+                activeCronJobId = null;
+                renderEmptyDetailState('The previously selected job is no longer available.');
+                setCronDetailDrawerOpen(false);
+            }
+            renderCronJobs();
+            console.log(`[Perf][Cron] cron.list + first render: ${Math.round(performance.now() - startedAt)}ms for ${cronJobs.length} jobs`);
+            if (!skipDiagnostics) {
+                console.log('[Perf][Cron] Skipping history warm-up on initial page load');
+            }
+            return cronJobs;
+        } catch (e) {
+            console.warn('[Cron] Failed to fetch jobs:', e.message);
+            if (!cronJobs.length) {
+                container.innerHTML = `<div class="empty-state">Could not load cron jobs: ${escapeHtml(e.message || 'Unknown error')}</div>`;
+            } else if (!silent && typeof showToast === 'function') {
+                showToast('Using cached cron jobs while refresh retries', 'warning');
+            }
+            return cronJobs;
+        } finally {
+            cronListLoadPromise = null;
         }
-        renderCronJobs();
-        console.log(`[Perf][Cron] cron.list + first render: ${Math.round(performance.now() - startedAt)}ms for ${cronJobs.length} jobs`);
-        if (!skipDiagnostics) {
-            console.log('[Perf][Cron] Skipping history warm-up on initial page load');
-        }
-    } catch (e) {
-        console.warn('[Cron] Failed to fetch jobs:', e.message);
-        container.innerHTML = `<div class="empty-state">Could not load cron jobs: ${escapeHtml(e.message || 'Unknown error')}</div>`;
-    }
+    })();
+
+    return cronListLoadPromise;
 }
 
 function renderCronJobs() {
@@ -983,9 +1104,9 @@ function renderCronJobs() {
     if (!container) return;
 
     updateCronFilterChips();
-    updateCronListMeta();
 
     if (cronJobs.length === 0) {
+        updateCronListMeta(0, 0);
         container.innerHTML = '<div class="empty-state">No cron jobs configured</div>';
         return;
     }
@@ -1005,7 +1126,7 @@ function renderCronJobs() {
         const nextRun = formatNextRun(job);
         const lastRun = formatLastRun(job);
         const scheduleText = formatCronSchedule(job.schedule || job.cron);
-        const payloadPreview = getPayloadSummary(job) || job.description || 'No summary available';
+        const payloadPreview = truncateForList(getPayloadSummary(job) || job.description || 'No summary available');
         const state = getCronState(job);
         const diagnostics = cronDiagnostics.get(job.id);
         const latestFailure = diagnostics?.latestFailure;
