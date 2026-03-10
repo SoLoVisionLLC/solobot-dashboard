@@ -110,6 +110,7 @@
         sec: 'knox',
         net: 'sentinel',
         cmp: 'vector',
+        docs: 'canon',
         art: 'luma',
         tax: 'ledger',
         ui: 'quill',
@@ -117,6 +118,22 @@
         smm: 'nova',
         youtube: 'snip',
         family: 'haven'
+    };
+
+    const CANONICAL_TO_LEGACY_WORKSPACE = {
+        elon: 'exec',
+        orion: 'cto',
+        atlas: 'coo',
+        sterling: 'cfo',
+        vector: 'cmp',
+        quill: 'ui',
+        chip: 'swe',
+        snip: 'youtube',
+        knox: 'sec',
+        sentinel: 'net',
+        haven: 'family',
+        canon: 'docs',
+        luma: 'creative'
     };
 
     const CANONICAL_TO_ORG = Object.entries(ORG_TO_CANONICAL).reduce((acc, [orgId, agentId]) => {
@@ -143,6 +160,25 @@
         if (!normalized) return null;
         if (ORG_TREE[normalized]) return normalized;
         return CANONICAL_TO_ORG[normalized] || normalized;
+    }
+
+    function getApiAgentCandidates(agentId) {
+        const canonical = String(agentId || '').toLowerCase();
+        const legacy = CANONICAL_TO_LEGACY_WORKSPACE[canonical];
+        return legacy && legacy !== canonical ? [canonical, legacy] : [canonical];
+    }
+
+    async function fetchAgentFileWithFallback(agentId, filename) {
+        let lastData = null;
+        for (const candidate of getApiAgentCandidates(agentId)) {
+            const res = await fetch(`/api/agents/${encodeURIComponent(candidate)}/files/${encodeURIComponent(filename)}?t=${Date.now()}`, { cache: 'no-store' });
+            const data = await res.json();
+            lastData = data;
+            if (!data?.error || !/file not found/i.test(String(data.error || ''))) {
+                return { data, apiAgentId: candidate };
+            }
+        }
+        return { data: lastData || { error: 'File not found' }, apiAgentId: String(agentId || '').toLowerCase() };
     }
 
     function getOrgGridStyle(orgId) {
@@ -1727,7 +1763,7 @@
         ctx.actions.innerHTML = `
             <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${escapeHtml(fileMeta.agentId || '')}')">Open workspace</button>
             <button class="btn btn-secondary btn-xs" onclick="window._memoryCards && (window._memoryCards.previewFileFromWorkspace ? window._memoryCards.previewFileFromWorkspace('${escapeHtml(name)}') : null)">↻ Reload</button>
-            <button class="btn btn-primary btn-xs" onclick="${(fileMeta && fileMeta.agentIsDefault ? `viewMemoryFile('${escapeHtml(name)}')` : `viewAgentFile('${escapeHtml(fileMeta.agentId || '')}', '${escapeHtml(name)}')`)}">✏️ Edit</button>
+            <button class="btn btn-primary btn-xs" onclick="${(fileMeta && fileMeta.agentIsDefault ? `viewMemoryFile('${escapeHtml(name)}')` : `viewAgentFile('${escapeHtml(fileMeta.apiAgentId || fileMeta.agentId || '')}', '${escapeHtml(name)}')`)}">✏️ Edit</button>
         `;
         ctx.preview.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Loading preview...</div>`;
     }
@@ -1820,7 +1856,7 @@
         target.innerHTML = '<div class=\"loading-state\">Loading...</div>';
 
         try {
-            let content, filePath;
+            let content, filePath, apiAgentId = agent.id;
             if (agent.isDefault) {
                 filePath = filename;
                 const res = await fetch(`/api/memory/${encodeURIComponent(filename)}`);
@@ -1828,14 +1864,16 @@
                 content = data.content || data.error || 'Empty file';
             } else {
                 filePath = filename;
-                const res = await fetch(`/api/agents/${encodeURIComponent(agent.id)}/files/${encodeURIComponent(filename)}?t=${Date.now()}`, { cache: 'no-store' });
-                const data = await res.json();
+                const fetched = await fetchAgentFileWithFallback(agent.id, filename);
+                const data = fetched.data || {};
+                apiAgentId = fetched.apiAgentId || agent.id;
                 content = data.content || data.error || 'Empty file';
             }
 
             const loadedMeta = (agentMemoryFiles || []).find(f => String(f.name) === String(filename)) || {};
             const fileTag = filename.endsWith('.md') ? '📝' : '📄';
             loadedMeta.agentId = agent.id;
+            loadedMeta.apiAgentId = apiAgentId || agent.id;
             loadedMeta.agentIsDefault = !!agent.isDefault;
 
             renderWorkspacePreview(loadedMeta);
@@ -1843,7 +1881,7 @@
                 <div class=\"agent-preview-header\">
                     <span class=\"agent-preview-filename\">${fileTag} ${escapeHtml(filename)}</span>
                     <div style="display:flex;gap:8px;">
-                        <button class="btn btn-ghost btn-xs" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(filePath)}')` : `viewAgentFile('${escapeHtml(agent.id)}', '${escapeHtml(filename)}')`}">✏️ Edit</button>
+                        <button class="btn btn-ghost btn-xs" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(filePath)}')` : `viewAgentFile('${escapeHtml(apiAgentId || agent.id)}', '${escapeHtml(filename)}')`}">✏️ Edit</button>
                         <button class="btn btn-secondary btn-xs" onclick="window._memoryCards && window._memoryCards.previewFileFromWorkspace('${escapeHtml(filename)}')">↻ Reload</button>
                     </div>
                 </div>
