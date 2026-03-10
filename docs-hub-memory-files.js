@@ -471,8 +471,17 @@ async function acknowledgeUpdate(filepath) {
     }
 }
 
+function getFileApiBase(filepath, fileType = null, agentId = null) {
+    const inferredType = fileType || window.currentMemoryFile?.type || 'memory';
+    const inferredAgent = agentId || window.currentMemoryFile?.agentId || null;
+    if (inferredType === 'agent' && inferredAgent) {
+        return `/api/agents/${encodeURIComponent(inferredAgent)}/files/${encodeURIComponent(filepath)}`;
+    }
+    return `/api/memory/${encodeURIComponent(filepath)}`;
+}
+
 // Load version history for a file
-async function loadVersionHistory(filepath) {
+async function loadVersionHistory(filepath, fileType = null, agentId = null) {
     console.log('[Memory] loadVersionHistory called for:', filepath);
     const container = document.getElementById('version-history-list');
     console.log('[Memory] version-history-list container:', container);
@@ -484,7 +493,8 @@ async function loadVersionHistory(filepath) {
     container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Loading versions...</div>';
     
     try {
-        const url = `/api/memory/${encodeURIComponent(filepath)}/versions`;
+        const base = getFileApiBase(filepath, fileType, agentId);
+        const url = `${base}/versions`;
         console.log('Fetching versions from:', url);
         const response = await fetch(url);
         const data = await response.json();
@@ -508,11 +518,11 @@ async function loadVersionHistory(filepath) {
                         <div style="font-size: 11px; color: var(--text-muted);">${dateStr}</div>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button onclick="previewVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp})" 
+                        <button onclick="previewVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp}, '${escapeHtmlLocal(fileType || window.currentMemoryFile?.type || 'memory')}', '${escapeHtmlLocal(agentId || window.currentMemoryFile?.agentId || '')}')" 
                                 class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
                             👁️ View
                         </button>
-                        <button onclick="restoreVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp})" 
+                        <button onclick="restoreVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp}, '${escapeHtmlLocal(fileType || window.currentMemoryFile?.type || 'memory')}', '${escapeHtmlLocal(agentId || window.currentMemoryFile?.agentId || '')}')" 
                                 class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
                             ↩️ Restore
                         </button>
@@ -539,15 +549,16 @@ function getTimeAgo(date) {
 }
 
 // Store current diff context for restore
-let diffContext = { filepath: null, timestamp: null };
+let diffContext = { filepath: null, timestamp: null, type: 'memory', agentId: null };
 
 // Preview a specific version with diff view
-async function previewVersion(filepath, timestamp) {
+async function previewVersion(filepath, timestamp, fileType = null, agentId = null) {
     try {
         // Fetch both current and historical versions
+        const base = getFileApiBase(filepath, fileType, agentId);
         const [currentRes, historicalRes] = await Promise.all([
-            fetch(`/api/memory/${encodeURIComponent(filepath)}`),
-            fetch(`/api/memory/${encodeURIComponent(filepath)}/versions/${timestamp}`)
+            fetch(base),
+            fetch(`${base}/versions/${timestamp}`)
         ]);
         
         const currentData = await currentRes.json();
@@ -559,7 +570,7 @@ async function previewVersion(filepath, timestamp) {
         }
         
         // Store context for restore button
-        diffContext = { filepath, timestamp };
+        diffContext = { filepath, timestamp, type: fileType || window.currentMemoryFile?.type || 'memory', agentId: agentId || window.currentMemoryFile?.agentId || null };
         
         // Update modal title and date
         const date = new Date(timestamp).toLocaleString();
@@ -709,24 +720,24 @@ function diffSimple(oldLines, newLines) {
 function closeDiffModal() {
     const modal = document.getElementById('diff-modal');
     if (modal) modal.classList.remove('visible');
-    diffContext = { filepath: null, timestamp: null };
+    diffContext = { filepath: null, timestamp: null, type: 'memory', agentId: null };
 }
 
 // Restore from diff view
 function restoreFromDiff() {
     console.log('[Memory] restoreFromDiff called, diffContext:', diffContext);
     if (diffContext.filepath && diffContext.timestamp) {
-        const { filepath, timestamp } = diffContext;
+        const { filepath, timestamp, type, agentId } = diffContext;
         closeDiffModal();
-        restoreVersion(filepath, timestamp);
+        restoreVersion(filepath, timestamp, type, agentId);
     } else {
         showToast('Error: No version selected', 'error');
     }
 }
 
 // Restore a specific version
-async function restoreVersion(filepath, timestamp) {
-    console.log('[Memory] restoreVersion called:', { filepath, timestamp, type: typeof timestamp });
+async function restoreVersion(filepath, timestamp, fileType = null, agentId = null) {
+    console.log('[Memory] restoreVersion called:', { filepath, timestamp, type: typeof timestamp, fileType, agentId });
     
     // Validate timestamp
     if (!timestamp || timestamp <= 0) {
@@ -745,7 +756,8 @@ async function restoreVersion(filepath, timestamp) {
     
     try {
         console.log('[Memory] Sending restore request for timestamp:', timestamp);
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/restore`, {
+        const base = getFileApiBase(filepath, fileType, agentId);
+        const response = await fetch(`${base}/restore`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ timestamp: Number(timestamp) })  // Ensure it's a number
@@ -761,7 +773,10 @@ async function restoreVersion(filepath, timestamp) {
         showToast('Version restored successfully!', 'success');
         
         // Reload the file
-        viewMemoryFile(filepath);
+        const inferredType = fileType || window.currentMemoryFile?.type || 'memory';
+        const inferredAgent = agentId || window.currentMemoryFile?.agentId || null;
+        if (inferredType === 'agent' && inferredAgent) viewAgentFile(inferredAgent, filepath);
+        else viewMemoryFile(filepath);
         
         // Clear cache
         memoryFilesCache = [];
@@ -1063,10 +1078,6 @@ async function viewAgentFile(agentId, filename) {
         }
         if (saveBtn) saveBtn.disabled = false;
 
-        if (historyList) {
-            historyList.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; padding: var(--space-3)">Version history unavailable for agent files.</div>';
-        }
-
         window.currentMemoryFile = {
             path: filename,
             fullPath: data.path || data.filepath || null,
@@ -1074,6 +1085,8 @@ async function viewAgentFile(agentId, filename) {
             type: 'agent',
             agentId,
         };
+
+        loadVersionHistory(filename, 'agent', agentId);
     } catch (e) {
         if (contentEl) contentEl.value = `Failed to load: ${e.message}`;
         if (saveBtn) {
