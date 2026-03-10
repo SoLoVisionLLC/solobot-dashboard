@@ -47,29 +47,31 @@
 
     // ── Org-Tree Data Structure ──
     const ORG_TREE = {
-        'main': { name: 'Halo', role: 'PA', emoji: '🤖', reports: ['exec', 'cto', 'coo', 'cfo'], description: 'Orchestrator' },
-        'exec': { name: 'Elon', role: 'CoS', emoji: '👔', reports: [], description: 'Chief of Staff' },
-        'cto': { name: 'Orion', role: 'CTO', emoji: '🧠', reports: ['dev', 'devops', 'sec', 'net'], description: 'Architecture & Standards' },
-        'coo': { name: 'Atlas', role: 'COO', emoji: '📋', reports: ['cmp', 'docs', 'art'], description: 'Operations' },
-        'cfo': { name: 'Sterling', role: 'CFO', emoji: '💰', reports: ['tax'], description: 'Finance & Tax' },
-        'dev': { name: 'Dev', role: 'ENG', emoji: '⚙️', reports: ['ui', 'swe'], description: 'Head of Engineering' },
-        'devops': { name: 'Forge', role: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' },
-        'sec': { name: 'Knox', role: 'SEC', emoji: '🔒', reports: [], description: 'Security' },
-        'net': { name: 'Sentinel', role: 'NET', emoji: '📡', reports: [], description: 'Networking & Infrastructure' },
-        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['smm', 'youtube'], description: 'Marketing & Product (Nova + Snip)' },
+        'solo': { name: 'SoLo', role: 'CEO', emoji: '👑', reports: ['main', 'exec', 'family'], description: 'Founder & President' },
+        'main': { name: 'Halo', role: 'PA', emoji: '🤖', reports: [], description: 'Personal Assistant' },
+        'exec': { name: 'Elon', role: 'CoS', emoji: '👔', reports: ['cfo', 'cto', 'cmp', 'coo'], description: 'Chief of Staff' },
+        'family': { name: 'Haven', role: 'HOME', emoji: '🏠', reports: [], description: 'Family & Household' },
+        'cfo': { name: 'Sterling', role: 'CFO', emoji: '💰', reports: ['tax'], description: 'Chief Financial Officer' },
+        'cto': { name: 'Orion', role: 'CTO', emoji: '🧠', reports: ['net', 'dev', 'sec'], description: 'Chief Technical Officer' },
+        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['art', 'smm'], description: 'Chief Marketing & Product' },
+        'coo': { name: 'Atlas', role: 'COO', emoji: '📋', reports: ['docs'], description: 'Chief Operating Officer' },
+        'tax': { name: 'Ledger', role: 'TAX', emoji: '📒', reports: [], description: 'Tax Specialist' },
+        'art': { name: 'Luma', role: 'ART', emoji: '🎨', reports: [], description: 'Creative Design' },
+        'smm': { name: 'Nova', role: 'SMM', emoji: '📱', reports: ['youtube'], description: 'Social Media Manager' },
+        'youtube': { name: 'Snip', role: 'YT', emoji: '🎬', reports: [], description: 'YouTube Manager' },
         'docs': { name: 'Canon', role: 'DOC', emoji: '📚', reports: [], description: 'Knowledge & Docs' },
-        'art': { name: 'Luma', role: 'ART', emoji: '🎨', reports: [], description: 'Creative Director' },
-        'tax': { name: 'Ledger', role: 'TAX', emoji: '📒', reports: [], description: 'Tax Compliance' },
+        'net': { name: 'Sentinel', role: 'NET', emoji: '📡', reports: [], description: 'Network Admin' },
+        'dev': { name: 'Dev', role: 'ENG', emoji: '⚙️', reports: ['ui', 'swe', 'devops'], description: 'Head of Engineering' },
+        'sec': { name: 'Knox', role: 'SEC', emoji: '🔒', reports: [], description: 'Security' },
         'ui': { name: 'Quill', role: 'FE/UI', emoji: '✒️', reports: [], description: 'Frontend / UI' },
         'swe': { name: 'Chip', role: 'SWE', emoji: '💻', reports: [], description: 'Software Engineer' },
-        'smm': { name: 'Nova', role: 'SMM', emoji: '📱', reports: [], description: 'Social: X, Facebook, Instagram, LinkedIn, Threads, Pinterest' },
-        'youtube': { name: 'Snip', role: 'YT/VEO', emoji: '🎬', reports: [], description: 'YouTube + Veo' },
-        'family': { name: 'Haven', role: 'FAM', emoji: '🏠', reports: [], description: 'Family & Household' }
+        'devops': { name: 'Forge', role: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' }
     };
 
-    const ORG_ORDER = ['main', 'exec', 'cto', 'coo', 'cfo', 'dev', 'devops', 'sec', 'net', 'cmp', 'docs', 'art', 'tax', 'ui', 'swe', 'smm', 'youtube', 'family'];
+    const ORG_ORDER = ['solo', 'main', 'exec', 'family', 'cfo', 'cto', 'cmp', 'coo', 'tax', 'art', 'smm', 'docs', 'youtube', 'net', 'dev', 'sec', 'ui', 'swe', 'devops'];
 
     const ORG_TO_CANONICAL = {
+        solo: null,
         main: 'main',
         exec: 'elon',
         cto: 'orion',
@@ -346,7 +348,7 @@
     }
 
     function getDepth(agentId) {
-        if (agentId === 'main') return 0;
+        if (agentId === 'solo') return 0;
         for (const [mgr, info] of Object.entries(ORG_TREE)) {
             if (info.reports.includes(agentId)) return getDepth(mgr) + 1;
         }

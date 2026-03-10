@@ -3,6 +3,7 @@
 let skillsList = [];
 let skillsInterval = null;
 let skillsPageBound = false;
+const SKILLS_CACHE_KEY = 'skillsStatusCache.v1';
 
 const skillsUi = {
     search: '',
@@ -20,10 +21,26 @@ function setHiddenSkills(arr) {
 
 function initSkillsPage() {
     bindSkillsPageControls();
-    loadSkills();
+    loadSkills({ useCache: true });
 
     if (skillsInterval) clearInterval(skillsInterval);
-    skillsInterval = setInterval(loadSkills, 60000);
+    skillsInterval = setInterval(() => loadSkills({ useCache: false }), 60000);
+}
+
+function readSkillsCache() {
+    try {
+        const cached = JSON.parse(localStorage.getItem(SKILLS_CACHE_KEY) || 'null');
+        if (!cached || !Array.isArray(cached.skills)) return null;
+        return cached;
+    } catch {
+        return null;
+    }
+}
+
+function writeSkillsCache(skills) {
+    try {
+        localStorage.setItem(SKILLS_CACHE_KEY, JSON.stringify({ ts: Date.now(), skills }));
+    } catch {}
 }
 
 function bindSkillsPageControls() {
@@ -66,16 +83,29 @@ function bindSkillsPageControls() {
     }
 
     if (refresh) {
-        refresh.addEventListener('click', () => loadSkills());
+        refresh.addEventListener('click', () => loadSkills({ useCache: false }));
     }
 }
 
-async function loadSkills() {
+async function loadSkills({ useCache = true } = {}) {
     const container = document.getElementById('skills-list');
     if (!container) return;
 
+    const startedAt = performance.now();
+
+    if (useCache) {
+        const cached = readSkillsCache();
+        if (cached?.skills?.length) {
+            skillsList = cached.skills;
+            renderSkills();
+            console.log(`[Perf][Skills] Rendered cached skills in ${Math.round(performance.now() - startedAt)}ms (${skillsList.length} skills)`);
+        }
+    }
+
     if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div class="empty-state">Connect to gateway to view skills</div>';
+        if (!skillsList.length) {
+            container.innerHTML = '<div class="empty-state">Connect to gateway to view skills</div>';
+        }
         return;
     }
 
@@ -83,18 +113,24 @@ async function loadSkills() {
         // Prefer skills.status (rich, includes install options + requirements).
         // Fallback to skills.list for older gateways.
         let result;
+        let source = 'skills.status';
         try {
             result = await gateway._request('skills.status', {});
             skillsList = result?.skills || [];
         } catch (e) {
+            source = 'skills.list';
             result = await gateway._request('skills.list', {});
             skillsList = result?.skills || result || [];
         }
 
+        writeSkillsCache(skillsList);
         renderSkills();
+        console.log(`[Perf][Skills] ${source} + render: ${Math.round(performance.now() - startedAt)}ms (${Array.isArray(skillsList) ? skillsList.length : 0} skills)`);
     } catch (e) {
         console.warn('[Skills] Failed:', e.message);
-        container.innerHTML = '<div class="empty-state">Could not load skills. The skills RPC may not be available.</div>';
+        if (!skillsList.length) {
+            container.innerHTML = '<div class="empty-state">Could not load skills. The skills RPC may not be available.</div>';
+        }
     }
 }
 

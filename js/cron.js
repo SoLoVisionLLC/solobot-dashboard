@@ -10,6 +10,13 @@ let cronDetailLoadToken = 0;
 let cronListFilter = 'all';
 let cronListQuery = '';
 let cronVisibleCount = 24;
+let cronDetailDrawerOpen = false;
+let cronAgentFilter = 'all';
+let cronEnabledFilter = 'all';
+let cronActivityFilter = 'all';
+let cronSortBy = 'nextRun';
+let cronSortDirection = 'asc';
+let cronAdvancedControlsOpen = false;
 const CRON_CACHE_KEY = 'cronListCache.v1';
 const CRON_NAME_MAP_KEY = 'cronJobNameMap.v1';
 
@@ -22,14 +29,71 @@ function initCronPage() {
             renderCronJobs();
         });
     }
+    if (searchInput) searchInput.value = cronListQuery;
+
+    const agentFilter = document.getElementById('cron-agent-filter');
+    if (agentFilter && !agentFilter.dataset.bound) {
+        agentFilter.dataset.bound = 'true';
+        agentFilter.addEventListener('change', (event) => {
+            cronAgentFilter = event.target.value || 'all';
+            updateCronAdvancedControlsUI();
+            renderCronJobs();
+        });
+    }
+
+    const enabledFilter = document.getElementById('cron-enabled-filter');
+    if (enabledFilter && !enabledFilter.dataset.bound) {
+        enabledFilter.dataset.bound = 'true';
+        enabledFilter.addEventListener('change', (event) => {
+            cronEnabledFilter = event.target.value || 'all';
+            updateCronAdvancedControlsUI();
+            renderCronJobs();
+        });
+    }
+    if (enabledFilter) enabledFilter.value = cronEnabledFilter;
+
+    const activityFilter = document.getElementById('cron-activity-filter');
+    if (activityFilter && !activityFilter.dataset.bound) {
+        activityFilter.dataset.bound = 'true';
+        activityFilter.addEventListener('change', (event) => {
+            cronActivityFilter = event.target.value || 'all';
+            updateCronAdvancedControlsUI();
+            renderCronJobs();
+        });
+    }
+    if (activityFilter) activityFilter.value = cronActivityFilter;
+
+    const sortBySelect = document.getElementById('cron-sort-by');
+    if (sortBySelect && !sortBySelect.dataset.bound) {
+        sortBySelect.dataset.bound = 'true';
+        sortBySelect.addEventListener('change', (event) => {
+            cronSortBy = event.target.value || 'nextRun';
+            renderCronJobs();
+        });
+    }
+    if (sortBySelect) sortBySelect.value = cronSortBy;
+
+    const sortDirectionBtn = document.getElementById('cron-sort-direction-btn');
+    if (sortDirectionBtn && !sortDirectionBtn.dataset.bound) {
+        sortDirectionBtn.dataset.bound = 'true';
+        sortDirectionBtn.addEventListener('click', () => {
+            cronSortDirection = cronSortDirection === 'asc' ? 'desc' : 'asc';
+            updateCronSortDirectionButton();
+            renderCronJobs();
+        });
+    }
 
     updateCronFilterChips();
+    updateCronSortDirectionButton();
+    updateCronAdvancedControlsUI();
     renderEmptyDetailState();
+    setCronDetailDrawerOpen(false);
+    populateCronAgentFilterOptions();
     loadCronJobs();
     syncCronViewFromURL();
     if (cronInterval) clearInterval(cronInterval);
     cronInterval = setInterval(() => {
-        if (activeCronJobId) {
+        if (activeCronJobId && cronDetailDrawerOpen) {
             openCronDetailView(activeCronJobId, { refresh: true, pushState: false });
         } else {
             loadCronJobs({ silent: true });
@@ -202,12 +266,211 @@ function getCronJobStatusTone(job) {
     return 'neutral';
 }
 
+function getRunStatusTone(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'ok' || normalized === 'success') return 'success';
+    if (normalized === 'error' || normalized === 'failed') return 'error';
+    return 'neutral';
+}
+
 function getCronJobAccentColor(job) {
     const tone = getCronJobStatusTone(job);
     if (tone === 'error') return 'var(--error)';
     if (tone === 'success') return 'var(--success)';
     if (tone === 'disabled') return 'var(--text-muted)';
     return 'var(--brand, var(--text-primary))';
+}
+
+function getCronJobOwnerAgent(job) {
+    const owner = String(job?.agentId || job?.ownerAgentId || '').trim();
+    return owner;
+}
+
+function parseTimestamp(value) {
+    if (value == null || value === '') return 0;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getCronJobLastRunMs(job) {
+    const state = getCronState(job);
+    return parseTimestamp(state.lastRunAtMs || job?.lastRunAtMs || job?.lastRun);
+}
+
+function getCronJobNextRunMs(job) {
+    const state = getCronState(job);
+    return parseTimestamp(state.nextRunAtMs || job?.nextRunAtMs || job?.nextRun);
+}
+
+function getCronJobFailureCount(job) {
+    const diagnostics = cronDiagnostics.get(job?.id);
+    if (diagnostics && Number.isFinite(Number(diagnostics.failureCount))) {
+        return Number(diagnostics.failureCount);
+    }
+    return getCronJobStatusTone(job) === 'error' ? 1 : 0;
+}
+
+function getCronJobConsecutiveErrors(job) {
+    return Number(getCronState(job).consecutiveErrors || 0);
+}
+
+function compareNumbers(a, b, direction = 'asc') {
+    const left = Number(a || 0);
+    const right = Number(b || 0);
+    if (left === right) return 0;
+    if (direction === 'asc') return left < right ? -1 : 1;
+    return left > right ? -1 : 1;
+}
+
+function compareStrings(a, b, direction = 'asc') {
+    const left = String(a || '');
+    const right = String(b || '');
+    const result = left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
+    return direction === 'asc' ? result : -result;
+}
+
+function getCronStatusSeverity(job) {
+    const tone = getCronJobStatusTone(job);
+    if (tone === 'error') return 4;
+    if (tone === 'disabled') return 3;
+    if (tone === 'neutral') return 2;
+    if (tone === 'success') return 1;
+    return 0;
+}
+
+function getComparableNextRunMs(job) {
+    const next = getCronJobNextRunMs(job);
+    if (next > 0) return next;
+    return cronSortDirection === 'asc' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+}
+
+function getComparableLastRunMs(job) {
+    const last = getCronJobLastRunMs(job);
+    if (last > 0) return last;
+    return cronSortDirection === 'asc' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+}
+
+function matchesCronListAdvancedFilters(job) {
+    const owner = getCronJobOwnerAgent(job);
+    if (cronAgentFilter === '__unassigned') {
+        if (owner) return false;
+    } else if (cronAgentFilter !== 'all' && owner !== cronAgentFilter) {
+        return false;
+    }
+
+    const enabled = job?.enabled !== false;
+    if (cronEnabledFilter === 'enabled' && !enabled) return false;
+    if (cronEnabledFilter === 'disabled' && enabled) return false;
+
+    const now = Date.now();
+    const lastRunMs = getCronJobLastRunMs(job);
+    const nextRunMs = getCronJobNextRunMs(job);
+    if (cronActivityFilter === 'ran_24h' && !(lastRunMs > now - (24 * 60 * 60 * 1000))) return false;
+    if (cronActivityFilter === 'stale_7d' && !(lastRunMs > 0 && lastRunMs < now - (7 * 24 * 60 * 60 * 1000))) return false;
+    if (cronActivityFilter === 'never' && lastRunMs > 0) return false;
+    if (cronActivityFilter === 'next_24h' && !(nextRunMs > now && nextRunMs <= now + (24 * 60 * 60 * 1000))) return false;
+
+    return true;
+}
+
+function sortCronJobs(jobs = []) {
+    const sorted = [...jobs];
+    sorted.sort((a, b) => {
+        let result = 0;
+
+        if (cronSortBy === 'name') {
+            result = compareStrings(a?.name || a?.id, b?.name || b?.id, cronSortDirection);
+        } else if (cronSortBy === 'agent') {
+            result = compareStrings(getCronJobOwnerAgent(a) || 'zzzzzz', getCronJobOwnerAgent(b) || 'zzzzzz', cronSortDirection);
+        } else if (cronSortBy === 'nextRun') {
+            result = compareNumbers(getComparableNextRunMs(a), getComparableNextRunMs(b), cronSortDirection);
+        } else if (cronSortBy === 'lastRun') {
+            result = compareNumbers(getComparableLastRunMs(a), getComparableLastRunMs(b), cronSortDirection);
+        } else if (cronSortBy === 'status') {
+            result = compareNumbers(getCronStatusSeverity(a), getCronStatusSeverity(b), cronSortDirection);
+        } else if (cronSortBy === 'errors') {
+            result = compareNumbers(getCronJobConsecutiveErrors(a), getCronJobConsecutiveErrors(b), cronSortDirection);
+        } else if (cronSortBy === 'failures') {
+            result = compareNumbers(getCronJobFailureCount(a), getCronJobFailureCount(b), cronSortDirection);
+        }
+
+        if (result !== 0) return result;
+        return compareStrings(a?.name || a?.id, b?.name || b?.id, 'asc');
+    });
+    return sorted;
+}
+
+function populateCronAgentFilterOptions() {
+    const select = document.getElementById('cron-agent-filter');
+    if (!select) return;
+
+    const currentValue = cronAgentFilter;
+    const owners = Array.from(new Set(cronJobs.map(getCronJobOwnerAgent).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+    const hasUnassigned = cronJobs.some(job => !getCronJobOwnerAgent(job));
+
+    select.innerHTML = '';
+    const addOption = (value, label) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+    };
+
+    addOption('all', 'All agents');
+    if (hasUnassigned) addOption('__unassigned', 'Unassigned');
+    owners.forEach((owner) => addOption(owner, owner));
+
+    if (currentValue === 'all') {
+        select.value = 'all';
+        return;
+    }
+    if (currentValue === '__unassigned' && hasUnassigned) {
+        select.value = currentValue;
+        return;
+    }
+    if (owners.includes(currentValue)) {
+        select.value = currentValue;
+        return;
+    }
+
+    cronAgentFilter = 'all';
+    select.value = 'all';
+}
+
+function updateCronSortDirectionButton() {
+    const button = document.getElementById('cron-sort-direction-btn');
+    if (!button) return;
+    button.textContent = cronSortDirection === 'asc' ? 'Asc' : 'Desc';
+    button.title = cronSortDirection === 'asc' ? 'Sort ascending' : 'Sort descending';
+}
+
+function updateCronAdvancedControlsUI() {
+    const advanced = document.getElementById('cron-advanced-controls');
+    const toggle = document.getElementById('cron-advanced-toggle-btn');
+    const activeAdvancedCount = Number(cronAgentFilter !== 'all') +
+        Number(cronEnabledFilter !== 'all') +
+        Number(cronActivityFilter !== 'all');
+
+    if (advanced) advanced.classList.toggle('hidden', !cronAdvancedControlsOpen);
+    if (toggle) {
+        const badge = activeAdvancedCount > 0 ? ` (${activeAdvancedCount})` : '';
+        toggle.textContent = cronAdvancedControlsOpen ? `Hide filters${badge}` : `Filters${badge}`;
+        toggle.setAttribute('aria-expanded', cronAdvancedControlsOpen ? 'true' : 'false');
+    }
+}
+
+function getCronSortLabel() {
+    if (cronSortBy === 'name') return 'name';
+    if (cronSortBy === 'agent') return 'agent owner';
+    if (cronSortBy === 'nextRun') return 'next run';
+    if (cronSortBy === 'lastRun') return 'last run';
+    if (cronSortBy === 'status') return 'status';
+    if (cronSortBy === 'errors') return 'consecutive errors';
+    if (cronSortBy === 'failures') return 'failure count';
+    return 'next run';
 }
 
 function matchesCronListFilter(job) {
@@ -252,7 +515,12 @@ function writeCronCache(jobs) {
 }
 
 function getVisibleCronJobs() {
-    return cronJobs.filter(job => matchesCronListFilter(job) && matchesCronListQuery(job));
+    const filtered = cronJobs.filter(job =>
+        matchesCronListFilter(job) &&
+        matchesCronListQuery(job) &&
+        matchesCronListAdvancedFilters(job)
+    );
+    return sortCronJobs(filtered);
 }
 
 function getRenderedCronJobs() {
@@ -262,18 +530,32 @@ function getRenderedCronJobs() {
 function updateCronListMeta(total = cronJobs.length, visible = getVisibleCronJobs().length) {
     const meta = document.getElementById('cron-list-meta');
     if (!meta) return;
-    meta.textContent = visible === total
+    const countText = visible === total
         ? `${total} jobs`
         : `${visible} of ${total} jobs shown`;
+    meta.textContent = countText;
 }
 
 function updateCronFilterChips() {
     document.querySelectorAll('[data-cron-filter]').forEach((button) => {
         const isActive = button.dataset.cronFilter === cronListFilter;
-        button.style.background = isActive ? 'var(--brand, var(--surface-2))' : 'transparent';
-        button.style.color = isActive ? 'white' : 'var(--text-primary)';
-        button.style.borderColor = isActive ? 'var(--brand, var(--surface-2))' : 'var(--border-default)';
+        button.classList.toggle('is-active', isActive);
     });
+}
+
+function setCronDetailDrawerOpen(open) {
+    const shouldOpen = Boolean(open && activeCronJobId);
+    const page = document.getElementById('page-cron');
+    const detailView = document.getElementById('cron-detail-view');
+    const peekButton = document.getElementById('cron-detail-peek-btn');
+
+    cronDetailDrawerOpen = shouldOpen;
+    if (page) page.classList.toggle('cron-detail-open', shouldOpen);
+    if (detailView) detailView.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+    if (peekButton) {
+        const shouldShowPeek = !shouldOpen && Boolean(activeCronJobId);
+        peekButton.classList.toggle('hidden', !shouldShowPeek);
+    }
 }
 
 function renderEmptyDetailState(message = 'Choose a cron job on the left to inspect its schedule, failures, and recent runs.') {
@@ -316,6 +598,7 @@ function showCronListView() {
     document.getElementById('cron-detail-view')?.classList.remove('hidden');
     renderCronJobs();
     renderEmptyDetailState();
+    setCronDetailDrawerOpen(false);
 }
 
 function setCronDetailURL(jobId) {
@@ -332,16 +615,12 @@ function setCronDetailURL(jobId) {
 }
 
 function renderSummaryCard(label, value, tone = 'default', subtext = '') {
-    const toneColor = tone === 'error'
-        ? 'var(--error)'
-        : tone === 'success'
-            ? 'var(--success)'
-            : 'var(--text-primary)';
+    const toneClass = tone === 'error' || tone === 'success' ? ` cron-tone-${tone}` : '';
     return `
-        <div style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 14px; min-height: 88px;">
-            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 8px;">${escapeHtml(label)}</div>
-            <div style="font-size: 18px; font-weight: 700; color: ${toneColor}; line-height: 1.2;">${escapeHtml(value || '--')}</div>
-            ${subtext ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">${escapeHtml(subtext)}</div>` : ''}
+        <div class="cron-summary-card${toneClass}">
+            <div class="cron-summary-label">${escapeHtml(label)}</div>
+            <div class="cron-summary-value">${escapeHtml(value || '--')}</div>
+            ${subtext ? `<div class="cron-summary-subtext">${escapeHtml(subtext)}</div>` : ''}
         </div>`;
 }
 
@@ -411,21 +690,21 @@ function renderDetailMeta(job, runs, diagnostics) {
     const payloadPreview = getPayloadSummary(job);
 
     document.getElementById('cron-detail-meta').innerHTML = `
-        <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-            <div style="font-size: 14px; font-weight: 600;">Job metadata</div>
-            <div style="font-size: 11px; color: var(--text-muted);">Showing ${runs.length} recent attempts</div>
+        <div class="cron-meta-header">
+            <div class="cron-meta-title">Job metadata</div>
+            <div class="cron-meta-window">Showing ${runs.length} recent attempts</div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px;">
+        <div class="cron-meta-grid">
             ${meta.map(([k, v]) => `
-                <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px;">
-                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">${escapeHtml(k)}</div>
-                    <div style="font-size: 13px; font-family: ${k === 'History URL' || k === 'Job ID' ? 'monospace' : 'inherit'}; word-break: break-word;">${escapeHtml(v)}</div>
+                <div class="cron-meta-item">
+                    <div class="cron-meta-label">${escapeHtml(k)}</div>
+                    <div class="cron-meta-value${k === 'History URL' || k === 'Job ID' ? ' is-code' : ''}">${escapeHtml(v)}</div>
                 </div>`).join('')}
         </div>
         ${payloadPreview ? `
-            <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px;">
-                <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Payload preview</div>
-                <div style="font-size: 13px; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(payloadPreview)}</div>
+            <div class="cron-meta-payload">
+                <div class="cron-meta-label">Payload preview</div>
+                <p class="cron-meta-payload-text">${escapeHtml(payloadPreview)}</p>
             </div>` : ''}
     `;
 
@@ -433,15 +712,10 @@ function renderDetailMeta(job, runs, diagnostics) {
     if (diagnostics.latestFailure) {
         errorEl.classList.remove('hidden');
         errorEl.innerHTML = `
-            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--error); margin-bottom: 8px;">Latest failed attempt</div>
-            <div style="font-size: 16px; font-weight: 700; margin-bottom: 6px;">${escapeHtml(formatDateTime(diagnostics.latestFailure.runAtMs || diagnostics.latestFailure.ts))}</div>
-            <div style="font-size: 13px; color: var(--text-primary); line-height: 1.5; white-space: pre-wrap;">${escapeHtml(diagnostics.latestFailure.error || diagnostics.latestFailure.summary || 'No error message recorded')}</div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--text-muted);">
-                <span>Status: ${escapeHtml(diagnostics.latestFailure.status || '--')}</span>
-                <span>Duration: ${escapeHtml(String(diagnostics.latestFailure.durationMs || '--'))}ms</span>
-                <span>Provider: ${escapeHtml(diagnostics.latestFailure.provider || '--')}</span>
-                <span>Model: ${escapeHtml(diagnostics.latestFailure.model || '--')}</span>
-            </div>
+            <div class="cron-run-error-label">Latest failed attempt</div>
+            <div class="cron-run-at">${escapeHtml(formatDateTime(diagnostics.latestFailure.runAtMs || diagnostics.latestFailure.ts))}</div>
+            <div class="cron-run-error-text">${escapeHtml(diagnostics.latestFailure.error || diagnostics.latestFailure.summary || 'No error message recorded')}</div>
+            <div class="cron-run-subline">Status: ${escapeHtml(diagnostics.latestFailure.status || '--')} · Duration: ${escapeHtml(String(diagnostics.latestFailure.durationMs || '--'))}ms · Provider: ${escapeHtml(diagnostics.latestFailure.provider || '--')} · Model: ${escapeHtml(diagnostics.latestFailure.model || '--')}</div>
         `;
     } else {
         errorEl.classList.add('hidden');
@@ -457,12 +731,7 @@ function renderDetailTimeline(runs = []) {
     }
 
     timeline.innerHTML = runs.map((entry, index) => {
-        const status = (entry.status || 'unknown').toLowerCase();
-        const tone = status === 'ok' || status === 'success'
-            ? 'var(--success)'
-            : status === 'error' || status === 'failed'
-                ? 'var(--error)'
-                : 'var(--text-primary)';
+        const tone = getRunStatusTone(entry.status);
         const summary = entry.summary || '';
         const error = entry.error || entry.deliveryError || entry.errorMessage || '';
         const usage = entry.usage
@@ -470,23 +739,23 @@ function renderDetailTimeline(runs = []) {
             : '';
 
         return `
-            <div style="display: grid; grid-template-columns: 24px 1fr; gap: 14px; align-items: stretch;">
-                <div style="display: flex; flex-direction: column; align-items: center;">
-                    <div style="width: 12px; height: 12px; border-radius: 999px; background: ${tone}; margin-top: 18px;"></div>
-                    ${index < runs.length - 1 ? '<div style="flex: 1; width: 2px; background: var(--border-default); margin-top: 6px;"></div>' : ''}
+            <article class="cron-timeline-item">
+                <div class="cron-timeline-rail">
+                    <div class="cron-timeline-dot cron-tone-${tone}"></div>
+                    ${index < runs.length - 1 ? '<div class="cron-timeline-line"></div>' : ''}
                 </div>
-                <div style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 14px;">
-                    <div style="display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 10px;">
+                <div class="cron-timeline-card">
+                    <div class="cron-run-head">
                         <div>
-                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px;">
-                                <span class="badge" style="font-size: 10px; background: ${tone}; color: white;">${escapeHtml(entry.status || 'unknown')}</span>
-                                <span class="badge" style="font-size: 10px;">${escapeHtml(entry.action || 'run')}</span>
-                                ${entry.deliveryStatus ? `<span class="badge" style="font-size: 10px;">delivery: ${escapeHtml(entry.deliveryStatus)}</span>` : ''}
+                            <div class="cron-run-badges">
+                                <span class="badge cron-tone-${tone}">${escapeHtml(entry.status || 'unknown')}</span>
+                                <span class="badge">${escapeHtml(entry.action || 'run')}</span>
+                                ${entry.deliveryStatus ? `<span class="badge">delivery: ${escapeHtml(entry.deliveryStatus)}</span>` : ''}
                             </div>
-                            <div style="font-size: 15px; font-weight: 700;">${escapeHtml(formatDateTime(entry.runAtMs || entry.ts))}</div>
-                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Duration: ${escapeHtml(String(entry.durationMs || '--'))}ms · Next run: ${escapeHtml(formatDateTime(entry.nextRunAtMs))}</div>
+                            <div class="cron-run-at">${escapeHtml(formatDateTime(entry.runAtMs || entry.ts))}</div>
+                            <div class="cron-run-subline">Duration: ${escapeHtml(String(entry.durationMs || '--'))}ms · Next run: ${escapeHtml(formatDateTime(entry.nextRunAtMs))}</div>
                         </div>
-                        <div style="text-align: right; font-size: 11px; color: var(--text-muted); min-width: 180px;">
+                        <div class="cron-run-tech">
                             <div>Provider: ${escapeHtml(entry.provider || '--')}</div>
                             <div>Model: ${escapeHtml(entry.model || '--')}</div>
                             <div>Session: ${escapeHtml(entry.sessionId || '--')}</div>
@@ -494,33 +763,33 @@ function renderDetailTimeline(runs = []) {
                     </div>
 
                     ${error ? `
-                        <div style="background: color-mix(in srgb, var(--error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--error) 28%, var(--border-default)); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 10px;">
-                            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--error); margin-bottom: 6px;">Error details</div>
-                            <div style="font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">${escapeHtml(error)}</div>
+                        <div class="cron-run-error">
+                            <div class="cron-run-error-label">Error details</div>
+                            <div class="cron-run-error-text">${escapeHtml(error)}</div>
                         </div>` : ''}
 
                     ${summary ? `
-                        <div style="margin-bottom: 10px;">
-                            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px;">Summary / output</div>
-                            <div style="font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;">${escapeHtml(summary)}</div>
+                        <div class="cron-run-summary">
+                            <div class="cron-run-summary-label">Summary / output</div>
+                            <div class="cron-run-summary-text">${escapeHtml(summary)}</div>
                         </div>` : ''}
 
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 8px;">
-                        <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Session key</div>
-                            <div style="font-size: 12px; font-family: monospace; word-break: break-word;">${escapeHtml(entry.sessionKey || '--')}</div>
+                    <div class="cron-run-grid">
+                        <div class="cron-run-cell">
+                            <div class="cron-run-cell-label">Session key</div>
+                            <div class="cron-run-cell-value is-code">${escapeHtml(entry.sessionKey || '--')}</div>
                         </div>
-                        <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Token usage</div>
-                            <div style="font-size: 12px; word-break: break-word;">${escapeHtml(usage || '--')}</div>
+                        <div class="cron-run-cell">
+                            <div class="cron-run-cell-label">Token usage</div>
+                            <div class="cron-run-cell-value">${escapeHtml(usage || '--')}</div>
                         </div>
-                        <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Delivery</div>
-                            <div style="font-size: 12px; word-break: break-word;">${escapeHtml(entry.delivered ? 'Delivered' : 'Not delivered')} ${entry.deliveryError ? `• ${escapeHtml(entry.deliveryError)}` : ''}</div>
+                        <div class="cron-run-cell">
+                            <div class="cron-run-cell-label">Delivery</div>
+                            <div class="cron-run-cell-value">${escapeHtml(entry.delivered ? 'Delivered' : 'Not delivered')} ${entry.deliveryError ? `• ${escapeHtml(entry.deliveryError)}` : ''}</div>
                         </div>
                     </div>
                 </div>
-            </div>`;
+            </article>`;
     }).join('');
 }
 
@@ -534,6 +803,7 @@ async function openCronDetailView(jobId, { refresh = false, pushState = true } =
     activeCronJobId = jobId;
     listView.classList.remove('hidden');
     detailView.classList.remove('hidden');
+    setCronDetailDrawerOpen(true);
     renderCronJobs();
     timeline.innerHTML = '<div class="empty-state">Loading run timeline...</div>';
     document.getElementById('cron-detail-summary').innerHTML = '';
@@ -552,6 +822,7 @@ async function openCronDetailView(jobId, { refresh = false, pushState = true } =
     if (!job) {
         if (loadToken !== cronDetailLoadToken) return;
         activeCronJobId = null;
+        setCronDetailDrawerOpen(false);
         renderCronJobs();
         renderEmptyDetailState('That cron job could not be found.');
         return;
@@ -596,9 +867,52 @@ window.closeCronDetailView = function() {
     }
 };
 
+window.tuckCronDetailView = function() {
+    setCronDetailDrawerOpen(false);
+};
+
+window.reopenCronDetailView = function() {
+    if (!activeCronJobId) {
+        showToast('Select a cron job first', 'warning');
+        return;
+    }
+    openCronDetailView(activeCronJobId, { pushState: false });
+};
+
 window.setCronListFilter = function(filter) {
     cronListFilter = filter || 'all';
     updateCronFilterChips();
+    renderCronJobs();
+};
+
+window.toggleCronAdvancedControls = function() {
+    cronAdvancedControlsOpen = !cronAdvancedControlsOpen;
+    updateCronAdvancedControlsUI();
+};
+
+window.resetCronListControls = function() {
+    cronListFilter = 'all';
+    cronListQuery = '';
+    cronAgentFilter = 'all';
+    cronEnabledFilter = 'all';
+    cronActivityFilter = 'all';
+    cronSortBy = 'nextRun';
+    cronSortDirection = 'asc';
+    cronAdvancedControlsOpen = false;
+
+    const searchInput = document.getElementById('cron-search-input');
+    if (searchInput) searchInput.value = '';
+    const enabledFilter = document.getElementById('cron-enabled-filter');
+    if (enabledFilter) enabledFilter.value = 'all';
+    const activityFilter = document.getElementById('cron-activity-filter');
+    if (activityFilter) activityFilter.value = 'all';
+    const sortBySelect = document.getElementById('cron-sort-by');
+    if (sortBySelect) sortBySelect.value = 'nextRun';
+    populateCronAgentFilterOptions();
+
+    updateCronFilterChips();
+    updateCronSortDirectionButton();
+    updateCronAdvancedControlsUI();
     renderCronJobs();
 };
 
@@ -647,9 +961,11 @@ async function loadCronJobs({ silent = false, skipDiagnostics = false } = {}) {
         const result = await gateway._request('cron.list', { includeDisabled: true });
         cronJobs = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
         persistCronNameMap();
+        populateCronAgentFilterOptions();
         if (activeCronJobId && !getJobById(activeCronJobId)) {
             activeCronJobId = null;
             renderEmptyDetailState('The previously selected job is no longer available.');
+            setCronDetailDrawerOpen(false);
         }
         renderCronJobs();
         console.log(`[Perf][Cron] cron.list + first render: ${Math.round(performance.now() - startedAt)}ms for ${cronJobs.length} jobs`);
@@ -685,6 +1001,7 @@ function renderCronJobs() {
     container.innerHTML = visibleJobs.map((job, idx) => {
         const enabled = job.enabled !== false;
         const lastStatus = getLastStatus(job);
+        const statusTone = getRunStatusTone(lastStatus);
         const nextRun = formatNextRun(job);
         const lastRun = formatLastRun(job);
         const scheduleText = formatCronSchedule(job.schedule || job.cron);
@@ -694,55 +1011,63 @@ function renderCronJobs() {
         const latestFailure = diagnostics?.latestFailure;
         const latestFailureMessage = latestFailure?.error || latestFailure?.summary || getLastError(job) || '';
         const accent = getCronJobAccentColor(job);
-        const isActive = String(activeCronJobId) === String(job.id || idx);
+        const jobId = String(job.id || idx);
+        const jobIdJs = jobId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isActive = String(activeCronJobId) === jobId;
         const failureCount = diagnostics?.failureCount || 0;
         const successCount = diagnostics?.successCount || 0;
+        const ownerAgent = getCronJobOwnerAgent(job);
+        const activeClass = isActive ? ' is-active' : '';
+        const statusToneClass = statusTone !== 'neutral' ? ` cron-tone-${statusTone}` : '';
 
         return `
-        <button onclick="openCronDetailView('${job.id || idx}')" class="cron-job-card" style="width: 100%; text-align: left; background: ${isActive ? 'color-mix(in srgb, var(--brand, #5b8cff) 14%, var(--surface-1))' : 'var(--surface-1)'}; border: 1px solid ${isActive ? 'color-mix(in srgb, var(--brand, #5b8cff) 55%, var(--border-default))' : 'var(--border-default)'}; border-left: 4px solid ${accent}; border-radius: var(--radius-md); padding: 14px; margin-bottom: 10px; box-shadow: ${isActive ? '0 10px 30px rgba(0,0,0,0.12)' : 'none'}; cursor: pointer;">
-            <div style="display: grid; gap: 10px;">
-                <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
-                    <div style="min-width: 0; flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
-                            <span style="width: 10px; height: 10px; border-radius: 999px; background: ${accent}; display: inline-block; flex-shrink: 0;"></span>
-                            <span style="font-weight: 700; font-size: 15px; line-height: 1.35;">${escapeHtml(job.name || job.id || 'Unnamed Job')}</span>
-                            ${!enabled ? '<span class="badge" style="font-size: 10px;">Disabled</span>' : ''}
-                            ${lastStatus && lastStatus !== '--' ? `<span class="badge" style="font-size: 10px;">${escapeHtml(lastStatus)}</span>` : ''}
-                            ${job.sessionTarget ? `<span class="badge" style="font-size: 10px;">${escapeHtml(job.sessionTarget)}</span>` : ''}
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-family: monospace; word-break: break-word;">${escapeHtml(job.id || '--')}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary, var(--text-muted)); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(payloadPreview)}</div>
+        <article class="cron-job-card${activeClass}" style="--cron-accent: ${accent};" role="button" tabindex="0" onclick="openCronDetailView('${jobIdJs}')" onkeydown="if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); openCronDetailView('${jobIdJs}'); }">
+            <div class="cron-job-header">
+                <div class="cron-job-main">
+                    <div class="cron-job-title-row">
+                        <span class="cron-job-status-dot"></span>
+                        <span class="cron-job-title">${escapeHtml(job.name || job.id || 'Unnamed Job')}</span>
+                        ${ownerAgent ? `<span class="badge cron-job-badge">${escapeHtml(ownerAgent)}</span>` : ''}
+                        ${!enabled ? '<span class="badge cron-job-badge">Disabled</span>' : ''}
+                        ${lastStatus && lastStatus !== '--' ? `<span class="badge cron-job-badge${statusToneClass}">${escapeHtml(lastStatus)}</span>` : ''}
+                        ${job.sessionTarget ? `<span class="badge cron-job-badge">${escapeHtml(job.sessionTarget)}</span>` : ''}
                     </div>
-                    <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;" onclick="event.stopPropagation();">
-                        <button onclick="toggleCronJob('${job.id || idx}', ${!enabled})" class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px;" title="${enabled ? 'Disable' : 'Enable'}">${enabled ? '⏸' : '▶'}</button>
-                        <button onclick="runCronJob('${job.id || idx}')" class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px;" title="Run Now">🚀</button>
-                    </div>
+                    <div class="cron-job-id">${escapeHtml(job.id || '--')}</div>
+                    <p class="cron-job-preview">${escapeHtml(payloadPreview)}</p>
                 </div>
-
-                <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
-                    <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px;">
-                        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 4px;">Next run</div>
-                        <div style="font-size: 12px; font-weight: 600; line-height: 1.4;">${escapeHtml(nextRun)}</div>
-                    </div>
-                    <div style="background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px;">
-                        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 4px;">Last result</div>
-                        <div style="font-size: 12px; font-weight: 600; line-height: 1.4;">${escapeHtml(lastRun)}</div>
-                    </div>
+                <div class="cron-job-actions" onclick="event.stopPropagation();">
+                    <button onclick="event.stopPropagation(); toggleCronJob('${jobIdJs}', ${!enabled});" class="cron-job-action-btn" title="${enabled ? 'Disable job' : 'Enable job'}">${enabled ? 'Pause' : 'Enable'}</button>
+                    <button onclick="event.stopPropagation(); runCronJob('${jobIdJs}');" class="cron-job-action-btn cron-job-action-run" title="Run now">Run now</button>
                 </div>
-
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--text-muted);">
-                    <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 10px;">${escapeHtml(scheduleText)}</code>
-                    ${state.consecutiveErrors ? `<span style="color: var(--error); font-weight: 600;">${escapeHtml(String(state.consecutiveErrors))} consecutive errors</span>` : ''}
-                    ${(failureCount || successCount) ? `<span>${failureCount} failed · ${successCount} successful</span>` : ''}
-                </div>
-
-                ${latestFailureMessage && getCronJobStatusTone(job) === 'error' ? `
-                    <div style="background: color-mix(in srgb, var(--error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--error) 22%, var(--border-default)); border-radius: var(--radius-sm); padding: 10px;">
-                        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--error); margin-bottom: 4px;">Latest failure</div>
-                        <div style="font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(latestFailureMessage)}</div>
-                    </div>` : ''}
             </div>
-        </button>`;
+
+            <div class="cron-job-divider"></div>
+
+            <div class="cron-job-kpis">
+                <div class="cron-job-kpi">
+                    <div class="cron-job-kpi-label">Next run</div>
+                    <div class="cron-job-kpi-value">${escapeHtml(nextRun)}</div>
+                </div>
+                <div class="cron-job-kpi">
+                    <div class="cron-job-kpi-label">Last result</div>
+                    <div class="cron-job-kpi-value">${escapeHtml(lastRun)}</div>
+                </div>
+            </div>
+
+            <div class="cron-job-divider"></div>
+
+            <div class="cron-job-footer">
+                <code class="cron-schedule-code">${escapeHtml(scheduleText)}</code>
+                ${state.consecutiveErrors ? `<span class="cron-job-consecutive-errors">${escapeHtml(String(state.consecutiveErrors))} consecutive errors</span>` : ''}
+                ${(failureCount || successCount) ? `<span>${failureCount} failed · ${successCount} successful</span>` : ''}
+            </div>
+
+            ${latestFailureMessage && getCronJobStatusTone(job) === 'error' ? `
+                <div class="cron-job-latest-failure">
+                    <div class="cron-job-latest-failure-label">Latest failure</div>
+                    <div class="cron-job-latest-failure-text">${escapeHtml(latestFailureMessage)}</div>
+                </div>` : ''}
+        </article>`;
     }).join('');
 }
 
@@ -762,7 +1087,7 @@ async function runCronJob(jobId) {
         showToast('Job triggered', 'success');
         cronRunCache.delete(jobId);
         cronDiagnostics.delete(jobId);
-        if (activeCronJobId === jobId) {
+        if (activeCronJobId === jobId && cronDetailDrawerOpen) {
             openCronDetailView(jobId, { refresh: true, pushState: false });
         } else {
             loadCronJobs({ silent: true });

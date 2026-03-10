@@ -1,36 +1,67 @@
                     <!-- =================== CRON PAGE =================== -->
                     <div id="page-cron" class="page">
-                        <div class="cron-page" style="max-width: 1440px; margin: 0 auto; padding: 24px;">
-                            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px; flex-wrap: wrap;">
-                                <div>
-                                    <h1 class="page-title">⏰ Cron Jobs</h1>
-                                    <p class="page-subtitle">Manage scheduled tasks and automation without losing your place</p>
+                        <div class="cron-page">
+                            <div class="cron-page-header">
+                                <div class="cron-page-heading">
+                                    <h1 class="cron-page-title">⏰ Cron Jobs</h1>
+                                    <p class="cron-page-subtitle">Manage scheduled tasks and automation without losing your place</p>
                                 </div>
-                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                    <button onclick="refreshCronDiagnostics()" class="btn btn-ghost" style="padding: 8px 16px;">Refresh diagnostics</button>
-                                    <button onclick="copyCronListJson()" class="btn btn-ghost" style="padding: 8px 16px;">Copy list JSON</button>
-                                    <button onclick="exportCronListJson()" class="btn btn-ghost" style="padding: 8px 16px;">Export list JSON</button>
-                                    <button onclick="openAddCronModal()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Job</button>
+                                <div class="cron-page-actions">
+                                    <button onclick="refreshCronDiagnostics()" class="btn btn-ghost">Refresh diagnostics</button>
+                                    <button onclick="copyCronListJson()" class="btn btn-ghost">Copy list JSON</button>
+                                    <button onclick="exportCronListJson()" class="btn btn-ghost">Export list JSON</button>
+                                    <button onclick="openAddCronModal()" class="btn btn-primary">+ Add Job</button>
                                 </div>
                             </div>
 
-                            <div style="display: grid; grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); gap: 18px; align-items: start;">
-                                <div id="cron-list-view" style="display: grid; gap: 14px; min-width: 0;">
-                                    <div style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 14px; display: grid; gap: 12px; position: sticky; top: 16px; z-index: 1;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <div class="cron-layout">
+                                <div id="cron-list-view" class="cron-list-view">
+                                    <div class="cron-list-controls">
+                                        <div class="cron-list-controls-header">
                                             <div>
-                                                <div style="font-size: 13px; font-weight: 700;">Jobs overview</div>
-                                                <div id="cron-list-meta" style="font-size: 11px; color: var(--text-muted);">Loading jobs…</div>
+                                                <div class="cron-section-label">Jobs overview</div>
+                                                <div id="cron-list-meta" class="cron-section-meta">Loading jobs…</div>
                                             </div>
-                                            <button onclick="closeCronDetailView()" class="btn btn-ghost" style="padding: 6px 10px;">Clear selection</button>
+                                            <button onclick="closeCronDetailView()" class="btn btn-ghost cron-small-btn">Clear selection</button>
                                         </div>
-                                        <input id="cron-search-input" type="text" class="input" placeholder="Search by name, ID, payload, or schedule" style="width: 100%;">
-                                        <div id="cron-filter-bar" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                            <button onclick="setCronListFilter('all')" class="btn btn-ghost" data-cron-filter="all" style="padding: 6px 10px;">All</button>
-                                            <button onclick="setCronListFilter('failing')" class="btn btn-ghost" data-cron-filter="failing" style="padding: 6px 10px;">Failing</button>
-                                            <button onclick="setCronListFilter('healthy')" class="btn btn-ghost" data-cron-filter="healthy" style="padding: 6px 10px;">Healthy</button>
-                                            <button onclick="setCronListFilter('disabled')" class="btn btn-ghost" data-cron-filter="disabled" style="padding: 6px 10px;">Disabled</button>
-                                            <button onclick="setCronListFilter('recent')" class="btn btn-ghost" data-cron-filter="recent" style="padding: 6px 10px;">Recently run</button>
+                                        <div class="cron-toolbar-row">
+                                            <input id="cron-search-input" type="text" class="input cron-search-input" placeholder="Search jobs">
+                                            <select id="cron-sort-by" class="input cron-control-input cron-sort-select">
+                                                <option value="nextRun">Next run</option>
+                                                <option value="lastRun">Last run</option>
+                                                <option value="status">Status</option>
+                                                <option value="errors">Consecutive errors</option>
+                                                <option value="failures">Failure count</option>
+                                                <option value="name">Name</option>
+                                                <option value="agent">Agent owner</option>
+                                            </select>
+                                            <button id="cron-sort-direction-btn" class="btn btn-ghost cron-small-btn cron-sort-direction-btn" type="button" title="Sort direction">Asc</button>
+                                            <button id="cron-advanced-toggle-btn" onclick="toggleCronAdvancedControls()" class="btn btn-ghost cron-small-btn" type="button" aria-expanded="false" title="Advanced filters">Filters</button>
+                                        </div>
+                                        <div id="cron-filter-bar" class="cron-filter-bar">
+                                            <button onclick="setCronListFilter('all')" class="btn btn-ghost cron-filter-btn" data-cron-filter="all">All</button>
+                                            <button onclick="setCronListFilter('failing')" class="btn btn-ghost cron-filter-btn" data-cron-filter="failing">Failing</button>
+                                            <button onclick="setCronListFilter('healthy')" class="btn btn-ghost cron-filter-btn" data-cron-filter="healthy">Healthy</button>
+                                            <button onclick="setCronListFilter('disabled')" class="btn btn-ghost cron-filter-btn" data-cron-filter="disabled">Disabled</button>
+                                            <button onclick="setCronListFilter('recent')" class="btn btn-ghost cron-filter-btn" data-cron-filter="recent">Recently run</button>
+                                        </div>
+                                        <div id="cron-advanced-controls" class="cron-advanced-controls hidden">
+                                            <select id="cron-agent-filter" class="input cron-control-input" title="Filter by owner agent">
+                                                <option value="all">All agents</option>
+                                            </select>
+                                            <select id="cron-enabled-filter" class="input cron-control-input" title="Filter by enabled state">
+                                                <option value="all">All states</option>
+                                                <option value="enabled">Enabled</option>
+                                                <option value="disabled">Disabled</option>
+                                            </select>
+                                            <select id="cron-activity-filter" class="input cron-control-input" title="Filter by job activity">
+                                                <option value="all">Any activity</option>
+                                                <option value="ran_24h">Ran in last 24 hours</option>
+                                                <option value="stale_7d">Stale (older than 7 days)</option>
+                                                <option value="never">Never run</option>
+                                                <option value="next_24h">Runs in next 24 hours</option>
+                                            </select>
+                                            <button onclick="resetCronListControls()" class="btn btn-ghost cron-small-btn" type="button">Reset</button>
                                         </div>
                                     </div>
 
@@ -39,15 +70,19 @@
                                     </div>
                                 </div>
 
-                                <div id="cron-detail-view" style="min-width: 0;">
-                                    <div style="position: sticky; top: 16px; display: grid; gap: 18px;">
-                                        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0; gap: 16px; flex-wrap: wrap; background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 16px;">
-                                            <div>
-                                                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 8px;">Selected job</div>
-                                                <h1 id="cron-detail-title" class="page-title" style="margin-bottom: 6px;">Select a cron job</h1>
-                                                <p id="cron-detail-subtitle" class="page-subtitle" style="margin-bottom: 0;">Choose a job on the left to inspect its schedule, failures, and recent runs.</p>
+                                <button id="cron-detail-peek-btn" class="btn btn-primary cron-detail-peek-btn hidden" onclick="reopenCronDetailView()">Show details panel</button>
+                                <div id="cron-detail-backdrop" class="cron-detail-backdrop" onclick="tuckCronDetailView()"></div>
+
+                                <div id="cron-detail-view" class="cron-detail-view" aria-hidden="true">
+                                    <div class="cron-detail-stack">
+                                        <div class="cron-detail-header">
+                                            <div class="cron-detail-heading">
+                                                <div class="cron-section-kicker">Selected job</div>
+                                                <h1 id="cron-detail-title" class="cron-detail-title">Select a cron job</h1>
+                                                <p id="cron-detail-subtitle" class="cron-detail-subtitle">Choose a job on the left to inspect its schedule, failures, and recent runs.</p>
                                             </div>
-                                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                            <div class="cron-detail-actions">
+                                                <button id="cron-detail-tuck-btn" class="btn btn-ghost" onclick="tuckCronDetailView()">Hide panel</button>
                                                 <button id="cron-detail-copy-btn" class="btn btn-ghost">Copy timeline JSON</button>
                                                 <button id="cron-detail-export-btn" class="btn btn-ghost">Export timeline JSON</button>
                                                 <button id="cron-detail-run-btn" class="btn btn-ghost">Run now</button>
@@ -55,10 +90,10 @@
                                             </div>
                                         </div>
 
-                                        <div id="cron-detail-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;"></div>
-                                        <div id="cron-detail-error" class="hidden" style="background: color-mix(in srgb, var(--error) 12%, transparent); border: 1px solid color-mix(in srgb, var(--error) 35%, var(--border-default)); border-radius: var(--radius-md); padding: 14px;"></div>
-                                        <div id="cron-detail-meta" style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 14px;"></div>
-                                        <div id="cron-detail-timeline" style="display: grid; gap: 14px;"></div>
+                                        <div id="cron-detail-summary" class="cron-summary-grid"></div>
+                                        <div id="cron-detail-error" class="cron-detail-error hidden"></div>
+                                        <div id="cron-detail-meta" class="cron-detail-meta"></div>
+                                        <div id="cron-detail-timeline" class="cron-detail-timeline"></div>
                                     </div>
                                 </div>
                             </div>
@@ -66,25 +101,25 @@
 
                         <!-- Add Cron Modal -->
                         <div id="add-cron-modal" class="modal-overlay">
-                            <div class="modal" style="max-width: 480px;">
+                            <div class="modal cron-modal">
                                 <div class="modal-header">
                                     <h2>Add Cron Job</h2>
                                     <button onclick="closeAddCronModal()" class="btn-icon">✕</button>
                                 </div>
-                                <div class="modal-body" style="padding: 16px;">
-                                    <div style="margin-bottom: 12px;">
-                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Name</label>
-                                        <input type="text" id="cron-new-name" class="input" placeholder="My cron job" style="width: 100%;">
+                                <div class="modal-body cron-modal-body">
+                                    <div class="cron-form-field">
+                                        <label class="cron-form-label">Name</label>
+                                        <input type="text" id="cron-new-name" class="input" placeholder="My cron job">
                                     </div>
-                                    <div style="margin-bottom: 12px;">
-                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Schedule (cron expression)</label>
-                                        <input type="text" id="cron-new-schedule" class="input" placeholder="0 9 * * *" style="width: 100%;">
+                                    <div class="cron-form-field">
+                                        <label class="cron-form-label">Schedule (cron expression)</label>
+                                        <input type="text" id="cron-new-schedule" class="input" placeholder="0 9 * * *">
                                     </div>
-                                    <div style="margin-bottom: 16px;">
-                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Command / Action</label>
-                                        <textarea id="cron-new-command" class="input" placeholder="What should this job do?" rows="3" style="width: 100%; resize: vertical;"></textarea>
+                                    <div class="cron-form-field cron-form-field-last">
+                                        <label class="cron-form-label">Command / Action</label>
+                                        <textarea id="cron-new-command" class="input cron-form-textarea" placeholder="What should this job do?" rows="3"></textarea>
                                     </div>
-                                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                                    <div class="cron-form-actions">
                                         <button onclick="closeAddCronModal()" class="btn btn-ghost">Cancel</button>
                                         <button onclick="submitNewCronJob()" class="btn btn-primary">Add Job</button>
                                     </div>
