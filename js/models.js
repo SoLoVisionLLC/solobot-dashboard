@@ -91,6 +91,13 @@ function isSystemMessage(text, from) {
     if (trimmed.includes('Reply with NO_REPLY if nothing durable.')) return true;
     if (trimmed.includes('Current time:') && trimmed.includes('America/Detroit')) return true;
 
+    // Watchdog / automation chatter
+    if (lowerTrimmed.includes('watchdog check')) return true;
+    if (lowerTrimmed.includes('watchdog ping')) return true;
+    if (lowerTrimmed.includes('agent-to-agent announce step')) return true;
+    if (lowerTrimmed.includes('reply with a one-line ack')) return true;
+    if (/^(ack|announce_skip|reply_skip)$/i.test(trimmed)) return true;
+
     // Short heartbeat patterns
     if (from === 'solobot' && trimmed.length < 200) {
         const exactStartPatterns = [
