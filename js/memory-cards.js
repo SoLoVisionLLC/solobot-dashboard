@@ -32,43 +32,71 @@
     function setPanzoomScale(instance, scale, opts) {
         if (!instance) return;
         const safeScale = sanitizeScale(scale, 1);
-        if (typeof instance.zoom === 'function') {
-            instance.zoom(safeScale, opts);
-            return;
-        }
         if (typeof instance.zoomAbs === 'function') {
             instance.zoomAbs(0, 0, safeScale);
             return;
         }
         if (typeof instance.zoomTo === 'function') {
             instance.zoomTo(0, 0, safeScale);
+            return;
+        }
+        if (typeof instance.zoom === 'function') {
+            instance.zoom(safeScale, opts);
         }
     }
 
+    const ORG_VIEWPORT_STORAGE_KEY = 'solobot-orgchart-viewport-v2';
+    const ORG_GRID_SPAN = 2;
+
     // ── Org-Tree Data Structure ──
     const ORG_TREE = {
-        'solo': { name: 'SoLo', role: 'CEO', emoji: '👑', reports: ['main', 'exec', 'family'], description: 'Founder & President' },
-        'main': { name: 'Halo', role: 'PA', emoji: '🤖', reports: [], description: 'Personal Assistant' },
-        'exec': { name: 'Elon', role: 'CoS', emoji: '👔', reports: ['cfo', 'cto', 'cmp', 'coo'], description: 'Chief of Staff' },
-        'family': { name: 'Haven', role: 'HOME', emoji: '🏠', reports: [], description: 'Family & Household' },
-        'cfo': { name: 'Sterling', role: 'CFO', emoji: '💰', reports: ['tax'], description: 'Chief Financial Officer' },
-        'cto': { name: 'Orion', role: 'CTO', emoji: '🧠', reports: ['net', 'dev', 'sec'], description: 'Chief Technical Officer' },
-        'cmp': { name: 'Vector', role: 'CMP', emoji: '📣', reports: ['art', 'smm'], description: 'Chief Marketing & Product' },
-        'coo': { name: 'Atlas', role: 'COO', emoji: '📋', reports: ['docs'], description: 'Chief Operating Officer' },
-        'tax': { name: 'Ledger', role: 'TAX', emoji: '📒', reports: [], description: 'Tax Specialist' },
-        'art': { name: 'Luma', role: 'ART', emoji: '🎨', reports: [], description: 'Creative Design' },
-        'smm': { name: 'Nova', role: 'SMM', emoji: '📱', reports: ['youtube'], description: 'Social Media Manager' },
-        'youtube': { name: 'Snip', role: 'YT', emoji: '🎬', reports: [], description: 'YouTube Manager' },
-        'docs': { name: 'Canon', role: 'DOC', emoji: '📚', reports: [], description: 'Knowledge & Docs' },
-        'net': { name: 'Sentinel', role: 'NET', emoji: '📡', reports: [], description: 'Network Admin' },
-        'dev': { name: 'Dev', role: 'ENG', emoji: '⚙️', reports: ['ui', 'swe', 'devops'], description: 'Head of Engineering' },
-        'sec': { name: 'Knox', role: 'SEC', emoji: '🔒', reports: [], description: 'Security' },
-        'ui': { name: 'Quill', role: 'FE/UI', emoji: '✒️', reports: [], description: 'Frontend / UI' },
-        'swe': { name: 'Chip', role: 'SWE', emoji: '💻', reports: [], description: 'Software Engineer' },
-        'devops': { name: 'Forge', role: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' }
+        solo: { name: 'SoLo', role: 'President', title: 'President', emoji: '👑', reports: ['main', 'exec', 'family'], description: 'Founder & President', drillable: false },
+        main: { name: 'Halo', role: 'PA', title: 'Personal Assistant', emoji: '🤖', reports: [], description: 'Personal Assistant' },
+        exec: { name: 'Elon', role: 'CoS', title: 'CoS', emoji: '👔', reports: ['cfo', 'cto', 'cmp', 'coo'], description: 'Chief of Staff' },
+        family: { name: 'Haven', role: 'HOME', title: 'Home', emoji: '🏠', reports: [], description: 'Family & Household' },
+        cfo: { name: 'Sterling', role: 'CFO', title: 'CFO', emoji: '💰', reports: ['tax'], description: 'Chief Financial Officer' },
+        cto: { name: 'Orion', role: 'CTO', title: 'CTO', emoji: '🧠', reports: ['net', 'dev', 'sec'], description: 'Chief Technical Officer' },
+        cmp: { name: 'Vector', role: 'CMP', title: 'CMP', emoji: '📣', reports: ['art', 'smm'], description: 'Chief Marketing & Product' },
+        coo: { name: 'Atlas', role: 'COO', title: 'COO', emoji: '📋', reports: [], description: 'Chief Operating Officer' },
+        tax: { name: 'Ledger', role: 'TAX', title: 'Tax Specialist', emoji: '📒', reports: [], description: 'Tax Specialist' },
+        art: { name: 'Luma', role: 'ART', title: 'Creative Design', emoji: '🎨', reports: [], description: 'Creative Design' },
+        smm: { name: 'Nova', role: 'SMM', title: 'Social Media Manager', emoji: '📱', reports: ['youtube'], description: 'Social Media Manager' },
+        youtube: { name: 'Snip', role: 'YT', title: 'YouTube Manager', emoji: '🎬', reports: [], description: 'YouTube Manager' },
+        net: { name: 'Sentinel', role: 'NET', title: 'Network Admin', emoji: '📡', reports: [], description: 'Network Admin' },
+        dev: { name: 'Dev', role: 'ENG', title: 'Head of Engineering', emoji: '⚙️', reports: ['ui', 'swe', 'devops'], description: 'Head of Engineering' },
+        sec: { name: 'Knox', role: 'SEC', title: 'Security', emoji: '🔒', reports: [], description: 'Security' },
+        ui: { name: 'Quill', role: 'FE/UI', title: 'Frontend/UI', emoji: '✒️', reports: [], description: 'Frontend / UI' },
+        swe: { name: 'Chip', role: 'SWE', title: 'Software Engineer', emoji: '💻', reports: [], description: 'Software Engineer' },
+        devops: { name: 'Forge', role: 'DEVOPS', title: 'DEVOPS', emoji: '🔨', reports: [], description: 'DevOps' }
     };
 
-    const ORG_ORDER = ['solo', 'main', 'exec', 'family', 'cfo', 'cto', 'cmp', 'coo', 'tax', 'art', 'smm', 'docs', 'youtube', 'net', 'dev', 'sec', 'ui', 'swe', 'devops'];
+    const ORG_LAYOUT = {
+        solo: { row: 1, col: 7 },
+        main: { row: 2, col: 2 },
+        exec: { row: 2, col: 6 },
+        family: { row: 2, col: 10 },
+        cfo: { row: 3, col: 2 },
+        cto: { row: 3, col: 5 },
+        cmp: { row: 3, col: 8 },
+        coo: { row: 3, col: 11 },
+        tax: { row: 4, col: 2 },
+        art: { row: 4, col: 7 },
+        smm: { row: 4, col: 9 },
+        youtube: { row: 5, col: 9 },
+        net: { row: 6, col: 3 },
+        dev: { row: 6, col: 6 },
+        sec: { row: 6, col: 9 },
+        ui: { row: 7, col: 3 },
+        swe: { row: 7, col: 6 },
+        devops: { row: 7, col: 9 }
+    };
+
+    const ORG_ORDER = Object.keys(ORG_LAYOUT).sort((left, right) => {
+        const leftPos = ORG_LAYOUT[left];
+        const rightPos = ORG_LAYOUT[right];
+        if (leftPos.row !== rightPos.row) return leftPos.row - rightPos.row;
+        return leftPos.col - rightPos.col;
+    });
 
     const ORG_TO_CANONICAL = {
         solo: null,
@@ -82,7 +110,6 @@
         sec: 'knox',
         net: 'sentinel',
         cmp: 'vector',
-        docs: 'canon',
         art: 'luma',
         tax: 'ledger',
         ui: 'quill',
@@ -92,11 +119,95 @@
         family: 'haven'
     };
 
+    const CANONICAL_TO_ORG = Object.entries(ORG_TO_CANONICAL).reduce((acc, [orgId, agentId]) => {
+        if (agentId) acc[agentId] = orgId;
+        return acc;
+    }, {});
+
+    const ORG_PARENT_MAP = Object.entries(ORG_TREE).reduce((acc, [parentId, info]) => {
+        (info.reports || []).forEach((childId) => {
+            acc[childId] = parentId;
+        });
+        return acc;
+    }, {});
+
     function resolveAgentForOrgId(orgId, agentMap) {
         const direct = agentMap[orgId];
         if (direct) return direct;
         const canonical = ORG_TO_CANONICAL[orgId];
         return canonical ? agentMap[canonical] : null;
+    }
+
+    function resolveOrgId(agentId) {
+        const normalized = String(agentId || '').toLowerCase();
+        if (!normalized) return null;
+        if (ORG_TREE[normalized]) return normalized;
+        return CANONICAL_TO_ORG[normalized] || normalized;
+    }
+
+    function getOrgGridStyle(orgId) {
+        const layout = ORG_LAYOUT[orgId];
+        if (!layout) return '';
+        return `grid-column: ${layout.col} / span ${ORG_GRID_SPAN}; grid-row: ${layout.row};`;
+    }
+
+    function addOrgBranch(orgId, visibleIds) {
+        if (!ORG_TREE[orgId]) return;
+        visibleIds.add(orgId);
+        (ORG_TREE[orgId].reports || []).forEach((childId) => addOrgBranch(childId, visibleIds));
+    }
+
+    function collectVisibleOrgIds(filter, agentMap) {
+        const query = String(filter || '').trim().toLowerCase();
+        if (!query) {
+            return {
+                visibleIds: new Set(ORG_ORDER),
+                highlightIds: new Set()
+            };
+        }
+
+        const highlightIds = new Set();
+        ORG_ORDER.forEach((orgId) => {
+            const org = ORG_TREE[orgId];
+            const agent = resolveAgentForOrgId(orgId, agentMap);
+            const searchable = [
+                org.name,
+                org.title,
+                org.role,
+                org.description,
+                agent?.name,
+                agent?.description,
+                agent?.role
+            ].filter(Boolean).join(' ').toLowerCase();
+
+            const matchesFiles = (agent?.files || []).some((file) =>
+                String(file?.name || '').toLowerCase().includes(query)
+            );
+
+            if (searchable.includes(query) || matchesFiles) {
+                highlightIds.add(orgId);
+            }
+        });
+
+        if (!highlightIds.size) {
+            return {
+                visibleIds: new Set(),
+                highlightIds
+            };
+        }
+
+        const visibleIds = new Set();
+        highlightIds.forEach((orgId) => {
+            addOrgBranch(orgId, visibleIds);
+
+            let cursor = orgId;
+            while (ORG_PARENT_MAP[cursor]) {
+                cursor = ORG_PARENT_MAP[cursor];
+                visibleIds.add(cursor);
+            }
+        });
+
+        return { visibleIds, highlightIds };
     }
 
     function getMemoryLayout() {
@@ -308,14 +419,14 @@
         return req;
     }
 
-    async function hydrateOrgCardDetails(levels) {
-        if (!levels) return;
+    async function hydrateOrgCardDetails(nodes) {
+        if (!nodes) return;
 
         const ids = [];
-        Object.values(levels).forEach(nodes => {
-            (nodes || []).forEach(({ id, agent }) => {
-                ids.push({ orgId: id, agentId: agent?.id || id });
-            });
+        (Array.isArray(nodes) ? nodes : Object.values(nodes).flat()).forEach(({ id, agent }) => {
+            const targetAgentId = agent?.id || ORG_TO_CANONICAL[id] || null;
+            if (!targetAgentId) return;
+            ids.push({ orgId: id, agentId: targetAgentId });
         });
 
         await Promise.all(ids.map(async ({ orgId, agentId }) => {
@@ -347,90 +458,151 @@
         return { totalAgents, totalFiles, modifiedToday, activeAgents };
     }
 
-    function getDepth(agentId) {
-        if (agentId === 'solo') return 0;
-        for (const [mgr, info] of Object.entries(ORG_TREE)) {
-            if (info.reports.includes(agentId)) return getDepth(mgr) + 1;
-        }
-        return 2;
+    function getOrgNodeMetrics(orgId) {
+        const canvas = document.getElementById('org-tree-canvas');
+        const nodeCard = document.querySelector(`.org-node[data-agent="${orgId}"] .org-node-card`);
+        if (!canvas || !nodeCard) return null;
+
+        const canvasRect = canvas.getBoundingClientRect();
+        const nodeRect = nodeCard.getBoundingClientRect();
+
+        return {
+            centerX: (nodeRect.left - canvasRect.left) + (nodeRect.width / 2),
+            topY: nodeRect.top - canvasRect.top,
+            bottomY: nodeRect.bottom - canvasRect.top
+        };
+    }
+
+    function buildConnectorLine(x1, y1, x2, y2) {
+        return `<line class="org-connector" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"></line>`;
+    }
+
+    function syncOrgCanvasSize() {
+        const canvas = document.getElementById('org-tree-canvas');
+        const grid = canvas?.querySelector('.org-tree-grid');
+        if (!canvas || !grid) return;
+
+        const canvasStyles = window.getComputedStyle(canvas);
+        const padX = parseFloat(canvasStyles.paddingLeft || '0') + parseFloat(canvasStyles.paddingRight || '0');
+        const padY = parseFloat(canvasStyles.paddingTop || '0') + parseFloat(canvasStyles.paddingBottom || '0');
+
+        canvas.style.width = `${Math.ceil(grid.scrollWidth + padX)}px`;
+        canvas.style.height = `${Math.ceil(grid.scrollHeight + padY)}px`;
+    }
+
+    function drawOrgConnectors(visibleIds) {
+        const svg = document.querySelector('.org-tree-connectors');
+        const canvas = document.getElementById('org-tree-canvas');
+        if (!svg || !canvas) return;
+
+        const width = Math.ceil(canvas.offsetWidth);
+        const height = Math.ceil(canvas.offsetHeight);
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+
+        let markup = '';
+        Object.entries(ORG_TREE).forEach(([parentId, info]) => {
+            if (!visibleIds.has(parentId)) return;
+            const parentMetrics = getOrgNodeMetrics(parentId);
+            if (!parentMetrics) return;
+
+            const childMetrics = (info.reports || [])
+                .filter((childId) => visibleIds.has(childId))
+                .map((childId) => ({ id: childId, metrics: getOrgNodeMetrics(childId) }))
+                .filter((entry) => entry.metrics);
+
+            if (!childMetrics.length) return;
+
+            const childTopY = Math.min(...childMetrics.map((entry) => entry.metrics.topY));
+            const branchY = Math.round(
+                parentMetrics.bottomY + Math.max(18, Math.min(54, (childTopY - parentMetrics.bottomY) / 2))
+            );
+
+            markup += buildConnectorLine(parentMetrics.centerX, parentMetrics.bottomY, parentMetrics.centerX, branchY);
+
+            if (childMetrics.length === 1) {
+                const onlyChild = childMetrics[0].metrics;
+                if (Math.abs(onlyChild.centerX - parentMetrics.centerX) > 1) {
+                    markup += buildConnectorLine(parentMetrics.centerX, branchY, onlyChild.centerX, branchY);
+                }
+            } else {
+                const childCenters = childMetrics.map((entry) => entry.metrics.centerX).sort((left, right) => left - right);
+                markup += buildConnectorLine(childCenters[0], branchY, childCenters[childCenters.length - 1], branchY);
+            }
+
+            childMetrics.forEach(({ metrics }) => {
+                markup += buildConnectorLine(metrics.centerX, branchY, metrics.centerX, metrics.topY);
+            });
+        });
+
+        svg.innerHTML = markup;
     }
 
     // ── Pan/Zoom Navigation ──
-    function initPanZoom() {
+    function initPanZoom(forceFit = false) {
         const wrapper = document.querySelector('.org-tree-wrapper');
         const viewport = document.querySelector('.org-tree-viewport');
-        const connectors = document.querySelector('.org-tree-connectors');
         if (!wrapper || !viewport || !window.panzoom) return;
 
-        // Destroy existing instance
         if (panzoomInstance) {
             panzoomInstance.dispose();
         }
 
         panzoomInstance = window.panzoom(viewport, {
             maxZoom: 2.5,
-            minZoom: 0.3,
+            minZoom: 0.45,
             zoomSpeed: 0.5,
             panSpeed: 0.5,
-            bounds: true,
-            boundsPadding: 0.1,
+            bounds: false,
+            boundsPadding: 0.08,
             disablePanOnZoom: false,
             disableZoomOnPan: false,
             exclude: ['.org-node-card'],
             onTouch: function (e) {
-                // Allow touch on nodes for click
                 return !e.target.closest('.org-node-card');
             }
         });
 
-        // Sync transform to connector SVG (keeps lines attached to nodes)
-        const syncConnectors = () => {
-            if (!panzoomInstance || !connectors) return;
-            const state = panzoomInstance.getTransform();
-            // Match the transform on the connector SVG so lines stay aligned
-            connectors.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
-            connectors.style.transformOrigin = '0 0';
-        };
-
-        // Load persisted state
-        const savedState = localStorage.getItem('solobot-orgchart-viewport');
-        if (savedState) {
-            try {
-                const { x, y, scale } = JSON.parse(savedState);
-                const safeX = Number.isFinite(Number(x)) ? Number(x) : 0;
-                const safeY = Number.isFinite(Number(y)) ? Number(y) : 0;
-                panzoomInstance.moveTo(safeX, safeY);
-                setPanzoomScale(panzoomInstance, scale);
-                syncConnectors();
-            } catch (e) {
-                console.warn('Failed to restore viewport state:', e);
+        let restored = false;
+        if (!forceFit) {
+            const savedState = localStorage.getItem(ORG_VIEWPORT_STORAGE_KEY);
+            if (savedState) {
+                try {
+                    const { x, y, scale } = JSON.parse(savedState);
+                    const safeX = Number.isFinite(Number(x)) ? Number(x) : 0;
+                    const safeY = Number.isFinite(Number(y)) ? Number(y) : 0;
+                    panzoomInstance.moveTo(safeX, safeY);
+                    setPanzoomScale(panzoomInstance, scale);
+                    restored = true;
+                } catch (e) {
+                    console.warn('Failed to restore org viewport state:', e);
+                }
             }
         }
 
-        // Save state and sync connectors on pan/zoom (throttled with rAF)
         let rafId = null;
         panzoomInstance.on('panzoom', () => {
             if (rafId) cancelAnimationFrame(rafId);
             rafId = requestAnimationFrame(() => {
                 rafId = null;
                 const state = panzoomInstance.getTransform();
-                localStorage.setItem('solobot-orgchart-viewport', JSON.stringify({
+                localStorage.setItem(ORG_VIEWPORT_STORAGE_KEY, JSON.stringify({
                     x: state.x,
                     y: state.y,
                     scale: state.scale
                 }));
-                syncConnectors();
+                updateMinimap();
             });
         });
 
-        // Initial sync
-        syncConnectors();
-
-        // Fit to content on load
         setTimeout(() => {
-            fitToContent();
-            syncConnectors();
-        }, 300);
+            if (!restored || forceFit) {
+                fitToContent(false);
+            } else {
+                updateMinimap();
+            }
+        }, 60);
     }
 
     function zoomIn() {
@@ -446,21 +618,18 @@
     }
 
     function resetView() {
-        if (panzoomInstance) {
-            panzoomInstance.moveTo(0, 0);
-            setPanzoomScale(panzoomInstance, 1, { animate: true });
-        }
+        fitToContent(true);
     }
 
-    function fitToContent() {
+    function fitToContent(animate = true) {
         if (!panzoomInstance) return;
         const wrapper = document.querySelector('.org-tree-wrapper');
-        const viewport = document.querySelector('.org-tree-viewport');
-        if (!wrapper || !viewport) return;
+        const canvas = document.getElementById('org-tree-canvas');
+        if (!wrapper || !canvas) return;
 
         const wrapperRect = wrapper.getBoundingClientRect();
-        const contentWidth = Number(viewport.scrollWidth);
-        const contentHeight = Number(viewport.scrollHeight);
+        const contentWidth = Number(canvas.offsetWidth);
+        const contentHeight = Number(canvas.offsetHeight);
 
         const safeWrapperW = Number.isFinite(wrapperRect.width) && wrapperRect.width > 0 ? wrapperRect.width : 1;
         const safeWrapperH = Number.isFinite(wrapperRect.height) && wrapperRect.height > 0 ? wrapperRect.height : 1;
@@ -468,39 +637,64 @@
         const safeContentH = Number.isFinite(contentHeight) && contentHeight > 0 ? contentHeight : 1;
 
         const scale = sanitizeScale(Math.min(
-            (safeWrapperW * 0.8) / safeContentW,
-            (safeWrapperH * 0.8) / safeContentH,
-            1.5
+            (safeWrapperW - 96) / safeContentW,
+            (safeWrapperH - 120) / safeContentH,
+            1.05
         ), 1);
 
-        panzoomInstance.moveTo(0, 0);
-        setPanzoomScale(panzoomInstance, scale, { animate: true });
+        setPanzoomScale(panzoomInstance, scale, animate ? { animate: true } : undefined);
+
+        const x = Math.round((safeWrapperW - (safeContentW * scale)) / 2);
+        const y = Math.round((safeWrapperH - (safeContentH * scale)) / 2);
+        panzoomInstance.moveTo(x, y);
+        updateMinimap();
+
+        localStorage.setItem(ORG_VIEWPORT_STORAGE_KEY, JSON.stringify({ x, y, scale }));
     }
 
     // ── Minimap Navigator ──
+    function drawOrgMinimap(visibleIds) {
+        const minimapContent = document.querySelector('.org-minimap-content');
+        const canvas = document.getElementById('org-tree-canvas');
+        if (!minimapContent || !canvas) return;
+
+        const width = Math.max(canvas.offsetWidth, 1);
+        const height = Math.max(canvas.offsetHeight, 1);
+
+        minimapContent.innerHTML = Array.from(visibleIds).map((orgId) => {
+            const metrics = getOrgNodeMetrics(orgId);
+            if (!metrics) return '';
+            const left = ((metrics.centerX / width) * 100).toFixed(3);
+            const top = (((metrics.topY + 12) / height) * 100).toFixed(3);
+            return `<div class="org-minimap-node" data-agent="${orgId}" style="left:${left}%; top:${top}%;"></div>`;
+        }).join('');
+    }
+
     function updateMinimap() {
         const minimap = document.querySelector('.org-minimap');
-        const viewport = document.querySelector('.org-tree-viewport');
-        if (!minimap || !viewport || !panzoomInstance) return;
-
+        const minimapContent = minimap?.querySelector('.org-minimap-content');
+        const indicator = minimap?.querySelector('.org-minimap-viewport');
         const wrapper = document.querySelector('.org-tree-wrapper');
+        const canvas = document.getElementById('org-tree-canvas');
+        if (!minimap || !minimapContent || !indicator || !wrapper || !canvas || !panzoomInstance) return;
+
         const wrapperRect = wrapper.getBoundingClientRect();
-
+        const contentRect = minimapContent.getBoundingClientRect();
+        const canvasWidth = Math.max(canvas.offsetWidth, 1);
+        const canvasHeight = Math.max(canvas.offsetHeight, 1);
         const state = panzoomInstance.getTransform();
-        const scale = state.scale;
+        const scale = state.scale || 1;
 
-        // Update viewport indicator
-        const indicator = minimap.querySelector('.org-minimap-viewport');
-        if (indicator) {
-            const viewportWidth = wrapperRect.width / scale;
-            const viewportHeight = wrapperRect.height / scale;
-            const viewportX = -state.x / scale;
-            const viewportY = -state.y / scale;
+        const viewportWidth = wrapperRect.width / scale;
+        const viewportHeight = wrapperRect.height / scale;
+        const viewportX = -state.x / scale;
+        const viewportY = -state.y / scale;
+        const scaleX = contentRect.width / canvasWidth;
+        const scaleY = contentRect.height / canvasHeight;
 
-            indicator.style.width = `${Math.min(viewportWidth, 800)}px`;
-            indicator.style.height = `${Math.min(viewportHeight, 600)}px`;
-            indicator.style.transform = `translate(${viewportX}px, ${viewportY}px)`;
-        }
+        indicator.style.width = `${Math.max(16, viewportWidth * scaleX)}px`;
+        indicator.style.height = `${Math.max(12, viewportHeight * scaleY)}px`;
+        indicator.style.transform = `translate(${viewportX * scaleX}px, ${viewportY * scaleY}px)`;
     }
 
     // ── Render Org-Tree View ──
@@ -524,38 +718,16 @@
         }
 
         const agentMap = {};
-        agentsData.forEach(a => { agentMap[a.id] = a; });
-
-        let visibleIds = new Set(ORG_ORDER);
-        if (filter) {
-            const q = filter.toLowerCase();
-            visibleIds = new Set(ORG_ORDER.filter(id => {
-                const org = ORG_TREE[id];
-                const agent = resolveAgentForOrgId(id, agentMap);
-                if (!org) return false;
-                if (org.name.toLowerCase().includes(q)) return true;
-                if (org.role.toLowerCase().includes(q)) return true;
-                if (agent?.files?.some(f => f.name.toLowerCase().includes(q))) return true;
-                return false;
-            }));
-        }
-
-        const stats = computeStats(agentsData);
-        const today = new Date().toDateString();
-
-        // Refresh operational card details on each full tree render
-        cardDetailsCache.clear();
-
-        const levels = {};
-        ORG_ORDER.forEach(id => {
-            if (!visibleIds.has(id)) return;
-            const org = ORG_TREE[id];
-            const depth = getDepth(id);
-            if (!levels[depth]) levels[depth] = [];
-            levels[depth].push({ id, org, agent: resolveAgentForOrgId(id, agentMap) });
+        agentsData.forEach((agent) => {
+            agentMap[agent.id] = agent;
         });
 
-        const connectorPaths = generateConnectorPaths(levels);
+        const { visibleIds, highlightIds } = collectVisibleOrgIds(filter, agentMap);
+        const stats = computeStats(agentsData);
+        const today = new Date().toDateString();
+        const hasSearch = Boolean(String(filter || '').trim());
+
+        cardDetailsCache.clear();
 
         let html = `
             <div class="agent-stats-bar">
@@ -564,43 +736,54 @@
                 <div class="agent-stat"><span class="agent-stat-value">${stats.modifiedToday}</span><span class="agent-stat-label">Modified Today</span></div>
                 <div class="agent-stat"><span class="agent-stat-value">${stats.activeAgents}</span><span class="agent-stat-label">Active Today</span></div>
             </div>
-
-            <!-- Navigation Controls -->
-            <div class="org-nav-controls">
-                <button class="org-nav-btn" onclick="window._memoryCards.zoomIn()" title="Zoom In (+)">+</button>
-                <button class="org-nav-btn" onclick="window._memoryCards.zoomOut()" title="Zoom Out (-)">−</button>
-                <button class="org-nav-btn" onclick="window._memoryCards.fitToContent()" title="Fit to Screen">⊡</button>
-                <button class="org-nav-btn" onclick="window._memoryCards.resetView()" title="Reset View (0)">⌂</button>
-            </div>
-
-            <!-- Minimap Navigator -->
-            <div class="org-minimap" id="org-minimap">
-                <button class="org-minimap-toggle" onclick="window._memoryCards.toggleMinimap()" title="Toggle minimap">⊡</button>
-                <div class="org-minimap-content">
-                    ${generateMinimapContent(levels)}
-                </div>
-                <div class="org-minimap-viewport"></div>
-            </div>
-
-            <!-- Pan/Zoom Viewport -->
-            <div class="org-tree-wrapper">
-                <div class="org-tree-viewport">
-                    <svg class="org-tree-connectors">
-                        ${connectorPaths}
-                    </svg>
-                    <div class="org-tree-nodes">
         `;
 
-        const levelKeys = Object.keys(levels).sort((a, b) => parseInt(a) - parseInt(b));
-        levelKeys.forEach(level => {
-            html += `<div class="org-tree-level" data-level="${level}">`;
-            levels[level].forEach(({ id, org, agent }) => {
-                html += renderOrgNode(id, org, agent, today);
+        if (!visibleIds.size) {
+            container.innerHTML = `${html}
+                <div class="empty-state" style="padding:32px; border:1px solid var(--border-default); border-radius:var(--radius-lg); background:var(--surface-1);">
+                    <p>No agents match “${escapeHtml(String(filter || '').trim())}”.</p>
+                </div>
+            `;
+            return;
+        }
+
+        html += `
+            <div class="org-chart-shell">
+                <div class="org-nav-controls">
+                    <button class="org-nav-btn" onclick="window._memoryCards.zoomIn()" title="Zoom in (+)">+</button>
+                    <button class="org-nav-btn" onclick="window._memoryCards.zoomOut()" title="Zoom out (-)">−</button>
+                    <button class="org-nav-btn" onclick="window._memoryCards.fitToContent()" title="Fit to screen">⊡</button>
+                    <button class="org-nav-btn" onclick="window._memoryCards.resetView()" title="Reset view (0)">⌂</button>
+                </div>
+
+                <div class="org-minimap" id="org-minimap">
+                    <button class="org-minimap-toggle" onclick="window._memoryCards.toggleMinimap()" title="Toggle minimap">⊡</button>
+                    <div class="org-minimap-content"></div>
+                    <div class="org-minimap-viewport"></div>
+                </div>
+
+                <div class="org-tree-wrapper">
+                    <div class="org-tree-viewport">
+                        <div class="org-tree-canvas" id="org-tree-canvas">
+                            <svg class="org-tree-connectors" aria-hidden="true"></svg>
+                            <div class="org-tree-grid">
+        `;
+
+        const visibleNodes = [];
+        ORG_ORDER.forEach((orgId) => {
+            if (!visibleIds.has(orgId)) return;
+            const org = ORG_TREE[orgId];
+            const agent = resolveAgentForOrgId(orgId, agentMap);
+            visibleNodes.push({ id: orgId, agent });
+            html += renderOrgNode(orgId, org, agent, today, {
+                isHighlighted: highlightIds.has(orgId),
+                isContext: highlightIds.size > 0 && !highlightIds.has(orgId)
             });
-            html += `</div>`;
         });
 
         html += `
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -608,109 +791,89 @@
 
         container.innerHTML = html;
 
-        // Populate operational metadata from authoritative backend endpoint
-        hydrateOrgCardDetails(levels).catch((e) => {
+        const minimap = document.getElementById('org-minimap');
+        if (localStorage.getItem('solobot-minimap-collapsed') === 'true' && minimap) {
+            minimap.classList.add('collapsed');
+        }
+
+        requestAnimationFrame(() => {
+            syncOrgCanvasSize();
+            drawOrgConnectors(visibleIds);
+            drawOrgMinimap(visibleIds);
+            initPanZoom(hasSearch);
+            updateMinimap();
+        });
+
+        hydrateOrgCardDetails(visibleNodes).catch((e) => {
             console.warn('[Agents] Failed to hydrate org card details:', e.message);
         });
-
-        // Initialize pan/zoom after render
-        setTimeout(() => {
-            initPanZoom();
-            updateMinimap();
-        }, 50);
     }
 
-    function generateConnectorPaths(levels) {
-        const levelHeight = 140;
-        const nodeWidth = 200;
-        const levelKeys = Object.keys(levels).sort((a, b) => parseInt(a) - parseInt(b));
-
-        let paths = '';
-
-        levelKeys.forEach((level, li) => {
-            const y = li * levelHeight + 60;
-            const nodes = levels[level];
-
-            nodes.forEach((node, ni) => {
-                const x = ni * (nodeWidth + 40) + 80;
-                const org = node.org;
-
-                if (org.reports && org.reports.length > 0) {
-                    const nextLevel = levels[parseInt(level) + 1];
-                    if (nextLevel) {
-                        org.reports.forEach(reportId => {
-                            const reportIdx = nextLevel.findIndex(n => n.id === reportId);
-                            if (reportIdx >= 0) {
-                                const reportX = reportIdx * (nodeWidth + 40) + 80 + (nodeWidth / 2);
-                                const reportY = (parseInt(level) + 1) * levelHeight + 30;
-                                const nodeX = x + nodeWidth / 2;
-
-                                paths += `<path class="org-connector" d="M ${nodeX} ${y + 30} L ${nodeX} ${reportY - 30} L ${reportX} ${reportY - 30}" fill="none" stroke="var(--border-subtle)" stroke-width="2"/>`;
-                            }
-                        });
-                    }
-                }
-            });
-        });
-
-        return paths;
-    }
-
-    function generateMinimapContent(levels) {
-        let html = '';
-        const levelKeys = Object.keys(levels).sort((a, b) => parseInt(a) - parseInt(b));
-        const nodeWidth = 24;
-        const nodeHeight = 18;
-        const gap = 4;
-
-        levelKeys.forEach((level, li) => {
-            const nodes = levels[level];
-            const y = li * (nodeHeight + gap) + 20;
-            nodes.forEach((node, ni) => {
-                const x = ni * (nodeWidth + gap) + 20;
-                html += `<div class="org-minimap-node" data-agent="${node.id}" style="left: ${x}px; top: ${y}px;"></div>`;
-            });
-        });
-        return html;
-    }
-
-    function renderOrgNode(id, org, agent, today) {
+    function renderOrgNode(id, org, agent, today, state = {}) {
         const files = agent?.files || [];
         const fileCount = files.length;
         const isDefault = agent?.isDefault;
-        const sortedFiles = [...files].sort((a, b) => {
-            if (!a.modified) return 1;
-            if (!b.modified) return -1;
-            return new Date(b.modified) - new Date(a.modified);
+        const isDrillable = Boolean(agent && org.drillable !== false);
+        const sortedFiles = [...files].sort((left, right) => {
+            if (!left.modified) return 1;
+            if (!right.modified) return -1;
+            return new Date(right.modified) - new Date(left.modified);
         });
         const lastMod = sortedFiles[0]?.modified;
-        const recentFiles = sortedFiles.slice(0, 2);
-
-        const hasToday = files.some(f => f.modified && new Date(f.modified).toDateString() === today);
+        const hasToday = files.some((file) => file.modified && new Date(file.modified).toDateString() === today);
         const statusClass = hasToday ? 'status-active' : 'status-idle';
 
+        const nodeClasses = [
+            'org-node',
+            isDrillable ? 'is-drillable' : 'is-static',
+            state.isHighlighted ? 'is-highlighted' : '',
+            state.isContext ? 'is-context' : ''
+        ].filter(Boolean).join(' ');
+
+        const operationalSummary = isDrillable
+            ? `
+                <div class="org-node-stats">
+                    <span class="org-node-stat-chip"><strong>${fileCount}</strong> files</span>
+                    <span class="org-node-stat-chip"><strong id="org-meta-tasks-${id}">—</strong> tasks</span>
+                </div>
+                <div class="org-node-foot">
+                    <span>${lastMod ? `Files ${timeAgo(lastMod)}` : 'No files yet'}</span>
+                    <span class="org-node-foot-sep">•</span>
+                    <span>Updated <span id="org-meta-update-${id}">—</span></span>
+                </div>
+            `
+            : `
+                <div class="org-node-stats">
+                    <span class="org-node-stat-chip"><strong>Leadership</strong> node</span>
+                    <span class="org-node-stat-chip"><strong>Chart</strong> anchor</span>
+                </div>
+                <div class="org-node-foot org-node-foot-static">${escapeHtml(org.description || '')}</div>
+            `;
+
+        const clickAttr = isDrillable ? `onclick="window._memoryCards.drillInto('${id}')"` : '';
+
+        const topMeta = isDrillable
+            ? `
+                <div class="org-node-top-meta">
+                    <span class="org-node-avatar">${org.emoji || '•'}</span>
+                    <span class="org-node-status ${statusClass}"></span>
+                </div>
+            `
+            : `<span class="org-node-avatar">${org.emoji || '•'}</span>`;
+
         return `
-            <div class="org-node" onclick="window._memoryCards.drillInto('${id}')" data-agent="${id}">
-                <div class="org-node-connector-top"></div>
+            <div class="${nodeClasses}" ${clickAttr} data-agent="${id}" style="${getOrgGridStyle(id)}">
                 <div class="org-node-card">
-                    <div class="org-node-header">
-                        <div class="org-node-avatar">${org.emoji}</div>
-                        <div class="org-node-info">
-                            <div class="org-node-name">
-                                ${org.name}
-                                ${isDefault ? '<span class="agent-card-badge">DEFAULT</span>' : ''}
-                            </div>
-                            <div class="org-node-role">${org.role} · ${org.description}</div>
-                        </div>
-                        <div class="org-node-status ${statusClass}"></div>
+                    <div class="org-node-title-row">
+                        <span class="org-node-title">${escapeHtml(org.title || org.role)}</span>
+                        ${topMeta}
                     </div>
-                    ${recentFiles.length ? `<div class="org-node-pills">${recentFiles.map(f => `<span class="agent-file-pill">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
-                    <div class="org-node-meta">${fileCount} file${fileCount !== 1 ? 's' : ''} · ${lastMod ? timeAgo(lastMod) : 'No files'}</div>
-                    <div class="org-node-meta" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                        <span>🧩 Active tasks: <span id="org-meta-tasks-${id}">—</span></span>
-                        <span>·</span>
-                        <span>⏱ Last update: <span id="org-meta-update-${id}">—</span></span>
+                    <div class="org-node-name">
+                        ${escapeHtml(org.name)}
+                        ${isDefault ? '<span class="agent-card-badge">DEFAULT</span>' : ''}
                     </div>
+                    <div class="org-node-role">${escapeHtml(org.role)}${org.description ? ` · ${escapeHtml(org.description)}` : ''}</div>
+                    ${operationalSummary}
                 </div>
             </div>
         `;
@@ -729,14 +892,14 @@
     function updateToolbarForAgent(agent, statusLabel, statusClass) {
         const tb = document.querySelector('.agents-toolbar');
         if (!tb) return;
-        const org = ORG_TREE[agent._orgId || agent.id] || {};
+        const org = ORG_TREE[resolveOrgId(agent._orgId || agent.id)] || {};
         tb.innerHTML = `
             <button class="btn btn-ghost btn-sm" onclick="window._memoryCards.backToGrid()" style="flex-shrink:0; white-space:nowrap;">← Agents</button>
             <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
             <span style="font-size:22px; line-height:1; flex-shrink:0;">${org.emoji || agent.emoji || '🤖'}</span>
             <div style="min-width:0; overflow:hidden;">
                 <div style="font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(org.name || agent.name)}</div>
-                ${org.role ? `<div style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${escapeHtml(org.role)}</div>` : ''}
+                ${(org.title || org.role) ? `<div style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${escapeHtml(org.title || org.role)}</div>` : ''}
             </div>
             <span class="agent-status-badge ${statusClass}" style="flex-shrink:0;">${statusLabel}</span>
             <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
@@ -769,7 +932,7 @@
             setTimeout(() => drillInto(agentId), 200);
             return;
         }
-        const orgId = String(agentId || '').toLowerCase();
+        const orgId = resolveOrgId(agentId);
         const canonicalId = ORG_TO_CANONICAL[orgId] || orgId;
         const found = agentsData.find(a => String(a.id || '').toLowerCase() === canonicalId);
         currentDrilledAgent = found ? { ...found, _orgId: orgId } : null;
@@ -803,7 +966,7 @@
     // ── Full Agent Dashboard (replaces simple file list) ──
     function renderDrilledView(container) {
         const agent = currentDrilledAgent;
-        const org = ORG_TREE[agent._orgId || agent.id] || {};
+        const org = ORG_TREE[resolveOrgId(agent._orgId || agent.id)] || {};
         const files = agent.files || [];
 
         // Determine live status from available sessions
@@ -886,7 +1049,7 @@
             cfo: { title: '💼 Business', page: 'business', desc: 'Business KPIs, finance, and planning' },
             sec: { title: '🛡️ Security', page: 'security', desc: 'Security & access controls' }
         };
-        const agentSection = agentSectionMap[agent._orgId || agent.id] || null;
+        const agentSection = agentSectionMap[resolveOrgId(agent._orgId || agent.id)] || null;
 
         container.innerHTML = ``;
 
@@ -1769,6 +1932,9 @@
             if (minimap) {
                 minimap.classList.toggle('collapsed');
                 localStorage.setItem('solobot-minimap-collapsed', minimap.classList.contains('collapsed'));
+                if (!minimap.classList.contains('collapsed')) {
+                    updateMinimap();
+                }
             }
         },
         getCurrentAgentId: function () {
