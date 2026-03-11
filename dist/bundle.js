@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-11T12:52:06Z
+// Generated: 2026-03-11T13:04:07Z
 // Modules: 25
 
 
@@ -2353,6 +2353,53 @@ async function getAgentSessionSnapshot(agentId) {
     return { sessions: sorted, latest, main, target };
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function extractHistoryMessages(historyOut) {
+    return historyOut?.messages || historyOut?.history || [];
+}
+
+function isAssistantMessage(msg) {
+    const role = String(msg?.role || msg?.from || '').toLowerCase();
+    return role === 'assistant' || role === 'solobot' || role === 'agent';
+}
+
+function messageTs(msg) {
+    const raw = msg?.time ?? msg?.timestamp ?? msg?.createdAt ?? msg?.updatedAt ?? null;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+        const n = Date.parse(raw);
+        return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+}
+
+async function waitForAssistantResponse(sessionKey, startedAtMs, timeoutMs = 20000) {
+    const deadline = Date.now() + timeoutMs;
+    let historyUnavailable = false;
+
+    while (Date.now() < deadline) {
+        const history = await safeGatewayRequest(['sessions.history', 'sessions_history'], { sessionKey, limit: 12 });
+        if (!history.ok) {
+            historyUnavailable = true;
+            await sleep(1800);
+            continue;
+        }
+
+        const msgs = extractHistoryMessages(history.out);
+        const found = msgs.find(m => isAssistantMessage(m) && messageTs(m) >= startedAtMs);
+        if (found) {
+            return { status: 'responded', message: found };
+        }
+
+        await sleep(1800);
+    }
+
+    return { status: historyUnavailable ? 'timed_out_history_unavailable' : 'timed_out' };
+}
+
 window._agentRecovery = {
     async check() {
         const agentId = getRecoveryAgentId();
@@ -2410,6 +2457,7 @@ window._agentRecovery = {
         if (info.error || !info.target) return setRecoveryStatus(`No target session available for ${agentId}.`, 'error');
         const sessionKey = info.target.key;
 
+        const probeStartedAt = Date.now();
         setRecoveryStatus(`Running blocking probe on ${sessionKey} (up to ~20s)...`);
         const res = await safeGatewayRequest(['chat.send', 'chat_send'], {
             sessionKey,
@@ -2424,7 +2472,17 @@ window._agentRecovery = {
             return setRecoveryStatus(`Probe failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
         }
         const status = res.out?.status || res.out?.result?.status || 'ok';
-        setRecoveryStatus(`Probe completed via ${res.method}: ${status}.`, 'success');
+        setRecoveryStatus(`Probe started via ${res.method}: ${status}. Waiting for assistant response...`);
+
+        const waited = await waitForAssistantResponse(sessionKey, probeStartedAt, 22000);
+        if (waited.status === 'responded') {
+            const preview = String(waited.message?.content || waited.message?.text || '').trim().slice(0, 80);
+            return setRecoveryStatus(`Probe responded: assistant replied on ${sessionKey}${preview ? ` · "${preview}${preview.length >= 80 ? '…' : ''}"` : ''}.`, 'success');
+        }
+        if (waited.status === 'timed_out_history_unavailable') {
+            return setRecoveryStatus(`Probe started, but response verification timed out because history is unavailable for ${sessionKey}.`, 'error');
+        }
+        return setRecoveryStatus(`Probe started, but no assistant response detected within wait window on ${sessionKey}.`, 'error');
     },
 
     async diagnose() {
