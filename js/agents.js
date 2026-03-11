@@ -151,20 +151,26 @@ function setRecoveryStatus(text, kind = 'muted') {
 
 async function safeGatewayRequest(candidates, payload) {
     let lastError = null;
+    const attempts = [];
     for (const method of candidates) {
         try {
             const out = await gateway._request(method, payload);
-            return { ok: true, method, out };
+            attempts.push({ method, ok: true });
+            console.log('[AgentRecovery] RPC success:', { method, payloadKeys: Object.keys(payload || {}) });
+            return { ok: true, method, out, attempts };
         } catch (e) {
             lastError = e;
+            const errMsg = String(e?.message || e || 'unknown error');
+            attempts.push({ method, ok: false, error: errMsg });
+            console.warn('[AgentRecovery] RPC failed:', { method, error: errMsg });
         }
     }
-    return { ok: false, error: lastError };
+    return { ok: false, error: lastError, attempts };
 }
 
 async function getAgentSessionSnapshot(agentId) {
     const list = await safeGatewayRequest(['sessions_list', 'sessions.list'], { includeGlobal: true });
-    if (!list.ok) return { error: list.error };
+    if (!list.ok) return { error: list.error, attempts: list.attempts || [] };
     const sessions = list.out?.sessions || [];
     const prefix = `agent:${agentId}:`;
     const matches = sessions.filter(s => (s.key || '').startsWith(prefix));
@@ -186,7 +192,10 @@ window._agentRecovery = {
 
         setRecoveryStatus(`Checking sessions for ${agentId}...`);
         const info = await getAgentSessionSnapshot(agentId);
-        if (info.error) return setRecoveryStatus(`Check failed: ${info.error?.message || 'unknown error'}`, 'error');
+        if (info.error) {
+            const tried = (info.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Check failed: ${info.error?.message || 'unknown error'}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
         if (!info.sessions?.length) return setRecoveryStatus(`No sessions found for ${agentId}.`, 'error');
 
         const latest = info.latest;
@@ -210,13 +219,14 @@ window._agentRecovery = {
         const payload = {
             sessionKey,
             message: 'Quick health ping from dashboard. Reply with ACK if healthy.',
-            timeoutSeconds: 0
+            idempotencyKey: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `recovery-${Date.now()}`
         };
-        const res = await safeGatewayRequest(['sessions_send', 'sessions.send'], payload);
+        const res = await safeGatewayRequest(['chat.send', 'chat_send'], payload);
         if (!res.ok) {
             const msg = String(res.error?.message || 'unknown error');
             if (/timeout/i.test(msg)) return setRecoveryStatus(`Ping timed out on ${sessionKey}. Session may be stuck or queueing.`, 'error');
-            return setRecoveryStatus(`Ping failed: ${msg}`, 'error');
+            const tried = (res.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Ping failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
         }
 
         setRecoveryStatus(`Ping sent to ${sessionKey} via ${res.method}.`, 'success');
@@ -232,16 +242,17 @@ window._agentRecovery = {
         const sessionKey = info.target.key;
 
         setRecoveryStatus(`Running blocking probe on ${sessionKey} (up to ~20s)...`);
-        const res = await safeGatewayRequest(['sessions_send', 'sessions.send'], {
+        const res = await safeGatewayRequest(['chat.send', 'chat_send'], {
             sessionKey,
             message: 'Health probe: reply with EXACT text "ACK" only.',
-            timeoutSeconds: 20
+            idempotencyKey: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `probe-${Date.now()}`
         });
 
         if (!res.ok) {
             const msg = String(res.error?.message || 'unknown error');
             if (/timeout/i.test(msg)) return setRecoveryStatus(`Probe timeout: ${sessionKey} did not answer within the wait window.`, 'error');
-            return setRecoveryStatus(`Probe failed: ${msg}`, 'error');
+            const tried = (res.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Probe failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
         }
         const status = res.out?.status || res.out?.result?.status || 'ok';
         setRecoveryStatus(`Probe completed via ${res.method}: ${status}.`, 'success');
@@ -253,7 +264,10 @@ window._agentRecovery = {
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
         const info = await getAgentSessionSnapshot(agentId);
-        if (info.error) return setRecoveryStatus(`Diag failed: sessions.list error: ${info.error?.message || 'unknown'}`, 'error');
+        if (info.error) {
+            const tried = (info.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Diag failed: sessions.list error: ${info.error?.message || 'unknown'}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
         if (!info.target) return setRecoveryStatus(`Diag: no sessions for ${agentId}.`, 'error');
 
         const targetKey = info.target.key;
