@@ -165,7 +165,7 @@ async function safeGatewayRequest(candidates, payload) {
 window._agentRecovery = {
     async check() {
         const agentId = getRecoveryAgentId();
-        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
         setRecoveryStatus(`Checking sessions for ${agentId}...`);
@@ -184,7 +184,7 @@ window._agentRecovery = {
 
     async ping() {
         const agentId = getRecoveryAgentId();
-        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
         const sessionKey = `agent:${agentId}:main`;
@@ -203,7 +203,7 @@ window._agentRecovery = {
 
     openChat() {
         const agentId = getRecoveryAgentId();
-        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
         try {
             if (typeof switchToAgent === 'function') switchToAgent(agentId);
             if (typeof showPage === 'function') showPage('chat');

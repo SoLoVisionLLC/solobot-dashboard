@@ -13,6 +13,7 @@
     let agentsData = [];
     let currentDrilledAgent = null;
     let agentMemoryRenderToken = 0;
+    let agentCronRenderToken = 0;
     let agentMemoryFiles = [];
     let agentMemorySearch = "";
     let showDailySectionExpanded = false;
@@ -166,6 +167,10 @@
         const canonical = String(agentId || '').toLowerCase();
         const legacy = CANONICAL_TO_LEGACY_WORKSPACE[canonical];
         return legacy && legacy !== canonical ? [canonical, legacy] : [canonical];
+    }
+
+    function escapeInlineJsString(value) {
+        return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     }
 
     async function fetchAgentFileWithFallback(agentId, filename) {
@@ -994,6 +999,7 @@
 
     function backToGrid() {
         currentDrilledAgent = null;
+        agentCronRenderToken += 1;
         if (agentMetricsRefreshTimer) {
             clearInterval(agentMetricsRefreshTimer);
             agentMetricsRefreshTimer = null;
@@ -1010,8 +1016,6 @@
     // ── Full Agent Dashboard (replaces simple file list) ──
     function renderDrilledView(container) {
         const agent = currentDrilledAgent;
-        const org = ORG_TREE[resolveOrgId(agent._orgId || agent.id)] || {};
-        const files = agent.files || [];
 
         // Determine live status from available sessions
         const sessions = window.availableSessions || [];
@@ -1073,15 +1077,6 @@
 
         const estCost = (tokenCount * 0.000003).toFixed(4);
 
-        // File summary
-        const sortedFiles = [...files].sort((a, b) => {
-            if (!a.modified) return 1;
-            if (!b.modified) return -1;
-            return new Date(b.modified) - new Date(a.modified);
-        });
-        const rootFiles = sortedFiles.filter(f => !f.name.includes('/'));
-        const memFiles = sortedFiles.filter(f => f.name.startsWith('memory/'));
-
         // Recent 5 sessions for this agent
         const recentSessions = agentSessions
             .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
@@ -1135,6 +1130,17 @@
                     `).join('') : '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No sessions yet</div>'}
                 </div>
 
+                <div class="agent-dash-card">
+                    <div class="agent-dash-card-title">🛠️ Agent Recovery</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;">
+                        <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.check()">Check Session Health</button>
+                        <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.ping()">Send Async Ping</button>
+                        <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.openChat()">Open Agent Chat</button>
+                        <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.refresh()">Refresh Sessions</button>
+                    </div>
+                    <div id="agent-recovery-status" style="margin-top:8px; font-size:12px; color:var(--text-muted);">Run recovery actions for this agent.</div>
+                </div>
+
                 ${agentSection ? `
                 <div class="agent-dash-card">
                     <div class="agent-dash-card-title">${agentSection.title}</div>
@@ -1143,37 +1149,13 @@
                 </div>
                 ` : ''}
 
-                <!-- Memory Files Card -->
                 <div class="agent-dash-card agent-dash-card-wide">
-                    <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>📁 Memory Workspace (${files.length})</span>
-                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agent.id}')">Open Workspace</button>
+                    <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                        <span>⏰ Cron Jobs</span>
+                        <button class="btn btn-ghost btn-xs" type="button" onclick="window._memoryCards.openCronPage()">Open Cron</button>
                     </div>
-                    <div style="display:grid; gap:8px;">
-                        <div style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
-                            <input id="agent-memory-quick-${agent.id}" type="text" class="input" value="" placeholder="Filter files…" style="max-width:280px;" oninput="window._memoryCards.filterAgentMemoryFiles(this.value, '${agent.id}')" />
-                            <span style="font-size:11px; color:var(--text-muted);">${files.length} file${files.length === 1 ? '' : 's'} synced</span>
-                        </div>
-                        <div id="agent-memory-compact-${agent.id}" style="display:grid; gap:6px; max-height:220px; overflow:auto; padding-right:4px;">
-                            ${sortedFiles.slice(0, 6).map(f => `
-                                <button class="agent-memory-row" type="button" onclick="window._memoryCards.previewFile('${escapeHtml(f.name)}')">
-                                    <span class="agent-memory-row-icon">${f.name.endsWith('.md') ? '📝' : '📄'}</span>
-                                    <span class="agent-memory-row-name">${escapeHtml(f.name)}</span>
-                                    <span class="agent-memory-row-meta">${f.modified ? timeAgo(f.modified) : '—'}</span>
-                                </button>
-                            `).join('') || '<div style="color:var(--text-muted); font-size:12px; padding:8px 0;">No files found</div>'}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- System Prompt Card -->
-                <div class="agent-dash-card agent-dash-card-wide" id="agent-identity-card-${agent.id}">
-                    <div class="agent-dash-card-title" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>📋 System Prompt</span>
-                        <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.toggleIdentityExpand('${agent.id}')">Expand</button>
-                    </div>
-                    <div class="agent-identity-preview" id="agent-identity-preview-${agent.id}">
-                        <div style="color:var(--text-muted); font-size:12px;">Loading...</div>
+                    <div id="agent-cron-jobs-${agent.id}" class="agent-cron-jobs-body">
+                        <div class="agent-cron-empty">Loading…</div>
                     </div>
                 </div>
 
@@ -1188,8 +1170,8 @@
 
         // Load model config async
         loadAgentModelConfig(agent.id);
-        // Load identity preview async
-        loadAgentIdentityPreview(agent.id, agent, org);
+        // Load assigned cron jobs async
+        loadAgentCronJobs(agent);
     }
 
     async function loadAgentModelConfig(agentId) {
@@ -1293,6 +1275,114 @@
 
         } catch (e) {
             el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Failed to load model config</div>`;
+        }
+    }
+
+    function getAgentCronStatusBadgeClass(job, lastStatus) {
+        if (job?.enabled === false) return 'badge-default';
+        const normalized = String(lastStatus || '').trim().toLowerCase();
+        if (normalized === 'ok' || normalized === 'success') return 'badge-success';
+        if (normalized === 'error' || normalized === 'failed') return 'badge-error';
+        return 'badge-default';
+    }
+
+    async function loadAgentCronJobs(agent) {
+        const el = document.getElementById(`agent-cron-jobs-${agent.id}`);
+        if (!el) return;
+
+        const token = ++agentCronRenderToken;
+        const cronApi = window._cronJobs;
+        if (!cronApi || typeof cronApi.ensureLoaded !== 'function' || typeof cronApi.getJobs !== 'function') {
+            el.innerHTML = `<div class="agent-cron-empty">Cron jobs are unavailable.</div>`;
+            return;
+        }
+
+        const orgId = resolveOrgId(agent._orgId || agent.id);
+        const candidateIds = new Set();
+        const canonicalAgentId = String(agent.id || '').trim().toLowerCase();
+        if (canonicalAgentId) candidateIds.add(canonicalAgentId);
+        if (orgId) candidateIds.add(orgId);
+        if (orgId && ORG_TO_CANONICAL[orgId]) candidateIds.add(String(ORG_TO_CANONICAL[orgId]).toLowerCase());
+
+        try {
+            await cronApi.ensureLoaded({ silent: true, skipDiagnostics: true });
+            if (token !== agentCronRenderToken) return;
+
+            const jobs = cronApi.getJobs();
+            const assignedJobs = jobs
+                .filter((job) => {
+                    const ownerRaw = typeof cronApi.getOwnerAgent === 'function'
+                        ? cronApi.getOwnerAgent(job)
+                        : (job?.agentId || job?.ownerAgentId || '');
+                    const owner = String(ownerRaw || '').trim().toLowerCase();
+                    if (!owner) return false;
+
+                    const ownerOrgId = resolveOrgId(owner);
+                    const ownerCanonicalId = ownerOrgId && ORG_TO_CANONICAL[ownerOrgId]
+                        ? String(ORG_TO_CANONICAL[ownerOrgId]).toLowerCase()
+                        : owner;
+
+                    return candidateIds.has(owner) ||
+                        (ownerOrgId && candidateIds.has(ownerOrgId)) ||
+                        candidateIds.has(ownerCanonicalId);
+                })
+                .sort((left, right) => String(left?.name || left?.id || '').localeCompare(
+                    String(right?.name || right?.id || ''),
+                    undefined,
+                    { sensitivity: 'base', numeric: true }
+                ));
+
+            const hasConnection = typeof cronApi.isConnected === 'function' ? cronApi.isConnected() : true;
+            if (!assignedJobs.length) {
+                const emptyMessage = !hasConnection && !jobs.length
+                    ? 'Connect to the gateway to load cron jobs.'
+                    : `No cron jobs assigned to ${agent.name || 'this agent'}.`;
+                el.innerHTML = `<div class="agent-cron-empty">${escapeHtml(emptyMessage)}</div>`;
+                return;
+            }
+
+            el.innerHTML = `
+                <div class="agent-cron-summary">${assignedJobs.length} job${assignedJobs.length === 1 ? '' : 's'} assigned</div>
+                <div class="agent-cron-list">
+                    ${assignedJobs.map((job) => {
+                        const jobId = String(job?.id || '');
+                        const jobName = job?.name || jobId || 'Unnamed job';
+                        const lastStatus = typeof cronApi.getLastStatus === 'function' ? cronApi.getLastStatus(job) : '--';
+                        const scheduleText = typeof cronApi.formatSchedule === 'function' ? cronApi.formatSchedule(job) : '--';
+                        const nextRun = typeof cronApi.formatNextRun === 'function' ? cronApi.formatNextRun(job) : '--';
+                        const lastRun = typeof cronApi.formatLastRun === 'function' ? cronApi.formatLastRun(job) : '--';
+                        const summary = String(
+                            (typeof cronApi.getPayloadSummary === 'function' ? cronApi.getPayloadSummary(job) : '') ||
+                            job?.description ||
+                            ''
+                        ).trim();
+                        const badgeHtml = [
+                            job?.enabled === false ? '<span class="badge badge-default">Disabled</span>' : '',
+                            lastStatus && lastStatus !== '--'
+                                ? `<span class="badge ${getAgentCronStatusBadgeClass(job, lastStatus)}">${escapeHtml(lastStatus)}</span>`
+                                : ''
+                        ].filter(Boolean).join('');
+
+                        return `
+                            <button class="agent-cron-row" type="button" onclick="window._memoryCards.openCronJob('${escapeInlineJsString(jobId)}')">
+                                <div class="agent-cron-row-head">
+                                    <span class="agent-cron-row-name">${escapeHtml(jobName)}</span>
+                                    ${badgeHtml ? `<span class="agent-cron-row-badges">${badgeHtml}</span>` : ''}
+                                </div>
+                                ${summary ? `<div class="agent-cron-row-summary">${escapeHtml(summary)}</div>` : ''}
+                                <div class="agent-cron-row-meta">
+                                    <span>${escapeHtml(scheduleText)}</span>
+                                    <span>Next ${escapeHtml(nextRun)}</span>
+                                    <span>Last ${escapeHtml(lastRun)}</span>
+                                </div>
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        } catch (e) {
+            if (token !== agentCronRenderToken) return;
+            el.innerHTML = `<div class="agent-cron-empty">Could not load cron jobs.</div>`;
         }
     }
 
@@ -1518,61 +1608,6 @@
         }, 5000);
     }
 
-    async function loadAgentIdentityPreview(agentId, agent, org) {
-        const el = document.getElementById(`agent-identity-preview-${agentId}`);
-        if (!el) return;
-
-        try {
-            let content = null;
-            // Try to load IDENTITY.md
-            const identityFile = agent.files?.find(f => f.name === 'IDENTITY.md' || f.name === 'identity.md');
-            if (identityFile) {
-                const endpoint = agent.isDefault
-                    ? `/api/memory/${encodeURIComponent(identityFile.name)}`
-                    : `/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(identityFile.name)}`;
-                const res = await fetch(endpoint);
-                const data = await res.json();
-                content = data.content || null;
-            }
-
-            if (content) {
-                // Show first 300 chars collapsed, expand on button click
-                const preview = content.slice(0, 300);
-                const hasMore = content.length > 300;
-                el.innerHTML = `
-                    <div id="agent-identity-text-${agentId}" class="agent-identity-text collapsed">
-                        <pre style="white-space:pre-wrap; font-size:11px; color:var(--text-secondary); margin:0;">${escapeHtml(preview)}${hasMore ? '...' : ''}</pre>
-                    </div>
-                    ${hasMore ? `<div id="agent-identity-full-${agentId}" class="agent-identity-text" style="display:none;"><pre style="white-space:pre-wrap; font-size:11px; color:var(--text-secondary); margin:0;">${escapeHtml(content)}</pre></div>` : ''}
-                    <div style="margin-top:8px; display:flex; gap:8px;">
-                        ${identityFile ? `<button class="btn btn-ghost btn-xs" onclick="${agent.isDefault ? `viewMemoryFile('${escapeHtml(identityFile.name)}')` : `viewAgentFile('${escapeHtml(agentId)}', '${escapeHtml(identityFile.name)}')`}">✏️ Edit</button>` : ''}
-                    </div>
-                `;
-            } else {
-                el.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:4px 0;">No IDENTITY.md found. <button class="btn btn-ghost btn-xs" onclick="window._memoryCards.openAgentMemoryFromUi(event, '${agentId}')">Browse files →</button></div>`;
-            }
-        } catch (e) {
-            el.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">Could not load identity</div>`;
-        }
-    }
-
-    function toggleIdentityExpand(agentId) {
-        const collapsed = document.getElementById(`agent-identity-text-${agentId}`);
-        const full = document.getElementById(`agent-identity-full-${agentId}`);
-        const btn = document.querySelector(`#agent-identity-card-${agentId} .btn-ghost`);
-        if (!collapsed) return;
-        const isCollapsed = collapsed.style.display !== 'none';
-        if (isCollapsed) {
-            collapsed.style.display = 'none';
-            if (full) full.style.display = '';
-            if (btn) btn.textContent = 'Collapse';
-        } else {
-            collapsed.style.display = '';
-            if (full) full.style.display = 'none';
-            if (btn) btn.textContent = 'Expand';
-        }
-    }
-
     function switchToAgentChat(agentId) {
         if (typeof switchToAgent === 'function') switchToAgent(agentId);
         else if (typeof showPage === 'function') showPage('chat');
@@ -1583,6 +1618,22 @@
             window.switchToSession(sessionKey);
             if (typeof showPage === 'function') showPage('chat');
         }
+    }
+
+    function openCronPage() {
+        if (window._cronJobs && typeof window._cronJobs.openPage === 'function') {
+            window._cronJobs.openPage();
+            return;
+        }
+        if (typeof showPage === 'function') showPage('cron');
+    }
+
+    function openCronJob(jobId) {
+        if (window._cronJobs && typeof window._cronJobs.openJob === 'function') {
+            window._cronJobs.openJob(jobId);
+            return;
+        }
+        openCronPage();
     }
 
     function openAgentMemoryFromUi(evt, agentId) {
@@ -1963,12 +2014,13 @@
         pingAgent,
         switchToAgentChat,
         switchToSession,
+        openCronPage,
+        openCronJob,
         openAgentMemory,
         openAgentMemoryFromUi,
         previewFileFromWorkspace,
         filterAgentMemoryFiles,
         toggleDailyFiles,
-        toggleIdentityExpand,
         customizeFallbacks,
         revertFallbacksToGlobal,
         addFallback,
