@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-11T13:04:07Z
+// Generated: 2026-03-11T15:17:33Z
 // Modules: 25
 
 
@@ -2376,28 +2376,25 @@ function messageTs(msg) {
     return 0;
 }
 
+function findAssistantResponseInState(sessionKey, startedAtMs) {
+    const key = String(sessionKey || '').toLowerCase();
+    const msgs = (window.state?.chat?.messages || []);
+    return msgs.find(m => {
+        const mKey = String(m?._sessionKey || '').toLowerCase();
+        if (!mKey || mKey !== key) return false;
+        if (!isAssistantMessage(m)) return false;
+        return messageTs(m) >= startedAtMs;
+    }) || null;
+}
+
 async function waitForAssistantResponse(sessionKey, startedAtMs, timeoutMs = 20000) {
     const deadline = Date.now() + timeoutMs;
-    let historyUnavailable = false;
-
     while (Date.now() < deadline) {
-        const history = await safeGatewayRequest(['sessions.history', 'sessions_history'], { sessionKey, limit: 12 });
-        if (!history.ok) {
-            historyUnavailable = true;
-            await sleep(1800);
-            continue;
-        }
-
-        const msgs = extractHistoryMessages(history.out);
-        const found = msgs.find(m => isAssistantMessage(m) && messageTs(m) >= startedAtMs);
-        if (found) {
-            return { status: 'responded', message: found };
-        }
-
-        await sleep(1800);
+        const found = findAssistantResponseInState(sessionKey, startedAtMs);
+        if (found) return { status: 'responded', message: found };
+        await sleep(1200);
     }
-
-    return { status: historyUnavailable ? 'timed_out_history_unavailable' : 'timed_out' };
+    return { status: 'timed_out' };
 }
 
 window._agentRecovery = {
@@ -2502,11 +2499,65 @@ window._agentRecovery = {
         const targetMins = info.target.updatedAt ? Math.round((Date.now() - new Date(info.target.updatedAt).getTime()) / 60000) : null;
         const cronSessions = info.sessions.filter(s => String(s.key || '').includes(':cron:'));
 
-        const history = await safeGatewayRequest(['sessions_history', 'sessions.history'], { sessionKey: targetKey, limit: 5 });
-        const historyOk = history.ok;
-        const count = historyOk ? ((history.out?.messages || history.out?.history || []).length || 0) : 0;
+        const localCount = (window.state?.chat?.messages || []).filter(m => String(m?._sessionKey || '').toLowerCase() === String(targetKey).toLowerCase()).length;
+        const recentAssistant = findAssistantResponseInState(targetKey, Date.now() - (15 * 60 * 1000));
 
-        setRecoveryStatus(`Diag: connected=yes · sessions=${info.sessions.length} (cron=${cronSessions.length}) · target(${targetType})=${targetKey}${targetMins !== null ? ` (${targetMins}m)` : ''} · targetHistory=${historyOk ? `ok(${count})` : 'unavailable'} · main=${info.main ? 'present' : 'missing'}.`, 'success');
+        setRecoveryStatus(`Diag: connected=yes · sessions=${info.sessions.length} (cron=${cronSessions.length}) · target(${targetType})=${targetKey}${targetMins !== null ? ` (${targetMins}m)` : ''} · localMsgs=${localCount} · recentAssistant=${recentAssistant ? 'yes' : 'no'} · main=${info.main ? 'present' : 'missing'}.`, 'success');
+    },
+
+    async rebindMain() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        const mainKey = `agent:${agentId}:main`;
+        try {
+            if (typeof switchToSession === 'function') {
+                await switchToSession(mainKey);
+                setRecoveryStatus(`Rebound to main session: ${mainKey}.`, 'success');
+            } else {
+                setRecoveryStatus(`Main session key: ${mainKey} (manual switch needed).`, 'success');
+            }
+        } catch (e) {
+            setRecoveryStatus(`Rebind failed: ${e?.message || e}`, 'error');
+        }
+    },
+
+    async replayContext() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getAgentSessionSnapshot(agentId);
+        if (info.error || !info.latest) return setRecoveryStatus(`No source session available for ${agentId}.`, 'error');
+
+        const sourceKey = info.latest.key;
+        const targetKey = `agent:${agentId}:main`;
+        const history = (window.state?.chat?.messages || [])
+            .filter(m => String(m?._sessionKey || '').toLowerCase() === String(sourceKey).toLowerCase())
+            .filter(m => String(m?.text || '').trim().length > 0)
+            .slice(-8)
+            .map(m => `${String(m.from || 'unknown').toUpperCase()}: ${String(m.text || '').trim()}`);
+
+        if (!history.length) return setRecoveryStatus(`No local context found to replay from ${sourceKey}.`, 'error');
+
+        const packet = [
+            `Context recovery packet from ${sourceKey}.`,
+            'Please resume from the latest actionable point. Recent context:',
+            ...history
+        ].join('\n');
+
+        const res = await safeGatewayRequest(['chat.send', 'chat_send'], {
+            sessionKey: targetKey,
+            message: packet,
+            idempotencyKey: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `replay-${Date.now()}`
+        });
+
+        if (!res.ok) {
+            const msg = String(res.error?.message || 'unknown error');
+            const tried = (res.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Replay failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
+
+        setRecoveryStatus(`Context replay sent to ${targetKey} from ${sourceKey}.`, 'success');
     },
 
     openChat() {

@@ -1137,6 +1137,8 @@
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.ping()">Send Async Ping</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.probe()">Probe + Wait</button>
                         <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.diagnose()">Deep Diagnose</button>
+                        <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.rebindMain()">Rebind to Main</button>
+                        <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.replayContext()">Replay Context to Main</button>
                         <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.openChat()">Open Agent Chat</button>
                         <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.refresh()">Refresh Sessions</button>
                     </div>
