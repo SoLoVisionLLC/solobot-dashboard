@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-11T15:21:31Z
+// Generated: 2026-03-11T15:26:21Z
 // Modules: 25
 
 
@@ -2387,6 +2387,41 @@ function findAssistantResponseInState(sessionKey, startedAtMs) {
     }) || null;
 }
 
+function pickBestContextSourceSession(agentId, targetMainKey) {
+    const all = (window.state?.chat?.messages || [])
+        .filter(m => String(m?.text || '').trim().length > 0)
+        .filter(m => String(m?._sessionKey || '').toLowerCase().startsWith(`agent:${String(agentId).toLowerCase()}:`));
+
+    if (!all.length) return null;
+
+    const grouped = new Map();
+    for (const m of all) {
+        const key = String(m._sessionKey || '').toLowerCase();
+        const item = grouped.get(key) || { key, lastTs: 0, count: 0 };
+        item.count += 1;
+        item.lastTs = Math.max(item.lastTs, messageTs(m));
+        grouped.set(key, item);
+    }
+
+    const target = String(targetMainKey || '').toLowerCase();
+    const candidates = Array.from(grouped.values())
+        .filter(s => s.key !== target)
+        .sort((a, b) => (b.lastTs - a.lastTs) || (b.count - a.count));
+
+    return candidates[0]?.key || null;
+}
+
+function buildReplayContextLines(sourceSessionKey, maxLines = 10) {
+    const source = String(sourceSessionKey || '').toLowerCase();
+    const rows = (window.state?.chat?.messages || [])
+        .filter(m => String(m?._sessionKey || '').toLowerCase() === source)
+        .filter(m => String(m?.text || '').trim().length > 0)
+        .sort((a, b) => messageTs(a) - messageTs(b))
+        .slice(-maxLines)
+        .map(m => `${String(m.from || 'unknown').toUpperCase()}: ${String(m.text || '').trim()}`);
+    return rows;
+}
+
 async function waitForAssistantResponse(sessionKey, startedAtMs, timeoutMs = 20000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -2529,19 +2564,21 @@ window._agentRecovery = {
         const info = await getAgentSessionSnapshot(agentId);
         if (info.error || !info.latest) return setRecoveryStatus(`No source session available for ${agentId}.`, 'error');
 
-        const sourceKey = info.latest.key;
         const targetKey = `agent:${agentId}:main`;
-        const history = (window.state?.chat?.messages || [])
-            .filter(m => String(m?._sessionKey || '').toLowerCase() === String(sourceKey).toLowerCase())
-            .filter(m => String(m?.text || '').trim().length > 0)
-            .slice(-8)
-            .map(m => `${String(m.from || 'unknown').toUpperCase()}: ${String(m.text || '').trim()}`);
+        const sourceKey = pickBestContextSourceSession(agentId, targetKey) || info.latest.key;
+        let history = buildReplayContextLines(sourceKey, 12);
+        if (!history.length && String(sourceKey).toLowerCase() !== String(targetKey).toLowerCase()) {
+            history = buildReplayContextLines(targetKey, 12);
+        }
 
-        if (!history.length) return setRecoveryStatus(`No local context found to replay from ${sourceKey}.`, 'error');
+        if (!history.length) return setRecoveryStatus(`No local context found to replay for ${agentId}.`, 'error');
 
         const packet = [
-            `Context recovery packet from ${sourceKey}.`,
-            'Please resume from the latest actionable point. Recent context:',
+            `Context recovery packet for ${agentId}.`,
+            `Source session: ${sourceKey}`,
+            `Target session: ${targetKey}`,
+            'Please continue exactly where this conversation left off. First: summarize last state in 1-2 bullets. Then continue execution.',
+            'Recent context:',
             ...history
         ].join('\n');
 
