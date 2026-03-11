@@ -162,6 +162,17 @@ async function safeGatewayRequest(candidates, payload) {
     return { ok: false, error: lastError };
 }
 
+async function getLatestAgentSession(agentId) {
+    const list = await safeGatewayRequest(['sessions.list'], { includeGlobal: true });
+    if (!list.ok) return { error: list.error };
+    const sessions = list.out?.sessions || [];
+    const prefix = `agent:${agentId}:`;
+    const matches = sessions.filter(s => (s.key || '').startsWith(prefix));
+    if (!matches.length) return { sessions: [], latest: null };
+    const latest = [...matches].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0];
+    return { sessions: matches, latest };
+}
+
 window._agentRecovery = {
     async check() {
         const agentId = getRecoveryAgentId();
@@ -169,17 +180,13 @@ window._agentRecovery = {
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
         setRecoveryStatus(`Checking sessions for ${agentId}...`);
-        const res = await safeGatewayRequest(['sessions.list'], { includeGlobal: true });
-        if (!res.ok) return setRecoveryStatus(`Check failed: ${res.error?.message || 'unknown error'}`, 'error');
+        const info = await getLatestAgentSession(agentId);
+        if (info.error) return setRecoveryStatus(`Check failed: ${info.error?.message || 'unknown error'}`, 'error');
+        if (!info.sessions?.length) return setRecoveryStatus(`No sessions found for ${agentId}.`, 'error');
 
-        const sessions = res.out?.sessions || [];
-        const prefix = `agent:${agentId}:`;
-        const matches = sessions.filter(s => (s.key || '').startsWith(prefix));
-        if (!matches.length) return setRecoveryStatus(`No sessions found for ${agentId}.`, 'error');
-
-        const latest = matches.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0];
-        const mins = latest.updatedAt ? Math.round((Date.now() - new Date(latest.updatedAt).getTime()) / 60000) : null;
-        setRecoveryStatus(`Healthy check: ${matches.length} session(s). Latest: ${latest.key}${mins !== null ? ` · ${mins}m ago` : ''}.`, 'success');
+        const latest = info.latest;
+        const mins = latest?.updatedAt ? Math.round((Date.now() - new Date(latest.updatedAt).getTime()) / 60000) : null;
+        setRecoveryStatus(`Healthy check: ${info.sessions.length} session(s). Latest: ${latest.key}${mins !== null ? ` · ${mins}m ago` : ''}.`, 'success');
     },
 
     async ping() {
@@ -187,7 +194,9 @@ window._agentRecovery = {
         if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
-        const sessionKey = `agent:${agentId}:main`;
+        const info = await getLatestAgentSession(agentId);
+        if (info.error || !info.latest) return setRecoveryStatus(`No target session available for ${agentId}.`, 'error');
+        const sessionKey = info.latest.key || `agent:${agentId}:main`;
         setRecoveryStatus(`Sending async ping to ${sessionKey}...`);
 
         const payload = {
@@ -199,6 +208,46 @@ window._agentRecovery = {
         if (!res.ok) return setRecoveryStatus(`Ping failed: ${res.error?.message || 'unknown error'}`, 'error');
 
         setRecoveryStatus(`Ping sent to ${sessionKey} via ${res.method}.`, 'success');
+    },
+
+    async probe() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getLatestAgentSession(agentId);
+        if (info.error || !info.latest) return setRecoveryStatus(`No target session available for ${agentId}.`, 'error');
+        const sessionKey = info.latest.key;
+
+        setRecoveryStatus(`Running blocking probe on ${sessionKey} (up to ~20s)...`);
+        const res = await safeGatewayRequest(['sessions.send', 'session.send'], {
+            sessionKey,
+            message: 'Health probe: reply with EXACT text "ACK" only.',
+            timeoutSeconds: 20
+        });
+
+        if (!res.ok) return setRecoveryStatus(`Probe failed: ${res.error?.message || 'unknown error'}`, 'error');
+        const status = res.out?.status || res.out?.result?.status || 'ok';
+        setRecoveryStatus(`Probe completed via ${res.method}: ${status}.`, 'success');
+    },
+
+    async diagnose() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getLatestAgentSession(agentId);
+        if (info.error) return setRecoveryStatus(`Diag failed: sessions.list error: ${info.error?.message || 'unknown'}`, 'error');
+        if (!info.latest) return setRecoveryStatus(`Diag: no sessions for ${agentId}.`, 'error');
+
+        const sessionKey = info.latest.key;
+        const mins = info.latest.updatedAt ? Math.round((Date.now() - new Date(info.latest.updatedAt).getTime()) / 60000) : null;
+
+        const history = await safeGatewayRequest(['sessions.history', 'session.history'], { sessionKey, limit: 5 });
+        const historyOk = history.ok;
+        const count = historyOk ? ((history.out?.messages || history.out?.history || []).length || 0) : 0;
+
+        setRecoveryStatus(`Diag: connected=yes · sessions=${info.sessions.length} · target=${sessionKey}${mins !== null ? ` (${mins}m)` : ''} · history=${historyOk ? `ok(${count})` : 'unavailable'} · use Probe+Wait for true responsiveness.`, 'success');
     },
 
     openChat() {

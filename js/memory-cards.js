@@ -1135,6 +1135,8 @@
                     <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;">
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.check()">Check Session Health</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.ping()">Send Async Ping</button>
+                        <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.probe()">Probe + Wait</button>
+                        <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.diagnose()">Deep Diagnose</button>
                         <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.openChat()">Open Agent Chat</button>
                         <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.refresh()">Refresh Sessions</button>
                     </div>
