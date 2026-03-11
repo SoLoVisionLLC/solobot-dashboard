@@ -212,8 +212,12 @@ window._agentRecovery = {
             message: 'Quick health ping from dashboard. Reply with ACK if healthy.',
             timeoutSeconds: 0
         };
-        const res = await safeGatewayRequest(['sessions.send', 'session.send'], payload);
-        if (!res.ok) return setRecoveryStatus(`Ping failed: ${res.error?.message || 'unknown error'}`, 'error');
+        const res = await safeGatewayRequest(['sessions.send'], payload);
+        if (!res.ok) {
+            const msg = String(res.error?.message || 'unknown error');
+            if (/timeout/i.test(msg)) return setRecoveryStatus(`Ping timed out on ${sessionKey}. Session may be stuck or queueing.`, 'error');
+            return setRecoveryStatus(`Ping failed: ${msg}`, 'error');
+        }
 
         setRecoveryStatus(`Ping sent to ${sessionKey} via ${res.method}.`, 'success');
     },
@@ -228,13 +232,17 @@ window._agentRecovery = {
         const sessionKey = info.target.key;
 
         setRecoveryStatus(`Running blocking probe on ${sessionKey} (up to ~20s)...`);
-        const res = await safeGatewayRequest(['sessions.send', 'session.send'], {
+        const res = await safeGatewayRequest(['sessions.send'], {
             sessionKey,
             message: 'Health probe: reply with EXACT text "ACK" only.',
             timeoutSeconds: 20
         });
 
-        if (!res.ok) return setRecoveryStatus(`Probe failed: ${res.error?.message || 'unknown error'}`, 'error');
+        if (!res.ok) {
+            const msg = String(res.error?.message || 'unknown error');
+            if (/timeout/i.test(msg)) return setRecoveryStatus(`Probe timeout: ${sessionKey} did not answer within the wait window.`, 'error');
+            return setRecoveryStatus(`Probe failed: ${msg}`, 'error');
+        }
         const status = res.out?.status || res.out?.result?.status || 'ok';
         setRecoveryStatus(`Probe completed via ${res.method}: ${status}.`, 'success');
     },
@@ -253,7 +261,7 @@ window._agentRecovery = {
         const targetMins = info.target.updatedAt ? Math.round((Date.now() - new Date(info.target.updatedAt).getTime()) / 60000) : null;
         const cronSessions = info.sessions.filter(s => String(s.key || '').includes(':cron:'));
 
-        const history = await safeGatewayRequest(['sessions.history', 'session.history'], { sessionKey: targetKey, limit: 5 });
+        const history = await safeGatewayRequest(['sessions.history'], { sessionKey: targetKey, limit: 5 });
         const historyOk = history.ok;
         const count = historyOk ? ((history.out?.messages || history.out?.history || []).length || 0) : 0;
 
