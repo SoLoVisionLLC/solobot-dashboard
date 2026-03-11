@@ -1133,6 +1133,13 @@
                 <div class="agent-dash-card">
                     <div class="agent-dash-card-title">🛠️ Agent Recovery</div>
                     <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;">
+                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
+                            Source Session
+                            <select id="agent-recovery-source-session" class="input" style="min-width:280px; max-width:420px;" onchange="window._agentRecovery && window._agentRecovery.setSource(this.value)"></select>
+                        </label>
+                        <button class="btn btn-ghost btn-sm" onclick="window._agentRecovery && window._agentRecovery.refreshSources()">Refresh Sources</button>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;">
                         <button class="btn btn-primary btn-sm" onclick="window._agentRecovery && window._agentRecovery.fullRecover()">⚡ Full Recover Agent</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.check()">Check Session Health</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.ping()">Send Async Ping</button>

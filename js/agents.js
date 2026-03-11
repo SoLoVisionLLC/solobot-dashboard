@@ -134,11 +134,25 @@ function switchToAgent(agentId) {
 }
 
 // Auto-init when gateway connects
+const recoverySourceSessionByAgent = {};
+
 function getRecoveryAgentId() {
     return (window._memoryCards && typeof window._memoryCards.getCurrentAgentId === 'function' && window._memoryCards.getCurrentAgentId())
         || window._deepLinkAgentId
         || window.currentAgentId
         || null;
+}
+
+function getLockedSourceSession(agentId) {
+    const key = String(agentId || '').toLowerCase();
+    return recoverySourceSessionByAgent[key] || null;
+}
+
+function setLockedSourceSession(agentId, sessionKey) {
+    const key = String(agentId || '').toLowerCase();
+    if (!key) return;
+    if (!sessionKey) delete recoverySourceSessionByAgent[key];
+    else recoverySourceSessionByAgent[key] = sessionKey;
 }
 
 function setRecoveryStatus(text, kind = 'muted') {
@@ -218,12 +232,10 @@ function findAssistantResponseInState(sessionKey, startedAtMs) {
     }) || null;
 }
 
-function pickBestContextSourceSession(agentId, targetMainKey) {
+function collectContextSourceSessions(agentId, targetMainKey) {
     const all = (window.state?.chat?.messages || [])
         .filter(m => String(m?.text || '').trim().length > 0)
         .filter(m => String(m?._sessionKey || '').toLowerCase().startsWith(`agent:${String(agentId).toLowerCase()}:`));
-
-    if (!all.length) return null;
 
     const grouped = new Map();
     for (const m of all) {
@@ -235,11 +247,13 @@ function pickBestContextSourceSession(agentId, targetMainKey) {
     }
 
     const target = String(targetMainKey || '').toLowerCase();
-    const candidates = Array.from(grouped.values())
-        .filter(s => s.key !== target)
+    return Array.from(grouped.values())
+        .filter(s => s.key && s.key !== target)
         .sort((a, b) => (b.lastTs - a.lastTs) || (b.count - a.count));
+}
 
-    return candidates[0]?.key || null;
+function pickBestContextSourceSession(agentId, targetMainKey) {
+    return collectContextSourceSessions(agentId, targetMainKey)[0]?.key || null;
 }
 
 function buildReplayContextLines(sourceSessionKey, maxLines = 10) {
@@ -264,11 +278,47 @@ async function waitForAssistantResponse(sessionKey, startedAtMs, timeoutMs = 200
 }
 
 window._agentRecovery = {
+    setSource(sessionKey) {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return;
+        setLockedSourceSession(agentId, sessionKey || null);
+        const label = sessionKey ? `Locked source: ${sessionKey}` : 'Source lock cleared. Using best source automatically.';
+        setRecoveryStatus(label, 'success');
+    },
+
+    async refreshSources() {
+        const agentId = getRecoveryAgentId();
+        const sel = document.getElementById('agent-recovery-source-session');
+        if (!agentId || !sel) return;
+
+        const targetKey = `agent:${agentId}:main`;
+        const options = collectContextSourceSessions(agentId, targetKey);
+        const locked = getLockedSourceSession(agentId);
+
+        sel.innerHTML = '';
+        const autoOpt = document.createElement('option');
+        autoOpt.value = '';
+        autoOpt.textContent = 'Auto (best stalled session)';
+        sel.appendChild(autoOpt);
+
+        options.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.key;
+            const mins = o.lastTs ? Math.round((Date.now() - o.lastTs) / 60000) : null;
+            opt.textContent = `${o.key}${mins !== null ? ` · ${mins}m ago` : ''} · ${o.count} msgs`;
+            sel.appendChild(opt);
+        });
+
+        if (locked && options.some(o => o.key === locked)) sel.value = locked;
+        else sel.value = '';
+    },
+
     async check() {
         const agentId = getRecoveryAgentId();
         if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
+        await this.refreshSources();
         setRecoveryStatus(`Checking sessions for ${agentId}...`);
         const info = await getAgentSessionSnapshot(agentId);
         if (info.error) {
@@ -396,7 +446,8 @@ window._agentRecovery = {
         if (info.error || !info.latest) return setRecoveryStatus(`No source session available for ${agentId}.`, 'error');
 
         const targetKey = `agent:${agentId}:main`;
-        const sourceKey = pickBestContextSourceSession(agentId, targetKey) || info.latest.key;
+        const lockedSource = getLockedSourceSession(agentId);
+        const sourceKey = lockedSource || pickBestContextSourceSession(agentId, targetKey) || info.latest.key;
         let history = buildReplayContextLines(sourceKey, 12);
         if (!history.length && String(sourceKey).toLowerCase() !== String(targetKey).toLowerCase()) {
             history = buildReplayContextLines(targetKey, 12);
@@ -434,6 +485,7 @@ window._agentRecovery = {
         if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
 
         try {
+            await this.refreshSources();
             setRecoveryStatus(`Full recover started for ${agentId}: refresh + rebind + replay + probe...`);
             if (typeof fetchSessions === 'function') await fetchSessions();
             await this.rebindMain();
