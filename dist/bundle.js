@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-10T20:24:38Z
+// Generated: 2026-03-11T11:26:39Z
 // Modules: 25
 
 
@@ -2303,6 +2303,95 @@ function switchToAgent(agentId) {
 }
 
 // Auto-init when gateway connects
+function getRecoveryAgentId() {
+    return (window._memoryCards && typeof window._memoryCards.getCurrentAgentId === 'function' && window._memoryCards.getCurrentAgentId())
+        || window._deepLinkAgentId
+        || window.currentAgentId
+        || null;
+}
+
+function setRecoveryStatus(text, kind = 'muted') {
+    const el = document.getElementById('agent-recovery-status');
+    if (!el) return;
+    const color = kind === 'error' ? 'var(--error)' : (kind === 'success' ? 'var(--success)' : 'var(--text-muted)');
+    el.style.color = color;
+    el.textContent = text;
+}
+
+async function safeGatewayRequest(candidates, payload) {
+    let lastError = null;
+    for (const method of candidates) {
+        try {
+            const out = await gateway._request(method, payload);
+            return { ok: true, method, out };
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    return { ok: false, error: lastError };
+}
+
+window._agentRecovery = {
+    async check() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        setRecoveryStatus(`Checking sessions for ${agentId}...`);
+        const res = await safeGatewayRequest(['sessions.list'], { includeGlobal: true });
+        if (!res.ok) return setRecoveryStatus(`Check failed: ${res.error?.message || 'unknown error'}`, 'error');
+
+        const sessions = res.out?.sessions || [];
+        const prefix = `agent:${agentId}:`;
+        const matches = sessions.filter(s => (s.key || '').startsWith(prefix));
+        if (!matches.length) return setRecoveryStatus(`No sessions found for ${agentId}.`, 'error');
+
+        const latest = matches.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0];
+        const mins = latest.updatedAt ? Math.round((Date.now() - new Date(latest.updatedAt).getTime()) / 60000) : null;
+        setRecoveryStatus(`Healthy check: ${matches.length} session(s). Latest: ${latest.key}${mins !== null ? ` · ${mins}m ago` : ''}.`, 'success');
+    },
+
+    async ping() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const sessionKey = `agent:${agentId}:main`;
+        setRecoveryStatus(`Sending async ping to ${sessionKey}...`);
+
+        const payload = {
+            sessionKey,
+            message: 'Quick health ping from dashboard. Reply with ACK if healthy.',
+            timeoutSeconds: 0
+        };
+        const res = await safeGatewayRequest(['sessions.send', 'session.send'], payload);
+        if (!res.ok) return setRecoveryStatus(`Ping failed: ${res.error?.message || 'unknown error'}`, 'error');
+
+        setRecoveryStatus(`Ping sent to ${sessionKey} via ${res.method}.`, 'success');
+    },
+
+    openChat() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        try {
+            if (typeof switchToAgent === 'function') switchToAgent(agentId);
+            if (typeof showPage === 'function') showPage('chat');
+            setRecoveryStatus(`Opened chat for ${agentId}.`, 'success');
+        } catch (e) {
+            setRecoveryStatus(`Open chat failed: ${e.message || e}`, 'error');
+        }
+    },
+
+    async refresh() {
+        try {
+            if (typeof fetchSessions === 'function') await fetchSessions();
+            setRecoveryStatus('Sessions refreshed.', 'success');
+        } catch (e) {
+            setRecoveryStatus(`Refresh failed: ${e.message || e}`, 'error');
+        }
+    }
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initAgentStatusPanel, 2000);
 });
@@ -10870,6 +10959,57 @@ window.submitNewCronJob = async function() {
         showToast('Failed: ' + e.message, 'error');
     }
 };
+
+window._cronJobs = Object.assign(window._cronJobs || {}, {
+    ensureLoaded: async function (options = {}) {
+        return loadCronJobs(options);
+    },
+    getJobs: function () {
+        return Array.isArray(cronJobs) ? cronJobs.slice() : [];
+    },
+    getOwnerAgent: function (job) {
+        return getCronJobOwnerAgent(job);
+    },
+    getLastStatus: function (job) {
+        return getLastStatus(job);
+    },
+    getPayloadSummary: function (job) {
+        return getPayloadSummary(job);
+    },
+    formatSchedule: function (job) {
+        return formatCronSchedule(job?.schedule || job?.cron);
+    },
+    formatNextRun: function (job) {
+        return formatNextRun(job);
+    },
+    formatLastRun: function (job) {
+        return formatLastRun(job);
+    },
+    isConnected: function () {
+        return Boolean(gateway && typeof gateway.isConnected === 'function' && gateway.isConnected());
+    },
+    openPage: function () {
+        if (typeof showPage === 'function') showPage('cron');
+    },
+    openJob: function (jobId) {
+        const safeJobId = String(jobId || '').trim();
+        if (!safeJobId) return;
+
+        const openDetail = (attempts = 0) => {
+            const detailView = document.getElementById('cron-detail-view');
+            if (detailView && typeof openCronDetailView === 'function') {
+                openCronDetailView(safeJobId, { pushState: true });
+                return;
+            }
+            if (attempts < 8) {
+                setTimeout(() => openDetail(attempts + 1), 80);
+            }
+        };
+
+        if (typeof showPage === 'function') showPage('cron');
+        setTimeout(() => openDetail(), 80);
+    }
+});
 
 window.addEventListener('popstate', () => {
     if (window.location.pathname === '/cron') {

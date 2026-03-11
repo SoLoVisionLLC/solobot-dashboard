@@ -134,6 +134,95 @@ function switchToAgent(agentId) {
 }
 
 // Auto-init when gateway connects
+function getRecoveryAgentId() {
+    return (window._memoryCards && typeof window._memoryCards.getCurrentAgentId === 'function' && window._memoryCards.getCurrentAgentId())
+        || window._deepLinkAgentId
+        || window.currentAgentId
+        || null;
+}
+
+function setRecoveryStatus(text, kind = 'muted') {
+    const el = document.getElementById('agent-recovery-status');
+    if (!el) return;
+    const color = kind === 'error' ? 'var(--error)' : (kind === 'success' ? 'var(--success)' : 'var(--text-muted)');
+    el.style.color = color;
+    el.textContent = text;
+}
+
+async function safeGatewayRequest(candidates, payload) {
+    let lastError = null;
+    for (const method of candidates) {
+        try {
+            const out = await gateway._request(method, payload);
+            return { ok: true, method, out };
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    return { ok: false, error: lastError };
+}
+
+window._agentRecovery = {
+    async check() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        setRecoveryStatus(`Checking sessions for ${agentId}...`);
+        const res = await safeGatewayRequest(['sessions.list'], { includeGlobal: true });
+        if (!res.ok) return setRecoveryStatus(`Check failed: ${res.error?.message || 'unknown error'}`, 'error');
+
+        const sessions = res.out?.sessions || [];
+        const prefix = `agent:${agentId}:`;
+        const matches = sessions.filter(s => (s.key || '').startsWith(prefix));
+        if (!matches.length) return setRecoveryStatus(`No sessions found for ${agentId}.`, 'error');
+
+        const latest = matches.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0];
+        const mins = latest.updatedAt ? Math.round((Date.now() - new Date(latest.updatedAt).getTime()) / 60000) : null;
+        setRecoveryStatus(`Healthy check: ${matches.length} session(s). Latest: ${latest.key}${mins !== null ? ` · ${mins}m ago` : ''}.`, 'success');
+    },
+
+    async ping() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const sessionKey = `agent:${agentId}:main`;
+        setRecoveryStatus(`Sending async ping to ${sessionKey}...`);
+
+        const payload = {
+            sessionKey,
+            message: 'Quick health ping from dashboard. Reply with ACK if healthy.',
+            timeoutSeconds: 0
+        };
+        const res = await safeGatewayRequest(['sessions.send', 'session.send'], payload);
+        if (!res.ok) return setRecoveryStatus(`Ping failed: ${res.error?.message || 'unknown error'}`, 'error');
+
+        setRecoveryStatus(`Ping sent to ${sessionKey} via ${res.method}.`, 'success');
+    },
+
+    openChat() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent memory page first.', 'error');
+        try {
+            if (typeof switchToAgent === 'function') switchToAgent(agentId);
+            if (typeof showPage === 'function') showPage('chat');
+            setRecoveryStatus(`Opened chat for ${agentId}.`, 'success');
+        } catch (e) {
+            setRecoveryStatus(`Open chat failed: ${e.message || e}`, 'error');
+        }
+    },
+
+    async refresh() {
+        try {
+            if (typeof fetchSessions === 'function') await fetchSessions();
+            setRecoveryStatus('Sessions refreshed.', 'success');
+        } catch (e) {
+            setRecoveryStatus(`Refresh failed: ${e.message || e}`, 'error');
+        }
+    }
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initAgentStatusPanel, 2000);
 });
