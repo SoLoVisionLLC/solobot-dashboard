@@ -1133,6 +1133,7 @@
                 <div class="agent-dash-card">
                     <div class="agent-dash-card-title">🛠️ Agent Recovery</div>
                     <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;">
+                        <button class="btn btn-primary btn-sm" onclick="window._agentRecovery && window._agentRecovery.fullRecover()">⚡ Full Recover Agent</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.check()">Check Session Health</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.ping()">Send Async Ping</button>
                         <button class="btn btn-secondary btn-sm" onclick="window._agentRecovery && window._agentRecovery.probe()">Probe + Wait</button>

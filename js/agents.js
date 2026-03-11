@@ -391,6 +391,24 @@ window._agentRecovery = {
         setRecoveryStatus(`Context replay sent to ${targetKey} from ${sourceKey}.`, 'success');
     },
 
+    async fullRecover() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        try {
+            setRecoveryStatus(`Full recover started for ${agentId}: refresh + rebind + replay + probe...`);
+            if (typeof fetchSessions === 'function') await fetchSessions();
+            await this.rebindMain();
+            await sleep(300);
+            await this.replayContext();
+            await sleep(400);
+            await this.probe();
+        } catch (e) {
+            setRecoveryStatus(`Full recover failed: ${e?.message || e}`, 'error');
+        }
+    },
+
     openChat() {
         const agentId = getRecoveryAgentId();
         if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
