@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-03-11T11:57:42Z
+// Generated: 2026-03-11T12:44:36Z
 // Modules: 25
 
 
@@ -2332,7 +2332,7 @@ async function safeGatewayRequest(candidates, payload) {
 }
 
 async function getAgentSessionSnapshot(agentId) {
-    const list = await safeGatewayRequest(['sessions.list'], { includeGlobal: true });
+    const list = await safeGatewayRequest(['sessions_list', 'sessions.list'], { includeGlobal: true });
     if (!list.ok) return { error: list.error };
     const sessions = list.out?.sessions || [];
     const prefix = `agent:${agentId}:`;
@@ -2381,7 +2381,7 @@ window._agentRecovery = {
             message: 'Quick health ping from dashboard. Reply with ACK if healthy.',
             timeoutSeconds: 0
         };
-        const res = await safeGatewayRequest(['sessions.send'], payload);
+        const res = await safeGatewayRequest(['sessions_send', 'sessions.send'], payload);
         if (!res.ok) {
             const msg = String(res.error?.message || 'unknown error');
             if (/timeout/i.test(msg)) return setRecoveryStatus(`Ping timed out on ${sessionKey}. Session may be stuck or queueing.`, 'error');
@@ -2401,7 +2401,7 @@ window._agentRecovery = {
         const sessionKey = info.target.key;
 
         setRecoveryStatus(`Running blocking probe on ${sessionKey} (up to ~20s)...`);
-        const res = await safeGatewayRequest(['sessions.send'], {
+        const res = await safeGatewayRequest(['sessions_send', 'sessions.send'], {
             sessionKey,
             message: 'Health probe: reply with EXACT text "ACK" only.',
             timeoutSeconds: 20
@@ -2430,7 +2430,7 @@ window._agentRecovery = {
         const targetMins = info.target.updatedAt ? Math.round((Date.now() - new Date(info.target.updatedAt).getTime()) / 60000) : null;
         const cronSessions = info.sessions.filter(s => String(s.key || '').includes(':cron:'));
 
-        const history = await safeGatewayRequest(['sessions.history'], { sessionKey: targetKey, limit: 5 });
+        const history = await safeGatewayRequest(['sessions_history', 'sessions.history'], { sessionKey: targetKey, limit: 5 });
         const historyOk = history.ok;
         const count = historyOk ? ((history.out?.messages || history.out?.history || []).length || 0) : 0;
 
