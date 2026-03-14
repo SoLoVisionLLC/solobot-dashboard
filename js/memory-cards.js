@@ -673,6 +673,40 @@
         return html;
     }
 
+    function getOrgAvatarAsset(orgId) {
+        const canonical = ORG_TO_CANONICAL[orgId] || orgId;
+        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'luma']);
+        const svgAgents = new Set(['tax', 'sec']);
+
+        if (pngAgents.has(canonical)) {
+            return canonical === 'main' ? '/avatars/solobot.png' : `/avatars/${canonical}.png`;
+        }
+        if (svgAgents.has(canonical)) {
+            return `/avatars/${canonical}.svg`;
+        }
+        return null;
+    }
+
+    function renderOrgAvatar(orgId, fallbackEmoji, extraClass = '') {
+        const avatarUrl = getOrgAvatarAsset(orgId);
+        const classes = ['org-node-avatar', extraClass].filter(Boolean).join(' ');
+        if (!avatarUrl) {
+            return `<span class="${classes}">${fallbackEmoji || '•'}</span>`;
+        }
+        return `<span class="${classes}"><img src="${avatarUrl}" alt="${escapeHtml(orgId)} avatar" onerror="this.parentElement.textContent='${escapeInlineJsString(fallbackEmoji || '•')}';"></span>`;
+    }
+
+    function renderOrgCardMedia(orgId, fallbackEmoji) {
+        const avatarUrl = getOrgAvatarAsset(orgId);
+        if (!avatarUrl) return '';
+        return `
+            <div class="org-node-media">
+                <img class="org-node-media-img" src="${avatarUrl}" alt="${escapeHtml(orgId)} avatar"
+                    onerror="this.parentElement.innerHTML='<span class=\"org-node-media-fallback\">${escapeInlineJsString(fallbackEmoji || '•')}</span>'">
+            </div>
+        `;
+    }
+
     function renderOrgNode(id, org, agent, today) {
         const files = agent?.files || [];
         const fileCount = files.length;
@@ -693,7 +727,7 @@
                 <div class="org-node-connector-top"></div>
                 <div class="org-node-card">
                     <div class="org-node-header">
-                        <div class="org-node-avatar">${org.emoji}</div>
+                        ${renderOrgAvatar(id, org.emoji)}
                         <div class="org-node-info">
                             <div class="org-node-name">
                                 ${org.name}
@@ -703,6 +737,7 @@
                         </div>
                         <div class="org-node-status ${statusClass}"></div>
                     </div>
+                    ${renderOrgCardMedia(id, org.emoji)}
                     ${recentFiles.length ? `<div class="org-node-pills">${recentFiles.map(f => `<span class="agent-file-pill">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
                     <div class="org-node-meta">${fileCount} file${fileCount !== 1 ? 's' : ''} · ${lastMod ? timeAgo(lastMod) : 'No files'}</div>
                     <div class="org-node-meta" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
@@ -729,10 +764,11 @@
         const tb = document.querySelector('.agents-toolbar');
         if (!tb) return;
         const org = ORG_TREE[agent._orgId || agent.id] || {};
+        const toolbarAvatar = renderOrgAvatar(agent._orgId || agent.id, org.emoji || agent.emoji || '🤖', 'org-node-avatar-toolbar');
         tb.innerHTML = `
             <button class="btn btn-ghost btn-sm" onclick="window._memoryCards.backToGrid()" style="flex-shrink:0; white-space:nowrap;">← Agents</button>
             <span style="width:1px; height:24px; background:var(--border-subtle); flex-shrink:0;"></span>
-            <span style="font-size:22px; line-height:1; flex-shrink:0;">${org.emoji || agent.emoji || '🤖'}</span>
+            ${toolbarAvatar}
             <div style="min-width:0; overflow:hidden;">
                 <div style="font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(org.name || agent.name)}</div>
                 ${org.role ? `<div style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${escapeHtml(org.role)}</div>` : ''}
@@ -911,9 +947,19 @@
         // Update the fixed toolbar with agent nav + actions
         updateToolbarForAgent(agent, statusLabel, statusClass);
 
+        const heroAvatarUrl = getOrgAvatarAsset(agent._orgId || agent.id);
+
         container.innerHTML = `
             <!-- Dashboard Grid -->
             <div class="agent-dashboard-grid">
+
+                ${heroAvatarUrl ? `
+                <div class="agent-dash-card" style="grid-column: 1 / -1; overflow:hidden;">
+                    <div class="agent-dash-card-title">🖼️ Avatar</div>
+                    <div style="display:flex; justify-content:center; align-items:center; padding-top:8px;">
+                        <img src="${heroAvatarUrl}" alt="${escapeHtml(agent.name || agent.id)} avatar" style="width:min(100%, 360px); max-height:360px; border-radius:24px; object-fit:cover; box-shadow:0 18px 48px rgba(0,0,0,.28); border:1px solid var(--border-subtle); background:var(--surface-2);">
+                    </div>
+                </div>` : ''}
 
                 <!-- Status Card -->
                 <div class="agent-dash-card">

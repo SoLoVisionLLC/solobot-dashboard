@@ -375,6 +375,46 @@
     background: var(--surface-3);
     border-radius: var(--radius-md);
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.org-node-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.org-node-avatar-toolbar {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+}
+
+.org-node-media {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--surface-2) 92%, black 8%);
+    border: 1px solid var(--border-subtle);
+}
+
+.org-node-media-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.org-node-media-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: var(--text-muted);
 }
 
 .org-node-info {
