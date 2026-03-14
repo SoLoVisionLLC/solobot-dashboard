@@ -675,7 +675,7 @@
 
     function getOrgAvatarAsset(orgId) {
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'luma']);
+        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma']);
         const svgAgents = new Set(['tax', 'sec']);
 
         if (pngAgents.has(canonical)) {
@@ -685,6 +685,12 @@
             return `/avatars/${canonical}.svg`;
         }
         return null;
+    }
+
+    function getOrgHeroAsset(orgId) {
+        const canonical = ORG_TO_CANONICAL[orgId] || orgId;
+        if (canonical === 'nova') return '/avatars/nova-full.png';
+        return getOrgAvatarAsset(orgId);
     }
 
     function renderOrgAvatar(orgId, fallbackEmoji, extraClass = '') {
@@ -947,7 +953,7 @@
         // Update the fixed toolbar with agent nav + actions
         updateToolbarForAgent(agent, statusLabel, statusClass);
 
-        const heroAvatarUrl = getOrgAvatarAsset(agent._orgId || agent.id);
+        const heroAvatarUrl = getOrgHeroAsset(agent._orgId || agent.id);
 
         container.innerHTML = `
             <!-- Dashboard Grid -->
