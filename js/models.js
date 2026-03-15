@@ -667,7 +667,14 @@ async function fetchModelsFromGateway() {
 
         let configData = config;
         if (typeof config === 'string') configData = JSON.parse(config);
-        if (configData?.raw) configData = JSON.parse(configData.raw);
+        if (configData?.raw) {
+            try {
+                configData = JSON.parse(configData.raw);
+            } catch (e) {
+                console.warn('[Dashboard] Falling back to structured config due to raw parse error:', e.message);
+                if (configData.config) configData = configData.config;
+            }
+        }
 
         const modelConfig = configData?.agents?.defaults?.model;
         if (!modelConfig) return;
