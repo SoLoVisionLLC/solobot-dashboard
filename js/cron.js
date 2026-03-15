@@ -1271,6 +1271,57 @@ window.submitNewCronJob = async function() {
     }
 };
 
+window._cronJobs = Object.assign(window._cronJobs || {}, {
+    ensureLoaded: async function (options = {}) {
+        return loadCronJobs(options);
+    },
+    getJobs: function () {
+        return Array.isArray(cronJobs) ? cronJobs.slice() : [];
+    },
+    getOwnerAgent: function (job) {
+        return getCronJobOwnerAgent(job);
+    },
+    getLastStatus: function (job) {
+        return getLastStatus(job);
+    },
+    getPayloadSummary: function (job) {
+        return getPayloadSummary(job);
+    },
+    formatSchedule: function (job) {
+        return formatCronSchedule(job?.schedule || job?.cron);
+    },
+    formatNextRun: function (job) {
+        return formatNextRun(job);
+    },
+    formatLastRun: function (job) {
+        return formatLastRun(job);
+    },
+    isConnected: function () {
+        return Boolean(gateway && typeof gateway.isConnected === 'function' && gateway.isConnected());
+    },
+    openPage: function () {
+        if (typeof showPage === 'function') showPage('cron');
+    },
+    openJob: function (jobId) {
+        const safeJobId = String(jobId || '').trim();
+        if (!safeJobId) return;
+
+        const openDetail = (attempts = 0) => {
+            const detailView = document.getElementById('cron-detail-view');
+            if (detailView && typeof openCronDetailView === 'function') {
+                openCronDetailView(safeJobId, { pushState: true });
+                return;
+            }
+            if (attempts < 8) {
+                setTimeout(() => openDetail(attempts + 1), 80);
+            }
+        };
+
+        if (typeof showPage === 'function') showPage('cron');
+        setTimeout(() => openDetail(), 80);
+    }
+});
+
 window.addEventListener('popstate', () => {
     if (window.location.pathname === '/cron') {
         syncCronViewFromURL();

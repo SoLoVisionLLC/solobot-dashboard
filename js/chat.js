@@ -1537,8 +1537,8 @@ function createChatPageMessage(msg) {
             avatar.setAttribute('data-agent', agentId);
 
             // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'luma'].includes(agentId)
-                ? `/avatars/${agentId === 'main' ? 'solobot' : agentId}.png`
+            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'nova', 'luma'].includes(agentId)
+                ? `/avatars/${agentId === 'main' ? 'solobot' : (agentId === 'smm' ? 'nova' : agentId)}.png`
                 : (agentId === 'tax' || agentId === 'sec')
                     ? `/avatars/${agentId}.svg`
                     : '/avatars/solobot.png';
