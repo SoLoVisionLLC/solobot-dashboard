@@ -430,7 +430,7 @@ body:has(#page-dashboard.active) .footer {
 .chat-page-avatar img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
 }
 
 .chat-page-avatar.user-avatar {
@@ -838,7 +838,7 @@ body:has(#page-dashboard.active) .footer {
     margin-bottom: var(--space-2);
     cursor: pointer;
     transition: transform 0.2s;
-    object-fit: cover;
+    object-fit: contain;
     border: 1px solid var(--border-default);
 }
 
@@ -850,7 +850,7 @@ body:has(#page-dashboard.active) .footer {
 .image-preview-wrapper img {
     width: 60px;
     height: 60px;
-    object-fit: cover;
+    object-fit: contain;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-default);
 }

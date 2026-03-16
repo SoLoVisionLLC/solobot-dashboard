@@ -852,7 +852,9 @@
 
     function getOrgAvatarAsset(orgId) {
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma']);
+        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma',
+            'elon', 'orion', 'atlas', 'sterling', 'forge', 'sentinel', 'knox', 'vector', 'canon',
+            'quill', 'chip', 'snip', 'ledger', 'haven', 'solo']);
         const svgAgents = new Set(['tax', 'sec']);
 
         if (pngAgents.has(canonical)) {
@@ -866,7 +868,9 @@
 
     function getOrgHeroAsset(orgId) {
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        if (canonical === 'nova') return '/avatars/nova-full.png';
+        // Return full profile pic for all agents that have one
+        if (canonical === 'main') return '/avatars/solobot.png';
+        if (canonical) return `/avatars/${canonical}-full.png`;
         return getOrgAvatarAsset(orgId);
     }
 
@@ -1146,7 +1150,7 @@
                 <div class="agent-dash-card" style="grid-column: 1 / -1; overflow:hidden;">
                     <div class="agent-dash-card-title">🖼️ Avatar</div>
                     <div style="display:flex; justify-content:center; align-items:center; padding-top:8px;">
-                        <img src="${heroAvatarUrl}" alt="${escapeHtml(agent.name || agent.id)} avatar" style="width:min(100%, 360px); max-height:360px; border-radius:24px; object-fit:cover; box-shadow:0 18px 48px rgba(0,0,0,.28); border:1px solid var(--border-subtle); background:var(--surface-2);">
+                        <img src="${heroAvatarUrl}" alt="${escapeHtml(agent.name || agent.id)} avatar" style="width:min(100%, 360px); max-height:360px; border-radius:24px; object-fit:contain; box-shadow:0 18px 48px rgba(0,0,0,.28); border:1px solid var(--border-subtle); background:var(--surface-2);">
                     </div>
                 </div>` : ''}
 
