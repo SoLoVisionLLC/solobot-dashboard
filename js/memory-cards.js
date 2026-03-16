@@ -854,7 +854,7 @@
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
         const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma',
             'elon', 'orion', 'atlas', 'sterling', 'forge', 'sentinel', 'knox', 'vector', 'canon',
-            'quill', 'chip', 'snip', 'ledger', 'haven', 'solo']);
+            'quill', 'chip', 'snip', 'ledger', 'haven', 'solo', 'halo']);
         const svgAgents = new Set(['tax', 'sec']);
 
         if (pngAgents.has(canonical)) {
