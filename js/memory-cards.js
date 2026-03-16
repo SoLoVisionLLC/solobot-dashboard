@@ -884,7 +884,7 @@
     }
 
     function renderOrgCardMedia(orgId, fallbackEmoji) {
-        const avatarUrl = getOrgAvatarAsset(orgId);
+        const avatarUrl = getOrgHeroAsset(orgId);
         if (!avatarUrl) return '';
         return `
             <div class="org-node-media">
