@@ -858,7 +858,7 @@
         const svgAgents = new Set(['tax', 'sec']);
 
         if (pngAgents.has(canonical)) {
-            return canonical === 'main' ? '/avatars/solobot.png' : `/avatars/${canonical}.png`;
+            return canonical === 'main' ? '/avatars/halo.png' : `/avatars/${canonical}.png`;
         }
         if (svgAgents.has(canonical)) {
             return `/avatars/${canonical}.svg`;
@@ -869,7 +869,7 @@
     function getOrgHeroAsset(orgId) {
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
         // Return full profile pic for all agents that have one
-        if (canonical === 'main') return '/avatars/solobot.png';
+        if (canonical === 'main') return '/avatars/halo-full.png';
         if (canonical) return `/avatars/${canonical}-full.png`;
         return getOrgAvatarAsset(orgId);
     }
