@@ -3239,6 +3239,29 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/session/:key/messages — returns state-stored chat messages for a session.
+  // Used by Android app to fetch user-originated messages that the gateway RPC does not persist.
+  if (url.pathname.startsWith('/api/session/') && url.pathname.endsWith('/messages') && req.method === 'GET') {
+    const pathMatch = url.pathname.match(/\/api\/session\/(.+)\/messages$/);
+    const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
+    if (!sessionKey) {
+      res.writeHead(400);
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: 'Missing session key' }));
+    }
+    const sessionMessages = (state.chat?.sessions?.[sessionKey] || [])
+      .filter(m => m && typeof m === 'object' && m.role)
+      .map(m => ({
+        id: m.id || '',
+        role: m.role,
+        content: m.content || '',
+        timestamp: m.timestamp || m.createdAt || 0
+      }));
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.end(JSON.stringify({ ok: true, sessionKey, messages: sessionMessages }));
+  }
+
   // Authoritative per-agent message metrics endpoint
   // GET /api/agents/:agentId/metrics?range=today
   if (url.pathname.match(/^\/api\/agents\/([^/]+)\/metrics$/) && req.method === 'GET') {
