@@ -675,7 +675,10 @@
 
     function getOrgAvatarAsset(orgId) {
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma']);
+        // All agents with avatar images
+        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma',
+            'atlas', 'chip', 'elon', 'forge', 'halo', 'haven', 'knox', 'ledger', 'orion', 'quill',
+            'sentinel', 'snip', 'solo', 'sterling', 'vector']);
         const svgAgents = new Set(['tax', 'sec']);
 
         if (pngAgents.has(canonical)) {
@@ -689,7 +692,12 @@
 
     function getOrgHeroAsset(orgId) {
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        if (canonical === 'nova') return '/avatars/nova-full.png';
+        // Agents with full-size hero avatars for profile pages
+        const fullAvatarAgents = new Set(['nova', 'luma', 'atlas', 'chip', 'elon', 'forge', 'halo',
+            'haven', 'knox', 'ledger', 'orion', 'quill', 'sentinel', 'snip', 'solo', 'sterling', 'vector']);
+        if (fullAvatarAgents.has(canonical)) {
+            return `/avatars/${canonical}-full.png`;
+        }
         return getOrgAvatarAsset(orgId);
     }
 
