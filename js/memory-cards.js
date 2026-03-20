@@ -1995,9 +1995,19 @@
     // ── Keyboard Shortcuts ──
     function initKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
-            // Only active when on memory page
+            // Only active when on agents/memory page and not typing in a form field
             const memPage = document.getElementById('page-agents');
-            if (!memPage || memPage.style.display === 'none') return;
+            const isAgentsPageActive = memPage && memPage.classList.contains('active');
+            if (!isAgentsPageActive) return;
+
+            const target = e.target;
+            const isTyping = target && (
+                target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.tagName === 'SELECT' ||
+                target.isContentEditable
+            );
+            if (isTyping) return;
 
             // Space + drag = pan
             if (e.code === 'Space') {
