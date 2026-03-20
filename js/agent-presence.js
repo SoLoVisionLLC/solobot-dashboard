@@ -195,6 +195,9 @@
     }
   };
 
-  setInterval(runTicker, 1000);
+  let tickerInterval = setInterval(runTicker, 1000);
   document.addEventListener('DOMContentLoaded', () => setTimeout(render, 300));
+
+  // Cleanup function for SPA navigation
+  window._agentPresenceCleanup = () => clearInterval(tickerInterval);
 })();

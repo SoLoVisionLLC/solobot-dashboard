@@ -1122,7 +1122,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         // Populate model dropdown for current provider and select current model
 
         // Set up periodic model sync (every 5 minutes)
-        setInterval(async () => {
+        let modelSyncInterval = setInterval(async () => {
             try {
                 const response = await fetch('/api/models/current');
                 const modelInfo = await response.json();
@@ -1137,6 +1137,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 // Silent fail for periodic sync
             }
         }, 5 * 60 * 1000); // 5 minutes
+        
+        // Export cleanup for SPA navigation
+        window._modelsCleanup = () => clearInterval(modelSyncInterval);
+        
         await updateModelDropdown(window.currentProvider);
         selectModelInDropdowns(window.currentModel);
 

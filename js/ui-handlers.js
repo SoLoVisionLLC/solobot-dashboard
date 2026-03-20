@@ -454,9 +454,12 @@ async function syncActivitiesFromFile() {
 }
 
 // Poll for activity updates every 30 seconds
-setInterval(syncActivitiesFromFile, 30000);
+let activitySyncInterval = setInterval(syncActivitiesFromFile, 30000);
 // Also sync on load
 setTimeout(syncActivitiesFromFile, 2000);
+
+// Cleanup function for SPA navigation
+window._uiHandlersCleanup = () => clearInterval(activitySyncInterval);
 
 function toggleConsoleExpand() {
     const section = document.getElementById('console-section');

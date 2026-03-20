@@ -130,12 +130,15 @@ function initCronPage() {
     }, 30000);
 }
 
-function formatCronSchedule(schedule) {
+function formatCronScheduleHuman(schedule) {
     if (!schedule) return '--';
-    if (typeof schedule === 'string') return schedule;
+    if (typeof schedule === 'string') {
+        // Try to parse as cron expression
+        return cronToHuman(schedule);
+    }
 
     if (schedule.kind === 'cron') {
-        return schedule.tz ? `${schedule.expr || '--'} (${schedule.tz})` : (schedule.expr || '--');
+        return cronToHuman(schedule.expr);
     }
     if (schedule.kind === 'every') {
         const ms = Number(schedule.everyMs || 0);
@@ -158,6 +161,63 @@ function formatCronSchedule(schedule) {
     }
 
     return JSON.stringify(schedule);
+}
+
+function cronToHuman(expr) {
+    if (!expr || typeof expr !== 'string') return expr || '--';
+
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length < 5) return expr;
+
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+    // Every X minutes: */X
+    if (minute.startsWith('*/')) {
+        const interval = minute.substring(2);
+        return `Every ${interval} minutes`;
+    }
+
+    // Every hour at minute X: X * * * *
+    if (hour === '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        return `Every hour at minute ${minute}`;
+    }
+
+    // Daily at X: X Y * * *
+    if (dayOfMonth === '*' && dayOfWeek === '*') {
+        const h = parseInt(hour);
+        const m = parseInt(minute);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        return `Daily at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // Weekly on X at Y: X Y * * Z
+    if (dayOfMonth === '*' && dayOfWeek !== '*') {
+        const h = parseInt(hour);
+        const m = parseInt(minute);
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        return `Weekly on ${days[parseInt(dayOfWeek)]} at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // Monthly on X at Y: X Y Z * *
+    if (dayOfMonth !== '*') {
+        const h = parseInt(hour);
+        const m = parseInt(minute);
+        const d = parseInt(dayOfMonth);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        const suffix = getOrdinalSuffix(d);
+        return `Monthly on the ${d}${suffix} at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // Fallback to raw expression with timezone
+    return expr;
+}
+
+function formatCronSchedule(schedule) {
+    return formatCronScheduleHuman(schedule);
 }
 
 function formatDateTime(value) {
@@ -1159,6 +1219,7 @@ function renderCronJobs() {
                 <div class="cron-job-actions" onclick="event.stopPropagation();">
                     <button onclick="event.stopPropagation(); toggleCronJob('${jobIdJs}', ${!enabled});" class="cron-job-action-btn" title="${enabled ? 'Disable job' : 'Enable job'}">${enabled ? 'Pause' : 'Enable'}</button>
                     <button onclick="event.stopPropagation(); runCronJob('${jobIdJs}');" class="cron-job-action-btn cron-job-action-run" title="Run now">Run now</button>
+                    <button onclick="event.stopPropagation(); openEditCronModal('${jobIdJs}');" class="cron-job-action-btn" title="Edit job">Edit</button>
                 </div>
             </div>
 
@@ -1235,10 +1296,78 @@ window.closeAddCronModal = function() {
     if (modal) modal.classList.remove('visible');
 };
 
+// Schedule builder functions
+window.updateCronScheduleBuilder = function(prefix) {
+    const type = document.getElementById(`cron-${prefix}-schedule-type`)?.value;
+    const rows = ['daily', 'weekly', 'monthly', 'hourly', 'minutes'];
+    rows.forEach(row => {
+        const el = document.getElementById(`cron-${prefix}-schedule-${row}`);
+        if (el) el.classList.toggle('hidden', row !== type);
+    });
+    updateCronScheduleFromBuilder(prefix);
+};
+
+window.updateCronScheduleFromBuilder = function(prefix) {
+    const type = document.getElementById(`cron-${prefix}-schedule-type`)?.value;
+    const preview = document.getElementById(`cron-${prefix}-schedule-preview`);
+    const hiddenInput = document.getElementById(`cron-${prefix}-schedule`);
+    let expr = '';
+    let previewText = '';
+
+    if (type === 'daily') {
+        const time = document.getElementById(`cron-${prefix}-daily-time`)?.value || '09:00';
+        const [h, m] = time.split(':').map(Number);
+        expr = `${m} ${h} * * *`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        previewText = `Daily at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } else if (type === 'weekly') {
+        const day = parseInt(document.getElementById(`cron-${prefix}-weekly-day`)?.value || '0');
+        const time = document.getElementById(`cron-${prefix}-weekly-time`)?.value || '09:00';
+        const [h, m] = time.split(':').map(Number);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        expr = `${m} ${h} * * ${day}`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        previewText = `Weekly on ${days[day]}s at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } else if (type === 'monthly') {
+        const day = parseInt(document.getElementById(`cron-${prefix}-monthly-day`)?.value || '1');
+        const time = document.getElementById(`cron-${prefix}-monthly-time`)?.value || '09:00';
+        const [h, m] = time.split(':').map(Number);
+        expr = `${m} ${h} ${day} * *`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        const suffix = getOrdinalSuffix(day);
+        previewText = `Monthly on the ${day}${suffix} at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } else if (type === 'hourly') {
+        expr = '0 * * * *';
+        previewText = 'Every hour at minute 0';
+    } else if (type === 'minutes') {
+        const interval = parseInt(document.getElementById(`cron-${prefix}-minutes-interval`)?.value || '15');
+        expr = `*/${interval} * * * *`;
+        previewText = `Every ${interval} minutes`;
+    }
+
+    if (hiddenInput) hiddenInput.value = expr;
+    if (preview) preview.textContent = previewText;
+};
+
+function getOrdinalSuffix(n) {
+    if (n >= 11 && n <= 13) return 'th';
+    switch (n % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+    }
+}
+
 window.submitNewCronJob = async function() {
     const name = document.getElementById('cron-new-name')?.value?.trim();
     const scheduleExpr = document.getElementById('cron-new-schedule')?.value?.trim();
     const command = document.getElementById('cron-new-command')?.value?.trim();
+    const agentId = document.getElementById('cron-new-agent')?.value?.trim();
+    const sessionTarget = document.getElementById('cron-new-session-target')?.value?.trim() || 'main';
 
     if (!name || !scheduleExpr || !command) {
         showToast('Name, schedule, and message are required', 'warning');
@@ -1252,7 +1381,7 @@ window.submitNewCronJob = async function() {
             expr: scheduleExpr,
             tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
         },
-        sessionTarget: 'main',
+        sessionTarget,
         wakeMode: 'now',
         payload: {
             kind: 'systemEvent',
@@ -1261,11 +1390,196 @@ window.submitNewCronJob = async function() {
         enabled: true
     };
 
+    if (agentId) {
+        job.agentId = agentId;
+    }
+
     try {
         await gateway._request('cron.add', job);
         showToast('Cron job added', 'success');
         closeAddCronModal();
         loadCronJobs();
+    } catch (e) {
+        showToast('Failed: ' + e.message, 'error');
+    }
+};
+
+let editingCronJobId = null;
+
+window.openEditCronModal = function(jobId) {
+    const job = getJobById(jobId || activeCronJobId);
+    if (!job) {
+        showToast('Select a cron job to edit', 'warning');
+        return;
+    }
+
+    editingCronJobId = job.id;
+
+    // Pre-fill the form
+    document.getElementById('cron-edit-id').value = job.id;
+    document.getElementById('cron-edit-name').value = job.name || '';
+    document.getElementById('cron-edit-command').value = getPayloadSummary(job) || '';
+
+    const sessionTarget = document.getElementById('cron-edit-session-target');
+    if (sessionTarget) {
+        sessionTarget.value = job.sessionTarget || 'main';
+    }
+
+    const agentSelect = document.getElementById('cron-edit-agent');
+    if (agentSelect) {
+        agentSelect.value = job.agentId || '';
+    }
+
+    // Parse cron expression and pre-fill schedule builder
+    const cronExpr = job.schedule?.expr || '';
+    const parsed = parseCronForBuilder(cronExpr);
+    const typeSelect = document.getElementById('cron-edit-schedule-type');
+    if (typeSelect) typeSelect.value = parsed.type;
+    updateCronScheduleBuilder('edit');
+
+    // Fill the specific inputs
+    if (parsed.type === 'daily') {
+        const timeInput = document.getElementById('cron-edit-daily-time');
+        if (timeInput) timeInput.value = parsed.time;
+    } else if (parsed.type === 'weekly') {
+        const daySelect = document.getElementById('cron-edit-weekly-day');
+        if (daySelect) daySelect.value = parsed.day;
+        const timeInput = document.getElementById('cron-edit-weekly-time');
+        if (timeInput) timeInput.value = parsed.time;
+    } else if (parsed.type === 'monthly') {
+        const dayInput = document.getElementById('cron-edit-monthly-day');
+        if (dayInput) dayInput.value = parsed.day;
+        const timeInput = document.getElementById('cron-edit-monthly-time');
+        if (timeInput) timeInput.value = parsed.time;
+    } else if (parsed.type === 'minutes') {
+        const intervalInput = document.getElementById('cron-edit-minutes-interval');
+        if (intervalInput) intervalInput.value = parsed.interval;
+    }
+
+    // Set the hidden cron expression and preview
+    const hiddenInput = document.getElementById('cron-edit-schedule');
+    if (hiddenInput) hiddenInput.value = cronExpr;
+    const preview = document.getElementById('cron-edit-schedule-preview');
+    if (preview) preview.textContent = parsed.previewText;
+
+    const modal = document.getElementById('edit-cron-modal');
+    if (modal) modal.classList.add('visible');
+};
+
+function parseCronForBuilder(expr) {
+    // Returns: { type, time, day, interval, previewText }
+    const result = { type: 'daily', time: '09:00', day: '0', interval: '15', previewText: 'Daily at 9:00 AM' };
+
+    if (!expr) return result;
+
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length < 5) return result;
+
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+    // Every X minutes: */X
+    if (minute.startsWith('*/') && hour === '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        const interval = minute.substring(2);
+        result.type = 'minutes';
+        result.interval = interval;
+        result.previewText = `Every ${interval} minutes`;
+        return result;
+    }
+
+    // Every hour at minute X: X * * * *
+    if (minute !== '*' && hour === '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        result.type = 'hourly';
+        result.time = `${String(hour || 0).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        result.previewText = 'Every hour at minute ' + minute;
+        return result;
+    }
+
+    // Daily at X: X Y * * *
+    if (minute !== '*' && hour !== '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        result.type = 'daily';
+        result.time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        result.previewText = `Daily at ${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+        return result;
+    }
+
+    // Weekly on X at Y: X Y * * Z
+    if (minute !== '*' && hour !== '*' && dayOfMonth === '*' && dayOfWeek !== '*') {
+        result.type = 'weekly';
+        result.day = dayOfWeek;
+        result.time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        result.previewText = `Weekly on ${days[parseInt(dayOfWeek)]}s at ${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+        return result;
+    }
+
+    // Monthly on X at Y: X Y Z * *
+    if (minute !== '*' && hour !== '*' && dayOfMonth !== '*') {
+        result.type = 'monthly';
+        result.day = dayOfMonth;
+        result.time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        const suffix = getOrdinalSuffix(parseInt(dayOfMonth));
+        result.previewText = `Monthly on the ${dayOfMonth}${suffix} at ${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+        return result;
+    }
+
+    return result;
+}
+
+window.closeEditCronModal = function() {
+    editingCronJobId = null;
+    const modal = document.getElementById('edit-cron-modal');
+    if (modal) modal.classList.remove('visible');
+};
+
+window.submitEditCronJob = async function() {
+    const jobId = document.getElementById('cron-edit-id')?.value?.trim();
+    const name = document.getElementById('cron-edit-name')?.value?.trim();
+    const scheduleExpr = document.getElementById('cron-edit-schedule')?.value?.trim();
+    const command = document.getElementById('cron-edit-command')?.value?.trim();
+    const sessionTarget = document.getElementById('cron-edit-session-target')?.value?.trim() || 'main';
+    const agentId = document.getElementById('cron-edit-agent')?.value?.trim();
+
+    if (!jobId || !name || !scheduleExpr || !command) {
+        showToast('Name, schedule, and message are required', 'warning');
+        return;
+    }
+
+    const patch = {
+        name,
+        schedule: {
+            kind: 'cron',
+            expr: scheduleExpr,
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        },
+        sessionTarget,
+        payload: {
+            kind: 'systemEvent',
+            text: command
+        }
+    };
+
+    if (agentId) {
+        patch.agentId = agentId;
+    } else {
+        patch.agentId = null; // Clear agent if not specified
+    }
+
+    try {
+        await gateway._request('cron.update', { jobId, patch });
+        showToast('Cron job updated', 'success');
+        closeEditCronModal();
+        loadCronJobs();
+
+        // Refresh detail view if this job is selected
+        if (String(activeCronJobId) === String(jobId)) {
+            openCronDetailView(jobId, { refresh: true, pushState: false });
+        }
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
     }

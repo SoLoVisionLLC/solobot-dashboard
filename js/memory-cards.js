@@ -5,7 +5,7 @@
 
     // Guard against early inline handler access before full API registration.
     const memoryCardsApi = window._memoryCards || (window._memoryCards = {});
-    const $ = (id) => document.getElementById(id);
+    // Note: $ helper is now in utils.js (uses global $)
     if (typeof memoryCardsApi.wasDragging !== 'boolean') {
         memoryCardsApi.wasDragging = false;
     }
@@ -286,20 +286,7 @@
         }
     }
 
-    function timeAgo(dateStr) {
-        if (!dateStr) return 'Unknown';
-        const now = Date.now();
-        const then = new Date(dateStr).getTime();
-        const diff = now - then;
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) return 'Just now';
-        if (mins < 60) return `${mins}m ago`;
-        const hours = Math.floor(mins / 60);
-        if (hours < 24) return `${hours}h ago`;
-        const days = Math.floor(hours / 24);
-        if (days < 30) return `${days}d ago`;
-        return new Date(dateStr).toLocaleDateString();
-    }
+    // Note: timeAgo is now in utils.js - using centralized version
 
     function setAgentMetricsStatus(agentId, status, metrics) {
         const msgEl = document.getElementById(`agent-metric-msgs-${agentId}`);
@@ -853,27 +840,15 @@
     }
 
     function getOrgAvatarAsset(orgId) {
+        // Use centralized avatar resolution with org-to-canonical mapping
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        const pngAgents = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'nova', 'luma',
-            'elon', 'orion', 'atlas', 'sterling', 'forge', 'sentinel', 'knox', 'vector', 'canon',
-            'quill', 'chip', 'snip', 'ledger', 'haven', 'solo', 'halo']);
-        const svgAgents = new Set(['tax', 'sec']);
-
-        if (pngAgents.has(canonical)) {
-            return canonical === 'main' ? '/avatars/halo.png' : `/avatars/${canonical}.png`;
-        }
-        if (svgAgents.has(canonical)) {
-            return `/avatars/${canonical}.svg`;
-        }
-        return null;
+        return getAvatarUrl(resolveAgentToAvatar(canonical));
     }
 
     function getOrgHeroAsset(orgId) {
+        // Use centralized avatar resolution for full-size avatars
         const canonical = ORG_TO_CANONICAL[orgId] || orgId;
-        // Return full profile pic for all agents that have one
-        if (canonical === 'main') return '/avatars/halo-full.png';
-        if (canonical) return `/avatars/${canonical}-full.png`;
-        return getOrgAvatarAsset(orgId);
+        return getAvatarUrlFull(resolveAgentToAvatar(canonical));
     }
 
     function renderOrgAvatarBadge(orgId, fallbackEmoji, extraClass = '') {

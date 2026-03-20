@@ -333,7 +333,7 @@ function parseModelsOutput(output) {
   return models;
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3124;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
 // OpenClaw data — uses OPENCLAW_HOME (auto-detected or env var)

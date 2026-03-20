@@ -13,7 +13,7 @@
 
   const AGENTS = ['main', 'elon', 'orion', 'atlas', 'sterling', 'dev', 'forge', 'knox', 'sentinel', 'vector', 'canon', 'luma', 'ledger', 'quill', 'chip', 'nova', 'snip', 'family'];
 
-  function $(id) { return document.getElementById(id); }
+  // Note: $ helper is now in utils.js
 
   function escapeHtml(v) {
     const d = document.createElement('div');
@@ -222,12 +222,7 @@ function showOrg(updateURL = true) {
     return { completed, blockers, decisions, followups };
   }
 
-  function formatTime(ts) {
-    if (!ts) return '';
-    const d = new Date(ts);
-    if (!Number.isFinite(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  // Note: formatTime is now in utils.js - using centralized version
 
   function renderSection(id, items) {
     const el = $(id);

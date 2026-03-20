@@ -5,26 +5,7 @@
 // CUSTOM CONFIRM & TOAST (no browser alerts!)
 // ===================
 
-let confirmResolver = null;
-
-// Custom confirm dialog - returns Promise<boolean>
-function showConfirm(message, title = 'Confirm', okText = 'OK') {
-    return new Promise((resolve) => {
-        confirmResolver = resolve;
-        document.getElementById('confirm-modal-title').textContent = title;
-        document.getElementById('confirm-modal-message').innerHTML = message;
-        document.getElementById('confirm-modal-ok').textContent = okText;
-        showModal('confirm-modal');
-    });
-}
-
-function closeConfirmModal(result) {
-    hideModal('confirm-modal');
-    if (confirmResolver) {
-        confirmResolver(result);
-        confirmResolver = null;
-    }
-}
+// Note: showConfirm and closeConfirmModal are defined later in this file (more complete version)
 
 // Toast notification - replaces alert()
 function showToast(message, type = 'info', duration = 4000) {

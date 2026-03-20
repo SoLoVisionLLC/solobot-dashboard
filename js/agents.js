@@ -93,13 +93,7 @@ function renderAgentStatuses(sessions) {
     }).join('');
 }
 
-function timeAgo(timestamp) {
-    const diff = Date.now() - timestamp;
-    if (diff < 60000) return 'just now';
-    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-    return Math.floor(diff / 86400000) + 'd ago';
-}
+// Note: timeAgo is now in utils.js - using centralized version
 
 let _switchingAgent = false;
 function switchToAgent(agentId) {
@@ -170,7 +164,6 @@ async function safeGatewayRequest(candidates, payload) {
         try {
             const out = await gateway._request(method, payload);
             attempts.push({ method, ok: true });
-            console.log('[AgentRecovery] RPC success:', { method, payloadKeys: Object.keys(payload || {}) });
             return { ok: true, method, out, attempts };
         } catch (e) {
             lastError = e;

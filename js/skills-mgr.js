@@ -8,7 +8,9 @@ const SKILLS_CACHE_KEY = 'skillsStatusCache.v1';
 const skillsUi = {
     search: '',
     onlyIssues: false,
-    onlyInstalled: true
+    status: '',      // 'enabled', 'disabled', or ''
+    source: '',      // 'bundled', 'installed', 'clawhub', or ''
+    agent: ''       // agent id or ''
 };
 
 function getHiddenSkills() {
@@ -47,44 +49,116 @@ function bindSkillsPageControls() {
     if (skillsPageBound) return;
     skillsPageBound = true;
 
+    // Search input
     const search = document.getElementById('skills-search');
-    const onlyIssues = document.getElementById('skills-only-issues');
-    const refresh = document.getElementById('skills-refresh');
-
     if (search) {
         search.addEventListener('input', () => {
             skillsUi.search = (search.value || '').trim().toLowerCase();
             renderSkills();
+            updateActiveFilters();
         });
     }
 
+    // Issues toggle
+    const onlyIssues = document.getElementById('skills-only-issues');
     if (onlyIssues) {
         onlyIssues.addEventListener('change', () => {
             skillsUi.onlyIssues = Boolean(onlyIssues.checked);
             renderSkills();
+            updateActiveFilters();
         });
     }
 
-    const onlyInstalled = document.getElementById('skills-only-installed');
-    if (onlyInstalled) {
-        onlyInstalled.checked = skillsUi.onlyInstalled;
-        onlyInstalled.addEventListener('change', () => {
-            skillsUi.onlyInstalled = Boolean(onlyInstalled.checked);
-            renderSkills();
-        });
-    }
-
-    const showHidden = document.getElementById('skills-show-hidden');
-    if (showHidden) {
-        showHidden.addEventListener('change', () => {
-            skillsUi.showHidden = Boolean(showHidden.checked);
-            renderSkills();
-        });
-    }
-
+    // Refresh button
+    const refresh = document.getElementById('skills-refresh');
     if (refresh) {
         refresh.addEventListener('click', () => loadSkills({ useCache: false }));
     }
+
+    // Clear filters button
+    const clearBtn = document.getElementById('skills-clear-filters');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            skillsUi.search = '';
+            skillsUi.onlyIssues = false;
+            skillsUi.status = '';
+            skillsUi.source = '';
+            skillsUi.agent = '';
+            
+            if (search) search.value = '';
+            if (onlyIssues) onlyIssues.checked = false;
+            
+            // Reset dropdowns
+            document.querySelectorAll('.skills-filter-popover-trigger').forEach(trigger => {
+                const filter = trigger.dataset.filter;
+                trigger.classList.remove('open');
+                trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                    opt.classList.toggle('active', opt.dataset.value === '');
+                });
+                const valueEl = document.getElementById(`skills-${filter}-value`);
+                if (valueEl) valueEl.textContent = filter === 'agent' ? 'All' : 'All';
+            });
+            
+            renderSkills();
+            updateActiveFilters();
+        });
+    }
+
+    // Filter popover triggers
+    document.querySelectorAll('.skills-filter-popover-trigger').forEach(trigger => {
+        const filter = trigger.dataset.filter;
+        const dropdown = trigger.querySelector('.skills-filter-dropdown');
+        
+        // Click on trigger to toggle
+        trigger.querySelector('.skills-filter-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            
+            // Close other open dropdowns
+            document.querySelectorAll('.skills-filter-popover-trigger.open').forEach(t => {
+                if (t !== trigger) t.classList.remove('open');
+            });
+            
+            trigger.classList.toggle('open');
+        });
+        
+        // Click on options
+        dropdown.querySelectorAll('.skills-filter-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                const label = option.textContent;
+                
+                // Update active state
+                dropdown.querySelectorAll('.skills-filter-option').forEach(opt => {
+                    opt.classList.toggle('active', opt === option);
+                });
+                
+                // Update UI
+                const valueEl = document.getElementById(`skills-${filter}-value`);
+                if (valueEl) valueEl.textContent = label;
+                
+                // Update state
+                if (filter === 'status') skillsUi.status = value;
+                else if (filter === 'source') skillsUi.source = value;
+                else if (filter === 'agent') skillsUi.agent = value;
+                
+                // Close dropdown
+                trigger.classList.remove('open');
+                
+                renderSkills();
+                updateActiveFilters();
+            });
+        });
+    });
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.skills-filter-popover-trigger')) {
+            document.querySelectorAll('.skills-filter-popover-trigger.open').forEach(t => {
+                t.classList.remove('open');
+            });
+        }
+    });
 }
 
 async function loadSkills({ useCache = true } = {}) {
@@ -235,21 +309,24 @@ function renderSkills() {
             return name.toLowerCase().includes(query) || desc.toLowerCase().includes(query) || key.toLowerCase().includes(query);
         })
         .filter(skill => {
-            if (!skillsUi.onlyInstalled) return true;
-            // "Installed" means actually usable: ready (no missing bins) AND eligible for this OS
-            const missing = skill?.missing || {};
-            const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
-            const missingOs = (missing.os || []).length > 0;
-            if (missingOs || missingBins > 0) return false;
-            return skill?.installed === true || skill?.bundled === true || skill?.enabled !== false;
+            if (!skillsUi.status) return true;
+            const enabled = !skill?.disabled && skill?.enabled !== false;
+            if (skillsUi.status === 'enabled') return enabled;
+            if (skillsUi.status === 'disabled') return !enabled;
+            return true;
+        })
+        .filter(skill => {
+            if (!skillsUi.source) return true;
+            if (skillsUi.source === 'bundled') return skill?.bundled === true;
+            if (skillsUi.source === 'installed') return skill?.installed === true;
+            if (skillsUi.source === 'clawhub') return skill?.source === 'clawhub';
+            return true;
+        })
+        .filter(skill => {
+            if (!skillsUi.agent) return true;
+            return skill?.assignedAgent === skillsUi.agent;
         })
         .filter(skill => skillsUi.onlyIssues ? skillHasIssues(skill) : true)
-        .filter(skill => {
-            if (skillsUi.showHidden) return true;
-            const hidden = getHiddenSkills();
-            const key = skill?.skillKey || skill?.name || '';
-            return !hidden.includes(key);
-        })
         .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
 
     container.innerHTML = filtered.map(skill => {
@@ -304,6 +381,12 @@ function renderSkills() {
                             style="padding: 4px 10px; font-size: 11px;"
                             title="View and edit skill files">
                         📂 Files
+                    </button>
+                    <button onclick="openEditSkillModal('${escapeHtml(skillKey)}')"
+                            class="btn btn-ghost"
+                            style="padding: 4px 10px; font-size: 11px;"
+                            title="Edit skill settings">
+                        ✏️ Edit
                     </button>
                     <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})"
                             class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}"
@@ -691,4 +774,200 @@ window.saveSkillFile = async function(relPath) {
     } catch (e) {
         showToast('Failed to save: ' + e.message, 'error');
     }
+};
+
+window.openEditSkillModal = function(skillKey) {
+    const skill = skillsList.find(s => (s?.skillKey || s?.name || '') === skillKey);
+    if (!skill) {
+        showToast('Skill not found', 'error');
+        return;
+    }
+
+    document.getElementById('edit-skill-key').value = skillKey;
+    document.getElementById('edit-skill-name').value = skill?.name || skillKey;
+    document.getElementById('edit-skill-description').value = skill?.description || '';
+
+    const enabled = !skill?.disabled && skill?.enabled !== false;
+    document.getElementById('edit-skill-enabled').checked = enabled;
+
+    // Get env vars from skill config if available
+    const envText = skill?.envEntries
+        ? Object.entries(skill.envEntries).map(([k, v]) => `${k}=${v}`).join('\n')
+        : '';
+    document.getElementById('edit-skill-env').value = envText;
+
+    // Get agent assignment if configured
+    const agentSelect = document.getElementById('edit-skill-agent');
+    if (agentSelect) {
+        agentSelect.value = skill?.assignedAgent || '';
+    }
+
+    document.getElementById('edit-skill-modal-subtitle').textContent = skill?.skillKey || skillKey;
+
+    showModal('edit-skill-modal');
+};
+
+window.submitEditSkill = async function() {
+    const skillKey = document.getElementById('edit-skill-key')?.value?.trim();
+    if (!skillKey) {
+        showToast('Skill key is required', 'error');
+        return;
+    }
+
+    const description = document.getElementById('edit-skill-description')?.value?.trim();
+    const enabled = document.getElementById('edit-skill-enabled')?.checked;
+    const envText = document.getElementById('edit-skill-env')?.value?.trim() || '';
+    const assignedAgent = document.getElementById('edit-skill-agent')?.value?.trim();
+
+    // Parse env vars
+    const envEntries = {};
+    if (envText) {
+        envText.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed) return;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+                const key = trimmed.substring(0, eqIdx).trim();
+                const value = trimmed.substring(eqIdx + 1).trim();
+                if (key) envEntries[key] = value;
+            }
+        });
+    }
+
+    // Build the skill config patch
+    const patch = {
+        enabled: enabled
+    };
+
+    if (description) {
+        patch.description = description;
+    }
+
+    if (Object.keys(envEntries).length > 0) {
+        patch.envEntries = envEntries;
+    }
+
+    if (assignedAgent) {
+        patch.assignedAgent = assignedAgent;
+    }
+
+    try {
+        const resp = await fetch('/api/skills/config', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skillKey, patch })
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to save skill settings');
+        }
+
+        showToast(`${skillKey} settings updated`, 'success');
+        hideModal('edit-skill-modal');
+        loadSkills({ useCache: false });
+    } catch (e) {
+        showToast('Failed to save: ' + e.message, 'error');
+    }
+};
+
+function updateActiveFilters() {
+    const container = document.getElementById('skills-active-filters');
+    const clearBtn = document.getElementById('skills-clear-filters');
+    const countEl = document.getElementById('skills-filter-count');
+    if (!container) return;
+
+    const filters = [];
+    
+    if (skillsUi.search) {
+        filters.push({ type: 'search', label: `"${skillsUi.search}"` });
+    }
+    if (skillsUi.status) {
+        filters.push({ type: 'status', label: skillsUi.status });
+    }
+    if (skillsUi.source) {
+        filters.push({ type: 'source', label: skillsUi.source });
+    }
+    if (skillsUi.agent) {
+        filters.push({ type: 'agent', label: skillsUi.agent });
+    }
+    if (skillsUi.onlyIssues) {
+        filters.push({ type: 'issues', label: '⚠ Issues' });
+    }
+
+    // Update count
+    const count = filters.length;
+    if (countEl) countEl.textContent = count;
+    
+    if (filters.length === 0) {
+        container.style.display = 'none';
+        if (clearBtn) clearBtn.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'flex';
+    if (clearBtn) clearBtn.style.display = 'flex';
+
+    const filterLabels = {
+        'search': 'Search',
+        'status': 'Status',
+        'source': 'Source',
+        'agent': 'Agent',
+        'issues': 'Issues'
+    };
+
+    container.innerHTML = filters.map(f => `
+        <span class="filter-chip">
+            <span style="opacity: 0.6; font-size: 10px;">${filterLabels[f.type]}:</span>
+            ${escapeHtml(f.label)}
+            <button onclick="clearFilter('${f.type}')">✕</button>
+        </span>
+    `).join('');
+}
+
+window.clearFilter = function(type) {
+    if (type === 'search') {
+        skillsUi.search = '';
+        const el = document.getElementById('skills-search');
+        if (el) el.value = '';
+    } else if (type === 'status') {
+        skillsUi.status = '';
+        const trigger = document.getElementById('skills-status-filter');
+        if (trigger) {
+            trigger.classList.remove('open');
+            trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === '');
+            });
+            const valueEl = document.getElementById('skills-status-value');
+            if (valueEl) valueEl.textContent = 'All';
+        }
+    } else if (type === 'source') {
+        skillsUi.source = '';
+        const trigger = document.getElementById('skills-source-filter');
+        if (trigger) {
+            trigger.classList.remove('open');
+            trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === '');
+            });
+            const valueEl = document.getElementById('skills-source-value');
+            if (valueEl) valueEl.textContent = 'All';
+        }
+    } else if (type === 'agent') {
+        skillsUi.agent = '';
+        const trigger = document.getElementById('skills-agent-filter');
+        if (trigger) {
+            trigger.classList.remove('open');
+            trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === '');
+            });
+            const valueEl = document.getElementById('skills-agent-value');
+            if (valueEl) valueEl.textContent = 'All';
+        }
+    } else if (type === 'issues') {
+        skillsUi.onlyIssues = false;
+        const el = document.getElementById('skills-only-issues');
+        if (el) el.checked = false;
+    }
+    renderSkills();
+    updateActiveFilters();
 };

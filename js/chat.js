@@ -416,31 +416,9 @@ function setVoiceState(state, targetInput = 'chat-input') {
 let activeVoiceTarget = 'chat-input';
 
 function toggleVoiceInputChatPage() {
+    // Set target before calling the main function
     activeVoiceTarget = 'chat-page-input';
     toggleVoiceInput();
-}
-
-// Override the original toggleVoiceInput to use the sidebar input
-const originalToggleVoiceInput = toggleVoiceInput;
-function toggleVoiceInput() {
-    // If called directly (not via chat page), target sidebar
-    // Only set to chat-input if we're starting a NEW recording
-    if (activeVoiceTarget !== 'chat-page-input' && voiceInputState !== 'listening') {
-        activeVoiceTarget = 'chat-input';
-    }
-
-    if (!voiceRecognition) {
-        showToast('Voice input not available', 'error');
-        return;
-    }
-
-    if (voiceInputState === 'listening') {
-        stopVoiceInput();
-    } else {
-        startVoiceInput();
-    }
-
-    // Don't reset target here - it should persist until onend resets it
 }
 
 // Toggle auto-send setting
@@ -1536,14 +1514,8 @@ function createChatPageMessage(msg) {
             const agentId = msg._agentId || currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
 
-            // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'nova', 'luma',
-                'elon', 'orion', 'atlas', 'sterling', 'forge', 'sentinel', 'knox', 'vector', 'canon',
-                'quill', 'chip', 'snip', 'ledger', 'haven', 'solo', 'halo'].includes(agentId)
-                ? `/avatars/${agentId === 'main' ? 'solobot' : (agentId === 'smm' ? 'nova' : agentId)}.png`
-                : (agentId === 'tax' || agentId === 'sec')
-                    ? `/avatars/${agentId}.svg`
-                    : '/avatars/solobot.png';
+            // Get avatar path - use centralized avatar resolution
+            const avatarPath = getAvatarUrl(agentId);
 
             const avatarImg = document.createElement('img');
             avatarImg.src = avatarPath;

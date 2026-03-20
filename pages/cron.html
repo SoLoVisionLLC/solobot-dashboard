@@ -86,6 +86,7 @@
                                                 <button id="cron-detail-copy-btn" class="btn btn-ghost">Copy timeline JSON</button>
                                                 <button id="cron-detail-export-btn" class="btn btn-ghost">Export timeline JSON</button>
                                                 <button id="cron-detail-run-btn" class="btn btn-ghost">Run now</button>
+                                                <button id="cron-detail-edit-btn" class="btn btn-primary" onclick="openEditCronModal()">Edit job</button>
                                                 <button id="cron-detail-refresh-btn" class="btn btn-primary">Refresh timeline</button>
                                             </div>
                                         </div>
@@ -106,23 +107,196 @@
                                     <h2>Add Cron Job</h2>
                                     <button onclick="closeAddCronModal()" class="btn-icon">✕</button>
                                 </div>
-                                <div class="modal-body cron-modal-body">
-                                    <div class="cron-form-field">
-                                        <label class="cron-form-label">Name</label>
-                                        <input type="text" id="cron-new-name" class="input" placeholder="My cron job">
+                                <div class="modal-body cron-modal-body cron-modal-two-col">
+                                    <div class="cron-modal-left">
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Name</label>
+                                            <input type="text" id="cron-new-name" class="input" placeholder="My cron job">
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Schedule</label>
+                                            <div class="cron-schedule-builder">
+                                                <select id="cron-new-schedule-type" class="input" onchange="updateCronScheduleBuilder('new')">
+                                                    <option value="daily">Daily at a specific time</option>
+                                                    <option value="weekly">Weekly on a specific day</option>
+                                                    <option value="monthly">Monthly on a specific date</option>
+                                                    <option value="hourly">Every hour</option>
+                                                    <option value="minutes">Every X minutes</option>
+                                                </select>
+                                                <div id="cron-new-schedule-daily" class="cron-schedule-row">
+                                                    <input type="time" id="cron-new-daily-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('new')">
+                                                </div>
+                                                <div id="cron-new-schedule-weekly" class="cron-schedule-row hidden">
+                                                    <select id="cron-new-weekly-day" class="input" onchange="updateCronScheduleFromBuilder('new')">
+                                                        <option value="0">Sunday</option>
+                                                        <option value="1">Monday</option>
+                                                        <option value="2">Tuesday</option>
+                                                        <option value="3">Wednesday</option>
+                                                        <option value="4">Thursday</option>
+                                                        <option value="5">Friday</option>
+                                                        <option value="6">Saturday</option>
+                                                    </select>
+                                                    <input type="time" id="cron-new-weekly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('new')">
+                                                </div>
+                                                <div id="cron-new-schedule-monthly" class="cron-schedule-row hidden">
+                                                    <input type="number" id="cron-new-monthly-day" class="input" min="1" max="31" value="1" placeholder="Day" onchange="updateCronScheduleFromBuilder('new')">
+                                                    <input type="time" id="cron-new-monthly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('new')">
+                                                </div>
+                                                <div id="cron-new-schedule-hourly" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Runs every hour at minute 0</span>
+                                                </div>
+                                                <div id="cron-new-schedule-minutes" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Every</span>
+                                                    <input type="number" id="cron-new-minutes-interval" class="input" min="1" max="59" value="15" onchange="updateCronScheduleFromBuilder('new')">
+                                                    <span class="cron-schedule-label">minutes</span>
+                                                </div>
+                                                <input type="hidden" id="cron-new-schedule" value="0 9 * * *">
+                                                <div class="cron-form-hint" id="cron-new-schedule-preview">Daily at 9:00 AM</div>
+                                            </div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Agent</label>
+                                            <select id="cron-new-agent" class="input">
+                                                <option value="">— No specific agent —</option>
+                                                <option value="main">Main (Halo)</option>
+                                                <option value="elon">Elon</option>
+                                                <option value="orion">Orion</option>
+                                                <option value="dev">Dev</option>
+                                                <option value="forge">Forge</option>
+                                                <option value="quill">Quill</option>
+                                                <option value="chip">Chip</option>
+                                                <option value="sentinel">Sentinel</option>
+                                                <option value="knox">Knox</option>
+                                                <option value="atlas">Atlas</option>
+                                                <option value="canon">Canon</option>
+                                                <option value="vector">Vector</option>
+                                                <option value="nova">Nova</option>
+                                                <option value="snip">Snip</option>
+                                                <option value="luma">Luma</option>
+                                                <option value="sterling">Sterling</option>
+                                                <option value="ledger">Ledger</option>
+                                                <option value="haven">Haven</option>
+                                            </select>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Session</label>
+                                            <select id="cron-new-session-target" class="input">
+                                                <option value="main">Main session</option>
+                                                <option value="isolated">Isolated session</option>
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div class="cron-form-field">
-                                        <label class="cron-form-label">Schedule (cron expression)</label>
-                                        <input type="text" id="cron-new-schedule" class="input" placeholder="0 9 * * *">
+                                    <div class="cron-modal-right">
+                                        <div class="cron-form-field cron-form-field-full">
+                                            <label class="cron-form-label">Command / Action</label>
+                                            <textarea id="cron-new-command" class="input cron-form-textarea cron-form-textarea-large" placeholder="What should this job do? Write your prompt here..." rows="10"></textarea>
+                                        </div>
                                     </div>
-                                    <div class="cron-form-field cron-form-field-last">
-                                        <label class="cron-form-label">Command / Action</label>
-                                        <textarea id="cron-new-command" class="input cron-form-textarea" placeholder="What should this job do?" rows="3"></textarea>
+                                </div>
+                                <div class="modal-footer">
+                                    <button onclick="closeAddCronModal()" class="btn btn-ghost">Cancel</button>
+                                    <button onclick="submitNewCronJob()" class="btn btn-primary">Add Job</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Edit Cron Modal -->
+                        <div id="edit-cron-modal" class="modal-overlay">
+                            <div class="modal cron-modal">
+                                <div class="modal-header">
+                                    <h2>Edit Cron Job</h2>
+                                    <button onclick="closeEditCronModal()" class="btn-icon">✕</button>
+                                </div>
+                                <div class="modal-body cron-modal-body cron-modal-two-col">
+                                    <input type="hidden" id="cron-edit-id">
+                                    <div class="cron-modal-left">
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Name</label>
+                                            <input type="text" id="cron-edit-name" class="input" placeholder="My cron job">
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Schedule</label>
+                                            <div class="cron-schedule-builder">
+                                                <select id="cron-edit-schedule-type" class="input" onchange="updateCronScheduleBuilder('edit')">
+                                                    <option value="daily">Daily at a specific time</option>
+                                                    <option value="weekly">Weekly on a specific day</option>
+                                                    <option value="monthly">Monthly on a specific date</option>
+                                                    <option value="hourly">Every hour</option>
+                                                    <option value="minutes">Every X minutes</option>
+                                                </select>
+                                                <div id="cron-edit-schedule-daily" class="cron-schedule-row">
+                                                    <input type="time" id="cron-edit-daily-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('edit')">
+                                                </div>
+                                                <div id="cron-edit-schedule-weekly" class="cron-schedule-row hidden">
+                                                    <select id="cron-edit-weekly-day" class="input" onchange="updateCronScheduleFromBuilder('edit')">
+                                                        <option value="0">Sunday</option>
+                                                        <option value="1">Monday</option>
+                                                        <option value="2">Tuesday</option>
+                                                        <option value="3">Wednesday</option>
+                                                        <option value="4">Thursday</option>
+                                                        <option value="5">Friday</option>
+                                                        <option value="6">Saturday</option>
+                                                    </select>
+                                                    <input type="time" id="cron-edit-weekly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('edit')">
+                                                </div>
+                                                <div id="cron-edit-schedule-monthly" class="cron-schedule-row hidden">
+                                                    <input type="number" id="cron-edit-monthly-day" class="input" min="1" max="31" value="1" placeholder="Day" onchange="updateCronScheduleFromBuilder('edit')">
+                                                    <input type="time" id="cron-edit-monthly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('edit')">
+                                                </div>
+                                                <div id="cron-edit-schedule-hourly" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Runs every hour at minute 0</span>
+                                                </div>
+                                                <div id="cron-edit-schedule-minutes" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Every</span>
+                                                    <input type="number" id="cron-edit-minutes-interval" class="input" min="1" max="59" value="15" onchange="updateCronScheduleFromBuilder('edit')">
+                                                    <span class="cron-schedule-label">minutes</span>
+                                                </div>
+                                                <input type="hidden" id="cron-edit-schedule" value="0 9 * * *">
+                                                <div class="cron-form-hint" id="cron-edit-schedule-preview">Daily at 9:00 AM</div>
+                                            </div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Agent</label>
+                                            <select id="cron-edit-agent" class="input">
+                                                <option value="">— No specific agent —</option>
+                                                <option value="main">Main (Halo)</option>
+                                                <option value="elon">Elon</option>
+                                                <option value="orion">Orion</option>
+                                                <option value="dev">Dev</option>
+                                                <option value="forge">Forge</option>
+                                                <option value="quill">Quill</option>
+                                                <option value="chip">Chip</option>
+                                                <option value="sentinel">Sentinel</option>
+                                                <option value="knox">Knox</option>
+                                                <option value="atlas">Atlas</option>
+                                                <option value="canon">Canon</option>
+                                                <option value="vector">Vector</option>
+                                                <option value="nova">Nova</option>
+                                                <option value="snip">Snip</option>
+                                                <option value="luma">Luma</option>
+                                                <option value="sterling">Sterling</option>
+                                                <option value="ledger">Ledger</option>
+                                                <option value="haven">Haven</option>
+                                            </select>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Session</label>
+                                            <select id="cron-edit-session-target" class="input">
+                                                <option value="main">Main session</option>
+                                                <option value="isolated">Isolated session</option>
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div class="cron-form-actions">
-                                        <button onclick="closeAddCronModal()" class="btn btn-ghost">Cancel</button>
-                                        <button onclick="submitNewCronJob()" class="btn btn-primary">Add Job</button>
+                                    <div class="cron-modal-right">
+                                        <div class="cron-form-field cron-form-field-full">
+                                            <label class="cron-form-label">Command / Action</label>
+                                            <textarea id="cron-edit-command" class="input cron-form-textarea cron-form-textarea-large" placeholder="What should this job do? Write your prompt here..." rows="10"></textarea>
+                                        </div>
                                     </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button onclick="closeEditCronModal()" class="btn btn-ghost">Cancel</button>
+                                    <button onclick="submitEditCronJob()" class="btn btn-primary">Update Job</button>
                                 </div>
                             </div>
                         </div>

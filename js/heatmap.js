@@ -110,7 +110,11 @@ function renderActivityHeatmap() {
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
 // Auto-init and periodic refresh
+let heatmapInterval;
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(renderActivityHeatmap, 3000);
-  setInterval(renderActivityHeatmap, 30000);
+  heatmapInterval = setInterval(renderActivityHeatmap, 30000);
 });
+
+// Cleanup function for SPA navigation
+window._heatmapCleanup = () => clearInterval(heatmapInterval);

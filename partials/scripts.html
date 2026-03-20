@@ -5,37 +5,37 @@
 <!-- BUNDLE OPTION: Run scripts/build.sh to create dist/bundle.js, then replace all script tags below with:
              <script src="dist/bundle.js?v=4.9.1"></script> -->
 <script src="js/state.js?v=4.9.10"></script>
-<script src="js/utils.js?v=4.9.1"></script>
-<script src="js/ui.js?v=4.9.1"></script>
+<script src="js/utils.js?v=4.9.28"></script>
+<script src="js/ui.js?v=4.9.25"></script>
 <script src="js/focus-timer.js?v=4.9.1"></script>
-<script src="js/quick-stats.js?v=4.9.1"></script>
+<script src="js/quick-stats.js?v=4.9.27?v=4.9.1"></script>
 <script src="js/keyboard.js?v=4.9.2"></script>
-<script src="js/models.js?v=4.9.9"></script>
-<script src="js/sidebar-agents.js?v=4.9.6"></script>
+<script src="js/models.js?v=4.9.27?v=4.9.9"></script>
+<script src="js/sidebar-agents.js?v=4.9.21"></script>
 <script src="js/sessions.js?v=4.9.9"></script>
-<script src="js/agent-presence.js?v=4.10.0"></script>
+<script src="js/agent-presence.js?v=4.9.27?v=4.10.0"></script>
 <script src="js/notifications.js?v=4.9.12"></script>
-<script src="js/chat.js?v=4.9.11"></script>
+<script src="js/chat.js?v=4.9.26"></script>
 <!-- Model Validator - uses EXACT same pipeline as chat -->
 <script src="js/model-validator.js?v=4.9.6"></script>
 <script src="js/system.js?v=4.9.1"></script>
 <script src="js/tasks.js?v=4.9.1"></script>
-<script src="js/ui-handlers.js?v=4.9.2"></script>
+<script src="js/ui-handlers.js?v=4.9.27?v=4.9.2"></script>
 <script src="js/memory.js?v=4.9.10"></script>
 <script src="js/health.js?v=4.9.1"></script>
-<script src="js/agents.js?v=4.9.9"></script>
+<script src="js/agents.js?v=4.9.23"></script>
 <script src="js/channels.js?v=4.9.1"></script>
 <script src="js/cron.js?v=4.9.6"></script>
 <script src="js/costs.js?v=4.9.1"></script>
 <script src="js/analytics.js?v=4.9.1"></script>
 <script src="js/memory-browser.js?v=4.9.1"></script>
 <script src="js/panzoom.min.js?v=4.9.1"></script>
-<script src="js/memory-cards.js?v=4.9.19"></script>
-<script src="js/daily-journal.js?v=4.9.11"></script>
+<script src="js/memory-cards.js?v=4.9.28"></script>
+<script src="js/daily-journal.js?v=4.9.25"></script>
 <script src="js/security.js?v=4.9.1"></script>
 <script src="js/skills-mgr.js?v=4.9.1"></script>
-<script src="js/subagent-monitor.js?v=4.9.1"></script>
-<script src="js/heatmap.js?v=4.9.1"></script>
+<script src="js/subagent-monitor.js?v=4.9.27?v=4.9.1"></script>
+<script src="js/heatmap.js?v=4.9.27?v=4.9.1"></script>
 <!-- Phase 1: Visual Design Foundation -->
 <script src="js/phase1-visuals.js?v=4.9.1"></script>
 <!-- Phase 2: Motion & Microinteractions -->
@@ -43,7 +43,7 @@
 <!-- Phase 3: Widget System -->
 <script src="js/phase3-widgets.js?v=4.9.1"></script>
 <!-- Phase 4: Context Awareness -->
-<script src="js/phase4-context.js?v=4.9.6"></script>
+<script src="js/phase4-context.js?v=4.9.27?v=4.9.6"></script>
 <!-- Phase 5: Command Palette -->
 <script src="js/phase5-cmdpalette.js?v=4.9.6"></script>
 <!-- Phase 6: AI Insights Widget -->
@@ -55,7 +55,7 @@
 <!-- Phase 9: Voice Integration -->
 <script src="js/phase9-voice.js?v=4.9.6"></script>
 <!-- Phase 10: Task Board Enhancements -->
-<script src="js/phase10-taskboard.js?v=4.9.1"></script>
+<script src="js/phase10-taskboard.js?v=4.9.24"></script>
 <!-- Notion KANBAN Widget -->
 <script src="js/notion-kanban.js?v=4.9.1"></script>
 <!-- Phase 11: Agent Status Panel -->
@@ -633,7 +633,7 @@
 
     window.setupScrollContainment = () => { }; // No-op now, handled globally
 
-    // showModal/hideModal defined in js/ui-handlers.js
+    // showModal/hideModal defined in js/ui-handlers.js?v=4.9.27
 
     // Click outside to close modals
     document.addEventListener("click", function (e) {
@@ -646,7 +646,7 @@
         }
     });
 
-    // Modal functions defined in js/ui-handlers.js
+    // Modal functions defined in js/ui-handlers.js?v=4.9.27
     // No overrides needed — those functions are global
 
     // Image preview visibility
