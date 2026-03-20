@@ -2040,6 +2040,35 @@
                 margin-top: 4px;
             }
 
+            .cron-form-hint-warning {
+                color: color-mix(in srgb, var(--warning) 88%, var(--text-primary));
+                font-weight: 500;
+            }
+
+            .cron-job-warning {
+                margin-top: var(--space-2);
+                background: color-mix(in srgb, var(--warning) 10%, transparent);
+                border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border-default));
+                border-radius: var(--radius-sm);
+                padding: 10px;
+                display: grid;
+                gap: 4px;
+            }
+
+            .cron-job-warning-label {
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: var(--warning);
+                font-weight: 700;
+            }
+
+            .cron-job-warning-text {
+                font-size: 11px;
+                color: var(--text-secondary);
+                line-height: 1.45;
+            }
+
             .cron-schedule-builder {
                 display: flex;
                 flex-direction: column;

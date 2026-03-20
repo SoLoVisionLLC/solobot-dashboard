@@ -264,6 +264,23 @@ function getPayloadSummary(job) {
     return '';
 }
 
+function getCronDelivery(job) {
+    return job?.delivery && typeof job.delivery === 'object' ? job.delivery : null;
+}
+
+function hasUnsupportedWebchatAnnounce(job) {
+    const delivery = getCronDelivery(job);
+    if (!delivery || delivery.mode !== 'announce') return false;
+    const channel = String(delivery.channel || '').trim().toLowerCase();
+    const to = String(delivery.to || '').trim().toLowerCase();
+    return channel === 'webchat' || to === 'webchat';
+}
+
+function getCronDeliveryWarning(job) {
+    if (!hasUnsupportedWebchatAnnounce(job)) return null;
+    return 'WebChat is not a supported cron announce channel in this build. Use Main session for dashboard-visible reminders, or use webhook / a real provider channel.';
+}
+
 function getJobById(jobId) {
     return cronJobs.find(job => String(job.id) === String(jobId));
 }
@@ -815,11 +832,17 @@ function buildCronTimelineExport(jobId) {
 
 function renderDetailMeta(job, runs, diagnostics) {
     const state = getCronState(job);
+    const delivery = getCronDelivery(job);
+    const deliveryLabel = delivery
+        ? `${delivery.mode || '--'} · ${delivery.channel || 'last'}${delivery.to ? ` → ${delivery.to}` : ''}`
+        : '--';
+    const deliveryWarning = getCronDeliveryWarning(job);
     const meta = [
         ['Job ID', job.id || '--'],
         ['Agent', job.agentId || '--'],
         ['Session target', job.sessionTarget || '--'],
         ['Wake mode', job.wakeMode || '--'],
+        ['Delivery', deliveryLabel],
         ['Enabled', job.enabled !== false ? 'Yes' : 'No'],
         ['Schedule', formatCronSchedule(job.schedule)],
         ['Next scheduled run', formatNextRun(job)],
@@ -846,6 +869,11 @@ function renderDetailMeta(job, runs, diagnostics) {
             <div class="cron-meta-payload">
                 <div class="cron-meta-label">Payload preview</div>
                 <p class="cron-meta-payload-text">${escapeHtml(payloadPreview)}</p>
+            </div>` : ''}
+        ${deliveryWarning ? `
+            <div class="cron-job-warning">
+                <div class="cron-job-warning-label">Unsupported WebChat delivery</div>
+                <div class="cron-job-warning-text">${escapeHtml(deliveryWarning)}</div>
             </div>` : ''}
     `;
 
@@ -1200,6 +1228,7 @@ function renderCronJobs() {
         const ownerAgent = getCronJobOwnerAgent(job);
         const activeClass = isActive ? ' is-active' : '';
         const statusToneClass = statusTone !== 'neutral' ? ` cron-tone-${statusTone}` : '';
+        const deliveryWarning = getCronDeliveryWarning(job);
 
         return `
         <article class="cron-job-card${activeClass}" style="--cron-accent: ${accent};" role="button" tabindex="0" onclick="openCronDetailView('${jobIdJs}')" onkeydown="if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); openCronDetailView('${jobIdJs}'); }">
@@ -1212,6 +1241,7 @@ function renderCronJobs() {
                         ${!enabled ? '<span class="badge cron-job-badge">Disabled</span>' : ''}
                         ${lastStatus && lastStatus !== '--' ? `<span class="badge cron-job-badge${statusToneClass}">${escapeHtml(lastStatus)}</span>` : ''}
                         ${job.sessionTarget ? `<span class="badge cron-job-badge">${escapeHtml(job.sessionTarget)}</span>` : ''}
+                        ${deliveryWarning ? '<span class="badge cron-job-badge cron-tone-error">webchat unsupported</span>' : ''}
                     </div>
                     <div class="cron-job-id">${escapeHtml(job.id || '--')}</div>
                     <p class="cron-job-preview">${escapeHtml(payloadPreview)}</p>
@@ -1244,6 +1274,11 @@ function renderCronJobs() {
                 ${(failureCount || successCount) ? `<span>${failureCount} failed · ${successCount} successful</span>` : ''}
             </div>
 
+            ${deliveryWarning ? `
+                <div class="cron-job-warning">
+                    <div class="cron-job-warning-label">Unsupported WebChat delivery</div>
+                    <div class="cron-job-warning-text">${escapeHtml(deliveryWarning)}</div>
+                </div>` : ''}
             ${latestFailureMessage && getCronJobStatusTone(job) === 'error' ? `
                 <div class="cron-job-latest-failure">
                     <div class="cron-job-latest-failure-label">Latest failure</div>
@@ -1414,6 +1449,11 @@ window.openEditCronModal = function(jobId) {
     }
 
     editingCronJobId = job.id;
+
+    const deliveryWarning = getCronDeliveryWarning(job);
+    if (deliveryWarning) {
+        showToast('This job still has unsupported WebChat announce delivery. Use Main session for dashboard-visible reminders, or move delivery to webhook / a real provider channel.', 'warning');
+    }
 
     // Pre-fill the form
     document.getElementById('cron-edit-id').value = job.id;
