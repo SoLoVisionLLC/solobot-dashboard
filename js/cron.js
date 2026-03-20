@@ -281,6 +281,24 @@ function getCronDeliveryWarning(job) {
     return 'WebChat is not a supported cron announce channel in this build. Use Main session for dashboard-visible reminders, or use webhook / a real provider channel.';
 }
 
+function buildCronWebchatMigrationPatch(job) {
+    const payloadText = getPayloadSummary(job) || job?.payload?.text || job?.payload?.message || '';
+    const patch = {
+        delivery: null
+    };
+
+    if ((job?.sessionTarget || 'main') !== 'main') {
+        patch.sessionTarget = 'main';
+        patch.payload = {
+            kind: 'systemEvent',
+            text: payloadText
+        };
+        patch.wakeMode = 'now';
+    }
+
+    return patch;
+}
+
 function getJobById(jobId) {
     return cronJobs.find(job => String(job.id) === String(jobId));
 }
@@ -837,6 +855,7 @@ function renderDetailMeta(job, runs, diagnostics) {
         ? `${delivery.mode || '--'} · ${delivery.channel || 'last'}${delivery.to ? ` → ${delivery.to}` : ''}`
         : '--';
     const deliveryWarning = getCronDeliveryWarning(job);
+    const jobIdJs = String(job.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const meta = [
         ['Job ID', job.id || '--'],
         ['Agent', job.agentId || '--'],
@@ -874,6 +893,9 @@ function renderDetailMeta(job, runs, diagnostics) {
             <div class="cron-job-warning">
                 <div class="cron-job-warning-label">Unsupported WebChat delivery</div>
                 <div class="cron-job-warning-text">${escapeHtml(deliveryWarning)}</div>
+                <div class="cron-job-warning-actions">
+                    <button class="btn btn-primary cron-small-btn" onclick="migrateUnsupportedWebchatCron('${jobIdJs}')">Migrate to Main session</button>
+                </div>
             </div>` : ''}
     `;
 
@@ -1278,6 +1300,9 @@ function renderCronJobs() {
                 <div class="cron-job-warning">
                     <div class="cron-job-warning-label">Unsupported WebChat delivery</div>
                     <div class="cron-job-warning-text">${escapeHtml(deliveryWarning)}</div>
+                    <div class="cron-job-warning-actions">
+                        <button onclick="event.stopPropagation(); migrateUnsupportedWebchatCron('${jobIdJs}');" class="btn btn-primary cron-small-btn" type="button">Migrate to Main session</button>
+                    </div>
                 </div>` : ''}
             ${latestFailureMessage && getCronJobStatusTone(job) === 'error' ? `
                 <div class="cron-job-latest-failure">
@@ -1313,6 +1338,35 @@ async function runCronJob(jobId) {
         showToast('Failed: ' + e.message, 'error');
     }
 }
+
+window.migrateUnsupportedWebchatCron = async function(jobId) {
+    const job = getJobById(jobId || activeCronJobId);
+    if (!job) {
+        showToast('Select a cron job to migrate', 'warning');
+        return;
+    }
+
+    if (!hasUnsupportedWebchatAnnounce(job)) {
+        showToast('This cron job is not using unsupported WebChat announce delivery', 'success');
+        return;
+    }
+
+    const patch = buildCronWebchatMigrationPatch(job);
+
+    try {
+        await gateway._request('cron.update', { jobId: job.id, patch });
+        const convertedToMain = patch.sessionTarget === 'main';
+        showToast(convertedToMain
+            ? 'Cron job migrated: WebChat announce removed and session switched to Main'
+            : 'Cron job migrated: unsupported WebChat announce removed', 'success');
+        await loadCronJobs();
+        if (String(activeCronJobId) === String(job.id)) {
+            openCronDetailView(job.id, { refresh: true, pushState: false });
+        }
+    } catch (e) {
+        showToast('Migration failed: ' + e.message, 'error');
+    }
+};
 
 window.refreshCronDiagnostics = async function() {
     cronRunCache.clear();

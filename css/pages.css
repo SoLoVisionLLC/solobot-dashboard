@@ -2069,6 +2069,14 @@
                 line-height: 1.45;
             }
 
+            .cron-job-warning-actions {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-top: 4px;
+            }
+
             .cron-schedule-builder {
                 display: flex;
                 flex-direction: column;
