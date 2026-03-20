@@ -939,7 +939,7 @@ function renderChat() {
 
     // Save scroll state BEFORE clearing
     const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const previousScrollTop = container.scrollTop;
 
     // Clear container
     container.innerHTML = '';
@@ -1004,12 +1004,11 @@ function renderChat() {
         container.appendChild(typingIndicator);
     }
 
-    // Auto-scroll if was at bottom, otherwise maintain position
+    // Auto-scroll only if user was at bottom; otherwise preserve exact reading position
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     } else {
-        // Restore position by maintaining same distance from bottom
-        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
+        container.scrollTop = previousScrollTop;
     }
 }
 
@@ -1377,8 +1376,8 @@ function renderChatPage() {
 
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
-    // Save distance from bottom (how far up the user has scrolled)
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // Preserve the exact reading position when user has scrolled up
+    const previousScrollTop = container.scrollTop;
 
     // === Incremental rendering — only touch DOM for changes ===
 
@@ -1481,7 +1480,7 @@ function renderChatPage() {
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     } else {
-        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
+        container.scrollTop = previousScrollTop;
     }
 }
 
