@@ -81,6 +81,24 @@
                                 </div>
                             </div>
 
+                            <button
+                                id="chat-agent-rail-card"
+                                class="chat-agent-rail-card"
+                                onclick="openCurrentChatAgentPage()"
+                                title="Open this agent’s page"
+                                style="top: 88px; left: 118px; width: 154px; min-height: 236px; padding: 20px 16px; border-radius: 26px; gap: 18px; z-index: 6;"
+                            >
+                                <div class="chat-agent-rail-avatar-wrap" style="width: 100px; height: 100px;">
+                                    <img id="chat-agent-rail-avatar" class="chat-agent-rail-avatar" src="/avatars/halo.png" alt="Current agent avatar" style="width: 100px; height: 100px; border-radius: 26px;">
+                                    <span id="chat-agent-rail-status" class="chat-agent-rail-status"></span>
+                                </div>
+                                <div class="chat-agent-rail-copy">
+                                    <div id="chat-agent-rail-label" class="chat-agent-rail-label">Halo</div>
+                                    <div id="chat-agent-rail-subtitle" class="chat-agent-rail-subtitle">Current chat agent</div>
+                                    <div class="chat-agent-rail-link">Open agent page →</div>
+                                </div>
+                            </button>
+
                             <!-- Messages Area -->
                             <div
                                 id="chat-page-messages"

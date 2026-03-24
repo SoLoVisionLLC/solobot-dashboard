@@ -1524,6 +1524,21 @@ window.openEditCronModal = function(jobId) {
         agentSelect.value = job.agentId || '';
     }
 
+    const delivery = getCronDelivery(job);
+    const deliveryModeInput = document.getElementById('cron-edit-delivery-mode');
+    const deliveryChannelInput = document.getElementById('cron-edit-delivery-channel');
+    const deliveryToInput = document.getElementById('cron-edit-delivery-to');
+    if (deliveryModeInput) {
+        deliveryModeInput.value = delivery?.mode || 'none';
+    }
+    if (deliveryChannelInput) {
+        deliveryChannelInput.value = delivery?.channel || '';
+    }
+    if (deliveryToInput) {
+        deliveryToInput.value = delivery?.to || '';
+    }
+    updateCronDeliveryFields('edit');
+
     // Parse cron expression and pre-fill schedule builder
     const cronExpr = job.schedule?.expr || '';
     const parsed = parseCronForBuilder(cronExpr);
@@ -1625,6 +1640,25 @@ function parseCronForBuilder(expr) {
     return result;
 }
 
+window.updateCronDeliveryFields = function(mode = 'edit') {
+    const modeValue = document.getElementById(`cron-${mode}-delivery-mode`)?.value || 'none';
+    const announceWrap = document.getElementById(`cron-${mode}-delivery-announce`);
+    const toWrap = document.getElementById(`cron-${mode}-delivery-to-wrap`);
+    const toHint = document.getElementById(`cron-${mode}-delivery-to-hint`);
+
+    if (announceWrap) {
+        announceWrap.classList.toggle('hidden', modeValue !== 'announce');
+    }
+    if (toWrap) {
+        toWrap.classList.toggle('hidden', modeValue === 'none');
+    }
+    if (toHint) {
+        toHint.textContent = modeValue === 'webhook'
+            ? 'Required for webhook. Use a full HTTPS URL.'
+            : 'Optional for announce. Leave blank to use the default announce target if configured.';
+    }
+};
+
 window.closeEditCronModal = function() {
     editingCronJobId = null;
     const modal = document.getElementById('edit-cron-modal');
@@ -1638,9 +1672,17 @@ window.submitEditCronJob = async function() {
     const command = document.getElementById('cron-edit-command')?.value?.trim();
     const sessionTarget = document.getElementById('cron-edit-session-target')?.value?.trim() || 'main';
     const agentId = document.getElementById('cron-edit-agent')?.value?.trim();
+    const deliveryMode = document.getElementById('cron-edit-delivery-mode')?.value?.trim() || 'none';
+    const deliveryChannel = document.getElementById('cron-edit-delivery-channel')?.value?.trim();
+    const deliveryTo = document.getElementById('cron-edit-delivery-to')?.value?.trim();
 
     if (!jobId || !name || !scheduleExpr || !command) {
         showToast('Name, schedule, and message are required', 'warning');
+        return;
+    }
+
+    if (deliveryMode === 'webhook' && !deliveryTo) {
+        showToast('Webhook delivery requires a destination URL', 'warning');
         return;
     }
 
@@ -1655,8 +1697,16 @@ window.submitEditCronJob = async function() {
         payload: {
             kind: 'systemEvent',
             text: command
-        }
+        },
+        delivery: { mode: deliveryMode }
     };
+
+    if (deliveryMode === 'announce') {
+        if (deliveryChannel) patch.delivery.channel = deliveryChannel;
+        if (deliveryTo) patch.delivery.to = deliveryTo;
+    } else if (deliveryMode === 'webhook') {
+        patch.delivery.to = deliveryTo;
+    }
 
     if (agentId) {
         patch.agentId = agentId;

@@ -9,6 +9,48 @@ if (window.__chatRuntimeMark !== CHAT_RUNTIME_MARK) {
 }
 window._chatPendingSends = window._chatPendingSends || new Map();
 
+function getCurrentChatAgentId() {
+    return (window.resolveAgentId ? window.resolveAgentId(window.currentAgentId || currentAgentId || 'main') : (window.currentAgentId || currentAgentId || 'main'));
+}
+
+function updateChatAgentRail() {
+    const agentId = getCurrentChatAgentId();
+    const avatar = document.getElementById('chat-agent-rail-avatar');
+    const label = document.getElementById('chat-agent-rail-label');
+    const subtitle = document.getElementById('chat-agent-rail-subtitle');
+    const status = document.getElementById('chat-agent-rail-status');
+    const card = document.getElementById('chat-agent-rail-card');
+    if (!avatar || !label || !subtitle || !status || !card) return;
+
+    const displayName = getAgentDisplayName(agentId);
+    avatar.src = getAvatarUrl(agentId);
+    avatar.alt = `${displayName} avatar`;
+    label.textContent = displayName;
+
+    const sessionLabel = (typeof getFriendlySessionName === 'function')
+        ? getFriendlySessionName(currentSessionName || GATEWAY_CONFIG?.sessionKey || '')
+        : (currentSessionName || GATEWAY_CONFIG?.sessionKey || 'main');
+    subtitle.textContent = sessionLabel ? `Chatting in ${sessionLabel}` : 'Current chat agent';
+
+    const connected = Boolean(gateway?.isConnected?.());
+    status.style.background = connected ? '#22c55e' : '#71717a';
+    status.style.boxShadow = connected
+        ? '0 0 0 4px rgba(34, 197, 94, 0.14)'
+        : '0 0 0 4px rgba(113, 113, 122, 0.14)';
+    card.title = `Open ${displayName}'s agent page`;
+}
+
+window.openCurrentChatAgentPage = function() {
+    const agentId = getCurrentChatAgentId();
+    if (window._memoryCards?.openAgentMemory) {
+        window._memoryCards.openAgentMemory(agentId, { updateURL: true, forceAgentsPage: true });
+        return;
+    }
+    if (typeof showPage === 'function') {
+        showPage('agents', false);
+    }
+};
+
 function trackPendingSend(runId, payload) {
     if (!runId || !payload) return;
     const map = window._chatPendingSends;
@@ -1321,6 +1363,7 @@ function forceRefreshHistory() {
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
+    updateChatAgentRail();
     if (!container) {
         return;
     }
@@ -1631,6 +1674,17 @@ function createChatPageMessage(msg) {
         };
         actions.appendChild(copyBtn);
 
+        // Forward button
+        const forwardBtn = document.createElement('button');
+        forwardBtn.className = 'chat-action-btn';
+        forwardBtn.innerHTML = '↪';
+        forwardBtn.title = 'Forward to agent';
+        forwardBtn.onclick = (e) => {
+            e.stopPropagation();
+            openForwardMessageModal(msg);
+        };
+        actions.appendChild(forwardBtn);
+
         bubble.appendChild(actions);
     }
 
@@ -1654,6 +1708,138 @@ function copyToClipboard(text) {
         showToast('Copied to clipboard!', 'success', 2000);
     });
 }
+
+function getForwardableAgents() {
+    const baseAgents = ['main', 'dev', 'orion', 'forge', 'quill', 'chip', 'sentinel', 'knox', 'atlas', 'canon', 'vector', 'nova', 'snip', 'luma', 'sterling', 'ledger', 'haven'];
+    return [...new Set(baseAgents.map(id => window.resolveAgentId ? window.resolveAgentId(id) : id))];
+}
+
+function buildForwardedMessageText(msg) {
+    const senderName = msg?.isUser
+        ? 'You'
+        : msg?.isSystem
+            ? 'System'
+            : getAgentDisplayName(msg?._agentId || currentAgentId || 'main');
+    return `Forwarded message from ${senderName}:\n\n${msg?.text || ''}`;
+}
+
+function ensureForwardMessageModal() {
+    let modal = document.getElementById('forward-message-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'forward-message-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 560px; width: calc(100vw - 32px);">
+            <div class="modal-header">
+                <h3 class="modal-title">Forward message</h3>
+                <button onclick="closeForwardMessageModal()" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Target agent</label>
+                    <select id="forward-message-agent" class="input"></select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Message</label>
+                    <textarea id="forward-message-text" class="input" rows="8" style="width:100%; resize:vertical;"></textarea>
+                    <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">This switches you to the target agent’s latest session, or creates a new forwarded session if none exists, then drops the forwarded text into the composer.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeForwardMessageModal()" class="btn btn-ghost">Cancel</button>
+                <button onclick="submitForwardMessage()" class="btn btn-primary">Forward</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+window.openForwardMessageModal = function(msg) {
+    const modal = ensureForwardMessageModal();
+    modal._forwardMessage = msg;
+
+    const agentSelect = document.getElementById('forward-message-agent');
+    if (agentSelect) {
+        const current = (msg?._agentId || currentAgentId || 'main');
+        agentSelect.innerHTML = getForwardableAgents().map(agentId => {
+            const selected = agentId !== current && agentId === (window.currentAgentId || currentAgentId || 'main') ? ' selected' : '';
+            return `<option value="${agentId}"${selected}>${escapeHtml(getAgentDisplayName(agentId))}</option>`;
+        }).join('');
+        if (!agentSelect.value) {
+            agentSelect.value = getForwardableAgents().find(id => id !== current) || 'main';
+        }
+    }
+
+    const textarea = document.getElementById('forward-message-text');
+    if (textarea) {
+        textarea.value = buildForwardedMessageText(msg);
+    }
+
+    requestAnimationFrame(() => {
+        modal.classList.add('visible');
+        textarea?.focus();
+        textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+};
+
+window.closeForwardMessageModal = function() {
+    const modal = document.getElementById('forward-message-modal');
+    if (!modal) return;
+    modal.classList.remove('visible');
+};
+
+function buildAutoForwardSessionKey(agentId) {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    return `agent:${agentId}:${agentId}-forwarded-${stamp}`;
+}
+
+window.submitForwardMessage = async function() {
+    const agentId = document.getElementById('forward-message-agent')?.value?.trim();
+    const text = document.getElementById('forward-message-text')?.value?.trim();
+    if (!agentId || !text) {
+        showToast('Target agent and message are required', 'warning');
+        return;
+    }
+
+    try {
+        let targetSessionKey = null;
+        const pool = Array.isArray(window.availableSessions) ? window.availableSessions.slice() : (Array.isArray(availableSessions) ? availableSessions.slice() : []);
+        const agentSessions = typeof filterSessionsForAgent === 'function'
+            ? filterSessionsForAgent(pool, agentId)
+            : pool.filter(s => (s?.key || '').startsWith(`agent:${agentId}:`));
+
+        if (agentSessions.length > 0) {
+            agentSessions.sort((a, b) => {
+                const aTs = new Date(a.updatedAt || a.lastMessageAt || a.createdAt || 0).getTime() || 0;
+                const bTs = new Date(b.updatedAt || b.lastMessageAt || b.createdAt || 0).getTime() || 0;
+                return bTs - aTs;
+            });
+            targetSessionKey = agentSessions[0].key;
+        } else {
+            targetSessionKey = buildAutoForwardSessionKey(agentId);
+        }
+
+        if (typeof switchToSession === 'function') {
+            await switchToSession(targetSessionKey);
+        }
+
+        const input = document.getElementById('chat-page-input');
+        if (input) {
+            input.value = text;
+            if (typeof resizeChatPageInput === 'function') resizeChatPageInput();
+            input.focus();
+        }
+
+        closeForwardMessageModal();
+        showToast(`Forward loaded for ${getAgentDisplayName(agentId)}${agentSessions.length ? '' : ' in a new session'}`, 'success');
+    } catch (err) {
+        console.error('Forward failed:', err);
+        showToast(`Forward failed: ${err?.message || err}`, 'error');
+    }
+};
 
 // Notify of new message (for indicator)
 function notifyChatPageNewMessage() {

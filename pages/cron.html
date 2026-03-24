@@ -288,6 +288,24 @@
                                             </select>
                                             <div class="cron-form-hint cron-form-hint-warning">For dashboard/WebChat-visible reminders, use Main session. WebChat is not a supported cron announce channel.</div>
                                         </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Delivery</label>
+                                            <select id="cron-edit-delivery-mode" class="input" onchange="updateCronDeliveryFields('edit')">
+                                                <option value="none">None</option>
+                                                <option value="announce">Announce</option>
+                                                <option value="webhook">Webhook</option>
+                                            </select>
+                                        </div>
+                                        <div id="cron-edit-delivery-announce" class="cron-form-field hidden">
+                                            <label class="cron-form-label">Announce channel</label>
+                                            <input type="text" id="cron-edit-delivery-channel" class="input" placeholder="telegram / discord / slack / ...">
+                                            <div class="cron-form-hint">Optional. Leave blank to use the default announce target if configured.</div>
+                                        </div>
+                                        <div id="cron-edit-delivery-to-wrap" class="cron-form-field hidden">
+                                            <label class="cron-form-label">Delivery target</label>
+                                            <input type="text" id="cron-edit-delivery-to" class="input" placeholder="channel/user id, webhook URL, or target name">
+                                            <div id="cron-edit-delivery-to-hint" class="cron-form-hint">Optional for announce. Required for webhook.</div>
+                                        </div>
                                     </div>
                                     <div class="cron-modal-right">
                                         <div class="cron-form-field cron-form-field-full">

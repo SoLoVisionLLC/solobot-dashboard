@@ -45,6 +45,35 @@ function writeSkillsCache(skills) {
     } catch {}
 }
 
+function getSkillAssignedAgent(skill) {
+    const explicit = String(skill?.assignedAgent || '').trim().toLowerCase();
+    if (explicit) return explicit;
+
+    const candidates = [
+        skill?.name,
+        skill?.id,
+        skill?.skillKey,
+        skill?.path,
+        skill?.directory,
+    ]
+        .filter(Boolean)
+        .map(value => String(value).trim().toLowerCase());
+
+    const knownAgents = [
+        'halo', 'nova', 'luma', 'vector', 'canon', 'snip', 'haven', 'dev', 'sterling'
+    ];
+
+    for (const candidate of candidates) {
+        for (const agent of knownAgents) {
+            if (candidate === agent || candidate.startsWith(`${agent}-`) || candidate.includes(`/${agent}-`) || candidate.includes(`/${agent}/`)) {
+                return agent;
+            }
+        }
+    }
+
+    return '';
+}
+
 function bindSkillsPageControls() {
     if (skillsPageBound) return;
     skillsPageBound = true;
@@ -324,7 +353,7 @@ function renderSkills() {
         })
         .filter(skill => {
             if (!skillsUi.agent) return true;
-            return skill?.assignedAgent === skillsUi.agent;
+            return getSkillAssignedAgent(skill) === skillsUi.agent;
         })
         .filter(skill => skillsUi.onlyIssues ? skillHasIssues(skill) : true)
         .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
@@ -344,6 +373,7 @@ function renderSkills() {
         const desc = skill?.description || '';
         const emoji = skill?.emoji || '🧩';
         const source = skill?.source ? `• ${escapeHtml(skill.source)}` : '';
+        const assignedAgent = getSkillAssignedAgent(skill);
 
         const topBadges = [
             showEligible ? (eligible ? '<span style="font-size: 10px; color: var(--success);">Ready</span>' : '<span style="font-size: 10px; color: var(--warning);">Needs attention</span>') : '',
@@ -369,6 +399,7 @@ function renderSkills() {
                     ${desc ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${escapeHtml(desc)}</div>` : ''}
                     <div style="margin-top: 6px; display:flex; align-items:center; gap: 10px; flex-wrap: wrap;">
                         <span style="font-size: 10px; color: var(--text-faint);">skillKey: <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">${escapeHtml(skillKey)}</span></span>
+                        ${assignedAgent ? `<span style="font-size: 10px; color: var(--text-faint);">agent: <span style="text-transform: capitalize;">${escapeHtml(assignedAgent)}</span></span>` : ''}
                         ${homepage}
                     </div>
                     ${missingBadges}
@@ -799,7 +830,7 @@ window.openEditSkillModal = function(skillKey) {
     // Get agent assignment if configured
     const agentSelect = document.getElementById('edit-skill-agent');
     if (agentSelect) {
-        agentSelect.value = skill?.assignedAgent || '';
+        agentSelect.value = getSkillAssignedAgent(skill);
     }
 
     document.getElementById('edit-skill-modal-subtitle').textContent = skill?.skillKey || skillKey;
