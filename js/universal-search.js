@@ -1,40 +1,259 @@
 // js/universal-search.js — Advanced universal search across all sessions and chat history
-// Uses MiniSearch (loaded from CDN) for full-text search with TF-IDF ranking, fuzzy matching, and field boosting
+// Built-in search engine: custom inverted index with TF-IDF, fuzzy matching, prefix search
+// No external dependencies required.
 
 (function() {
     'use strict';
 
-    // ---------------------------------------------------------------------------
-    // State
-    // ---------------------------------------------------------------------------
-    let searchIndex = null;
-    let indexDocs = {};        // id → doc map for quick lookup
-    let allSessions = [];      // session metadata from fetchSessions()
-    let isIndexBuilt = false;
-    let isBuildingIndex = false;
-    let lastQuery = '';
-    let searchHistory = JSON.parse(localStorage.getItem('universal_search_history') || '[]');
+    // ============================================================
+    //  MINI-SEARCH ENGINE (built-in, no external CDN needed)
+    // ============================================================
+    // A lightweight in-browser full-text search engine with:
+    // - Inverted index for fast lookups
+    // - TF-IDF scoring for relevance ranking
+    // - Fuzzy matching (Levenshtein distance ≤ 2)
+    // - Prefix matching for instant feedback
+    // - Field boosting (text > agentName > sessionName)
 
-    const MAX_HISTORY = 20;
-    const MAX_RESULTS = 100;
+    var MiniSearchEngine = (function() {
 
-    // ---------------------------------------------------------------------------
-    // MiniSearch options — tuned for chat search
-    // ---------------------------------------------------------------------------
-    var MINISEARCH_OPTIONS = {
-        fields: ['text', 'agentName', 'sessionName', 'agentId'],
-        weights: { text: 3, agentName: 1, sessionName: 1, agentId: 1 },
-        storeFields: ['text', 'agentName', 'sessionName', 'agentId', 'sessionKey', 'timestamp', 'from', 'id', 'role'],
-        searchOptions: {
-            boost: { text: 3 },
-            fuzzy: 0.2,
-            prefix: true
+        // ─── Levenshtein distance ───────────────────────────────────────────────
+        function levenshtein(a, b) {
+            if (!a || !a.length) return b ? b.length : 0;
+            if (!b || !b.length) return a.length;
+            var m = a.length, n = b.length;
+            var dp = new Array(m + 1);
+            for (var i = 0; i <= m; i++) dp[i] = new Array(n + 1);
+            for (var j = 0; j <= n; j++) dp[0][j] = j;
+            for (var i2 = 0; i2 <= m; i2++) dp[i2][0] = i2;
+            for (var i3 = 1; i3 <= m; i3++) {
+                for (var j2 = 1; j2 <= n; j2++) {
+                    var cost = a[i3 - 1] === b[j2 - 1] ? 0 : 1;
+                    dp[i3][j2] = Math.min(
+                        dp[i3 - 1][j2] + 1,      // deletion
+                        dp[i3][j2 - 1] + 1,      // insertion
+                        dp[i3 - 1][j2 - 1] + cost // substitution
+                    );
+                }
+            }
+            return dp[m][n];
         }
-    };
 
-    // ---------------------------------------------------------------------------
-    // Public API
-    // ---------------------------------------------------------------------------
+        // ─── Tokenizer ───────────────────────────────────────────────────────────
+        function tokenize(text) {
+            if (!text) return [];
+            return String(text)
+                .toLowerCase()
+                .replace(/[^a-z0-9\s\-_']+/g, ' ')
+                .split(/\s+/)
+                .filter(function(t) { return t.length > 1; });
+        }
+
+        // ─── IDF cache ───────────────────────────────────────────────────────────
+        var idfCache = {};
+
+        function computeIDF(index, term, totalDocs) {
+            var key = term;
+            if (idfCache[key] !== undefined) return idfCache[key];
+            var docsWithTerm = 0;
+            for (var docId in index) {
+                if (index.hasOwnProperty(docId) && index[docId].terms && index[docId].terms[term]) {
+                    docsWithTerm++;
+                }
+            }
+            // IDF: log((totalDocs + 1) / (docsWithTerm + 1)) + 1 (smoothed)
+            var idf = Math.log((totalDocs + 1) / (docsWithTerm + 1)) + 1;
+            idfCache[key] = idf;
+            return idf;
+        }
+
+        // ─── Main engine ─────────────────────────────────────────────────────────
+        function createEngine(options) {
+            options = options || {};
+            var fields = options.fields || ['text'];
+            var weights = options.weights || {};
+            var storeFields = options.storeFields || [];
+            var fuzzy = options.fuzzy !== undefined ? options.fuzzy : 0.2;
+            var prefix = options.prefix !== undefined ? options.prefix : true;
+
+            var index = {};       // term → { docId → { tf, pos[] } }
+            var docStore = {};    // docId → stored fields
+            var docCount = 0;
+            var fieldIndex = {};  // docId → { fieldName → text }
+
+            var self = {};
+
+            self.add = function(doc) {
+                var id = doc.id !== undefined ? String(doc.id) : String(docCount);
+                var docFields = {};
+                var allTokens = [];
+
+                for (var fi = 0; fi < fields.length; fi++) {
+                    var fieldName = fields[fi];
+                    var text = doc[fieldName] || '';
+                    var tokens = tokenize(text);
+                    docFields[fieldName] = tokens;
+                    allTokens = allTokens.concat(tokens);
+                }
+
+                // Store
+                var stored = { id: id };
+                for (var si = 0; si < storeFields.length; si++) {
+                    stored[storeFields[si]] = doc[storeFields[si]];
+                }
+                docStore[id] = stored;
+                fieldIndex[id] = docFields;
+
+                // Index
+                var uniqueTokens = [];
+                var seen = {};
+                for (var ti = 0; ti < allTokens.length; ti++) {
+                    var tok = allTokens[ti];
+                    if (!seen[tok]) { seen[tok] = true; uniqueTokens.push(tok); }
+                }
+
+                for (var ui = 0; ui < uniqueTokens.length; ui++) {
+                    var term = uniqueTokens[ui];
+                    if (!index[term]) index[term] = {};
+                    var tf = 0;
+                    for (var fj = 0; fj < fields.length; fj++) {
+                        var fn = fields[fj];
+                        var fieldTokens = docFields[fn] || [];
+                        for (var ft = 0; ft < fieldTokens.length; ft++) {
+                            if (fieldTokens[ft] === term) tf++;
+                        }
+                    }
+                    if (!index[term][id]) index[term][id] = { tf: 0 };
+                    index[term][id].tf += tf * (weights[fields[fj]] || 1);
+                }
+
+                docCount++;
+                return self;
+            };
+
+            self.search = function(query, searchOptions) {
+                searchOptions = searchOptions || {};
+                var sFuzzy = searchOptions.fuzzy !== undefined ? searchOptions.fuzzy : fuzzy;
+                var sPrefix = searchOptions.prefix !== undefined ? searchOptions.prefix : prefix;
+                var boost = searchOptions.boost || {};
+
+                var queryTokens = tokenize(query);
+                if (!queryTokens.length) return [];
+
+                var scored = {};
+                var matchInfo = {};
+
+                for (var qi = 0; qi < queryTokens.length; qi++) {
+                    var qtok = queryTokens[qi];
+                    var matchingTerms = [];
+
+                    // Exact match
+                    if (index[qtok]) matchingTerms.push(qtok);
+
+                    // Fuzzy match
+                    if (sFuzzy > 0) {
+                        var maxDist = sFuzzy <= 1 ? Math.ceil(qtok.length * sFuzzy) : Math.ceil(sFuzzy);
+                        for (var term in index) {
+                            if (!index.hasOwnProperty(term)) continue;
+                            if (matchingTerms.indexOf(term) >= 0) continue;
+                            var dist = levenshtein(qtok, term);
+                            if (dist <= maxDist && dist <= 2) matchingTerms.push(term);
+                        }
+                    }
+
+                    // Prefix match
+                    if (sPrefix) {
+                        for (var pterm in index) {
+                            if (!index.hasOwnProperty(pterm)) continue;
+                            if (matchingTerms.indexOf(pterm) >= 0) continue;
+                            if (pterm.indexOf(qtok) === 0) matchingTerms.push(pterm);
+                        }
+                    }
+
+                    // Score matching docs
+                    for (var mi = 0; mi < matchingTerms.length; mi++) {
+                        var term = matchingTerms[mi];
+                        var idf = computeIDF(index, term, docCount);
+                        var termDocs = index[term];
+
+                        for (var docId in termDocs) {
+                            if (!termDocs.hasOwnProperty(docId)) continue;
+                            var tf = termDocs[docId].tf || 1;
+                            var fieldBoost = 1;
+                            // Check which field matched
+                            var docFields = fieldIndex[docId] || {};
+                            for (var fdName in docFields) {
+                                if (!docFields.hasOwnProperty(fdName)) continue;
+                                var fTokens = docFields[fdName] || [];
+                                for (var fti = 0; fti < fTokens.length; fti++) {
+                                    if (fTokens[fti] === term) {
+                                        fieldBoost = Math.max(fieldBoost, weights[fdName] || 1);
+                                        if (boost[fdName]) fieldBoost *= boost[fdName];
+                                    }
+                                }
+                            }
+                            var tfNorm = 1 + Math.log(tf + 1);
+                            var score = tfNorm * idf * fieldBoost;
+
+                            if (!scored[docId]) { scored[docId] = 0; matchInfo[docId] = {}; }
+                            scored[docId] += score;
+                            if (!matchInfo[docId][term]) matchInfo[docId][term] = 0;
+                            matchInfo[docId][term]++;
+                        }
+                    }
+                }
+
+                var results = [];
+                for (var did in scored) {
+                    if (!scored.hasOwnProperty(did)) continue;
+                    results.push({
+                        id: did,
+                        score: scored[did],
+                        match: matchInfo[did]
+                    });
+                }
+
+                results.sort(function(a, b) { return b.score - a.score; });
+                return results;
+            };
+
+            self.getStoredFields = function(id) {
+                return docStore[id] || null;
+            };
+
+            self.getDocCount = function() { return docCount; };
+
+            self.clear = function() {
+                index = {};
+                docStore = {};
+                fieldIndex = {};
+                docCount = 0;
+                idfCache = {};
+            };
+
+            return self;
+        }
+
+        return { create: createEngine };
+    })();
+
+    // ============================================================
+    //  STATE
+    // ============================================================
+    var searchEngine = null;
+    var indexDocs = {};       // id → doc map
+    var allSessions = [];
+    var isIndexBuilt = false;
+    var isBuildingIndex = false;
+    var lastQuery = '';
+    var searchHistory = JSON.parse(localStorage.getItem('universal_search_history') || '[]');
+
+    var MAX_HISTORY = 20;
+    var MAX_RESULTS = 100;
+
+    // ============================================================
+    //  PUBLIC API
+    // ============================================================
     window._universalSearch = {
         open: open,
         close: close,
@@ -47,32 +266,17 @@
         toggleSession: toggleSession
     };
 
-    // ---------------------------------------------------------------------------
-    // Bootstrap: load MiniSearch from CDN if not already loaded
-    // ---------------------------------------------------------------------------
-    function loadMiniSearch() {
-        return new Promise(function(resolve, reject) {
-            if (window.MiniSearch) { resolve(); return; }
-            var script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/minisearch/7.1.2/minisearch.umd.min.js';
-            script.crossOrigin = 'anonymous';
-            script.onload = resolve;
-            script.onerror = function() { reject(new Error('Failed to load MiniSearch')); };
-            document.head.appendChild(script);
-        });
-    }
-
-    // ---------------------------------------------------------------------------
-    // Fetch all sessions
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  FETCH ALL SESSIONS
+    // ============================================================
     async function fetchAllSessions() {
         try {
             if (typeof fetchSessions === 'function') {
                 allSessions = await fetchSessions();
             } else {
-                var response = await fetch('/api/sessions');
-                if (!response.ok) throw new Error('Failed to fetch sessions: ' + response.status);
-                var raw = await response.json();
+                var resp = await fetch('/api/sessions');
+                if (!resp.ok) throw new Error('Failed to fetch sessions: ' + resp.status);
+                var raw = await resp.json();
                 allSessions = Array.isArray(raw) ? raw : (raw.sessions || raw.data || []);
             }
         } catch (e) {
@@ -81,15 +285,15 @@
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Fetch ALL messages from /api/state (includes chat.sessions map)
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  FETCH ALL MESSAGES FROM /api/state
+    // ============================================================
     async function fetchAllMessages() {
         try {
-            var response = await fetch('/api/state', { cache: 'no-store' });
-            if (!response.ok) throw new Error('Failed to fetch state: ' + response.status);
-            var state = await response.json();
-            var sessionsMap = state && state.chat && state.chat.sessions ? state.chat.sessions : {};
+            var resp = await fetch('/api/state', { cache: 'no-store' });
+            if (!resp.ok) throw new Error('Failed to fetch state: ' + resp.status);
+            var state = await resp.json();
+            var sessionsMap = (state && state.chat && state.chat.sessions) ? state.chat.sessions : {};
             var messages = [];
 
             for (var sessionKey in sessionsMap) {
@@ -98,24 +302,24 @@
                 if (!Array.isArray(sessionMessages)) continue;
 
                 var sessionMeta = null;
-                for (var i = 0; i < allSessions.length; i++) {
-                    if (allSessions[i].key === sessionKey) { sessionMeta = allSessions[i]; break; }
+                for (var si = 0; si < allSessions.length; si++) {
+                    if (allSessions[si].key === sessionKey) { sessionMeta = allSessions[si]; break; }
                 }
                 var agentId = extractAgentId(sessionKey);
 
-                for (var j = 0; j < sessionMessages.length; j++) {
-                    var msg = sessionMessages[j];
+                for (var mi = 0; mi < sessionMessages.length; mi++) {
+                    var msg = sessionMessages[mi];
                     if (!msg || typeof msg !== 'object') continue;
                     var text = extractMessageText(msg);
                     if (!text || !text.trim()) continue;
 
                     messages.push({
-                        id: msg.id || (sessionKey + '-' + j),
+                        id: msg.id || (sessionKey + '-' + mi),
                         text: text,
                         agentId: agentId,
                         agentName: getAgentDisplayName(agentId),
                         sessionKey: sessionKey,
-                        sessionName: (sessionMeta ? (sessionMeta.name || sessionMeta.label || sessionKey) : sessionKey),
+                        sessionName: sessionMeta ? (sessionMeta.name || sessionMeta.label || sessionKey) : sessionKey,
                         timestamp: msg.timestamp || msg.time || msg.createdAt || 0,
                         from: msg.from || msg.role || 'unknown',
                         role: msg.role || 'user',
@@ -130,31 +334,47 @@
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Build or rebuild the search index
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  BUILD / REBUILD INDEX
+    // ============================================================
     async function rebuildIndex() {
         if (isBuildingIndex) return;
         isBuildingIndex = true;
         isIndexBuilt = false;
 
         try {
-            await loadMiniSearch();
+            searchEngine = MiniSearchEngine.create({
+                fields: ['text', 'agentName', 'sessionName', 'agentId'],
+                weights: { text: 3, agentName: 1, sessionName: 1, agentId: 1 },
+                storeFields: ['text', 'agentName', 'sessionName', 'agentId', 'sessionKey', 'timestamp', 'from', 'role', 'images', 'id'],
+                fuzzy: 0.25,
+                prefix: true
+            });
+
             await fetchAllSessions();
             var messages = await fetchAllMessages();
 
             indexDocs = {};
-            searchIndex = new MiniSearch(MINISEARCH_OPTIONS);
-
             for (var i = 0; i < messages.length; i++) {
                 var msg = messages[i];
                 var id = String(i);
                 indexDocs[id] = msg;
-                searchIndex.add(Object.assign({}, msg, { id: id }));
+                searchEngine.add(Object.assign({}, msg, { id: id }));
             }
 
             isIndexBuilt = true;
             console.log('[UniversalSearch] Index built: ' + messages.length + ' messages across ' + allSessions.length + ' sessions');
+
+            // If modal is open, refresh results
+            var bodyEl = document.getElementById('universal-search-body');
+            if (bodyEl) {
+                var inputEl = document.getElementById('universal-search-input');
+                if (inputEl && inputEl.value.trim()) {
+                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                } else {
+                    bodyEl.innerHTML = renderEmptyState();
+                }
+            }
         } catch (e) {
             console.error('[UniversalSearch] Index build failed:', e);
         } finally {
@@ -162,19 +382,16 @@
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Perform search
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  PERFORM SEARCH
+    // ============================================================
     function performSearch(query, options) {
         options = options || {};
-        if (!query || !query.trim()) {
-            lastQuery = '';
-            return [];
-        }
+        if (!query || !query.trim()) { lastQuery = ''; return []; }
         query = query.trim();
         lastQuery = query;
 
-        if (!isIndexBuilt || !searchIndex) return [];
+        if (!isIndexBuilt || !searchEngine) return [];
 
         var agentFilter = options.agentFilter || 'all';
         var dateFrom = options.dateFrom || '';
@@ -182,37 +399,34 @@
         var limit = options.limit || MAX_RESULTS;
 
         try {
-            var results = searchIndex.search(query, MINISEARCH_OPTIONS.searchOptions);
+            var rawResults = searchEngine.search(query, {
+                fuzzy: 0.25,
+                prefix: true,
+                boost: { text: 3 }
+            });
 
-            // Post-filter by agent
-            if (agentFilter !== 'all') {
-                results = results.filter(function(r) {
-                    var doc = indexDocs[r.id];
-                    return doc && doc.agentId === agentFilter;
-                });
-            }
+            var results = [];
+            for (var i = 0; i < rawResults.length; i++) {
+                var raw = rawResults[i];
+                var doc = indexDocs[raw.id];
+                if (!doc) continue;
 
-            // Post-filter by date range
-            if (dateFrom) {
-                var fromMs = new Date(dateFrom).getTime();
-                results = results.filter(function(r) {
-                    var doc = indexDocs[r.id];
-                    return doc && (doc.timestamp || 0) >= fromMs;
-                });
-            }
-            if (dateTo) {
-                var toMs = new Date(dateTo).getTime() + 86400000;
-                results = results.filter(function(r) {
-                    var doc = indexDocs[r.id];
-                    return doc && (doc.timestamp || 0) <= toMs;
-                });
-            }
+                // Agent filter
+                if (agentFilter !== 'all' && doc.agentId !== agentFilter) continue;
 
-            results = results.slice(0, limit);
+                // Date from
+                if (dateFrom) {
+                    var fromMs = new Date(dateFrom).getTime();
+                    if ((doc.timestamp || 0) < fromMs) continue;
+                }
 
-            return results.map(function(r) {
-                var doc = indexDocs[r.id] || {};
-                return {
+                // Date to
+                if (dateTo) {
+                    var toMs = new Date(dateTo).getTime() + 86400000;
+                    if ((doc.timestamp || 0) > toMs) continue;
+                }
+
+                results.push({
                     text: doc.text || '',
                     agentId: doc.agentId || '',
                     agentName: doc.agentName || '',
@@ -222,19 +436,21 @@
                     from: doc.from || '',
                     role: doc.role || '',
                     images: doc.images || '',
-                    _score: r.score,
-                    _match: r.match
-                };
-            });
+                    _score: raw.score,
+                    _match: raw.match
+                });
+            }
+
+            return results.slice(0, limit);
         } catch (e) {
             console.error('[UniversalSearch] Search error:', e);
             return [];
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Open search modal
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  OPEN / CLOSE MODAL
+    // ============================================================
     function open() {
         renderModal();
         document.body.classList.add('universal-search-open');
@@ -258,52 +474,61 @@
         document.body.style.overflow = '';
     }
 
-    // ---------------------------------------------------------------------------
-    // Render modal HTML
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  RENDER MODAL
+    // ============================================================
     function renderModal() {
         var existing = document.getElementById('universal-search-modal');
         if (existing) existing.remove();
 
         var uniqueAgents = getUniqueAgents();
-        var agentOptionsHtml = uniqueAgents.map(function(a) {
-            return '<option value="' + escapeHtmlAttr(a.id) + '">' + escapeHtml(a.name) + '</option>';
-        }).join('');
+        var agentOptions = '<option value="all">All Agents</option>';
+        for (var ai = 0; ai < uniqueAgents.length; ai++) {
+            agentOptions += '<option value="' + escapeHtmlAttr(uniqueAgents[ai].id) + '">' + escapeHtml(uniqueAgents[ai].name) + '</option>';
+        }
 
         var historyHtml = '';
         if (searchHistory.length > 0) {
-            var historyItems = searchHistory.slice(0, 5).map(function(q) {
-                return '<button class="universal-search-history-item" data-query="' + escapeHtmlAttr(q) + '">' + escapeHtml(q) + '</button>';
-            }).join('');
-            historyHtml = '<div class="universal-search-history"><div class="universal-search-history-title">Recent searches</div><div class="universal-search-history-items">' + historyItems + '</div></div>';
+            var historyItems = '';
+            for (var hi = 0; hi < Math.min(searchHistory.length, 5); hi++) {
+                historyItems += '<button class="us-history-chip" data-q="' + escapeHtmlAttr(searchHistory[hi]) + '">' + escapeHtml(searchHistory[hi]) + '</button>';
+            }
+            historyHtml = '<div class="us-section-header"><span class="us-section-label">Recent</span></div><div class="us-history-row">' + historyItems + '</div>';
         }
 
         var modal = document.createElement('div');
         modal.id = 'universal-search-modal';
         modal.innerHTML =
-            '<div id="universal-search-backdrop"></div>' +
-            '<div class="universal-search-container" role="dialog" aria-label="Universal Search">' +
-                '<div class="universal-search-header">' +
-                    '<div class="universal-search-title">' +
-                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
-                        'Universal Search' +
+            '<div class="us-backdrop" id="universal-search-backdrop"></div>' +
+            '<div class="us-container" role="dialog" aria-label="Universal Search">' +
+                // Search bar
+                '<div class="us-search-bar">' +
+                    '<div class="us-search-icon">' +
+                        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
                     '</div>' +
-                    '<div class="universal-search-shortcut"><kbd>Esc</kbd> to close &nbsp;·&nbsp; <kbd>Ctrl+K</kbd> to open</div>' +
+                    '<input id="universal-search-input" class="us-search-input" type="text" placeholder="Search all conversations, all sessions..." autocomplete="off" spellcheck="false" />' +
+                    '<div class="us-search-count" id="universal-search-count"></div>' +
+                    '<button class="us-close-btn" id="us-close-btn" title="Close (Esc)">' +
+                        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                    '</button>' +
                 '</div>' +
-                '<div class="universal-search-controls">' +
-                    '<div class="universal-search-filters">' +
-                        '<select id="universal-search-agent" class="input" title="Filter by agent"><option value="all">All Agents</option>' + agentOptionsHtml + '</select>' +
-                        '<input type="date" id="universal-search-from" class="input" title="From date" />' +
-                        '<input type="date" id="universal-search-to" class="input" title="To date" />' +
-                        '<button id="universal-search-clear-filters" class="btn" style="font-size:11px;padding:4px 8px;">Clear filters</button>' +
+                // Filters
+                '<div class="us-filters-bar">' +
+                    '<div class="us-filter-group">' +
+                        '<select id="universal-search-agent" class="us-select">' + agentOptions + '</select>' +
                     '</div>' +
+                    '<div class="us-filter-group us-filter-dates">' +
+                        '<span class="us-filter-label">From</span>' +
+                        '<input type="date" id="universal-search-from" class="us-date-input" />' +
+                        '<span class="us-filter-label">To</span>' +
+                        '<input type="date" id="universal-search-to" class="us-date-input" />' +
+                    '</div>' +
+                    '<button id="universal-search-clear-filters" class="us-clear-btn" style="display:none">Clear filters</button>' +
                 '</div>' +
-                '<div class="universal-search-input-wrap">' +
-                    '<input id="universal-search-input" type="text" class="input universal-search-input" placeholder="Search all chats, all sessions... (fuzzy + prefix enabled)" autocomplete="off" spellcheck="false" />' +
-                    '<div class="universal-search-count" id="universal-search-count"></div>' +
-                '</div>' +
-                '<div class="universal-search-body" id="universal-search-body">' + renderEmptyState() + '</div>' +
-                historyHtml +
+                // Results / Empty state
+                '<div class="us-body" id="universal-search-body">' + renderEmptyState() + '</div>' +
+                // Footer with history
+                '<div class="us-footer" id="us-footer">' + historyHtml + '</div>' +
             '</div>';
 
         document.body.appendChild(modal);
@@ -311,37 +536,48 @@
 
         var backdrop = document.getElementById('universal-search-backdrop');
         if (backdrop) {
-            backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;backdrop-filter:blur(2px);';
+            backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9998;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);';
             backdrop.addEventListener('click', close);
         }
+
+        // Wire close button
+        var closeBtn = document.getElementById('us-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', close);
 
         wireModalEvents();
     }
 
     function renderEmptyState() {
-        if (!isIndexBuilt) {
-            return '<div class="universal-search-empty">' +
-                '<div class="universal-search-spinner"></div>' +
-                '<p>Building search index...</p>' +
-                '<p style="font-size:11px;color:var(--text-muted)">Indexing all sessions and messages</p>' +
+        if (isBuildingIndex || !isIndexBuilt) {
+            return '<div class="us-empty-state">' +
+                '<div class="us-spinner"></div>' +
+                '<p class="us-empty-title">Building search index…</p>' +
+                '<p class="us-empty-sub">Indexing all sessions and conversations</p>' +
             '</div>';
         }
-        return '<div class="universal-search-empty">' +
-            '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
-            '<p>Search across all chats, sessions, and agents</p>' +
-            '<p style="font-size:11px;color:var(--text-muted)">Supports fuzzy matching and prefix search</p>' +
+        return '<div class="us-empty-state us-empty-searching">' +
+            '<div class="us-search-illustration">' +
+                '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+            '</div>' +
+            '<p class="us-empty-title">Search across all conversations</p>' +
+            '<p class="us-empty-sub">Messages, agents, sessions — all indexed and searchable</p>' +
+            '<div class="us-feature-pills">' +
+                '<span class="us-feature-pill">✨ Fuzzy matching</span>' +
+                '<span class="us-feature-pill">⚡ Prefix search</span>' +
+                '<span class="us-feature-pill">📅 Date filtering</span>' +
+            '</div>' +
         '</div>';
     }
 
-    // ---------------------------------------------------------------------------
-    // Wire modal events
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  WIRE EVENTS
+    // ============================================================
     function wireModalEvents() {
         var input = document.getElementById('universal-search-input');
         var agentSelect = document.getElementById('universal-search-agent');
         var dateFrom = document.getElementById('universal-search-from');
         var dateTo = document.getElementById('universal-search-to');
-        var clearFilters = document.getElementById('universal-search-clear-filters');
+        var clearBtn = document.getElementById('universal-search-clear-filters');
         var body = document.getElementById('universal-search-body');
 
         var debounceTimer = null;
@@ -349,10 +585,13 @@
         function doSearch() {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(function() {
-                var query = input && input.value ? input.value.trim() : '';
+                var query = input ? input.value.trim() : '';
                 var agent = agentSelect ? agentSelect.value : 'all';
                 var from = dateFrom ? dateFrom.value : '';
                 var to = dateTo ? dateTo.value : '';
+
+                var hasFilters = agent !== 'all' || from || to;
+                if (clearBtn) clearBtn.style.display = hasFilters ? '' : 'none';
 
                 if (!query) {
                     body.innerHTML = renderEmptyState();
@@ -365,8 +604,10 @@
                 body.innerHTML = renderResults(results, query);
 
                 var countEl = document.getElementById('universal-search-count');
-                if (countEl) countEl.textContent = results.length + ' result' + (results.length !== 1 ? 's' : '');
-            }, 120);
+                if (countEl) {
+                    countEl.textContent = results.length > 0 ? results.length + ' result' + (results.length !== 1 ? 's' : '') : '';
+                }
+            }, 100);
         }
 
         if (input) input.addEventListener('input', doSearch);
@@ -374,8 +615,8 @@
         if (dateFrom) dateFrom.addEventListener('change', doSearch);
         if (dateTo) dateTo.addEventListener('change', doSearch);
 
-        if (clearFilters) {
-            clearFilters.addEventListener('click', function() {
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
                 if (agentSelect) agentSelect.value = 'all';
                 if (dateFrom) dateFrom.value = '';
                 if (dateTo) dateTo.value = '';
@@ -383,18 +624,17 @@
             });
         }
 
-        // Recent history items
-        var historyItems = document.querySelectorAll('.universal-search-history-item');
-        for (var k = 0; k < historyItems.length; k++) {
-            historyItems[k].addEventListener('click', function(e) {
-                var query = e.target.getAttribute('data-query') || e.target.textContent;
-                if (input) input.value = query;
+        // History chips
+        var chips = document.querySelectorAll('.us-history-chip');
+        for (var ci = 0; ci < chips.length; ci++) {
+            chips[ci].addEventListener('click', function(e) {
+                var q = e.target.getAttribute('data-q') || e.target.textContent;
+                if (input) { input.value = q; input.focus(); }
                 doSearch();
-                if (input) input.focus();
             });
         }
 
-        // Keyboard handlers on modal
+        // Keyboard: Escape to close
         document.addEventListener('keydown', function onKey(e) {
             if (e.key === 'Escape') {
                 close();
@@ -403,15 +643,17 @@
         });
     }
 
-    // ---------------------------------------------------------------------------
-    // Render search results grouped by session
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  RENDER RESULTS
+    // ============================================================
     function renderResults(results, query) {
         if (results.length === 0) {
-            return '<div class="universal-search-empty">' +
-                '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
-                '<p>No results for "<strong>' + escapeHtml(query) + '</strong>"</p>' +
-                '<p style="font-size:11px;color:var(--text-muted)">Try different keywords or remove filters</p>' +
+            return '<div class="us-empty-state">' +
+                '<div class="us-search-illustration" style="opacity:0.4">' +
+                    '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+                '</div>' +
+                '<p class="us-empty-title">No results for "<strong>' + escapeHtml(query) + '</strong>"</p>' +
+                '<p class="us-empty-sub">Try different keywords, check spelling, or remove filters</p>' +
             '</div>';
         }
 
@@ -429,14 +671,18 @@
         for (var sessKey in bySession) {
             if (!bySession.hasOwnProperty(sessKey)) continue;
             var msgs = bySession[sessKey];
-            var maxTs = Math.max.apply(null, msgs.map(function(m) { return m.timestamp || 0; }));
+            var maxTs = 0;
+            for (var ti = 0; ti < msgs.length; ti++) maxTs = Math.max(maxTs, msgs[ti].timestamp || 0);
             sortedSessions.push({ key: sessKey, msgs: msgs, maxTs: maxTs });
         }
         sortedSessions.sort(function(a, b) { return b.maxTs - a.maxTs; });
 
-        var html = '<div class="universal-search-results">';
+        var html = '<div class="us-results-list">';
+
         for (var si = 0; si < sortedSessions.length; si++) {
             var sess = sortedSessions[si];
+
+            // Find session metadata
             var sessionMeta = null;
             for (var ai = 0; ai < allSessions.length; ai++) {
                 if (allSessions[ai].key === sess.key) { sessionMeta = allSessions[ai]; break; }
@@ -446,48 +692,74 @@
             var sessLabel = sessionMeta ? (sessionMeta.name || sessionMeta.label || sess.key) : sess.key;
             var safeSessKey = CSS.escape(sess.key);
 
-            html += '<div class="universal-search-session-group">';
-            html += '<div class="universal-search-session-header" data-session="' + safeSessKey + '">';
-            html += '<span class="universal-search-session-caret" id="caret-' + safeSessKey + '">▾</span> ';
-            html += '<span class="universal-search-session-name">' + escapeHtml(sessLabel) + '</span> ';
-            html += '<span class="universal-search-session-agent">' + escapeHtml(sessAgentName) + '</span> ';
-            html += '<span class="universal-search-session-count">' + sess.msgs.length + ' match' + (sess.msgs.length !== 1 ? 'es' : '') + '</span>';
+            html += '<div class="us-session-group">';
+
+            // Session header row
+            html += '<div class="us-session-header" data-session="' + safeSessKey + '">';
+            html += '<span class="us-session-caret" id="caret-' + safeSessKey + '">▾</span>';
+            html += '<div class="us-session-meta">';
+            html += '<span class="us-session-name">' + escapeHtml(sessLabel) + '</span>';
+            html += '<span class="us-session-agent-badge">' + escapeHtml(sessAgentName) + '</span>';
             html += '</div>';
-            html += '<div class="universal-search-session-messages" id="session-msgs-' + safeSessKey + '">';
+            html += '<span class="us-session-count">' + sess.msgs.length + ' match' + (sess.msgs.length !== 1 ? 'es' : '') + '</span>';
+            html += '</div>';
+
+            // Messages
+            html += '<div class="us-session-messages" id="session-msgs-' + safeSessKey + '">';
             for (var mi = 0; mi < sess.msgs.length; mi++) {
                 html += renderResultItem(sess.msgs[mi], query, mi === 0);
             }
             html += '</div></div>';
         }
+
         html += '</div>';
         return html;
     }
 
     function renderResultItem(msg, query, isFirst) {
-        var highlighted = highlightMatches(msg.text || '', query);
+        var text = msg.text || '';
+        var highlighted = highlightMatches(text, query);
         var time = msg.timestamp ? formatTimestamp(msg.timestamp) : '';
         var isUser = msg.from === 'user' || msg.role === 'user';
         var roleIcon = isUser ? '👤' : getAgentEmoji(msg.agentId);
-        var score = msg._score ? msg._score.toFixed(2) : '';
+        var score = msg._score ? msg._score.toFixed(1) : '';
         var safeSessKey = CSS.escape(msg.sessionKey);
 
-        var html = '<div class="universal-search-result-item' + (isFirst ? ' is-first' : '') + '" ';
-        html += 'data-session="' + safeSessKey + '" data-timestamp="' + (msg.timestamp || 0) + '">';
-        html += '<div class="universal-search-result-meta">';
-        html += '<span class="universal-search-result-icon">' + roleIcon + '</span>';
-        html += '<span class="universal-search-result-from">' + escapeHtml(msg.from || msg.agentName || 'Unknown') + '</span>';
-        html += '<span class="universal-search-result-time">' + time + '</span>';
-        if (score) html += '<span class="universal-search-result-score" title="Relevance score">' + score + '</span>';
-        if (msg.images) html += '<span class="universal-search-result-images">📎</span>';
+        // Truncate text for preview
+        var textPreview = text.length > 180 ? text.substring(0, 180) + '…' : text;
+
+        var html = '<div class="us-result-item' + (isFirst ? ' us-result-first' : '') + '" ';
+        html += 'data-session="' + safeSessKey + '" data-ts="' + (msg.timestamp || 0) + '">';
+
+        // Left accent bar
+        html += '<div class="us-result-accent"></div>';
+
+        // Content
+        html += '<div class="us-result-content">';
+        html += '<div class="us-result-meta">';
+        html += '<span class="us-result-icon">' + roleIcon + '</span>';
+        html += '<span class="us-result-from">' + escapeHtml(msg.from || msg.agentName || 'Unknown') + '</span>';
+        if (time) html += '<span class="us-result-time">' + time + '</span>';
+        if (msg.images) html += '<span class="us-result-img-badge">📎</span>';
         html += '</div>';
-        html += '<div class="universal-search-result-text">' + highlighted + '</div>';
+        html += '<div class="us-result-text">' + highlighted + '</div>';
+        html += '</div>';
+
+        // Score badge
+        if (score) {
+            html += '<div class="us-result-score" title="Relevance: ' + score + '">' + score + '</div>';
+        }
+
+        // Navigate arrow
+        html += '<div class="us-result-arrow">→</div>';
+
         html += '</div>';
         return html;
     }
 
-    // ---------------------------------------------------------------------------
-    // Highlight matching terms in text
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  HIGHLIGHT MATCHING TERMS
+    // ============================================================
     function highlightMatches(text, query) {
         if (!text || !query) return escapeHtml(text || '');
         var terms = query.toLowerCase().split(/\s+/).filter(function(t) { return t.length > 1; });
@@ -495,18 +767,17 @@
         for (var i = 0; i < terms.length; i++) {
             var term = terms[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             var regex = new RegExp('(' + term + ')', 'gi');
-            escaped = escaped.replace(regex, '<mark>$1</mark>');
+            escaped = escaped.replace(regex, '<mark class="us-highlight">$1</mark>');
         }
         return escaped;
     }
 
-    // ---------------------------------------------------------------------------
-    // Navigate to a specific message in its session
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  NAVIGATION
+    // ============================================================
     function navigateTo(sessionKey, timestamp) {
         timestamp = Number(timestamp) || 0;
 
-        // Save query to history
         if (lastQuery && searchHistory.indexOf(lastQuery) === -1) {
             searchHistory.unshift(lastQuery);
             searchHistory = searchHistory.slice(0, MAX_HISTORY);
@@ -515,7 +786,6 @@
 
         close();
 
-        // Switch to the target session
         if (typeof switchToSession === 'function') {
             switchToSession(sessionKey, { scrollToTimestamp: timestamp });
         } else if (typeof window.switchToSession === 'function') {
@@ -527,14 +797,9 @@
 
     function searchFromHistory(query) {
         var input = document.getElementById('universal-search-input');
-        if (input) {
-            input.value = query;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.focus();
-        }
+        if (input) { input.value = query; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); }
     }
 
-    // Toggle session group expand/collapse
     function toggleSession(sessionKey) {
         var el = document.getElementById('session-msgs-' + CSS.escape(sessionKey));
         var caret = document.getElementById('caret-' + CSS.escape(sessionKey));
@@ -544,18 +809,28 @@
         if (caret) caret.textContent = isHidden ? '▾' : '▸';
     }
 
-    // Wire up session header toggle clicks
+    // Session header click → toggle
     document.addEventListener('click', function(e) {
-        var header = e.target.closest('.universal-search-session-header');
+        var header = e.target.closest('.us-session-header');
         if (header) {
             var sk = header.getAttribute('data-session');
             if (sk) toggleSession(sk);
         }
+
+        // Result item click → navigate
+        var resultItem = e.target.closest('.us-result-item');
+        if (resultItem && !e.target.closest('.us-result-arrow')) {
+            var sk = resultItem.getAttribute('data-session');
+            var ts = Number(resultItem.getAttribute('data-ts')) || 0;
+            if (sk) navigateTo(sk, ts);
+        }
     });
 
-    // ---------------------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //    // ============================================================
+    //  HELPERS
+    // ============================================================
+
     function getUniqueAgents() {
         var seen = {};
         var docs = Object.values(indexDocs);
@@ -621,9 +896,9 @@
         return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    // ---------------------------------------------------------------------------
-    // Global keyboard shortcut: Ctrl/Cmd+K to open
-    // ---------------------------------------------------------------------------
+    // ============================================================
+    //  GLOBAL KEYBOARD SHORTCUT: Ctrl+K / Cmd+K
+    // ============================================================
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
             e.preventDefault();
@@ -631,4 +906,4 @@
         }
     });
 
-})();
+    })();
