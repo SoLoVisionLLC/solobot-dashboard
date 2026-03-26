@@ -267,15 +267,29 @@
     };
 
     // ============================================================
-    //  FETCH ALL SESSIONS
+    //  FETCH ALL SESSIONS via gateway or HTTP
     // ============================================================
     async function fetchAllSessions() {
         try {
+            // Try gateway WebSocket API first (most authoritative)
+            if (window.gateway && typeof window.gateway.listSessions === 'function' && window.gateway.connected) {
+                try {
+                    var result = await window.gateway.listSessions({ includeDerivedTitles: true });
+                    if (result && Array.isArray(result.sessions)) {
+                        allSessions = result.sessions;
+                        console.log('[UniversalSearch] Gateway loaded ' + allSessions.length + ' sessions');
+                        return;
+                    }
+                } catch (gwErr) {
+                    console.warn('[UniversalSearch] Gateway listSessions failed:', gwErr.message);
+                }
+            }
+            // Fallback: use dashboard's existing fetchSessions or HTTP
             if (typeof fetchSessions === 'function') {
                 allSessions = await fetchSessions();
             } else {
                 var resp = await fetch('/api/sessions');
-                if (!resp.ok) throw new Error('Failed to fetch sessions: ' + resp.status);
+                if (!resp.ok) throw new Error('Failed: ' + resp.status);
                 var raw = await resp.json();
                 allSessions = Array.isArray(raw) ? raw : (raw.sessions || raw.data || []);
             }
@@ -286,52 +300,160 @@
     }
 
     // ============================================================
-    //  FETCH ALL MESSAGES FROM /api/state
+    //  FETCH MESSAGES FOR ONE SESSION (gateway WebSocket preferred)
     // ============================================================
-    async function fetchAllMessages() {
+    async function fetchSessionMessages(sessionKey, sessionMeta) {
+        var agentId = extractAgentId(sessionKey);
+        var sessionName = sessionMeta ? (sessionMeta.name || sessionMeta.label || sessionKey) : sessionKey;
+        var messages = [];
+
+        // Try gateway WebSocket chat.history RPC
+        if (window.gateway && typeof window.gateway._request === 'function' && window.gateway.connected) {
+            try {
+                var result = await window.gateway._request('chat.history', {
+                    sessionKey: sessionKey,
+                    limit: 300
+                });
+                if (result && Array.isArray(result.messages)) {
+                    for (var i = 0; i < result.messages.length; i++) {
+                        var msg = result.messages[i];
+                        if (!msg || typeof msg !== 'object') continue;
+                        var text = extractMessageText(msg);
+                        if (!text || !text.trim()) continue;
+                        messages.push({
+                            id: msg.id || (sessionKey + '-' + i),
+                            text: text,
+                            agentId: agentId,
+                            agentName: getAgentDisplayName(agentId),
+                            sessionKey: sessionKey,
+                            sessionName: sessionName,
+                            timestamp: msg.timestamp || msg.time || msg.createdAt || 0,
+                            from: msg.from || msg.role || 'unknown',
+                            role: msg.role || 'user',
+                            images: (msg.images && msg.images.length > 0) || msg.image ? '[image]' : ''
+                        });
+                    }
+                    return messages;
+                }
+            } catch (e) {
+                // Fall through to HTTP fallback
+            }
+        }
+
+        // HTTP fallback: /api/state session map
         try {
             var resp = await fetch('/api/state', { cache: 'no-store' });
-            if (!resp.ok) throw new Error('Failed to fetch state: ' + resp.status);
-            var state = await resp.json();
-            var sessionsMap = (state && state.chat && state.chat.sessions) ? state.chat.sessions : {};
-            var messages = [];
-
-            for (var sessionKey in sessionsMap) {
-                if (!sessionsMap.hasOwnProperty(sessionKey)) continue;
+            if (resp.ok) {
+                var state = await resp.json();
+                var sessionsMap = (state && state.chat && state.chat.sessions) ? state.chat.sessions : {};
                 var sessionMessages = sessionsMap[sessionKey];
-                if (!Array.isArray(sessionMessages)) continue;
-
-                var sessionMeta = null;
-                for (var si = 0; si < allSessions.length; si++) {
-                    if (allSessions[si].key === sessionKey) { sessionMeta = allSessions[si]; break; }
-                }
-                var agentId = extractAgentId(sessionKey);
-
-                for (var mi = 0; mi < sessionMessages.length; mi++) {
-                    var msg = sessionMessages[mi];
-                    if (!msg || typeof msg !== 'object') continue;
-                    var text = extractMessageText(msg);
-                    if (!text || !text.trim()) continue;
-
-                    messages.push({
-                        id: msg.id || (sessionKey + '-' + mi),
-                        text: text,
-                        agentId: agentId,
-                        agentName: getAgentDisplayName(agentId),
-                        sessionKey: sessionKey,
-                        sessionName: sessionMeta ? (sessionMeta.name || sessionMeta.label || sessionKey) : sessionKey,
-                        timestamp: msg.timestamp || msg.time || msg.createdAt || 0,
-                        from: msg.from || msg.role || 'unknown',
-                        role: msg.role || 'user',
-                        images: (msg.images && msg.images.length > 0) || msg.image ? '[image]' : ''
-                    });
+                if (Array.isArray(sessionMessages)) {
+                    for (var j = 0; j < sessionMessages.length; j++) {
+                        var msg2 = sessionMessages[j];
+                        if (!msg2 || typeof msg2 !== 'object') continue;
+                        var text2 = extractMessageText(msg2);
+                        if (!text2 || !text2.trim()) continue;
+                        messages.push({
+                            id: msg2.id || (sessionKey + '-' + j),
+                            text: text2,
+                            agentId: agentId,
+                            agentName: getAgentDisplayName(agentId),
+                            sessionKey: sessionKey,
+                            sessionName: sessionName,
+                            timestamp: msg2.timestamp || msg2.time || msg2.createdAt || 0,
+                            from: msg2.from || msg2.role || 'unknown',
+                            role: msg2.role || 'user',
+                            images: (msg2.images && msg2.images.length > 0) || msg2.image ? '[image]' : ''
+                        });
+                    }
                 }
             }
-            return messages;
-        } catch (e) {
-            console.warn('[UniversalSearch] Could not fetch all messages:', e.message);
+        } catch (e2) {
+            // silent
+        }
+
+        return messages;
+    }
+
+    // ============================================================
+    //  FETCH ALL MESSAGES ACROSS ALL SESSIONS
+    // ============================================================
+    async function fetchAllMessages() {
+        if (!allSessions || allSessions.length === 0) {
+            console.warn('[UniversalSearch] No sessions to fetch messages from');
             return [];
         }
+
+        // Try /api/state first — if it has a rich session map, use it (one request)
+        try {
+            var resp = await fetch('/api/state', { cache: 'no-store' });
+            if (resp.ok) {
+                var state = await resp.json();
+                var sessionsMap = (state && state.chat && state.chat.sessions) ? state.chat.sessions : {};
+                var sessionCount = Object.keys(sessionsMap).length;
+                var totalMsgs = 0;
+                for (var k in sessionsMap) {
+                    if (Array.isArray(sessionsMap[k])) totalMsgs += sessionsMap[k].length;
+                }
+                // If we have a populated map with messages, use it
+                if (sessionCount > 3 && totalMsgs > 10) {
+                    console.log('[UniversalSearch] /api/state has ' + sessionCount + ' sessions with ' + totalMsgs + ' messages');
+                    var allMessages = [];
+                    for (var sk in sessionsMap) {
+                        if (!sessionsMap.hasOwnProperty(sk)) continue;
+                        if (!Array.isArray(sessionsMap[sk])) continue;
+                        var sMeta = null;
+                        for (var si = 0; si < allSessions.length; si++) {
+                            if (allSessions[si].key === sk) { sMeta = allSessions[si]; break; }
+                        }
+                        var aId = extractAgentId(sk);
+                        for (var mi = 0; mi < sessionsMap[sk].length; mi++) {
+                            var m = sessionsMap[sk][mi];
+                            if (!m || typeof m !== 'object') continue;
+                            var txt = extractMessageText(m);
+                            if (!txt || !txt.trim()) continue;
+                            allMessages.push({
+                                id: m.id || (sk + '-' + mi),
+                                text: txt,
+                                agentId: aId,
+                                agentName: getAgentDisplayName(aId),
+                                sessionKey: sk,
+                                sessionName: sMeta ? (sMeta.name || sMeta.label || sk) : sk,
+                                timestamp: m.timestamp || m.time || m.createdAt || 0,
+                                from: m.from || m.role || 'unknown',
+                                role: m.role || 'user',
+                                images: (m.images && m.images.length > 0) || m.image ? '[image]' : ''
+                            });
+                        }
+                    }
+                    console.log('[UniversalSearch] Indexed ' + allMessages.length + ' messages from /api/state session map');
+                    return allMessages;
+                }
+            }
+        } catch (e) {
+            console.warn('[UniversalSearch] /api/state check failed:', e.message);
+        }
+
+        // No rich session map — fetch per-session via gateway in parallel batches
+        console.log('[UniversalSearch] Fetching messages per-session via gateway (' + allSessions.length + ' sessions)...');
+        var allMessages = [];
+        var BATCH = 8;
+        for (var b = 0; b < allSessions.length; b += BATCH) {
+            var batchSessions = allSessions.slice(b, b + BATCH);
+            var batchResults = await Promise.all(
+                batchSessions.map(function(s) {
+                    return fetchSessionMessages(s.key || s.sessionKey || s.name, s);
+                })
+            );
+            for (var r = 0; r < batchResults.length; r++) {
+                allMessages = allMessages.concat(batchResults[r]);
+            }
+            var progress = Math.min(b + BATCH, allSessions.length);
+            console.log('[UniversalSearch] Progress: ' + progress + '/' + allSessions.length + ' sessions, ' + allMessages.length + ' messages indexed');
+        }
+
+        console.log('[UniversalSearch] Total: ' + allMessages.length + ' messages from ' + allSessions.length + ' sessions');
+        return allMessages;
     }
 
     // ============================================================
@@ -365,7 +487,7 @@
             isIndexBuilt = true;
             console.log('[UniversalSearch] Index built: ' + messages.length + ' messages across ' + allSessions.length + ' sessions');
 
-            // If modal is open, refresh results
+            // If modal is open, refresh results AND update agent dropdown
             var bodyEl = document.getElementById('universal-search-body');
             if (bodyEl) {
                 var inputEl = document.getElementById('universal-search-input');
@@ -375,10 +497,35 @@
                     bodyEl.innerHTML = renderEmptyState();
                 }
             }
+            // Always update the agent dropdown after a fresh build
+            updateAgentDropdown();
         } catch (e) {
             console.error('[UniversalSearch] Index build failed:', e);
         } finally {
             isBuildingIndex = false;
+        }
+    }
+
+    // Update the agent dropdown with fresh options from indexDocs
+    function updateAgentDropdown() {
+        var select = document.getElementById('universal-search-agent');
+        if (!select) return;
+        var uniqueAgents = getUniqueAgents();
+        var currentVal = select.value;
+        var html = '<option value="all">All Agents</option>';
+        for (var i = 0; i < uniqueAgents.length; i++) {
+            html += '<option value="' + escapeHtmlAttr(uniqueAgents[i].id) + '">' + escapeHtml(uniqueAgents[i].name) + '</option>';
+        }
+        select.innerHTML = html;
+        // Restore previous selection if still valid
+        if (currentVal && currentVal !== 'all') {
+            var opts = select.querySelectorAll('option');
+            for (var j = 0; j < opts.length; j++) {
+                if (opts[j].value === currentVal) {
+                    select.value = currentVal;
+                    break;
+                }
+            }
         }
     }
 
@@ -452,6 +599,8 @@
     //  OPEN / CLOSE MODAL
     // ============================================================
     function open() {
+        // If index is already built, render immediately with correct agents.
+        // Otherwise render with empty state, then rebuild + update dropdown.
         renderModal();
         document.body.classList.add('universal-search-open');
 
