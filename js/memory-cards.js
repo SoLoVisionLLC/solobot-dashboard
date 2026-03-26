@@ -57,11 +57,12 @@
         family: { name: 'Haven', role: 'HOME', title: 'Home', emoji: '🏠', reports: [], description: 'Family & Household' },
         cfo: { name: 'Sterling', role: 'CFO', title: 'CFO', emoji: '💰', reports: ['tax'], description: 'Chief Financial Officer' },
         cto: { name: 'Orion', role: 'CTO', title: 'CTO', emoji: '🧠', reports: ['net', 'dev', 'sec'], description: 'Chief Technical Officer' },
-        cmp: { name: 'Vector', role: 'CMP', title: 'CMP', emoji: '📣', reports: ['art', 'smm'], description: 'Chief Marketing & Product' },
+        cmp: { name: 'Vector', role: 'CMP', title: 'CMP', emoji: '📣', reports: ['art', 'smm', 'pulse'], description: 'Chief Marketing & Product' },
         coo: { name: 'Atlas', role: 'COO', title: 'COO', emoji: '📋', reports: ['docs'], description: 'Chief Operating Officer' },
         docs: { name: 'Canon', role: 'DOCS', title: 'Documentation', emoji: '📄', reports: [], description: 'Documentation Specialist' },
         tax: { name: 'Ledger', role: 'TAX', title: 'Tax Specialist', emoji: '📒', reports: [], description: 'Tax Specialist' },
         art: { name: 'Luma', role: 'ART', title: 'Creative Design', emoji: '🎨', reports: [], description: 'Creative Design' },
+        pulse: { name: 'Pulse', role: 'Pulse', title: 'Pulse', emoji: '💓', reports: [], description: 'Marketing & Product' },
         smm: { name: 'Nova', role: 'SMM', title: 'Social Media Manager', emoji: '📱', reports: ['youtube'], description: 'Social Media Manager' },
         youtube: { name: 'Snip', role: 'YT', title: 'YouTube Manager', emoji: '🎬', reports: [], description: 'YouTube Manager' },
         net: { name: 'Sentinel', role: 'NET', title: 'Network Admin', emoji: '📡', reports: [], description: 'Network Admin' },
@@ -85,6 +86,7 @@
         tax: { row: 4, col: 2 },
         art: { row: 4, col: 7 },
         smm: { row: 4, col: 9 },
+        pulse: { row: 5, col: 8 },
         youtube: { row: 5, col: 9 },
         net: { row: 6, col: 3 },
         dev: { row: 6, col: 6 },
@@ -120,7 +122,8 @@
         swe: 'chip',
         smm: 'nova',
         youtube: 'snip',
-        family: 'haven'
+        family: 'haven',
+        pulse: 'pulse'
     };
 
     const CANONICAL_TO_LEGACY_WORKSPACE = {

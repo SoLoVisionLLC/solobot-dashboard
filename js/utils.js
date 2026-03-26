@@ -154,7 +154,7 @@ function updateArchiveBadge() {
 
 const PNG_AGENTS = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'nova', 'luma',
     'elon', 'orion', 'atlas', 'sterling', 'forge', 'sentinel', 'knox', 'vector', 'canon',
-    'quill', 'chip', 'snip', 'ledger', 'haven', 'solo', 'halo']);
+    'quill', 'chip', 'snip', 'ledger', 'haven', 'solo', 'halo', 'pulse']);
 const SVG_AGENTS = new Set(['tax', 'sec']);
 
 /**
@@ -230,7 +230,8 @@ const AGENT_ID_ALIASES = {
     family: "haven",
     creative: "luma",
     art: "luma",
-    halo: "main"
+    halo: "main",
+    pulse: "pulse"
 };
 
 const DEFAULT_DEPARTMENTS = {
@@ -249,6 +250,7 @@ const DEFAULT_DEPARTMENTS = {
     nova: "Marketing & Product",
     snip: "Marketing & Product",
     luma: "Marketing & Product",
+    pulse: "Marketing & Product",
     sterling: "Finance",
     ledger: "Finance",
     haven: "Family / Household"

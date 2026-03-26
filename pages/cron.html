@@ -306,6 +306,20 @@
                                             <input type="text" id="cron-edit-delivery-to" class="input" placeholder="channel/user id, webhook URL, or target name">
                                             <div id="cron-edit-delivery-to-hint" class="cron-form-hint">Optional for announce. Required for webhook.</div>
                                         </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Model provider</label>
+                                            <select id="cron-edit-model-provider" class="input" onchange="window.onCronEditModelProviderChange?.()">
+                                                <option value="">Loading providers…</option>
+                                            </select>
+                                            <div class="cron-form-hint">Optional. Leave blank to keep the job's current/default provider selection.</div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Model</label>
+                                            <select id="cron-edit-model" class="input">
+                                                <option value="">Default / unchanged</option>
+                                            </select>
+                                            <div class="cron-form-hint">Uses the same provider → model pattern as the dashboard header selector.</div>
+                                        </div>
                                     </div>
                                     <div class="cron-modal-right">
                                         <div class="cron-form-field cron-form-field-full">

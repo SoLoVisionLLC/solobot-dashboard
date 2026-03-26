@@ -1710,7 +1710,7 @@ function copyToClipboard(text) {
 }
 
 function getForwardableAgents() {
-    const baseAgents = ['main', 'dev', 'orion', 'forge', 'quill', 'chip', 'sentinel', 'knox', 'atlas', 'canon', 'vector', 'nova', 'snip', 'luma', 'sterling', 'ledger', 'haven'];
+    const baseAgents = ['main', 'dev', 'orion', 'forge', 'quill', 'chip', 'sentinel', 'knox', 'atlas', 'canon', 'vector', 'nova', 'snip', 'luma', 'pulse', 'sterling', 'ledger', 'haven'];
     return [...new Set(baseAgents.map(id => window.resolveAgentId ? window.resolveAgentId(id) : id))];
 }
 

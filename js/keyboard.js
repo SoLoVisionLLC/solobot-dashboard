@@ -225,8 +225,8 @@ document.addEventListener('keydown', (e) => {
     // Don't trigger shortcuts when typing in inputs (except specific ones)
     const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
     
-    // Command palette: Cmd/Ctrl + K
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    // Command palette: Cmd/Ctrl + Shift + K
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
         e.preventDefault();
         if (commandPaletteOpen) {
             closeCommandPalette();

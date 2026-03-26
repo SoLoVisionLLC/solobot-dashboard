@@ -121,8 +121,8 @@
         
         setupGlobalShortcut() {
             document.addEventListener('keydown', (e) => {
-                // Cmd/Ctrl + K to open
-                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                // Cmd/Ctrl + Shift + K to open
+                if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
                     e.preventDefault();
                     this.toggle();
                 }

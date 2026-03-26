@@ -433,7 +433,7 @@ function showNotificationToast(title, body, sessionKey, onClick = null, duration
         if (typeof updateAgentChatButton === 'function') updateAgentChatButton(agentId);
     }
     const agentId = agentMatch ? (window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1]) : 'main';
-    const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
+    const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6', pulse: '#00D4FF' };
     const color = agentColors[agentId] || '#BC2026';
 
     const toast = document.createElement('div');

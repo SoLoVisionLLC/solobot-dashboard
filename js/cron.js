@@ -848,6 +848,30 @@ function buildCronTimelineExport(jobId) {
     };
 }
 
+function getCronJobDisplayModel(job, diagnostics = null) {
+    // 1. Explicit payload model (set via the cron edit model selector)
+    const payloadModel = String(job?.payload?.model || '').trim();
+    if (payloadModel) return payloadModel;
+
+    // 2. Root-level model field on the job itself
+    const rootModel = String(job?.model || '').trim();
+    if (rootModel) return rootModel;
+
+    // 3. Model from the most recent run history (diagnostics load asynchronously,
+    //    so this only helps after the detail view has been opened at least once)
+    if (diagnostics) {
+        const latestModel = String(
+            diagnostics?.latest?.model ||
+            diagnostics?.latestSuccess?.model ||
+            diagnostics?.latestFailure?.model ||
+            ''
+        ).trim();
+        if (latestModel) return latestModel;
+    }
+
+    return '--';
+}
+
 function renderDetailMeta(job, runs, diagnostics) {
     const state = getCronState(job);
     const delivery = getCronDelivery(job);
@@ -861,6 +885,7 @@ function renderDetailMeta(job, runs, diagnostics) {
         ['Agent', job.agentId || '--'],
         ['Session target', job.sessionTarget || '--'],
         ['Wake mode', job.wakeMode || '--'],
+        ['Model', getCronJobDisplayModel(job, diagnostics)],
         ['Delivery', deliveryLabel],
         ['Enabled', job.enabled !== false ? 'Yes' : 'No'],
         ['Schedule', formatCronSchedule(job.schedule)],
@@ -1251,6 +1276,7 @@ function renderCronJobs() {
         const activeClass = isActive ? ' is-active' : '';
         const statusToneClass = statusTone !== 'neutral' ? ` cron-tone-${statusTone}` : '';
         const deliveryWarning = getCronDeliveryWarning(job);
+        const displayModel = getCronJobDisplayModel(job, diagnostics);
 
         return `
         <article class="cron-job-card${activeClass}" style="--cron-accent: ${accent};" role="button" tabindex="0" onclick="openCronDetailView('${jobIdJs}')" onkeydown="if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); openCronDetailView('${jobIdJs}'); }">
@@ -1263,6 +1289,7 @@ function renderCronJobs() {
                         ${!enabled ? '<span class="badge cron-job-badge">Disabled</span>' : ''}
                         ${lastStatus && lastStatus !== '--' ? `<span class="badge cron-job-badge${statusToneClass}">${escapeHtml(lastStatus)}</span>` : ''}
                         ${job.sessionTarget ? `<span class="badge cron-job-badge">${escapeHtml(job.sessionTarget)}</span>` : ''}
+                        ${displayModel && displayModel !== '--' ? `<span class="badge cron-job-badge">${escapeHtml(displayModel)}</span>` : ''}
                         ${deliveryWarning ? '<span class="badge cron-job-badge cron-tone-error">webchat unsupported</span>' : ''}
                     </div>
                     <div class="cron-job-id">${escapeHtml(job.id || '--')}</div>
@@ -1494,8 +1521,95 @@ window.submitNewCronJob = async function() {
 };
 
 let editingCronJobId = null;
+let cronEditModelCatalog = null;
 
-window.openEditCronModal = function(jobId) {
+async function fetchCronModelCatalog() {
+    if (cronEditModelCatalog) return cronEditModelCatalog;
+    const response = await fetch('/api/models/list');
+    if (!response.ok) throw new Error(`Failed to load models (${response.status})`);
+    cronEditModelCatalog = await response.json();
+    return cronEditModelCatalog;
+}
+
+function getCronModelProviderFromId(modelId) {
+    if (!modelId) return '';
+    if (typeof window.getProviderFromModelId === 'function') {
+        return window.getProviderFromModelId(modelId) || '';
+    }
+    if (typeof modelId === 'string' && modelId.includes('/')) {
+        return modelId.startsWith('openrouter/') ? 'openrouter' : modelId.split('/')[0];
+    }
+    return '';
+}
+
+async function populateCronEditProviderDropdown(selectedProvider = '', selectedModel = '') {
+    const providerSelect = document.getElementById('cron-edit-model-provider');
+    if (!providerSelect) return [];
+
+    const catalog = await fetchCronModelCatalog();
+    const providers = Object.keys(catalog || {});
+    const inferredProvider = selectedProvider || getCronModelProviderFromId(selectedModel) || '';
+
+    providerSelect.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default / unchanged';
+    providerSelect.appendChild(defaultOption);
+
+    providers.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider;
+        option.textContent = provider.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        if (provider === inferredProvider) option.selected = true;
+        providerSelect.appendChild(option);
+    });
+
+    await populateCronEditModelDropdown(providerSelect.value || inferredProvider || '', selectedModel);
+    return providers;
+}
+
+async function populateCronEditModelDropdown(provider, selectedModel = '') {
+    const modelSelect = document.getElementById('cron-edit-model');
+    if (!modelSelect) return;
+
+    modelSelect.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default / unchanged';
+    modelSelect.appendChild(defaultOption);
+
+    if (!provider) {
+        modelSelect.value = '';
+        return;
+    }
+
+    const catalog = await fetchCronModelCatalog();
+    const models = Array.isArray(catalog?.[provider]) ? catalog[provider] : [];
+    const normalizedSelectedModel = selectedModel && typeof window.resolveFullModelId === 'function'
+        ? window.resolveFullModelId(selectedModel)
+        : selectedModel;
+
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.name || model.id;
+        if (model.id === normalizedSelectedModel) option.selected = true;
+        modelSelect.appendChild(option);
+    });
+
+    if (!normalizedSelectedModel) {
+        modelSelect.value = '';
+    }
+}
+
+window.onCronEditModelProviderChange = async function() {
+    const provider = document.getElementById('cron-edit-model-provider')?.value || '';
+    await populateCronEditModelDropdown(provider, '');
+};
+
+window.openEditCronModal = async function(jobId) {
     const job = getJobById(jobId || activeCronJobId);
     if (!job) {
         showToast('Select a cron job to edit', 'warning');
@@ -1538,6 +1652,15 @@ window.openEditCronModal = function(jobId) {
         deliveryToInput.value = delivery?.to || '';
     }
     updateCronDeliveryFields('edit');
+
+    const payloadModel = job?.payload?.model || '';
+    const payloadProvider = getCronModelProviderFromId(payloadModel);
+    try {
+        await populateCronEditProviderDropdown(payloadProvider, payloadModel);
+    } catch (e) {
+        console.warn('[Cron] Failed to load model dropdowns:', e.message);
+        showToast('Failed to load model list for cron editor: ' + e.message, 'warning');
+    }
 
     // Parse cron expression and pre-fill schedule builder
     const cronExpr = job.schedule?.expr || '';
@@ -1675,6 +1798,8 @@ window.submitEditCronJob = async function() {
     const deliveryMode = document.getElementById('cron-edit-delivery-mode')?.value?.trim() || 'none';
     const deliveryChannel = document.getElementById('cron-edit-delivery-channel')?.value?.trim();
     const deliveryTo = document.getElementById('cron-edit-delivery-to')?.value?.trim();
+    const modelProvider = document.getElementById('cron-edit-model-provider')?.value?.trim();
+    const selectedModelRaw = document.getElementById('cron-edit-model')?.value?.trim();
 
     if (!jobId || !name || !scheduleExpr || !command) {
         showToast('Name, schedule, and message are required', 'warning');
@@ -1686,6 +1811,27 @@ window.submitEditCronJob = async function() {
         return;
     }
 
+    const selectedModel = selectedModelRaw && typeof window.resolveFullModelId === 'function'
+        ? window.resolveFullModelId(selectedModelRaw)
+        : selectedModelRaw;
+
+    if (selectedModel && !modelProvider) {
+        showToast('Choose a model provider before selecting a model', 'warning');
+        return;
+    }
+
+    const existingJob = getJobById(jobId || editingCronJobId);
+    const existingPayload = existingJob?.payload && typeof existingJob.payload === 'object' ? existingJob.payload : {};
+    const payloadKind = existingPayload.kind || 'systemEvent';
+    const payload = { kind: payloadKind };
+
+    if (payloadKind === 'agentTurn') {
+        payload.message = command;
+        if (typeof existingPayload.timeoutSeconds === 'number') payload.timeoutSeconds = existingPayload.timeoutSeconds;
+    } else {
+        payload.text = command;
+    }
+
     const patch = {
         name,
         schedule: {
@@ -1694,12 +1840,13 @@ window.submitEditCronJob = async function() {
             tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
         },
         sessionTarget,
-        payload: {
-            kind: 'systemEvent',
-            text: command
-        },
+        payload,
         delivery: { mode: deliveryMode }
     };
+
+    if (selectedModel) {
+        patch.payload.model = selectedModel;
+    }
 
     if (deliveryMode === 'announce') {
         if (deliveryChannel) patch.delivery.channel = deliveryChannel;
