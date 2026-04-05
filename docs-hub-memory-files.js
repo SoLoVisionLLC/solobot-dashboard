@@ -471,8 +471,17 @@ async function acknowledgeUpdate(filepath) {
     }
 }
 
+function getFileApiBase(filepath, fileType = null, agentId = null) {
+    const inferredType = fileType || window.currentMemoryFile?.type || 'memory';
+    const inferredAgent = agentId || window.currentMemoryFile?.agentId || null;
+    if (inferredType === 'agent' && inferredAgent) {
+        return `/api/agents/${encodeURIComponent(inferredAgent)}/files/${encodeURIComponent(filepath)}`;
+    }
+    return `/api/memory/${encodeURIComponent(filepath)}`;
+}
+
 // Load version history for a file
-async function loadVersionHistory(filepath) {
+async function loadVersionHistory(filepath, fileType = null, agentId = null) {
     console.log('[Memory] loadVersionHistory called for:', filepath);
     const container = document.getElementById('version-history-list');
     console.log('[Memory] version-history-list container:', container);
@@ -484,7 +493,8 @@ async function loadVersionHistory(filepath) {
     container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Loading versions...</div>';
     
     try {
-        const url = `/api/memory/${encodeURIComponent(filepath)}/versions`;
+        const base = getFileApiBase(filepath, fileType, agentId);
+        const url = `${base}/versions`;
         console.log('Fetching versions from:', url);
         const response = await fetch(url);
         const data = await response.json();
@@ -508,11 +518,11 @@ async function loadVersionHistory(filepath) {
                         <div style="font-size: 11px; color: var(--text-muted);">${dateStr}</div>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button onclick="previewVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp})" 
+                        <button onclick="previewVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp}, '${escapeHtmlLocal(fileType || window.currentMemoryFile?.type || 'memory')}', '${escapeHtmlLocal(agentId || window.currentMemoryFile?.agentId || '')}')" 
                                 class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
                             👁️ View
                         </button>
-                        <button onclick="restoreVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp})" 
+                        <button onclick="restoreVersion('${escapeHtmlLocal(filepath)}', ${version.timestamp}, '${escapeHtmlLocal(fileType || window.currentMemoryFile?.type || 'memory')}', '${escapeHtmlLocal(agentId || window.currentMemoryFile?.agentId || '')}')" 
                                 class="btn btn-ghost" style="font-size: 12px; padding: 4px 8px;">
                             ↩️ Restore
                         </button>
@@ -539,15 +549,16 @@ function getTimeAgo(date) {
 }
 
 // Store current diff context for restore
-let diffContext = { filepath: null, timestamp: null };
+let diffContext = { filepath: null, timestamp: null, type: 'memory', agentId: null };
 
 // Preview a specific version with diff view
-async function previewVersion(filepath, timestamp) {
+async function previewVersion(filepath, timestamp, fileType = null, agentId = null) {
     try {
         // Fetch both current and historical versions
+        const base = getFileApiBase(filepath, fileType, agentId);
         const [currentRes, historicalRes] = await Promise.all([
-            fetch(`/api/memory/${encodeURIComponent(filepath)}`),
-            fetch(`/api/memory/${encodeURIComponent(filepath)}/versions/${timestamp}`)
+            fetch(base),
+            fetch(`${base}/versions/${timestamp}`)
         ]);
         
         const currentData = await currentRes.json();
@@ -559,7 +570,7 @@ async function previewVersion(filepath, timestamp) {
         }
         
         // Store context for restore button
-        diffContext = { filepath, timestamp };
+        diffContext = { filepath, timestamp, type: fileType || window.currentMemoryFile?.type || 'memory', agentId: agentId || window.currentMemoryFile?.agentId || null };
         
         // Update modal title and date
         const date = new Date(timestamp).toLocaleString();
@@ -709,24 +720,24 @@ function diffSimple(oldLines, newLines) {
 function closeDiffModal() {
     const modal = document.getElementById('diff-modal');
     if (modal) modal.classList.remove('visible');
-    diffContext = { filepath: null, timestamp: null };
+    diffContext = { filepath: null, timestamp: null, type: 'memory', agentId: null };
 }
 
 // Restore from diff view
 function restoreFromDiff() {
     console.log('[Memory] restoreFromDiff called, diffContext:', diffContext);
     if (diffContext.filepath && diffContext.timestamp) {
-        const { filepath, timestamp } = diffContext;
+        const { filepath, timestamp, type, agentId } = diffContext;
         closeDiffModal();
-        restoreVersion(filepath, timestamp);
+        restoreVersion(filepath, timestamp, type, agentId);
     } else {
         showToast('Error: No version selected', 'error');
     }
 }
 
 // Restore a specific version
-async function restoreVersion(filepath, timestamp) {
-    console.log('[Memory] restoreVersion called:', { filepath, timestamp, type: typeof timestamp });
+async function restoreVersion(filepath, timestamp, fileType = null, agentId = null) {
+    console.log('[Memory] restoreVersion called:', { filepath, timestamp, type: typeof timestamp, fileType, agentId });
     
     // Validate timestamp
     if (!timestamp || timestamp <= 0) {
@@ -745,7 +756,8 @@ async function restoreVersion(filepath, timestamp) {
     
     try {
         console.log('[Memory] Sending restore request for timestamp:', timestamp);
-        const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}/restore`, {
+        const base = getFileApiBase(filepath, fileType, agentId);
+        const response = await fetch(`${base}/restore`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ timestamp: Number(timestamp) })  // Ensure it's a number
@@ -761,7 +773,10 @@ async function restoreVersion(filepath, timestamp) {
         showToast('Version restored successfully!', 'success');
         
         // Reload the file
-        viewMemoryFile(filepath);
+        const inferredType = fileType || window.currentMemoryFile?.type || 'memory';
+        const inferredAgent = agentId || window.currentMemoryFile?.agentId || null;
+        if (inferredType === 'agent' && inferredAgent) viewAgentFile(inferredAgent, filepath);
+        else viewMemoryFile(filepath);
         
         // Clear cache
         memoryFilesCache = [];
@@ -781,76 +796,187 @@ function closeMemoryModal() {
 async function saveMemoryFile() {
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
-    
+
     if (!contentEl || !window.currentMemoryFile) return;
-    
+
     const newContent = contentEl.value;
     const filepath = window.currentMemoryFile.path;
-    
-    if (saveBtn) saveBtn.textContent = '⏳ Saving...';
-    
-    let success = false;
-    
-    // Try gateway RPC first
-    if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
-        try {
-            console.log('[Memory] Saving file via gateway RPC...');
-            await window.gateway._request('memory.write', { 
-                path: filepath, 
-                content: newContent 
-            });
-            success = true;
-            console.log('[Memory] ✓ Saved file via gateway RPC');
-        } catch (e) {
-            console.warn('[Memory] Gateway RPC write failed, falling back to REST API:', e.message);
-        }
+    const isAgentFile = window.currentMemoryFile.type === 'agent';
+    const agentId = window.currentMemoryFile.agentId || null;
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⏳ Saving...';
     }
-    
-    // Fallback to REST API
-    if (!success) {
+
+    let success = false;
+
+    // Agent-scoped file save path
+    if (isAgentFile && agentId) {
+        let lastErr = null;
+        const traceId = `agent-save-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
+        const targetUrl = `/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filepath)}`;
+
+        // 1) Agent API write path
+        let putData = null;
         try {
-            const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+            console.info('[MemorySave][Agent] PUT start', { traceId, agentId, filepath, bytes: newContent.length, targetUrl });
+            const response = await fetch(`${targetUrl}?trace=${encodeURIComponent(traceId)}&t=${Date.now()}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    content: newContent,
-                    updatedBy: 'user'  // Track that user made this edit
-                })
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Trace': traceId },
+                body: JSON.stringify({ content: newContent, updatedBy: 'user' })
             });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                showToast(`Failed to save: ${data.error}`, 'error');
-                if (saveBtn) saveBtn.textContent = '💾 Save';
-                return;
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            putData = await response.json().catch(() => ({}));
+            if (putData && putData.error) throw new Error(putData.error);
+
+            // Read-after-write verification to prevent false "saved" state
+            const verify = await fetch(`${targetUrl}?trace=${encodeURIComponent(traceId)}&verify=1&t=${Date.now()}`, {
+                cache: 'no-store',
+                headers: { 'X-Debug-Trace': traceId }
+            });
+            if (!verify.ok) throw new Error(`Verify HTTP ${verify.status}`);
+            const verifyData = await verify.json().catch(() => ({}));
+            if (typeof verifyData?.content !== 'string') throw new Error('Verify failed: invalid read response');
+            const normalizeEol = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const requestedNorm = normalizeEol(newContent);
+            const actualNorm = normalizeEol(verifyData.content);
+            if (actualNorm !== requestedNorm) {
+                let mismatchAt = -1;
+                const max = Math.min(requestedNorm.length, actualNorm.length);
+                for (let i = 0; i < max; i++) {
+                    if (requestedNorm[i] !== actualNorm[i]) { mismatchAt = i; break; }
+                }
+                if (mismatchAt === -1) mismatchAt = max;
+                const s = Math.max(0, mismatchAt - 24);
+                const e = mismatchAt + 24;
+                const reqSnippet = requestedNorm.slice(s, e);
+                const actSnippet = actualNorm.slice(s, e);
+                console.error('[MemorySave][Agent] verify mismatch', {
+                    traceId,
+                    requestedLength: newContent.length,
+                    actualLength: (verifyData?.content || '').length,
+                    requestedNormLength: requestedNorm.length,
+                    actualNormLength: actualNorm.length,
+                    mismatchAt,
+                    reqSnippet,
+                    actSnippet,
+                    putDebug: putData?.debug,
+                    getDebug: verifyData?.debug,
+                });
+                throw new Error(`Verify failed: persisted content mismatch (trace ${traceId})`);
             }
+
+            console.info('[MemorySave][Agent] PUT+verify ok', { traceId, putDebug: putData?.debug, getDebug: verifyData?.debug });
             success = true;
         } catch (e) {
-            showToast(`Failed to save: ${e.message}`, 'error');
-            if (saveBtn) saveBtn.textContent = '💾 Save';
+            const serverDebugMissing = !putData?.debug;
+            console.error('[MemorySave][Agent] failed', {
+                traceId,
+                agentId,
+                filepath,
+                error: e?.message || String(e),
+                serverDebugMissing,
+                hint: serverDebugMissing ? 'Dashboard server likely not on diagnostics build yet (frontend and backend out of sync)' : undefined,
+            });
+            lastErr = e;
+        }
+
+        // IMPORTANT: Do NOT fallback agent-file writes to gateway memory.write or /api/memory.
+        // Those paths can target a different storage namespace and produce false-positive saves.
+        if (!success) {
+            const errMsg = String(lastErr?.message || 'Unknown error');
+            const hint = /HTTP\s+404/.test(errMsg)
+                ? ' (Agent file write endpoint unavailable on this deployment; update/redeploy dashboard server.)'
+                : '';
+            showToast(`Failed to save agent file: ${errMsg}${hint}`, 'error');
+            if (saveBtn) {
+                saveBtn.textContent = '💾 Save';
+                saveBtn.disabled = false;
+            }
             return;
         }
     }
-    
+
+    // Global memory file path (existing behavior)
+    if (!isAgentFile) {
+        // Try gateway RPC first
+        if (window.gateway && window.gateway.isConnected && window.gateway.isConnected()) {
+            try {
+                console.log('[Memory] Saving file via gateway RPC...');
+                await window.gateway._request('memory.write', {
+                    path: filepath,
+                    content: newContent
+                });
+                success = true;
+                console.log('[Memory] ✓ Saved file via gateway RPC');
+            } catch (e) {
+                console.warn('[Memory] Gateway RPC write failed, falling back to REST API:', e.message);
+            }
+        }
+
+        // Fallback to REST API
+        if (!success) {
+            try {
+                const response = await fetch(`/api/memory/${encodeURIComponent(filepath)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: newContent,
+                        updatedBy: 'user'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showToast(`Failed to save: ${data.error}`, 'error');
+                    if (saveBtn) {
+                        saveBtn.textContent = '💾 Save';
+                        saveBtn.disabled = false;
+                    }
+                    return;
+                }
+                success = true;
+            } catch (e) {
+                showToast(`Failed to save: ${e.message}`, 'error');
+                if (saveBtn) {
+                    saveBtn.textContent = '💾 Save';
+                    saveBtn.disabled = false;
+                }
+                return;
+            }
+        }
+    }
+
     if (success) {
         if (saveBtn) saveBtn.textContent = '✓ Saved!';
         setTimeout(() => {
-            if (saveBtn) saveBtn.textContent = '💾 Save';
-        }, 2000);
-        
+            if (saveBtn) {
+                saveBtn.textContent = '💾 Save';
+                saveBtn.disabled = false;
+            }
+        }, 1500);
+
         // Update stored content
         window.currentMemoryFile.content = newContent;
-        
+
         // Clear cache and refresh
         memoryFilesCache = [];
         lastFetchTime = 0;
-        
-        // Reload version history
-        loadVersionHistory(filepath);
-        
-        // Refresh file list in background
-        renderMemoryFiles(document.getElementById('memory-search')?.value || '');
+
+        if (!isAgentFile) {
+            // Reload version history
+            loadVersionHistory(filepath);
+
+            // Refresh file list in background
+            renderMemoryFiles(document.getElementById('memory-search')?.value || '');
+        } else if (typeof window._memoryCards?.openAgentMemory === 'function') {
+            // Refresh agent memory pane
+            const aid = agentId || window._memoryCards.getCurrentAgentId?.();
+            if (aid) window._memoryCards.openAgentMemory(aid, { updateURL: false, forceAgentsPage: false });
+        }
     }
 }
 
@@ -914,35 +1040,59 @@ async function viewAgentFile(agentId, filename) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
-    
+    const historyList = document.getElementById('version-history-list');
+
     if (titleEl) titleEl.textContent = `${agentId}/${filename}`;
-    if (contentEl) contentEl.value = 'Loading...';
-    if (saveBtn) saveBtn.style.display = 'none'; // Read-only for sub-agent files
-    
+    if (contentEl) {
+        contentEl.value = 'Loading...';
+        contentEl.disabled = true;
+    }
+    if (saveBtn) {
+        saveBtn.style.display = '';
+        saveBtn.disabled = true;
+        saveBtn.textContent = '💾 Save';
+    }
+
     showModal('memory-file-modal');
-    
+
     try {
-        const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}`);
+        const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filename)}?t=${Date.now()}`, { cache: 'no-store' });
         const data = await resp.json();
-        
+
         if (data.error) {
-            contentEl.value = `Error: ${data.error}`;
+            if (contentEl) contentEl.value = `Error: ${data.error}`;
             return;
         }
-        
+
         // Fix single-line markdown
         let content = data.content || '';
         const lineCount = content.split('\n').length;
         if (content.length > 200 && lineCount <= 3) {
             content = fixSingleLineMarkdown(content);
         }
-        
+
         if (titleEl) titleEl.innerHTML = `${escapeHtmlLocal(data.name)} <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">— Agent: ${escapeHtmlLocal(agentId)}</span>`;
-        if (contentEl) contentEl.value = content;
-        
-        window.currentMemoryFile = null; // Not editable
+        if (contentEl) {
+            contentEl.value = content;
+            contentEl.disabled = false;
+        }
+        if (saveBtn) saveBtn.disabled = false;
+
+        window.currentMemoryFile = {
+            path: filename,
+            fullPath: data.path || data.filepath || null,
+            content,
+            type: 'agent',
+            agentId,
+        };
+
+        loadVersionHistory(filename, 'agent', agentId);
     } catch (e) {
-        contentEl.value = `Failed to load: ${e.message}`;
+        if (contentEl) contentEl.value = `Failed to load: ${e.message}`;
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = '💾 Save';
+        }
     }
 }
 

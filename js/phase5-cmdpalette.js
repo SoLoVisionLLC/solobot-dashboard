@@ -21,7 +21,6 @@
             // Navigation
             { id: 'nav-dashboard', icon: '📊', title: 'Dashboard', desc: 'Go to dashboard', category: 'Navigation', shortcut: 'G D', action: () => showPage('dashboard') },
             { id: 'nav-chat', icon: '💬', title: 'Chat', desc: 'Open chat page', category: 'Navigation', shortcut: 'G C', action: () => showPage('chat') },
-            { id: 'nav-memory', icon: '🧠', title: 'Memory', desc: 'Browse memory files', category: 'Navigation', shortcut: 'G M', action: () => showPage('memory') },
             { id: 'nav-system', icon: '🔧', title: 'System', desc: 'View system status', category: 'Navigation', shortcut: 'G S', action: () => showPage('system') },
             { id: 'nav-cron', icon: '⏰', title: 'Cron Jobs', desc: 'Manage scheduled tasks', category: 'Navigation', shortcut: 'G R', action: () => showPage('cron') },
             { id: 'nav-security', icon: '🔒', title: 'Security', desc: 'Security settings', category: 'Navigation', shortcut: 'G X', action: () => showPage('security') },
@@ -122,8 +121,8 @@
         
         setupGlobalShortcut() {
             document.addEventListener('keydown', (e) => {
-                // Cmd/Ctrl + K to open
-                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                // Cmd/Ctrl + Shift + K to open
+                if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
                     e.preventDefault();
                     this.toggle();
                 }

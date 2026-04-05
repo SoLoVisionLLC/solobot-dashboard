@@ -29,10 +29,6 @@ function hideModal(id) {
 async function openSettingsModal() {
     showModal('settings-modal');
 
-    // Init memory layout setting
-    const layoutSel = document.getElementById('setting-memory-layout');
-    if (layoutSel && window._memoryCards) layoutSel.value = window._memoryCards.getLayout();
-
     try {
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
@@ -458,9 +454,12 @@ async function syncActivitiesFromFile() {
 }
 
 // Poll for activity updates every 30 seconds
-setInterval(syncActivitiesFromFile, 30000);
+let activitySyncInterval = setInterval(syncActivitiesFromFile, 30000);
 // Also sync on load
 setTimeout(syncActivitiesFromFile, 2000);
+
+// Cleanup function for SPA navigation
+window._uiHandlersCleanup = () => clearInterval(activitySyncInterval);
 
 function toggleConsoleExpand() {
     const section = document.getElementById('console-section');
