@@ -8,7 +8,7 @@
 let currentMemoryFile = null;
 
 // View a memory file in the modal
-window.viewMemoryFile = async function(filePath) {
+if (typeof window.viewMemoryFile !== 'function') window.viewMemoryFile = async function(filePath) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
@@ -64,7 +64,7 @@ window.viewMemoryFile = async function(filePath) {
 };
 
 // Save memory file changes
-window.saveMemoryFile = async function() {
+if (typeof window.saveMemoryFile !== 'function') window.saveMemoryFile = async function() {
     if (!currentMemoryFile) return;
     
     const contentEl = document.getElementById('memory-file-content');
@@ -117,7 +117,7 @@ window.saveMemoryFile = async function() {
 };
 
 // Close memory modal
-window.closeMemoryModal = function() {
+if (typeof window.closeMemoryModal !== 'function') window.closeMemoryModal = function() {
     currentMemoryFile = null;
     hideModal('memory-file-modal');
 };
