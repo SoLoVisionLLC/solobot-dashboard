@@ -22,6 +22,7 @@
                 --agent-tax: #78716C;
                 --agent-sec: #3B82F6;
                 --agent-smm: #8B5CF6;
+                --agent-pulse: #00D4FF;
 
                 /* Fallback theme values (midnight) — ensures UI isn't transparent
                    if themes.css loads late or fails */

@@ -868,7 +868,7 @@
                 height: 26px;
                 border-radius: 50%;
                 border: 2px solid var(--border-default);
-                object-fit: cover;
+                object-fit: contain;
                 flex-shrink: 0;
                 background: var(--surface-2);
             }
