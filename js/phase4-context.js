@@ -22,7 +22,14 @@
         init() {
             this.applyTimeBasedLayout();
             // Re-check every 15 minutes
-            setInterval(() => this.applyTimeBasedLayout(), 15 * 60 * 1000);
+            this.layoutInterval = setInterval(() => this.applyTimeBasedLayout(), 15 * 60 * 1000);
+        },
+
+        cleanup() {
+            if (this.layoutInterval) {
+                clearInterval(this.layoutInterval);
+                this.layoutInterval = null;
+            }
         },
 
         getCurrentMode() {

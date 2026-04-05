@@ -1,7 +1,7 @@
 // js/daily-journal.js — Agents page daily journal view
 (function () {
   'use strict';
-  console.log('[Agents] daily-journal loaded (memory subview enabled)');
+  console.log('[Agents] daily-journal loaded');
 
   const api = window._dailyJournal || (window._dailyJournal = {});
 
@@ -10,11 +10,10 @@
   let currentView = 'org'; // org | log | journal | memory
   let lastDaily = null;
   let timelineMode = 'detailed'; // brief | detailed
-  let showMemoryInFlight = false;
 
   const AGENTS = ['main', 'elon', 'orion', 'atlas', 'sterling', 'dev', 'forge', 'knox', 'sentinel', 'vector', 'canon', 'luma', 'ledger', 'quill', 'chip', 'nova', 'snip', 'family'];
 
-  function $(id) { return document.getElementById(id); }
+  // Note: $ helper is now in utils.js
 
   function escapeHtml(v) {
     const d = document.createElement('div');
@@ -53,7 +52,7 @@
     if (view === 'org') return agentId ? `/agents/${agentId}` : '/agents';
     if (view === 'log') return agentId ? `/agents/${agentId}/log` : '/agents/log';
     if (view === 'journal') return agentId ? `/agents/${agentId}/journal` : '/agents/journal';
-    if (view === 'memory') return agentId ? `/agents/${agentId}/memory` : '/agents';
+    if (view === 'memory') return agentId ? `/agents/${agentId}/memory` : '/agents/memory';
     return '/agents';
   }
 
@@ -68,14 +67,25 @@
     }
   }
 
-  function showOrg(updateURL = true) {
+    function setAgentsMemoryViewport(enabled) {
+    const page = document.getElementById('page-agents');
+    const cls = 'agents-memory-viewport';
+    if (!page) return;
+    if (enabled) page.classList.add(cls);
+    else page.classList.remove(cls);
+  }
+
+function showOrg(updateURL = true) {
     currentView = 'org';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
     if (org) org.style.display = '';
+    if (memory) memory.style.display = 'none';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
+    setAgentsMemoryViewport(false);
     syncViewButtons();
     if (updateURL) pushAgentsHistory('org');
   }
@@ -83,11 +93,14 @@
   function showLog(updateURL = true) {
     currentView = 'log';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
     if (org) org.style.display = 'none';
+    if (memory) memory.style.display = 'none';
     if (log) log.style.display = '';
     if (journal) journal.style.display = 'none';
+    setAgentsMemoryViewport(false);
     syncViewButtons();
     if (updateURL) pushAgentsHistory('log');
 
@@ -105,11 +118,14 @@
   function showJournalTimeline(updateURL = true) {
     currentView = 'journal';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
     if (org) org.style.display = 'none';
+    if (memory) memory.style.display = 'none';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = '';
+    setAgentsMemoryViewport(false);
     syncViewButtons();
     if (updateURL) pushAgentsHistory('journal');
 
@@ -126,30 +142,25 @@
   }
 
   function showMemory(updateURL = true) {
-    if (showMemoryInFlight) return;
-    showMemoryInFlight = true;
     currentView = 'memory';
     const org = $('agents-org-shell');
+    const memory = $('agents-memory-shell');
     const log = $('agents-log-shell');
     const journal = $('agents-journal-shell');
-    if (org) org.style.display = '';
+    if (org) org.style.display = 'none';
+    if (memory) memory.style.display = '';
     if (log) log.style.display = 'none';
     if (journal) journal.style.display = 'none';
+    setAgentsMemoryViewport(true);
 
-    // Force agent-specific memory pane when an agent is in context.
     const pathMatch = window.location.pathname.match(/^\/agents\/([^/]+)/);
     const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || (pathMatch ? pathMatch[1] : null) || null;
-    console.log('[Agents] showMemory context agent:', agentId, 'path:', window.location.pathname);
     if (agentId && typeof window._memoryCards?.openAgentMemory === 'function') {
       window._memoryCards.openAgentMemory(agentId, { updateURL: false, forceAgentsPage: false });
-    } else if (typeof window._memoryCards?.setLayout === 'function') {
-      window._memoryCards.setLayout('classic');
-      if (typeof window.renderMemoryFilesForPage === 'function') window.renderMemoryFilesForPage('');
     }
 
     syncViewButtons();
     if (updateURL) pushAgentsHistory('memory');
-    showMemoryInFlight = false;
   }
 
   function normalizeIndex(payload) {
@@ -211,12 +222,7 @@
     return { completed, blockers, decisions, followups };
   }
 
-  function formatTime(ts) {
-    if (!ts) return '';
-    const d = new Date(ts);
-    if (!Number.isFinite(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  // Note: formatTime is now in utils.js - using centralized version
 
   function renderSection(id, items) {
     const el = $(id);

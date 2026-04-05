@@ -328,7 +328,7 @@ const WidgetSystem = {
             body.focus-mode .bento-widget {
                 opacity: 0.2;
                 pointer-events: none;
-                filter: grayscale(0.5);
+                filter: none;
                 transition: opacity 0.3s ease, filter 0.3s ease;
             }
             

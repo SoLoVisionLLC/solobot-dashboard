@@ -9,6 +9,48 @@ if (window.__chatRuntimeMark !== CHAT_RUNTIME_MARK) {
 }
 window._chatPendingSends = window._chatPendingSends || new Map();
 
+function getCurrentChatAgentId() {
+    return (window.resolveAgentId ? window.resolveAgentId(window.currentAgentId || currentAgentId || 'main') : (window.currentAgentId || currentAgentId || 'main'));
+}
+
+function updateChatAgentRail() {
+    const agentId = getCurrentChatAgentId();
+    const avatar = document.getElementById('chat-agent-rail-avatar');
+    const label = document.getElementById('chat-agent-rail-label');
+    const subtitle = document.getElementById('chat-agent-rail-subtitle');
+    const status = document.getElementById('chat-agent-rail-status');
+    const card = document.getElementById('chat-agent-rail-card');
+    if (!avatar || !label || !subtitle || !status || !card) return;
+
+    const displayName = getAgentDisplayName(agentId);
+    avatar.src = getAvatarUrl(agentId);
+    avatar.alt = `${displayName} avatar`;
+    label.textContent = displayName;
+
+    const sessionLabel = (typeof getFriendlySessionName === 'function')
+        ? getFriendlySessionName(currentSessionName || GATEWAY_CONFIG?.sessionKey || '')
+        : (currentSessionName || GATEWAY_CONFIG?.sessionKey || 'main');
+    subtitle.textContent = sessionLabel ? `Chatting in ${sessionLabel}` : 'Current chat agent';
+
+    const connected = Boolean(gateway?.isConnected?.());
+    status.style.background = connected ? '#22c55e' : '#71717a';
+    status.style.boxShadow = connected
+        ? '0 0 0 4px rgba(34, 197, 94, 0.14)'
+        : '0 0 0 4px rgba(113, 113, 122, 0.14)';
+    card.title = `Open ${displayName}'s agent page`;
+}
+
+window.openCurrentChatAgentPage = function() {
+    const agentId = getCurrentChatAgentId();
+    if (window._memoryCards?.openAgentMemory) {
+        window._memoryCards.openAgentMemory(agentId, { updateURL: true, forceAgentsPage: true });
+        return;
+    }
+    if (typeof showPage === 'function') {
+        showPage('agents', false);
+    }
+};
+
 function trackPendingSend(runId, payload) {
     if (!runId || !payload) return;
     const map = window._chatPendingSends;
@@ -416,31 +458,9 @@ function setVoiceState(state, targetInput = 'chat-input') {
 let activeVoiceTarget = 'chat-input';
 
 function toggleVoiceInputChatPage() {
+    // Set target before calling the main function
     activeVoiceTarget = 'chat-page-input';
     toggleVoiceInput();
-}
-
-// Override the original toggleVoiceInput to use the sidebar input
-const originalToggleVoiceInput = toggleVoiceInput;
-function toggleVoiceInput() {
-    // If called directly (not via chat page), target sidebar
-    // Only set to chat-input if we're starting a NEW recording
-    if (activeVoiceTarget !== 'chat-page-input' && voiceInputState !== 'listening') {
-        activeVoiceTarget = 'chat-input';
-    }
-
-    if (!voiceRecognition) {
-        showToast('Voice input not available', 'error');
-        return;
-    }
-
-    if (voiceInputState === 'listening') {
-        stopVoiceInput();
-    } else {
-        startVoiceInput();
-    }
-
-    // Don't reset target here - it should persist until onend resets it
 }
 
 // Toggle auto-send setting
@@ -830,10 +850,10 @@ async function sendChatMessage() {
     }
 }
 
-function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null) {
+function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null, meta = null) {
     // DEFENSIVE: Hard session gate - validate incoming messages match current session
     // Check if this message already has a session tag from outside
-    const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
+    const incomingSession = (meta?._sessionKey || imageOrModel?._sessionKey || '').toLowerCase();
     const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
 
     if (incomingSession && currentSession && incomingSession !== currentSession) {
@@ -879,11 +899,15 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         images: images, // New array field
         model: messageModel, // Store which AI model generated this response
         provider: provider, // Store which provider (e.g., 'google', 'anthropic')
-        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
-        _agentId: window.currentAgentId || 'main' // Fix #3: Store agent at message creation time for correct display later
+        _sessionKey: meta?._sessionKey || window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
+        _agentId: meta?._agentId || window.currentAgentId || 'main', // attribution owner
+        _sourceSession: meta?._sourceSession || null,
+        _sourceAgent: meta?._sourceAgent || null,
+        _sourceAgentName: meta?._sourceAgentName || null,
+        _isInterSession: !!(meta?._isInterSession)
     };
 
-    const isSystem = isSystemMessage(text, from);
+    const isSystem = isSystemMessage(text, from) || !!(message._isInterSession || message._sourceSession || message._sourceAgent);
 
     // Route to appropriate message array
     if (isSystem) {
@@ -952,12 +976,12 @@ function renderChat() {
     }
     // Removed verbose log: renderChat called frequently
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
     const isConnected = gateway?.isConnected();
 
     // Save scroll state BEFORE clearing
     const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const previousScrollTop = container.scrollTop;
 
     // Clear container
     container.innerHTML = '';
@@ -1000,33 +1024,53 @@ function renderChat() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceState = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabel = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatus = !streamingText && (
+        isProcessing || (_presenceState && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceState.state))
+    );
+    if (_showCompactStatus) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.innerHTML = `
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabel}</span>
         `;
         container.appendChild(typingIndicator);
     }
 
-    // Auto-scroll if was at bottom, otherwise maintain position
+    // Auto-scroll only if user was at bottom; otherwise preserve exact reading position
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     } else {
-        // Restore position by maintaining same distance from bottom
-        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
+        container.scrollTop = previousScrollTop;
     }
+}
+
+function shouldHideFromMainChat(msg) {
+    if (!msg) return false;
+    if (msg._isInterSession || msg._sourceSession || msg._sourceAgent) return true;
+    if (typeof isSystemMessage === 'function' && isSystemMessage(msg.text, msg.from)) return true;
+    return false;
+}
+
+function getMainChatRenderableMessages(messages) {
+    return (messages || []).filter(msg => !shouldHideFromMainChat(msg));
 }
 
 function createChatMessageElement(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
 
     // Create message container
@@ -1100,6 +1144,14 @@ function createChatMessageElement(msg) {
             modelBadge.title = bestModel;
             header.appendChild(modelBadge);
         }
+    }
+
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: var(--space-2);';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
     }
 
     // Message content
@@ -1311,6 +1363,7 @@ function forceRefreshHistory() {
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
+    updateChatAgentRail();
     if (!container) {
         return;
     }
@@ -1331,7 +1384,7 @@ function renderChatPage() {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
 
     // Avoid clearing selection: if user is selecting text in chat, skip re-render
     const selection = window.getSelection();
@@ -1366,8 +1419,8 @@ function renderChatPage() {
 
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
-    // Save distance from bottom (how far up the user has scrolled)
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // Preserve the exact reading position when user has scrolled up
+    const previousScrollTop = container.scrollTop;
 
     // === Incremental rendering — only touch DOM for changes ===
 
@@ -1443,8 +1496,17 @@ function renderChatPage() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceStateCP = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabelCP = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatusCP = !streamingText && (
+        isProcessing || (_presenceStateCP && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceStateCP.state))
+    );
+    if (_showCompactStatusCP) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.style.cssText = 'margin: 12px 0 12px 12px;';
@@ -1452,7 +1514,7 @@ function renderChatPage() {
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabelCP}</span>
         `;
         container.appendChild(typingIndicator);
     }
@@ -1461,7 +1523,7 @@ function renderChatPage() {
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     } else {
-        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
+        container.scrollTop = previousScrollTop;
     }
 }
 
@@ -1470,13 +1532,14 @@ function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
 
     // Message wrapper
     const wrapper = document.createElement('div');
-    wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
+    wrapper.className = `chat-page-message ${isUser ? 'user' : (isSystem ? 'system' : 'solobot')}${msg.isStreaming ? ' streaming' : ''}`;
     wrapper.setAttribute('data-msg-id', msg.id || '');
 
     // Avatar (for bot and user messages, not system)
@@ -1490,18 +1553,11 @@ function createChatPageMessage(msg) {
             avatar.textContent = 'U';
         } else {
             // Bot avatar - agent-specific image and color
-            const agentId = currentAgentId || 'main';
+            const agentId = msg._agentId || currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
 
-            // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarAgents = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'nova', 'luma',
-                'atlas', 'chip', 'elon', 'forge', 'halo', 'haven', 'knox', 'ledger', 'orion', 'quill',
-                'sentinel', 'snip', 'solo', 'sterling', 'vector'];
-            const avatarPath = avatarAgents.includes(agentId)
-                ? `/avatars/${agentId === 'main' ? 'solobot' : (agentId === 'smm' ? 'nova' : agentId)}.png`
-                : (agentId === 'tax' || agentId === 'sec')
-                    ? `/avatars/${agentId}.svg`
-                    : '/avatars/solobot.png';
+            // Get avatar path - use centralized avatar resolution
+            const avatarPath = getAvatarUrl(agentId);
 
             const avatarImg = document.createElement('img');
             avatarImg.src = avatarPath;
@@ -1582,6 +1638,14 @@ function createChatPageMessage(msg) {
 
     bubble.appendChild(header);
 
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: 6px;';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
+    }
+
     // Content
     const content = document.createElement('div');
     content.className = 'chat-page-bubble-content';
@@ -1610,6 +1674,17 @@ function createChatPageMessage(msg) {
         };
         actions.appendChild(copyBtn);
 
+        // Forward button
+        const forwardBtn = document.createElement('button');
+        forwardBtn.className = 'chat-action-btn';
+        forwardBtn.innerHTML = '↪';
+        forwardBtn.title = 'Forward to agent';
+        forwardBtn.onclick = (e) => {
+            e.stopPropagation();
+            openForwardMessageModal(msg);
+        };
+        actions.appendChild(forwardBtn);
+
         bubble.appendChild(actions);
     }
 
@@ -1633,6 +1708,138 @@ function copyToClipboard(text) {
         showToast('Copied to clipboard!', 'success', 2000);
     });
 }
+
+function getForwardableAgents() {
+    const baseAgents = ['main', 'dev', 'orion', 'forge', 'quill', 'chip', 'sentinel', 'knox', 'atlas', 'canon', 'vector', 'nova', 'snip', 'luma', 'pulse', 'sterling', 'ledger', 'haven'];
+    return [...new Set(baseAgents.map(id => window.resolveAgentId ? window.resolveAgentId(id) : id))];
+}
+
+function buildForwardedMessageText(msg) {
+    const senderName = msg?.isUser
+        ? 'You'
+        : msg?.isSystem
+            ? 'System'
+            : getAgentDisplayName(msg?._agentId || currentAgentId || 'main');
+    return `Forwarded message from ${senderName}:\n\n${msg?.text || ''}`;
+}
+
+function ensureForwardMessageModal() {
+    let modal = document.getElementById('forward-message-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'forward-message-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 560px; width: calc(100vw - 32px);">
+            <div class="modal-header">
+                <h3 class="modal-title">Forward message</h3>
+                <button onclick="closeForwardMessageModal()" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Target agent</label>
+                    <select id="forward-message-agent" class="input"></select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Message</label>
+                    <textarea id="forward-message-text" class="input" rows="8" style="width:100%; resize:vertical;"></textarea>
+                    <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">This switches you to the target agent’s latest session, or creates a new forwarded session if none exists, then drops the forwarded text into the composer.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeForwardMessageModal()" class="btn btn-ghost">Cancel</button>
+                <button onclick="submitForwardMessage()" class="btn btn-primary">Forward</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+window.openForwardMessageModal = function(msg) {
+    const modal = ensureForwardMessageModal();
+    modal._forwardMessage = msg;
+
+    const agentSelect = document.getElementById('forward-message-agent');
+    if (agentSelect) {
+        const current = (msg?._agentId || currentAgentId || 'main');
+        agentSelect.innerHTML = getForwardableAgents().map(agentId => {
+            const selected = agentId !== current && agentId === (window.currentAgentId || currentAgentId || 'main') ? ' selected' : '';
+            return `<option value="${agentId}"${selected}>${escapeHtml(getAgentDisplayName(agentId))}</option>`;
+        }).join('');
+        if (!agentSelect.value) {
+            agentSelect.value = getForwardableAgents().find(id => id !== current) || 'main';
+        }
+    }
+
+    const textarea = document.getElementById('forward-message-text');
+    if (textarea) {
+        textarea.value = buildForwardedMessageText(msg);
+    }
+
+    requestAnimationFrame(() => {
+        modal.classList.add('visible');
+        textarea?.focus();
+        textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+};
+
+window.closeForwardMessageModal = function() {
+    const modal = document.getElementById('forward-message-modal');
+    if (!modal) return;
+    modal.classList.remove('visible');
+};
+
+function buildAutoForwardSessionKey(agentId) {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    return `agent:${agentId}:${agentId}-forwarded-${stamp}`;
+}
+
+window.submitForwardMessage = async function() {
+    const agentId = document.getElementById('forward-message-agent')?.value?.trim();
+    const text = document.getElementById('forward-message-text')?.value?.trim();
+    if (!agentId || !text) {
+        showToast('Target agent and message are required', 'warning');
+        return;
+    }
+
+    try {
+        let targetSessionKey = null;
+        const pool = Array.isArray(window.availableSessions) ? window.availableSessions.slice() : (Array.isArray(availableSessions) ? availableSessions.slice() : []);
+        const agentSessions = typeof filterSessionsForAgent === 'function'
+            ? filterSessionsForAgent(pool, agentId)
+            : pool.filter(s => (s?.key || '').startsWith(`agent:${agentId}:`));
+
+        if (agentSessions.length > 0) {
+            agentSessions.sort((a, b) => {
+                const aTs = new Date(a.updatedAt || a.lastMessageAt || a.createdAt || 0).getTime() || 0;
+                const bTs = new Date(b.updatedAt || b.lastMessageAt || b.createdAt || 0).getTime() || 0;
+                return bTs - aTs;
+            });
+            targetSessionKey = agentSessions[0].key;
+        } else {
+            targetSessionKey = buildAutoForwardSessionKey(agentId);
+        }
+
+        if (typeof switchToSession === 'function') {
+            await switchToSession(targetSessionKey);
+        }
+
+        const input = document.getElementById('chat-page-input');
+        if (input) {
+            input.value = text;
+            if (typeof resizeChatPageInput === 'function') resizeChatPageInput();
+            input.focus();
+        }
+
+        closeForwardMessageModal();
+        showToast(`Forward loaded for ${getAgentDisplayName(agentId)}${agentSessions.length ? '' : ' in a new session'}`, 'success');
+    } catch (err) {
+        console.error('Forward failed:', err);
+        showToast(`Forward failed: ${err?.message || err}`, 'error');
+    }
+};
 
 // Notify of new message (for indicator)
 function notifyChatPageNewMessage() {
