@@ -75,27 +75,27 @@
     };
 
     const ORG_LAYOUT = {
-        solo: { row: 1, col: 7 },
+        solo: { row: 1, col: 8 },
         main: { row: 2, col: 2 },
-        exec: { row: 2, col: 6 },
-        family: { row: 2, col: 10 },
+        exec: { row: 2, col: 7 },
+        family: { row: 2, col: 12 },
         cfo: { row: 3, col: 2 },
         cto: { row: 3, col: 5 },
         cmp: { row: 3, col: 8 },
         coo: { row: 3, col: 11 },
         docs: { row: 4, col: 12 },
         tax: { row: 4, col: 2 },
-        art: { row: 4, col: 6 },
-        chase: { row: 4, col: 8 },
-        smm: { row: 4, col: 10 },
+        art: { row: 4, col: 5 },
+        chase: { row: 4, col: 7 },
+        smm: { row: 4, col: 9 },
         pulse: { row: 5, col: 7 },
         youtube: { row: 5, col: 9 },
-        net: { row: 6, col: 3 },
-        dev: { row: 6, col: 6 },
-        sec: { row: 6, col: 9 },
-        ui: { row: 7, col: 3 },
-        swe: { row: 7, col: 6 },
-        devops: { row: 7, col: 9 }
+        net: { row: 6, col: 5 },
+        dev: { row: 6, col: 8 },
+        sec: { row: 6, col: 11 },
+        ui: { row: 7, col: 5 },
+        swe: { row: 7, col: 8 },
+        devops: { row: 7, col: 11 }
     };
 
     const ORG_ORDER = Object.keys(ORG_LAYOUT).sort((left, right) => {
