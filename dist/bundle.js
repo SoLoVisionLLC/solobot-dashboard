@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-04-07T12:50:56Z
+// Generated: 2026-04-07T13:28:50Z
 // Modules: 25
 
 
@@ -830,6 +830,7 @@ const DEFAULT_DEPARTMENTS = {
     nova: "Marketing & Product",
     snip: "Marketing & Product",
     luma: "Marketing & Product",
+    chase: "Marketing & Product",
     pulse: "Marketing & Product",
     sterling: "Finance",
     ledger: "Finance",

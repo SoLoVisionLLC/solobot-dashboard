@@ -62,7 +62,7 @@
         docs: { name: 'Canon', role: 'DOCS', title: 'Documentation', emoji: '📄', reports: [], description: 'Documentation Specialist' },
         tax: { name: 'Ledger', role: 'TAX', title: 'Tax Specialist', emoji: '📒', reports: [], description: 'Tax Specialist' },
         art: { name: 'Luma', role: 'ART', title: 'Creative Design', emoji: '🎨', reports: [], description: 'Creative Design' },
-        chase: { name: 'Chase', role: 'Content Ops', title: 'Content Ops', emoji: '🎯', reports: ['pulse', 'youtube'], description: 'Content Operations' },
+        chase: { name: 'Chase', role: 'Content Ops', title: 'Content Ops', emoji: '🎯', reports: ['pulse'], description: 'Content Operations' },
         pulse: { name: 'Pulse', role: 'Pulse', title: 'Pulse', emoji: '💓', reports: [], description: 'Marketing & Product' },
         smm: { name: 'Nova', role: 'SMM', title: 'Social Media Manager', emoji: '📱', reports: ['youtube'], description: 'Social Media Manager' },
         youtube: { name: 'Snip', role: 'YT', title: 'YouTube Manager', emoji: '🎬', reports: [], description: 'YouTube Manager' },

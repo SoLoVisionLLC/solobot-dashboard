@@ -250,6 +250,7 @@ const DEFAULT_DEPARTMENTS = {
     nova: "Marketing & Product",
     snip: "Marketing & Product",
     luma: "Marketing & Product",
+    chase: "Marketing & Product",
     pulse: "Marketing & Product",
     sterling: "Finance",
     ledger: "Finance",
