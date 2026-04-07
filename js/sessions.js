@@ -19,6 +19,7 @@ const AGENT_PERSONAS = {
     'forge': { name: 'Forge', role: 'DEVOPS' },
     'quill': { name: 'Quill', role: 'FE/UI' },
     'chip': { name: 'Chip', role: 'SWE' },
+    'chase': { name: 'Chase', role: 'Content Ops' },
     'snip': { name: 'Snip', role: 'YT/VEO' },
     'knox': { name: 'Knox', role: 'SEC' },
     'sentinel': { name: 'Sentinel', role: 'NET' },

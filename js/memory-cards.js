@@ -62,6 +62,7 @@
         docs: { name: 'Canon', role: 'DOCS', title: 'Documentation', emoji: '📄', reports: [], description: 'Documentation Specialist' },
         tax: { name: 'Ledger', role: 'TAX', title: 'Tax Specialist', emoji: '📒', reports: [], description: 'Tax Specialist' },
         art: { name: 'Luma', role: 'ART', title: 'Creative Design', emoji: '🎨', reports: [], description: 'Creative Design' },
+        chase: { name: 'Chase', role: 'Content Ops', title: 'Content Ops', emoji: '🎯', reports: ['pulse', 'youtube'], description: 'Content Operations' },
         pulse: { name: 'Pulse', role: 'Pulse', title: 'Pulse', emoji: '💓', reports: [], description: 'Marketing & Product' },
         smm: { name: 'Nova', role: 'SMM', title: 'Social Media Manager', emoji: '📱', reports: ['youtube'], description: 'Social Media Manager' },
         youtube: { name: 'Snip', role: 'YT', title: 'YouTube Manager', emoji: '🎬', reports: [], description: 'YouTube Manager' },
@@ -84,9 +85,10 @@
         coo: { row: 3, col: 11 },
         docs: { row: 4, col: 12 },
         tax: { row: 4, col: 2 },
-        art: { row: 4, col: 7 },
-        smm: { row: 4, col: 9 },
-        pulse: { row: 5, col: 8 },
+        art: { row: 4, col: 6 },
+        chase: { row: 4, col: 8 },
+        smm: { row: 4, col: 10 },
+        pulse: { row: 5, col: 7 },
         youtube: { row: 5, col: 9 },
         net: { row: 6, col: 3 },
         dev: { row: 6, col: 6 },
@@ -123,7 +125,8 @@
         smm: 'nova',
         youtube: 'snip',
         family: 'haven',
-        pulse: 'pulse'
+        pulse: 'pulse',
+        chase: 'chase'
     };
 
     const CANONICAL_TO_LEGACY_WORKSPACE = {
