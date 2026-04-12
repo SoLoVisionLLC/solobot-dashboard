@@ -333,7 +333,7 @@ function parseModelsOutput(output) {
   return models;
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3124;
 const STATE_FILE = './data/state.json';
 const DEFAULT_STATE_FILE = './data/default-state.json';
 // OpenClaw data — uses OPENCLAW_HOME (auto-detected or env var)
@@ -2097,6 +2097,113 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // List versions for a sub-agent file (must be before generic file GET)
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+    const safeKey = `agents__${agentId}__${filename.replace(/\//g, '__')}`;
+    const prefix = `${safeKey}.`;
+
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const versions = fs.readdirSync(VERSIONS_DIR)
+        .filter(f => f.startsWith(prefix))
+        .map(f => {
+          const ts = parseInt(f.substring(prefix.length), 10);
+          const versionPath = path.join(VERSIONS_DIR, f);
+          const stat = fs.statSync(versionPath);
+          return { timestamp: ts, size: stat.size };
+        })
+        .filter(v => Number.isFinite(v.timestamp))
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 20);
+
+      return res.end(JSON.stringify({ versions }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // Read specific version of a sub-agent file
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions\/(\d+)$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+    const timestamp = match[3];
+    const safeKey = `agents__${agentId}__${filename.replace(/\//g, '__')}`;
+    const versionPath = path.join(VERSIONS_DIR, `${safeKey}.${timestamp}`);
+
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      if (!fs.existsSync(versionPath)) {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ error: 'Version not found' }));
+      }
+      const content = fs.readFileSync(versionPath, 'utf8');
+      return res.end(JSON.stringify({ content, timestamp: Number(timestamp) }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // Restore a sub-agent file version
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/restore$/) && req.method === 'POST') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/restore$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+
+    // Resolve workspace path
+    let agentWorkspace;
+    if (agentId === 'main') {
+      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+    } else {
+      agentWorkspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+      if (!fs.existsSync(agentWorkspace)) {
+        agentWorkspace = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+      }
+    }
+
+    const filePath = path.resolve(agentWorkspace, filename);
+    const resolvedWorkspace = path.resolve(agentWorkspace);
+    if (!filePath.startsWith(resolvedWorkspace)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { timestamp } = JSON.parse(body);
+        const safeKey = `agents__${agentId}__${filename.replace(/\//g, '__')}`;
+        const versionPath = path.join(VERSIONS_DIR, `${safeKey}.${timestamp}`);
+
+        if (!fs.existsSync(versionPath)) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Version not found' }));
+        }
+
+        if (fs.existsSync(filePath)) {
+          const currentContent = fs.readFileSync(filePath, 'utf8');
+          createVersion(`agents/${agentId}/${filename}`, currentContent);
+        }
+
+        const versionContent = fs.readFileSync(versionPath, 'utf8');
+        fs.writeFileSync(filePath, versionContent, 'utf8');
+
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({ ok: true, restored: timestamp }));
+      } catch (e) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Read sub-agent file
   if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
@@ -2125,13 +2232,94 @@ const server = http.createServer(async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     try {
       const content = fs.readFileSync(filePath, 'utf8');
-      return res.end(JSON.stringify({ name: filename, content }));
+      const stat = fs.statSync(filePath);
+      const traceId = String(url.searchParams.get('trace') || req.headers['x-debug-trace'] || '');
+      const contentHash = crypto.createHash('sha256').update(content).digest('hex');
+      if (traceId) {
+        console.log(`[AgentFile][GET][trace=${traceId}] agent=${agentId} file=${filename} bytes=${Buffer.byteLength(content, 'utf8')} mtime=${stat.mtime.toISOString()} hash=${contentHash}`);
+      }
+      return res.end(JSON.stringify({ name: filename, content, path: filename, debug: { traceId, mtime: stat.mtime.toISOString(), bytes: Buffer.byteLength(content, 'utf8'), hash: contentHash } }));
     } catch (e) {
       res.writeHead(404);
       return res.end(JSON.stringify({ error: 'File not found', path: filePath }));
     }
+  }
+
+  // Write sub-agent file
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'PUT') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+
+    // Resolve workspace path using the same convention as /api/agents
+    let agentWorkspace;
+    if (agentId === 'main') {
+      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+    } else {
+      agentWorkspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+      if (!fs.existsSync(agentWorkspace)) {
+        // Legacy fallback
+        agentWorkspace = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+      }
+    }
+
+    const filePath = path.resolve(agentWorkspace, filename);
+
+    // Security: ensure path is within workspace
+    const resolvedWorkspace = path.resolve(agentWorkspace);
+    if (!filePath.startsWith(resolvedWorkspace)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { content } = JSON.parse(body);
+        if (typeof content !== 'string') {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'content must be a string' }));
+        }
+
+        const traceId = String(req.headers['x-debug-trace'] || url.searchParams.get('trace') || `${Date.now()}-${Math.random().toString(16).slice(2,8)}`);
+
+        // Ensure target dir exists
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+
+        const beforeExists = fs.existsSync(filePath);
+        const beforeContent = beforeExists ? fs.readFileSync(filePath, 'utf8') : '';
+        const beforeHash = beforeExists ? crypto.createHash('sha256').update(beforeContent).digest('hex') : null;
+
+        const versionTimestamp = beforeExists ? createVersion(`agents/${agentId}/${filename}`, beforeContent) : null;
+
+        fs.writeFileSync(filePath, content, 'utf8');
+
+        const afterContent = fs.readFileSync(filePath, 'utf8');
+        const afterStat = fs.statSync(filePath);
+        const afterHash = crypto.createHash('sha256').update(afterContent).digest('hex');
+        const requestedHash = crypto.createHash('sha256').update(content).digest('hex');
+        const verified = afterContent === content;
+
+        console.log(`[AgentFile][PUT][trace=${traceId}] agent=${agentId} file=${filename} before=${beforeHash || 'none'} requested=${requestedHash} after=${afterHash} verified=${verified} mtime=${afterStat.mtime.toISOString()} bytes=${Buffer.byteLength(content, 'utf8')}`);
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return res.end(JSON.stringify({ ok: true, saved: filename, path: filename, versionCreated: versionTimestamp, debug: { traceId, requestedHash, beforeHash, afterHash, verified, mtime: afterStat.mtime.toISOString(), bytes: Buffer.byteLength(content, 'utf8') } }));
+      } catch (e) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
   }
 
   // ========== Skills Files API ==========
@@ -3237,29 +3425,6 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'Failed to get session history', details: e.message }));
     }
     return;
-  }
-
-  // GET /api/session/:key/messages — returns state-stored chat messages for a session.
-  // Used by Android app to fetch user-originated messages that the gateway RPC does not persist.
-  if (url.pathname.startsWith('/api/session/') && url.pathname.endsWith('/messages') && req.method === 'GET') {
-    const pathMatch = url.pathname.match(/\/api\/session\/(.+)\/messages$/);
-    const sessionKey = pathMatch ? decodeURIComponent(pathMatch[1]) : null;
-    if (!sessionKey) {
-      res.writeHead(400);
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ error: 'Missing session key' }));
-    }
-    const sessionMessages = (state.chat?.sessions?.[sessionKey] || [])
-      .filter(m => m && typeof m === 'object' && m.role)
-      .map(m => ({
-        id: m.id || '',
-        role: m.role,
-        content: m.content || '',
-        timestamp: m.timestamp || m.createdAt || 0
-      }));
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.end(JSON.stringify({ ok: true, sessionKey, messages: sessionMessages }));
   }
 
   // Authoritative per-agent message metrics endpoint

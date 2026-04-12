@@ -325,6 +325,7 @@ class GatewayClient {
         this.onDisconnected = options.onDisconnected || (() => { });
         this.onChatEvent = options.onChatEvent || (() => { });
         this.onToolEvent = options.onToolEvent || (() => { });
+        this.onPresenceEvent = options.onPresenceEvent || (() => { });
         this.onError = options.onError || (() => { });
         this.onCrossSessionMessage = options.onCrossSessionMessage || (() => { });
 
@@ -657,35 +658,45 @@ class GatewayClient {
         const phase = payload.data?.phase;
         const toolName = payload.data?.name;
         const args = payload.data?.args;
+        const toolEvent = {
+            kind: 'tool',
+            phase,
+            name: toolName,
+            callId: payload.data?.id || payload.data?.callId || null,
+            sessionKey: payload.sessionKey,
+            timestamp: payload.ts || Date.now()
+        };
 
-        if (phase === 'start' && toolName) {
-            // Format the tool call for display
-            let summary = `🔧 ${toolName}`;
-            if (args) {
-                if (toolName === 'exec' && args.command) {
-                    const cmd = args.command.length > 60 ? args.command.substring(0, 57) + '...' : args.command;
-                    summary = `🔧 ${cmd}`;
-                } else if (toolName === 'Edit' || toolName === 'Write' || toolName === 'Read') {
-                    const path = args.path || args.file_path || '';
-                    const filename = path.split('/').pop();
-                    const icon = toolName === 'Edit' ? '✏️' : toolName === 'Write' ? '📝' : '📖';
-                    summary = `${icon} ${toolName}: ${filename}`;
-                } else if (toolName === 'web_search') {
-                    summary = `🔍 Search: ${(args.query || '').substring(0, 40)}`;
-                } else if (toolName === 'web_fetch') {
-                    summary = `🌐 Fetch: ${(args.url || '').substring(0, 40)}`;
-                }
-            }
+        if (this.onPresenceEvent) {
+            try { this.onPresenceEvent(toolEvent); } catch { }
+        }
 
-            // Emit as tool event callback
-            if (this.onToolEvent) {
-                this.onToolEvent({
-                    phase: 'start',
-                    name: toolName,
-                    summary,
-                    timestamp: payload.ts || Date.now()
-                });
+        // Format and emit start/completion for UI timeline/logging
+        let summary = `🔧 ${toolName || 'tool'}`;
+        if (args && toolName) {
+            if (toolName === 'exec' && args.command) {
+                const cmd = args.command.length > 60 ? args.command.substring(0, 57) + '...' : args.command;
+                summary = `🔧 ${cmd}`;
+            } else if (toolName === 'Edit' || toolName === 'Write' || toolName === 'Read') {
+                const path = args.path || args.file_path || '';
+                const filename = path.split('/').pop();
+                const icon = toolName === 'Edit' ? '✏️' : toolName === 'Write' ? '📝' : '📖';
+                summary = `${icon} ${toolName}: ${filename}`;
+            } else if (toolName === 'web_search') {
+                summary = `🔍 Search: ${(args.query || '').substring(0, 40)}`;
+            } else if (toolName === 'web_fetch') {
+                summary = `🌐 Fetch: ${(args.url || '').substring(0, 40)}`;
             }
+        }
+
+        if (this.onToolEvent && phase) {
+            this.onToolEvent({
+                phase,
+                name: toolName,
+                summary,
+                sessionKey: payload.sessionKey,
+                timestamp: payload.ts || Date.now()
+            });
         }
     }
 
@@ -696,6 +707,21 @@ class GatewayClient {
         const eventSessionKey = normalizeSessionKey(payload.sessionKey || 'main');
         const currentKey = normalizeSessionKey(this.sessionKey).toLowerCase();
         const eventKey = eventSessionKey.toLowerCase();
+
+        const state = payload.state;
+        const message = payload.message;
+        try {
+            this.onPresenceEvent({
+                kind: 'chat',
+                sessionKey: eventSessionKey,
+                state,
+                role: message?.role || payload.role || 'assistant',
+                runId: message?.runId || payload.runId,
+                content: _extractMessageContent(message, payload).text || '',
+                errorMessage: message?.errorMessage || payload.errorMessage || payload?.error?.message || null,
+                timestamp: payload.ts || Date.now()
+            });
+        } catch { }
 
         if (eventKey !== currentKey) {
             // Cross-session message — route to notification callback
@@ -724,9 +750,6 @@ class GatewayClient {
             }
             return;
         }
-
-        const state = payload.state;
-        const message = payload.message;
 
         // Extract text content, images, and role
         const { text: contentText, images } = _extractMessageContent(message, payload);

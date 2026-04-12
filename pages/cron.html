@@ -1,42 +1,336 @@
                     <!-- =================== CRON PAGE =================== -->
                     <div id="page-cron" class="page">
-                        <div class="cron-page" style="max-width: 900px; margin: 0 auto; padding: 24px;">
-                            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                <div>
-                                    <h1 class="page-title">⏰ Cron Jobs</h1>
-                                    <p class="page-subtitle">Manage scheduled tasks and automation</p>
+                        <div class="cron-page">
+                            <div class="cron-page-header">
+                                <div class="cron-page-heading">
+                                    <h1 class="cron-page-title">⏰ Cron Jobs</h1>
+                                    <p class="cron-page-subtitle">Manage scheduled tasks and automation without losing your place</p>
                                 </div>
-                                <button onclick="openAddCronModal()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Job</button>
+                                <div class="cron-page-actions">
+                                    <button onclick="refreshCronDiagnostics()" class="btn btn-ghost">Refresh diagnostics</button>
+                                    <button onclick="copyCronListJson()" class="btn btn-ghost">Copy list JSON</button>
+                                    <button onclick="exportCronListJson()" class="btn btn-ghost">Export list JSON</button>
+                                    <button onclick="openAddCronModal()" class="btn btn-primary">+ Add Job</button>
+                                </div>
                             </div>
-                            <div id="cron-jobs-list">
-                                <div class="empty-state">Loading cron jobs...</div>
+
+                            <div class="cron-layout">
+                                <div id="cron-list-view" class="cron-list-view">
+                                    <div class="cron-list-controls">
+                                        <div class="cron-list-controls-header">
+                                            <div>
+                                                <div class="cron-section-label">Jobs overview</div>
+                                                <div id="cron-list-meta" class="cron-section-meta">Loading jobs…</div>
+                                            </div>
+                                            <button onclick="closeCronDetailView()" class="btn btn-ghost cron-small-btn">Clear selection</button>
+                                        </div>
+                                        <div class="cron-toolbar-row">
+                                            <input id="cron-search-input" type="text" class="input cron-search-input" placeholder="Search jobs">
+                                            <select id="cron-sort-by" class="input cron-control-input cron-sort-select">
+                                                <option value="nextRun">Next run</option>
+                                                <option value="lastRun">Last run</option>
+                                                <option value="status">Status</option>
+                                                <option value="errors">Consecutive errors</option>
+                                                <option value="failures">Failure count</option>
+                                                <option value="name">Name</option>
+                                                <option value="agent">Agent owner</option>
+                                            </select>
+                                            <button id="cron-sort-direction-btn" class="btn btn-ghost cron-small-btn cron-sort-direction-btn" type="button" title="Sort direction">Asc</button>
+                                            <button id="cron-advanced-toggle-btn" onclick="toggleCronAdvancedControls()" class="btn btn-ghost cron-small-btn" type="button" aria-expanded="false" title="Advanced filters">Filters</button>
+                                        </div>
+                                        <div id="cron-filter-bar" class="cron-filter-bar">
+                                            <button onclick="setCronListFilter('all')" class="btn btn-ghost cron-filter-btn" data-cron-filter="all">All</button>
+                                            <button onclick="setCronListFilter('failing')" class="btn btn-ghost cron-filter-btn" data-cron-filter="failing">Failing</button>
+                                            <button onclick="setCronListFilter('healthy')" class="btn btn-ghost cron-filter-btn" data-cron-filter="healthy">Healthy</button>
+                                            <button onclick="setCronListFilter('disabled')" class="btn btn-ghost cron-filter-btn" data-cron-filter="disabled">Disabled</button>
+                                            <button onclick="setCronListFilter('recent')" class="btn btn-ghost cron-filter-btn" data-cron-filter="recent">Recently run</button>
+                                        </div>
+                                        <div id="cron-advanced-controls" class="cron-advanced-controls hidden">
+                                            <select id="cron-agent-filter" class="input cron-control-input" title="Filter by owner agent">
+                                                <option value="all">All agents</option>
+                                            </select>
+                                            <select id="cron-enabled-filter" class="input cron-control-input" title="Filter by enabled state">
+                                                <option value="all">All states</option>
+                                                <option value="enabled">Enabled</option>
+                                                <option value="disabled">Disabled</option>
+                                            </select>
+                                            <select id="cron-activity-filter" class="input cron-control-input" title="Filter by job activity">
+                                                <option value="all">Any activity</option>
+                                                <option value="ran_24h">Ran in last 24 hours</option>
+                                                <option value="stale_7d">Stale (older than 7 days)</option>
+                                                <option value="never">Never run</option>
+                                                <option value="next_24h">Runs in next 24 hours</option>
+                                            </select>
+                                            <button onclick="resetCronListControls()" class="btn btn-ghost cron-small-btn" type="button">Reset</button>
+                                        </div>
+                                    </div>
+
+                                    <div id="cron-jobs-list">
+                                        <div class="empty-state">Loading cron jobs...</div>
+                                    </div>
+                                </div>
+
+                                <button id="cron-detail-peek-btn" class="btn btn-primary cron-detail-peek-btn hidden" onclick="reopenCronDetailView()">Show details panel</button>
+                                <div id="cron-detail-backdrop" class="cron-detail-backdrop" onclick="tuckCronDetailView()"></div>
+
+                                <div id="cron-detail-view" class="cron-detail-view" aria-hidden="true">
+                                    <div class="cron-detail-stack">
+                                        <div class="cron-detail-header">
+                                            <div class="cron-detail-heading">
+                                                <div class="cron-section-kicker">Selected job</div>
+                                                <h1 id="cron-detail-title" class="cron-detail-title">Select a cron job</h1>
+                                                <p id="cron-detail-subtitle" class="cron-detail-subtitle">Choose a job on the left to inspect its schedule, failures, and recent runs.</p>
+                                            </div>
+                                            <div class="cron-detail-actions">
+                                                <button id="cron-detail-tuck-btn" class="btn btn-ghost" onclick="tuckCronDetailView()">Hide panel</button>
+                                                <button id="cron-detail-copy-btn" class="btn btn-ghost">Copy timeline JSON</button>
+                                                <button id="cron-detail-export-btn" class="btn btn-ghost">Export timeline JSON</button>
+                                                <button id="cron-detail-run-btn" class="btn btn-ghost">Run now</button>
+                                                <button id="cron-detail-edit-btn" class="btn btn-primary" onclick="openEditCronModal()">Edit job</button>
+                                                <button id="cron-detail-refresh-btn" class="btn btn-primary">Refresh timeline</button>
+                                            </div>
+                                        </div>
+
+                                        <div id="cron-detail-summary" class="cron-summary-grid"></div>
+                                        <div id="cron-detail-error" class="cron-detail-error hidden"></div>
+                                        <div id="cron-detail-meta" class="cron-detail-meta"></div>
+                                        <div id="cron-detail-timeline" class="cron-detail-timeline"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Add Cron Modal -->
                         <div id="add-cron-modal" class="modal-overlay">
-                            <div class="modal" style="max-width: 480px;">
+                            <div class="modal cron-modal">
                                 <div class="modal-header">
                                     <h2>Add Cron Job</h2>
                                     <button onclick="closeAddCronModal()" class="btn-icon">✕</button>
                                 </div>
-                                <div class="modal-body" style="padding: 16px;">
-                                    <div style="margin-bottom: 12px;">
-                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Name</label>
-                                        <input type="text" id="cron-new-name" class="input" placeholder="My cron job" style="width: 100%;">
+                                <div class="modal-body cron-modal-body cron-modal-two-col">
+                                    <div class="cron-modal-left">
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Name</label>
+                                            <input type="text" id="cron-new-name" class="input" placeholder="My cron job">
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Schedule</label>
+                                            <div class="cron-schedule-builder">
+                                                <select id="cron-new-schedule-type" class="input" onchange="updateCronScheduleBuilder('new')">
+                                                    <option value="daily">Daily at a specific time</option>
+                                                    <option value="weekly">Weekly on a specific day</option>
+                                                    <option value="monthly">Monthly on a specific date</option>
+                                                    <option value="hourly">Every hour</option>
+                                                    <option value="minutes">Every X minutes</option>
+                                                </select>
+                                                <div id="cron-new-schedule-daily" class="cron-schedule-row">
+                                                    <input type="time" id="cron-new-daily-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('new')">
+                                                </div>
+                                                <div id="cron-new-schedule-weekly" class="cron-schedule-row hidden">
+                                                    <select id="cron-new-weekly-day" class="input" onchange="updateCronScheduleFromBuilder('new')">
+                                                        <option value="0">Sunday</option>
+                                                        <option value="1">Monday</option>
+                                                        <option value="2">Tuesday</option>
+                                                        <option value="3">Wednesday</option>
+                                                        <option value="4">Thursday</option>
+                                                        <option value="5">Friday</option>
+                                                        <option value="6">Saturday</option>
+                                                    </select>
+                                                    <input type="time" id="cron-new-weekly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('new')">
+                                                </div>
+                                                <div id="cron-new-schedule-monthly" class="cron-schedule-row hidden">
+                                                    <input type="number" id="cron-new-monthly-day" class="input" min="1" max="31" value="1" placeholder="Day" onchange="updateCronScheduleFromBuilder('new')">
+                                                    <input type="time" id="cron-new-monthly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('new')">
+                                                </div>
+                                                <div id="cron-new-schedule-hourly" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Runs every hour at minute 0</span>
+                                                </div>
+                                                <div id="cron-new-schedule-minutes" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Every</span>
+                                                    <input type="number" id="cron-new-minutes-interval" class="input" min="1" max="59" value="15" onchange="updateCronScheduleFromBuilder('new')">
+                                                    <span class="cron-schedule-label">minutes</span>
+                                                </div>
+                                                <input type="hidden" id="cron-new-schedule" value="0 9 * * *">
+                                                <div class="cron-form-hint" id="cron-new-schedule-preview">Daily at 9:00 AM</div>
+                                            </div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Agent</label>
+                                            <select id="cron-new-agent" class="input">
+                                                <option value="">— No specific agent —</option>
+                                                <option value="main">Main (Halo)</option>
+                                                <option value="elon">Elon</option>
+                                                <option value="orion">Orion</option>
+                                                <option value="dev">Dev</option>
+                                                <option value="forge">Forge</option>
+                                                <option value="quill">Quill</option>
+                                                <option value="chip">Chip</option>
+                                                <option value="sentinel">Sentinel</option>
+                                                <option value="knox">Knox</option>
+                                                <option value="atlas">Atlas</option>
+                                                <option value="canon">Canon</option>
+                                                <option value="vector">Vector</option>
+                                                <option value="nova">Nova</option>
+                                                <option value="snip">Snip</option>
+                                                <option value="luma">Luma</option>
+                                                <option value="sterling">Sterling</option>
+                                                <option value="ledger">Ledger</option>
+                                                <option value="haven">Haven</option>
+                                            </select>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Session</label>
+                                            <select id="cron-new-session-target" class="input">
+                                                <option value="main">Main session</option>
+                                                <option value="isolated">Isolated session</option>
+                                            </select>
+                                            <div class="cron-form-hint cron-form-hint-warning">For dashboard/WebChat-visible reminders, use Main session. WebChat is not a supported cron announce channel.</div>
+                                        </div>
                                     </div>
-                                    <div style="margin-bottom: 12px;">
-                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Schedule (cron expression)</label>
-                                        <input type="text" id="cron-new-schedule" class="input" placeholder="0 9 * * *" style="width: 100%;">
+                                    <div class="cron-modal-right">
+                                        <div class="cron-form-field cron-form-field-full">
+                                            <label class="cron-form-label">Command / Action</label>
+                                            <textarea id="cron-new-command" class="input cron-form-textarea cron-form-textarea-large" placeholder="What should this job do? Write your prompt here..." rows="10"></textarea>
+                                        </div>
                                     </div>
-                                    <div style="margin-bottom: 16px;">
-                                        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Command / Action</label>
-                                        <textarea id="cron-new-command" class="input" placeholder="What should this job do?" rows="3" style="width: 100%; resize: vertical;"></textarea>
+                                </div>
+                                <div class="modal-footer">
+                                    <button onclick="closeAddCronModal()" class="btn btn-ghost">Cancel</button>
+                                    <button onclick="submitNewCronJob()" class="btn btn-primary">Add Job</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Edit Cron Modal -->
+                        <div id="edit-cron-modal" class="modal-overlay">
+                            <div class="modal cron-modal">
+                                <div class="modal-header">
+                                    <h2>Edit Cron Job</h2>
+                                    <button onclick="closeEditCronModal()" class="btn-icon">✕</button>
+                                </div>
+                                <div class="modal-body cron-modal-body cron-modal-two-col">
+                                    <input type="hidden" id="cron-edit-id">
+                                    <div class="cron-modal-left">
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Name</label>
+                                            <input type="text" id="cron-edit-name" class="input" placeholder="My cron job">
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Schedule</label>
+                                            <div class="cron-schedule-builder">
+                                                <select id="cron-edit-schedule-type" class="input" onchange="updateCronScheduleBuilder('edit')">
+                                                    <option value="daily">Daily at a specific time</option>
+                                                    <option value="weekly">Weekly on a specific day</option>
+                                                    <option value="monthly">Monthly on a specific date</option>
+                                                    <option value="hourly">Every hour</option>
+                                                    <option value="minutes">Every X minutes</option>
+                                                </select>
+                                                <div id="cron-edit-schedule-daily" class="cron-schedule-row">
+                                                    <input type="time" id="cron-edit-daily-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('edit')">
+                                                </div>
+                                                <div id="cron-edit-schedule-weekly" class="cron-schedule-row hidden">
+                                                    <select id="cron-edit-weekly-day" class="input" onchange="updateCronScheduleFromBuilder('edit')">
+                                                        <option value="0">Sunday</option>
+                                                        <option value="1">Monday</option>
+                                                        <option value="2">Tuesday</option>
+                                                        <option value="3">Wednesday</option>
+                                                        <option value="4">Thursday</option>
+                                                        <option value="5">Friday</option>
+                                                        <option value="6">Saturday</option>
+                                                    </select>
+                                                    <input type="time" id="cron-edit-weekly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('edit')">
+                                                </div>
+                                                <div id="cron-edit-schedule-monthly" class="cron-schedule-row hidden">
+                                                    <input type="number" id="cron-edit-monthly-day" class="input" min="1" max="31" value="1" placeholder="Day" onchange="updateCronScheduleFromBuilder('edit')">
+                                                    <input type="time" id="cron-edit-monthly-time" class="input" value="09:00" onchange="updateCronScheduleFromBuilder('edit')">
+                                                </div>
+                                                <div id="cron-edit-schedule-hourly" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Runs every hour at minute 0</span>
+                                                </div>
+                                                <div id="cron-edit-schedule-minutes" class="cron-schedule-row hidden">
+                                                    <span class="cron-schedule-label">Every</span>
+                                                    <input type="number" id="cron-edit-minutes-interval" class="input" min="1" max="59" value="15" onchange="updateCronScheduleFromBuilder('edit')">
+                                                    <span class="cron-schedule-label">minutes</span>
+                                                </div>
+                                                <input type="hidden" id="cron-edit-schedule" value="0 9 * * *">
+                                                <div class="cron-form-hint" id="cron-edit-schedule-preview">Daily at 9:00 AM</div>
+                                            </div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Agent</label>
+                                            <select id="cron-edit-agent" class="input">
+                                                <option value="">— No specific agent —</option>
+                                                <option value="main">Main (Halo)</option>
+                                                <option value="elon">Elon</option>
+                                                <option value="orion">Orion</option>
+                                                <option value="dev">Dev</option>
+                                                <option value="forge">Forge</option>
+                                                <option value="quill">Quill</option>
+                                                <option value="chip">Chip</option>
+                                                <option value="sentinel">Sentinel</option>
+                                                <option value="knox">Knox</option>
+                                                <option value="atlas">Atlas</option>
+                                                <option value="canon">Canon</option>
+                                                <option value="vector">Vector</option>
+                                                <option value="nova">Nova</option>
+                                                <option value="snip">Snip</option>
+                                                <option value="luma">Luma</option>
+                                                <option value="sterling">Sterling</option>
+                                                <option value="ledger">Ledger</option>
+                                                <option value="haven">Haven</option>
+                                            </select>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Session</label>
+                                            <select id="cron-edit-session-target" class="input">
+                                                <option value="main">Main session</option>
+                                                <option value="isolated">Isolated session</option>
+                                            </select>
+                                            <div class="cron-form-hint cron-form-hint-warning">For dashboard/WebChat-visible reminders, use Main session. WebChat is not a supported cron announce channel.</div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Delivery</label>
+                                            <select id="cron-edit-delivery-mode" class="input" onchange="updateCronDeliveryFields('edit')">
+                                                <option value="none">None</option>
+                                                <option value="announce">Announce</option>
+                                                <option value="webhook">Webhook</option>
+                                            </select>
+                                        </div>
+                                        <div id="cron-edit-delivery-announce" class="cron-form-field hidden">
+                                            <label class="cron-form-label">Announce channel</label>
+                                            <input type="text" id="cron-edit-delivery-channel" class="input" placeholder="telegram / discord / slack / ...">
+                                            <div class="cron-form-hint">Optional. Leave blank to use the default announce target if configured.</div>
+                                        </div>
+                                        <div id="cron-edit-delivery-to-wrap" class="cron-form-field hidden">
+                                            <label class="cron-form-label">Delivery target</label>
+                                            <input type="text" id="cron-edit-delivery-to" class="input" placeholder="channel/user id, webhook URL, or target name">
+                                            <div id="cron-edit-delivery-to-hint" class="cron-form-hint">Optional for announce. Required for webhook.</div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Model provider</label>
+                                            <select id="cron-edit-model-provider" class="input" onchange="window.onCronEditModelProviderChange?.()">
+                                                <option value="">Loading providers…</option>
+                                            </select>
+                                            <div class="cron-form-hint">Optional. Leave blank to keep the job's current/default provider selection.</div>
+                                        </div>
+                                        <div class="cron-form-field">
+                                            <label class="cron-form-label">Model</label>
+                                            <select id="cron-edit-model" class="input">
+                                                <option value="">Default / unchanged</option>
+                                            </select>
+                                            <div class="cron-form-hint">Uses the same provider → model pattern as the dashboard header selector.</div>
+                                        </div>
                                     </div>
-                                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                                        <button onclick="closeAddCronModal()" class="btn btn-ghost">Cancel</button>
-                                        <button onclick="submitNewCronJob()" class="btn btn-primary">Add Job</button>
+                                    <div class="cron-modal-right">
+                                        <div class="cron-form-field cron-form-field-full">
+                                            <label class="cron-form-label">Command / Action</label>
+                                            <textarea id="cron-edit-command" class="input cron-form-textarea cron-form-textarea-large" placeholder="What should this job do? Write your prompt here..." rows="10"></textarea>
+                                        </div>
                                     </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button onclick="closeEditCronModal()" class="btn btn-ghost">Cancel</button>
+                                    <button onclick="submitEditCronJob()" class="btn btn-primary">Update Job</button>
                                 </div>
                             </div>
                         </div>

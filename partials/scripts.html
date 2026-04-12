@@ -1,40 +1,43 @@
 <script src="js/perf-guard.js?v=4.9.1"></script>
 <script src="gateway-client.js?v=4.9.8"></script>
-<script src="docs-hub-memory-files.js?v=4.9.1"></script>
+<script src="docs-hub-memory-files.js?v=4.9.12"></script>
 <!-- Modular dashboard scripts (load order matters) -->
 <!-- BUNDLE OPTION: Run scripts/build.sh to create dist/bundle.js, then replace all script tags below with:
              <script src="dist/bundle.js?v=4.9.1"></script> -->
-<script src="js/state.js?v=4.9.6"></script>
-<script src="js/utils.js?v=4.9.1"></script>
-<script src="js/ui.js?v=4.9.1"></script>
+<script src="js/state.js?v=4.9.10"></script>
+<script src="js/utils.js?v=4.9.28"></script>
+<script src="js/ui.js?v=4.9.25"></script>
 <script src="js/focus-timer.js?v=4.9.1"></script>
-<script src="js/quick-stats.js?v=4.9.1"></script>
-<script src="js/keyboard.js?v=4.9.1"></script>
-<script src="js/models.js?v=4.9.7"></script>
-<script src="js/sidebar-agents.js?v=4.9.6"></script>
-<script src="js/sessions.js?v=4.9.8"></script>
-<script src="js/notifications.js?v=4.9.8"></script>
-<script src="js/chat.js?v=4.9.8"></script>
+<script src="js/quick-stats.js?v=4.9.27?v=4.9.1"></script>
+<script src="js/keyboard.js?v=4.9.2"></script>
+<script src="js/models.js?v=4.9.27?v=4.9.9"></script>
+<script src="js/sidebar-agents.js?v=4.9.21"></script>
+<script src="js/sessions.js?v=4.9.9"></script>
+<script src="js/agent-presence.js?v=4.9.27?v=4.10.0"></script>
+<script src="js/notifications.js?v=4.9.12"></script>
+<script src="js/chat.js?v=4.9.26"></script>
+<!-- Universal Search — Ctrl+K to open -->
+<script src="js/universal-search.js?v=4.9.30"></script>
 <!-- Model Validator - uses EXACT same pipeline as chat -->
 <script src="js/model-validator.js?v=4.9.6"></script>
 <script src="js/system.js?v=4.9.1"></script>
 <script src="js/tasks.js?v=4.9.1"></script>
-<script src="js/ui-handlers.js?v=4.9.1"></script>
-<script src="js/memory.js?v=4.9.1"></script>
+<script src="js/ui-handlers.js?v=4.9.27?v=4.9.2"></script>
+<script src="js/memory.js?v=4.9.10"></script>
 <script src="js/health.js?v=4.9.1"></script>
-<script src="js/agents.js?v=4.9.6"></script>
+<script src="js/agents.js?v=4.9.23"></script>
 <script src="js/channels.js?v=4.9.1"></script>
-<script src="js/cron.js?v=4.9.1"></script>
+<script src="js/cron.js?v=4.9.6"></script>
 <script src="js/costs.js?v=4.9.1"></script>
 <script src="js/analytics.js?v=4.9.1"></script>
 <script src="js/memory-browser.js?v=4.9.1"></script>
 <script src="js/panzoom.min.js?v=4.9.1"></script>
-<script src="js/memory-cards.js?v=4.9.7"></script>
-<script src="js/daily-journal.js?v=4.9.6"></script>
+<script src="js/memory-cards.js?v=4.9.28"></script>
+<script src="js/daily-journal.js?v=4.9.25"></script>
 <script src="js/security.js?v=4.9.1"></script>
 <script src="js/skills-mgr.js?v=4.9.1"></script>
-<script src="js/subagent-monitor.js?v=4.9.1"></script>
-<script src="js/heatmap.js?v=4.9.1"></script>
+<script src="js/subagent-monitor.js?v=4.9.27?v=4.9.1"></script>
+<script src="js/heatmap.js?v=4.9.27?v=4.9.1"></script>
 <!-- Phase 1: Visual Design Foundation -->
 <script src="js/phase1-visuals.js?v=4.9.1"></script>
 <!-- Phase 2: Motion & Microinteractions -->
@@ -42,7 +45,7 @@
 <!-- Phase 3: Widget System -->
 <script src="js/phase3-widgets.js?v=4.9.1"></script>
 <!-- Phase 4: Context Awareness -->
-<script src="js/phase4-context.js?v=4.9.6"></script>
+<script src="js/phase4-context.js?v=4.9.27?v=4.9.6"></script>
 <!-- Phase 5: Command Palette -->
 <script src="js/phase5-cmdpalette.js?v=4.9.6"></script>
 <!-- Phase 6: AI Insights Widget -->
@@ -54,7 +57,7 @@
 <!-- Phase 9: Voice Integration -->
 <script src="js/phase9-voice.js?v=4.9.6"></script>
 <!-- Phase 10: Task Board Enhancements -->
-<script src="js/phase10-taskboard.js?v=4.9.1"></script>
+<script src="js/phase10-taskboard.js?v=4.9.24"></script>
 <!-- Notion KANBAN Widget -->
 <script src="js/notion-kanban.js?v=4.9.1"></script>
 <!-- Phase 11: Agent Status Panel -->
@@ -100,13 +103,19 @@
         window._deepLinkAgentId = null;
         window._deepLinkAgentsSubview = null; // org | log | journal | memory
 
-        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal
+        // Legacy global memory path (no agent): canonicalize to /agents
+        if (rawPath === 'agents/memory') {
+            history.replaceState({ page: 'agents', agentId: null, agentsView: 'org' }, '', '/agents');
+            return 'agents';
+        }
+
+        // /agents, /agents/log, /agents/journal, /agents/:id, /agents/:id/log, /agents/:id/journal, /agents/:id/memory
         const agentsMatch = rawPath.match(/^agents(?:\/([^/]+))?(?:\/(log|journal|memory))?$/);
         if (agentsMatch) {
             const seg1 = agentsMatch[1] || null;
             const seg2 = agentsMatch[2] || null;
 
-            if (seg1 === 'log' || seg1 === 'journal') {
+            if (seg1 === 'log' || seg1 === 'journal' || seg1 === 'memory') {
                 window._deepLinkAgentsSubview = seg1;
             } else {
                 window._deepLinkAgentId = seg1;
@@ -266,9 +275,9 @@
                 if (subview === 'log') window._dailyJournal.showLog(false);
                 else if (subview === 'journal') window._dailyJournal.showJournalTimeline(false);
                 else if (subview === 'memory') {
-                    window._dailyJournal.showMemory(false);
+                    window._dailyJournal.showMemory(true);
                     if (agentId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
-                        window._memoryCards.openAgentMemory(agentId, { updateURL: false });
+                        window._memoryCards.openAgentMemory(agentId, { updateURL: true, forceAgentsPage: false });
                     }
                 }
                 else window._dailyJournal.showOrg(false);
@@ -278,13 +287,15 @@
 
     // Initialize page from URL on load
     document.addEventListener('DOMContentLoaded', () => {
-        // Check for server-injected deep link metadata
+        // Parse URL first so window._deepLink* is populated before resolving metadata
+        const initialPage = getPageFromURL();
+
+        // Check for server-injected deep link metadata (override URL when present)
         const metaDeepLink = document.querySelector('meta[name="x-agent-deep-link"]');
         const metaSubview = document.querySelector('meta[name="x-agents-subview"]');
         const deepLinkId = metaDeepLink?.content || window._deepLinkAgentId || null;
         const deepLinkSubview = metaSubview?.content || window._deepLinkAgentsSubview || null;
 
-        const initialPage = getPageFromURL();
         showPage(initialPage, false);
 
         const applyAgentsSubview = () => {
@@ -292,9 +303,9 @@
             if (deepLinkSubview === 'log') window._dailyJournal.showLog(false);
             else if (deepLinkSubview === 'journal') window._dailyJournal.showJournalTimeline(false);
             else if (deepLinkSubview === 'memory') {
-                window._dailyJournal.showMemory(false);
+                window._dailyJournal.showMemory(true);
                 if (deepLinkId && window._memoryCards && typeof window._memoryCards.openAgentMemory === 'function') {
-                    window._memoryCards.openAgentMemory(deepLinkId, { updateURL: false });
+                    window._memoryCards.openAgentMemory(deepLinkId, { updateURL: true, forceAgentsPage: false });
                 }
             }
             else window._dailyJournal.showOrg(false);
@@ -317,19 +328,17 @@
         }
     });
 
-    // Render memory files for the Memory page
+    // Render the Agents org chart page
     async function renderMemoryFilesForPage(
         filter = "",
     ) {
-        // Apply layout toggle on render
         if (window._memoryCards) {
             window._memoryCards.applyLayout();
-            // org-tree and cards both render via _memoryCards — don't fall through to classic render
-            if (window._memoryCards.getLayout() !== 'classic') {
-                return;
+            if (typeof window._memoryCards.renderAgentCardsView === 'function') {
+                window._memoryCards.renderAgentCardsView(filter || '');
             }
         }
-
+        return;
 
         const container = document.getElementById(
             "memory-files-grid",
@@ -626,7 +635,7 @@
 
     window.setupScrollContainment = () => { }; // No-op now, handled globally
 
-    // showModal/hideModal defined in js/ui-handlers.js
+    // showModal/hideModal defined in js/ui-handlers.js?v=4.9.27
 
     // Click outside to close modals
     document.addEventListener("click", function (e) {
@@ -639,7 +648,7 @@
         }
     });
 
-    // Modal functions defined in js/ui-handlers.js
+    // Modal functions defined in js/ui-handlers.js?v=4.9.27
     // No overrides needed — those functions are global
 
     // Image preview visibility
@@ -1181,7 +1190,7 @@
 </script>
 
 <!-- Memory Files Styles -->
-<link rel="stylesheet" href="css/docs.css?v=4.2.0">
+<link rel="stylesheet" href="css/docs.css?v=4.2.1">
 <script>
     // ===== THEME PICKER ENGINE =====
     class ThemePicker {

@@ -1,5 +1,5 @@
 // SoLoBot Dashboard — Bundled JS
-// Generated: 2026-02-22T15:38:38Z
+// Generated: 2026-04-07T13:28:50Z
 // Modules: 25
 
 
@@ -61,7 +61,39 @@ const AGENT_COLORS = window.AGENT_COLORS = new Proxy({}, {
 
 function normalizeSessionKey(sessionKey) {
     if (!sessionKey || sessionKey === 'main') return 'agent:main:main';
-    return sessionKey;
+    const key = String(sessionKey);
+    const match = key.match(/^agent:([^:]+):(.+)$/);
+    if (!match) return key;
+
+    const rawAgentId = match[1].toLowerCase();
+    const legacyMap = {
+        exec: 'elon',
+        cto: 'orion',
+        coo: 'atlas',
+        cfo: 'sterling',
+        cmp: 'vector',
+        devops: 'forge',
+        ui: 'quill',
+        swe: 'chip',
+        youtube: 'snip',
+        veo: 'snip',
+        veoflow: 'snip',
+        sec: 'knox',
+        net: 'sentinel',
+        smm: 'nova',
+        docs: 'canon',
+        tax: 'ledger',
+        family: 'haven',
+        creative: 'luma',
+        art: 'luma',
+        halo: 'main'
+    };
+    const canonicalAgent = (typeof window.resolveAgentId === 'function')
+        ? window.resolveAgentId(rawAgentId)
+        : (legacyMap[rawAgentId] || rawAgentId);
+
+    if (!canonicalAgent || canonicalAgent === rawAgentId) return key;
+    return `agent:${canonicalAgent}:${match[2]}`;
 }
 
 function chatStorageKey(sessionKey) {
@@ -69,8 +101,40 @@ function chatStorageKey(sessionKey) {
     return 'solobot-chat-' + key;
 }
 
+function resolveMessageSessionKey(message) {
+    const raw = message?._sessionKey || message?.sessionKey || '';
+    if (!raw || typeof raw !== 'string') return '';
+    return normalizeSessionKey(raw);
+}
+
 // In-memory session message cache (avoids full reload on agent switch)
 const _sessionMessageCache = new Map();
+
+function dedupeStateMessages(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    const kept = [];
+    const seen = new Set();
+
+    for (const msg of list) {
+        if (!msg || typeof msg !== 'object') continue;
+        const text = String(msg.text || '').trim();
+        const imageCount = Array.isArray(msg.images) ? msg.images.length : (msg.image ? 1 : 0);
+        if (!text && imageCount === 0) continue;
+
+        const session = String(msg._sessionKey || msg.sessionKey || '').toLowerCase();
+        const from = String(msg.from || msg.role || '').toLowerCase();
+        const runId = String(msg.runId || '');
+        const key = runId
+            ? `run:${session}:${from}:${runId}`
+            : `text:${session}:${from}:${text}:${imageCount}`;
+
+        if (seen.has(key)) continue;
+        seen.add(key);
+        kept.push(msg);
+    }
+
+    return kept;
+}
 
 function cacheSessionMessages(sessionKey, messages) {
     if (!sessionKey || !messages) return;
@@ -104,18 +168,38 @@ function loadPersistedMessages() {
         if (chatData) {
             const parsed = JSON.parse(chatData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                // Fix #1: Session-guard messages — drop any tagged with a different session
-                // This prevents stale messages from a previously-visited session appearing on hard refresh
-                const sessionTag = GATEWAY_CONFIG.sessionKey.toLowerCase();
-                state.chat.messages = parsed.filter(m => {
-                    if (!m._sessionKey) return true; // Legacy untagged — keep (conservative)
-                    return m._sessionKey.toLowerCase() === sessionTag;
-                });
+                const sessionTag = normalizeSessionKey(GATEWAY_CONFIG.sessionKey).toLowerCase();
+                const scopedMessages = parsed
+                    .map(m => {
+                        if (!m || typeof m !== 'object') return null;
+                        const msgSession = resolveMessageSessionKey(m);
+                        if (!msgSession) return null;
+                        const normalized = { ...m, _sessionKey: msgSession };
+                        const hasText = !!String(normalized.text || '').trim();
+                        const hasImage = Array.isArray(normalized.images) ? normalized.images.length > 0 : !!normalized.image;
+                        if (!hasText && !hasImage) return null;
+                        return normalized;
+                    })
+                    .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
+
+                const dedupedScopedMessages = typeof collapseDuplicateMessages === 'function'
+                    ? collapseDuplicateMessages(scopedMessages)
+                    : dedupeStateMessages(scopedMessages);
+                const migratedSystem = dedupedScopedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+                state.chat.messages = dedupedScopedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+                if (migratedSystem.length > 0) {
+                    state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
+                    persistSystemMessages();
+                }
+
                 // Migrate legacy key to session-scoped
                 if (legacyChat && !savedChat) {
-                    localStorage.setItem(currentKey, chatData);
+                    localStorage.setItem(currentKey, JSON.stringify(state.chat.messages));
                 }
-                if (state.chat.messages.length > 0) return;
+                if (state.chat.messages.length > 0 || migratedSystem.length > 0) {
+                    localStorage.setItem(currentKey, JSON.stringify(state.chat.messages));
+                    return;
+                }
             }
         }
 
@@ -131,13 +215,47 @@ async function loadChatFromServer() {
     try {
         const response = await fetch('/api/state');
         const serverState = await response.json();
-        if (serverState.chat?.messages?.length > 0) {
-            state.chat.messages = serverState.chat.messages;
+        const sessionKey = normalizeSessionKey(GATEWAY_CONFIG?.sessionKey || localStorage.getItem('gateway_session') || 'agent:main:main');
+        const sessionTag = sessionKey.toLowerCase();
+
+        const hasSessionMap = !!(serverState.chat?.sessions && typeof serverState.chat.sessions === 'object');
+        const sessionMessages = Array.isArray(serverState.chat?.sessions?.[sessionKey])
+            ? serverState.chat.sessions[sessionKey]
+            : [];
+        const fallbackMessages = Array.isArray(serverState.chat?.messages)
+            ? serverState.chat.messages
+            : [];
+
+        const sourceMessages = hasSessionMap ? sessionMessages : fallbackMessages;
+        const filtered = sourceMessages
+            .map(m => {
+                if (!m || typeof m !== 'object') return null;
+                const msgSession = resolveMessageSessionKey(m);
+                if (!msgSession) return null;
+                const normalized = { ...m, _sessionKey: msgSession };
+                const hasText = !!String(normalized.text || '').trim();
+                const hasImage = Array.isArray(normalized.images) ? normalized.images.length > 0 : !!normalized.image;
+                if (!hasText && !hasImage) return null;
+                return normalized;
+            })
+            .filter(m => m && m._sessionKey.toLowerCase() === sessionTag);
+
+        if (filtered.length > 0) {
+            const dedupedFiltered = typeof collapseDuplicateMessages === 'function'
+                ? collapseDuplicateMessages(filtered)
+                : dedupeStateMessages(filtered);
+            const migratedSystem = dedupedFiltered.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+            state.chat.messages = dedupedFiltered.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from)));
+            if (migratedSystem.length > 0) {
+                state.system.messages = [...(state.system.messages || []), ...migratedSystem].slice(-GATEWAY_CONFIG.maxMessages);
+                persistSystemMessages();
+            }
             localStorage.setItem(chatStorageKey(), JSON.stringify(state.chat.messages));
             // console.log(`[Dashboard] Loaded ${state.chat.messages.length} chat messages from server`); // Keep quiet
             // Re-render if on chat page
             if (typeof renderChatMessages === 'function') renderChatMessages();
             if (typeof renderChatPage === 'function') renderChatPage();
+            if (typeof renderSystemPage === 'function') renderSystemPage();
         }
     } catch (e) {
         // Silently fail - not critical
@@ -162,13 +280,14 @@ function persistChatMessages() {
         // Limit to 50 messages to prevent localStorage quota exceeded
         const chatToSave = state.chat.messages.slice(-200);
         // Use session-scoped key so each agent's chat is stored separately
-        const key = chatStorageKey();
+        const sessionKey = normalizeSessionKey(currentSessionName || GATEWAY_CONFIG.sessionKey);
+        const key = chatStorageKey(sessionKey);
         localStorage.setItem(key, JSON.stringify(chatToSave));
         // Also update in-memory cache
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, chatToSave);
+        cacheSessionMessages(sessionKey, chatToSave);
 
         // Also sync to server for persistence across deploys
-        syncChatToServer(chatToSave);
+        syncChatToServer(chatToSave, sessionKey);
     } catch (e) {
         // Silently fail - not critical
     }
@@ -176,23 +295,23 @@ function persistChatMessages() {
 
 // Sync chat messages to server (debounced)
 let chatSyncTimeout = null;
-function syncChatToServer(messages) {
+function syncChatToServer(messages, sessionKey) {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
     chatSyncTimeout = setTimeout(async () => {
         try {
             await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
+                body: JSON.stringify({
+                    messages,
+                    sessionKey: normalizeSessionKey(sessionKey || currentSessionName || GATEWAY_CONFIG.sessionKey)
+                })
             });
         } catch (e) {
             // Silently fail - not critical
         }
     }, 2000); // Debounce 2 seconds
 }
-
-// Load persisted messages immediately
-loadPersistedMessages();
 
 // Gateway connection configuration - localStorage only (sessionKey is browser concern, not server)
 const GATEWAY_CONFIG = {
@@ -202,6 +321,9 @@ const GATEWAY_CONFIG = {
     sessionKey: normalizeSessionKey(localStorage.getItem('gateway_session') || 'agent:main:main'),
     maxMessages: 500
 };
+
+// Load persisted messages after gateway config is initialized.
+loadPersistedMessages();
 
 // Function to save gateway settings to localStorage only
 function saveGatewaySettings(host, port, token, sessionKey) {
@@ -455,8 +577,6 @@ function initDashboardTasks() {
     console.log('[Dashboard] Task initialization skipped — tasks managed server-side');
 }
 
-
-
 // === utils.js ===
 // js/utils.js — Utility functions (time formatting, etc)
 
@@ -606,6 +726,192 @@ function updateArchiveBadge() {
 
 
 
+// ============================================================================
+// CENTRALIZED AVATAR RESOLUTION
+// All avatar URL generation should go through these functions to avoid
+// duplicate logic and potential inconsistencies.
+// ============================================================================
+
+const PNG_AGENTS = new Set(['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm', 'nova', 'luma',
+    'elon', 'orion', 'atlas', 'sterling', 'forge', 'sentinel', 'knox', 'vector', 'canon',
+    'quill', 'chip', 'snip', 'ledger', 'haven', 'solo', 'halo', 'pulse']);
+const SVG_AGENTS = new Set(['tax', 'sec']);
+
+/**
+ * Resolve an agent ID to their avatar filename (without extension).
+ * This is the SINGLE SOURCE OF TRUTH for avatar resolution.
+ * @param {string} agentId - The agent ID (e.g., 'main', 'dev', 'orion')
+ * @returns {string} The avatar filename (e.g., 'halo', 'dev', 'orion')
+ */
+function resolveAgentToAvatar(agentId) {
+    // Special case: 'main' agent uses 'halo' avatar
+    if (agentId === 'main') return 'halo';
+    // Special case: 'smm' agent uses 'nova' avatar (legacy mapping)
+    if (agentId === 'smm') return 'nova';
+    // Return the agentId itself for all other cases
+    return agentId;
+}
+
+/**
+ * Get the full avatar URL for an agent (small version).
+ * @param {string} agentId - The agent ID
+ * @returns {string} The avatar URL (e.g., '/avatars/halo.png')
+ */
+function getAvatarUrl(agentId) {
+    const avatar = resolveAgentToAvatar(agentId);
+    if (PNG_AGENTS.has(avatar)) {
+        return `/avatars/${avatar}.png`;
+    }
+    if (SVG_AGENTS.has(avatar)) {
+        return `/avatars/${avatar}.svg`;
+    }
+    // Fallback for unknown agents
+    return '/avatars/solobot.png';
+}
+
+/**
+ * Get the full-size avatar URL for an agent (hero/full version).
+ * @param {string} agentId - The agent ID
+ * @returns {string} The full-size avatar URL
+ */
+function getAvatarUrlFull(agentId) {
+    const avatar = resolveAgentToAvatar(agentId);
+    if (PNG_AGENTS.has(avatar)) {
+        return `/avatars/${avatar}-full.png`;
+    }
+    if (SVG_AGENTS.has(avatar)) {
+        return `/avatars/${avatar}.svg`;
+    }
+    // Fallback to small avatar if full not available
+    return getAvatarUrl(agentId);
+}
+
+// ============================================================================
+// CENTRALIZED AGENT DATA
+// ============================================================================
+
+const AGENT_ID_ALIASES = {
+    exec: "elon",
+    cto: "orion",
+    coo: "atlas",
+    cfo: "sterling",
+    cmp: "vector",
+    devops: "forge",
+    ui: "quill",
+    swe: "chip",
+    youtube: "snip",
+    veo: "snip",
+    veoflow: "snip",
+    sec: "knox",
+    net: "sentinel",
+    smm: "nova",
+    docs: "canon",
+    tax: "ledger",
+    family: "haven",
+    creative: "luma",
+    art: "luma",
+    halo: "main",
+    pulse: "pulse"
+};
+
+const DEFAULT_DEPARTMENTS = {
+    main: "Executive",
+    elon: "Executive",
+    orion: "Technology",
+    dev: "Technology",
+    forge: "Technology",
+    quill: "Technology",
+    chip: "Technology",
+    sentinel: "Technology",
+    knox: "Technology",
+    atlas: "Operations",
+    canon: "Operations",
+    vector: "Marketing & Product",
+    nova: "Marketing & Product",
+    snip: "Marketing & Product",
+    luma: "Marketing & Product",
+    chase: "Marketing & Product",
+    pulse: "Marketing & Product",
+    sterling: "Finance",
+    ledger: "Finance",
+    haven: "Family / Household"
+};
+
+const ALLOWED_AGENT_IDS = new Set(Object.keys(DEFAULT_DEPARTMENTS));
+
+// ============================================================================
+// AGENT ID NORMALIZATION
+// ============================================================================
+
+function normalizeAgentId(raw) {
+    if (!raw) return 'main';
+    const normalized = raw.toLowerCase().trim();
+    return AGENT_ID_ALIASES[normalized] || normalized;
+}
+
+function getAgentDepartment(agentId) {
+    const normalized = normalizeAgentId(agentId);
+    return DEFAULT_DEPARTMENTS[normalized] || 'Other';
+}
+
+// ============================================================================
+// TIME FORMATTING (CENTRALIZED)
+// ============================================================================
+
+function timeAgo(timestamp) {
+    if (!timestamp) return 'never';
+    const now = Date.now();
+    const then = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    const seconds = Math.floor((now - then) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+    return new Date(then).toLocaleDateString();
+}
+
+// ============================================================================
+// LOCALSTORAGE UTILITIES
+// ============================================================================
+
+function getStorage(key, defaultValue = null) {
+    try {
+        const value = localStorage.getItem(key);
+        return value !== null ? value : defaultValue;
+    } catch { return defaultValue; }
+}
+
+function setStorage(key, value) {
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch { return false; }
+}
+
+function getStorageJSON(key, defaultValue = null) {
+    try {
+        const value = localStorage.getItem(key);
+        return value ? JSON.parse(value) : defaultValue;
+    } catch { return defaultValue; }
+}
+
+function setStorageJSON(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+    } catch { return false; }
+}
+
+// ============================================================================
+// DOM HELPER
+// ============================================================================
+
+// Simple ID-based element lookup (like jQuery's $())
+function $(id) {
+    return typeof id === 'string' ? document.getElementById(id) : id;
+}
+
 // === ui.js ===
 // js/ui.js — Confirm dialogs, toasts, alert/confirm overrides
 
@@ -614,32 +920,27 @@ function updateArchiveBadge() {
 // CUSTOM CONFIRM & TOAST (no browser alerts!)
 // ===================
 
-let confirmResolver = null;
-
-// Custom confirm dialog - returns Promise<boolean>
-function showConfirm(message, title = 'Confirm', okText = 'OK') {
-    return new Promise((resolve) => {
-        confirmResolver = resolve;
-        document.getElementById('confirm-modal-title').textContent = title;
-        document.getElementById('confirm-modal-message').innerHTML = message;
-        document.getElementById('confirm-modal-ok').textContent = okText;
-        showModal('confirm-modal');
-    });
-}
-
-function closeConfirmModal(result) {
-    hideModal('confirm-modal');
-    if (confirmResolver) {
-        confirmResolver(result);
-        confirmResolver = null;
-    }
-}
+// Note: showConfirm and closeConfirmModal are defined later in this file (more complete version)
 
 // Toast notification - replaces alert()
 function showToast(message, type = 'info', duration = 4000) {
+    // Centralized notification rendering via showNotificationToast for a single look/feel.
+    const normalized = String(message ?? '');
+    const title = type === 'error' ? 'Warning' :
+                  type === 'warning' ? 'Notice' :
+                  type === 'success' ? 'Status' :
+                  'Info';
+
+    if (typeof showNotificationToast === 'function') {
+        // showNotificationToast keeps all notification UI centralized in one style.
+        showNotificationToast(title, normalized, null, null, duration);
+        return;
+    }
+
+    // Fallback to legacy toast styling if notifications module is not loaded yet.
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+
     const toast = document.createElement('div');
     toast.style.cssText = `
         padding: 12px 20px;
@@ -651,18 +952,18 @@ function showToast(message, type = 'info', duration = 4000) {
         max-width: 350px;
         word-wrap: break-word;
     `;
-    
+
     // Set color based on type
-    switch(type) {
+    switch (type) {
         case 'success': toast.style.background = 'var(--success)'; break;
         case 'error': toast.style.background = 'var(--error)'; break;
         case 'warning': toast.style.background = '#f59e0b'; break;
         default: toast.style.background = 'var(--accent)'; break;
     }
-    
-    toast.textContent = message;
+
+    toast.textContent = normalized;
     container.appendChild(toast);
-    
+
     // Auto-remove after duration
     setTimeout(() => {
         toast.style.animation = 'fadeOut 0.3s ease';
@@ -1600,7 +1901,7 @@ function initSparklineData() {
 initSparklineData();
 
 // Update stats every minute
-setInterval(updateQuickStats, 60000);
+let quickStatsInterval = setInterval(updateQuickStats, 60000);
 
 // Export for use in other modules
 window.QuickStats = {
@@ -1608,7 +1909,8 @@ window.QuickStats = {
     generateSparkline,
     generateProgressRing,
     generateMiniHeatmap,
-    generateActivityHeatmap
+    generateActivityHeatmap,
+    cleanup: () => clearInterval(quickStatsInterval)
 };
 
 // === phase1-visuals.js ===
@@ -2076,7 +2378,7 @@ function renderAgentStatuses(sessions) {
 
     // Group sessions by agent
     const agents = {};
-    const knownAgents = ['main', 'exec', 'coo', 'cfo', 'cmp', 'dev', 'family', 'tax', 'sec', 'smm'];
+    const knownAgents = ['main', 'elon', 'atlas', 'sterling', 'vector', 'dev', 'haven', 'ledger', 'knox', 'nova'];
 
     for (const s of sessions) {
         const match = s.key?.match(/^agent:([^:]+):/);
@@ -2128,13 +2430,7 @@ function renderAgentStatuses(sessions) {
     }).join('');
 }
 
-function timeAgo(timestamp) {
-    const diff = Date.now() - timestamp;
-    if (diff < 60000) return 'just now';
-    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-    return Math.floor(diff / 86400000) + 'd ago';
-}
+// Note: timeAgo is now in utils.js - using centralized version
 
 let _switchingAgent = false;
 function switchToAgent(agentId) {
@@ -2169,6 +2465,391 @@ function switchToAgent(agentId) {
 }
 
 // Auto-init when gateway connects
+const recoverySourceSessionByAgent = {};
+
+function getRecoveryAgentId() {
+    return (window._memoryCards && typeof window._memoryCards.getCurrentAgentId === 'function' && window._memoryCards.getCurrentAgentId())
+        || window._deepLinkAgentId
+        || window.currentAgentId
+        || null;
+}
+
+function getLockedSourceSession(agentId) {
+    const key = String(agentId || '').toLowerCase();
+    return recoverySourceSessionByAgent[key] || null;
+}
+
+function setLockedSourceSession(agentId, sessionKey) {
+    const key = String(agentId || '').toLowerCase();
+    if (!key) return;
+    if (!sessionKey) delete recoverySourceSessionByAgent[key];
+    else recoverySourceSessionByAgent[key] = sessionKey;
+}
+
+function setRecoveryStatus(text, kind = 'muted') {
+    const el = document.getElementById('agent-recovery-status');
+    if (!el) return;
+    const color = kind === 'error' ? 'var(--error)' : (kind === 'success' ? 'var(--success)' : 'var(--text-muted)');
+    el.style.color = color;
+    el.textContent = text;
+}
+
+async function safeGatewayRequest(candidates, payload) {
+    let lastError = null;
+    const attempts = [];
+    for (const method of candidates) {
+        try {
+            const out = await gateway._request(method, payload);
+            attempts.push({ method, ok: true });
+            return { ok: true, method, out, attempts };
+        } catch (e) {
+            lastError = e;
+            const errMsg = String(e?.message || e || 'unknown error');
+            attempts.push({ method, ok: false, error: errMsg });
+            console.warn('[AgentRecovery] RPC failed:', { method, error: errMsg });
+        }
+    }
+    return { ok: false, error: lastError, attempts };
+}
+
+async function getAgentSessionSnapshot(agentId) {
+    const list = await safeGatewayRequest(['sessions_list', 'sessions.list'], { includeGlobal: true });
+    if (!list.ok) return { error: list.error, attempts: list.attempts || [] };
+    const sessions = list.out?.sessions || [];
+    const prefix = `agent:${agentId}:`;
+    const matches = sessions.filter(s => (s.key || '').startsWith(prefix));
+    if (!matches.length) return { sessions: [], latest: null, main: null, target: null };
+
+    const sorted = [...matches].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    const latest = sorted[0];
+    const main = sorted.find(s => (s.key || '') === `agent:${agentId}:main`) || null;
+    const target = main || latest;
+
+    return { sessions: sorted, latest, main, target };
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function extractHistoryMessages(historyOut) {
+    return historyOut?.messages || historyOut?.history || [];
+}
+
+function isAssistantMessage(msg) {
+    const role = String(msg?.role || msg?.from || '').toLowerCase();
+    return role === 'assistant' || role === 'solobot' || role === 'agent';
+}
+
+function messageTs(msg) {
+    const raw = msg?.time ?? msg?.timestamp ?? msg?.createdAt ?? msg?.updatedAt ?? null;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+        const n = Date.parse(raw);
+        return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+}
+
+function findAssistantResponseInState(sessionKey, startedAtMs) {
+    const key = String(sessionKey || '').toLowerCase();
+    const msgs = (window.state?.chat?.messages || []);
+    return msgs.find(m => {
+        const mKey = String(m?._sessionKey || '').toLowerCase();
+        if (!mKey || mKey !== key) return false;
+        if (!isAssistantMessage(m)) return false;
+        return messageTs(m) >= startedAtMs;
+    }) || null;
+}
+
+function collectContextSourceSessions(agentId, targetMainKey) {
+    const all = (window.state?.chat?.messages || [])
+        .filter(m => String(m?.text || '').trim().length > 0)
+        .filter(m => String(m?._sessionKey || '').toLowerCase().startsWith(`agent:${String(agentId).toLowerCase()}:`));
+
+    const grouped = new Map();
+    for (const m of all) {
+        const key = String(m._sessionKey || '').toLowerCase();
+        const item = grouped.get(key) || { key, lastTs: 0, count: 0 };
+        item.count += 1;
+        item.lastTs = Math.max(item.lastTs, messageTs(m));
+        grouped.set(key, item);
+    }
+
+    const target = String(targetMainKey || '').toLowerCase();
+    return Array.from(grouped.values())
+        .filter(s => s.key && s.key !== target)
+        .sort((a, b) => (b.lastTs - a.lastTs) || (b.count - a.count));
+}
+
+function pickBestContextSourceSession(agentId, targetMainKey) {
+    return collectContextSourceSessions(agentId, targetMainKey)[0]?.key || null;
+}
+
+function buildReplayContextLines(sourceSessionKey, maxLines = 10) {
+    const source = String(sourceSessionKey || '').toLowerCase();
+    const rows = (window.state?.chat?.messages || [])
+        .filter(m => String(m?._sessionKey || '').toLowerCase() === source)
+        .filter(m => String(m?.text || '').trim().length > 0)
+        .sort((a, b) => messageTs(a) - messageTs(b))
+        .slice(-maxLines)
+        .map(m => `${String(m.from || 'unknown').toUpperCase()}: ${String(m.text || '').trim()}`);
+    return rows;
+}
+
+async function waitForAssistantResponse(sessionKey, startedAtMs, timeoutMs = 20000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const found = findAssistantResponseInState(sessionKey, startedAtMs);
+        if (found) return { status: 'responded', message: found };
+        await sleep(1200);
+    }
+    return { status: 'timed_out' };
+}
+
+window._agentRecovery = {
+    setSource(sessionKey) {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return;
+        setLockedSourceSession(agentId, sessionKey || null);
+        const label = sessionKey ? `Locked source: ${sessionKey}` : 'Source lock cleared. Using best source automatically.';
+        setRecoveryStatus(label, 'success');
+    },
+
+    async refreshSources() {
+        const agentId = getRecoveryAgentId();
+        const sel = document.getElementById('agent-recovery-source-session');
+        if (!agentId || !sel) return;
+
+        const targetKey = `agent:${agentId}:main`;
+        const options = collectContextSourceSessions(agentId, targetKey);
+        const locked = getLockedSourceSession(agentId);
+
+        sel.innerHTML = '';
+        const autoOpt = document.createElement('option');
+        autoOpt.value = '';
+        autoOpt.textContent = 'Auto (best stalled session)';
+        sel.appendChild(autoOpt);
+
+        options.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.key;
+            const mins = o.lastTs ? Math.round((Date.now() - o.lastTs) / 60000) : null;
+            opt.textContent = `${o.key}${mins !== null ? ` · ${mins}m ago` : ''} · ${o.count} msgs`;
+            sel.appendChild(opt);
+        });
+
+        if (locked && options.some(o => o.key === locked)) sel.value = locked;
+        else sel.value = '';
+    },
+
+    async check() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        await this.refreshSources();
+        setRecoveryStatus(`Checking sessions for ${agentId}...`);
+        const info = await getAgentSessionSnapshot(agentId);
+        if (info.error) {
+            const tried = (info.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Check failed: ${info.error?.message || 'unknown error'}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
+        if (!info.sessions?.length) return setRecoveryStatus(`No sessions found for ${agentId}.`, 'error');
+
+        const latest = info.latest;
+        const target = info.target;
+        const targetType = info.main ? 'main' : 'latest';
+        const mins = target?.updatedAt ? Math.round((Date.now() - new Date(target.updatedAt).getTime()) / 60000) : null;
+        const cronCount = info.sessions.filter(s => String(s.key || '').includes(':cron:')).length;
+        setRecoveryStatus(`Healthy check: sessions=${info.sessions.length} (cron=${cronCount}) · target(${targetType})=${target?.key || 'none'}${mins !== null ? ` · ${mins}m ago` : ''}.`, 'success');
+    },
+
+    async ping() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getAgentSessionSnapshot(agentId);
+        if (info.error || !info.target) return setRecoveryStatus(`No target session available for ${agentId}.`, 'error');
+        const sessionKey = info.target.key || `agent:${agentId}:main`;
+        setRecoveryStatus(`Sending async ping to ${sessionKey}...`);
+
+        const payload = {
+            sessionKey,
+            message: 'Quick health ping from dashboard. Reply with ACK if healthy.',
+            idempotencyKey: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `recovery-${Date.now()}`
+        };
+        const res = await safeGatewayRequest(['chat.send', 'chat_send'], payload);
+        if (!res.ok) {
+            const msg = String(res.error?.message || 'unknown error');
+            if (/timeout/i.test(msg)) return setRecoveryStatus(`Ping timed out on ${sessionKey}. Session may be stuck or queueing.`, 'error');
+            const tried = (res.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Ping failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
+
+        setRecoveryStatus(`Ping sent to ${sessionKey} via ${res.method}.`, 'success');
+    },
+
+    async probe() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getAgentSessionSnapshot(agentId);
+        if (info.error || !info.target) return setRecoveryStatus(`No target session available for ${agentId}.`, 'error');
+        const sessionKey = info.target.key;
+
+        const probeStartedAt = Date.now();
+        setRecoveryStatus(`Running blocking probe on ${sessionKey} (up to ~20s)...`);
+        const res = await safeGatewayRequest(['chat.send', 'chat_send'], {
+            sessionKey,
+            message: 'Health probe: reply with EXACT text "ACK" only.',
+            idempotencyKey: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `probe-${Date.now()}`
+        });
+
+        if (!res.ok) {
+            const msg = String(res.error?.message || 'unknown error');
+            if (/timeout/i.test(msg)) return setRecoveryStatus(`Probe timeout: ${sessionKey} did not answer within the wait window.`, 'error');
+            const tried = (res.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Probe failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
+        const status = res.out?.status || res.out?.result?.status || 'ok';
+        setRecoveryStatus(`Probe started via ${res.method}: ${status}. Waiting for assistant response...`);
+
+        const waited = await waitForAssistantResponse(sessionKey, probeStartedAt, 22000);
+        if (waited.status === 'responded') {
+            const preview = String(waited.message?.content || waited.message?.text || '').trim().slice(0, 80);
+            return setRecoveryStatus(`Probe responded: assistant replied on ${sessionKey}${preview ? ` · "${preview}${preview.length >= 80 ? '…' : ''}"` : ''}.`, 'success');
+        }
+        if (waited.status === 'timed_out_history_unavailable') {
+            return setRecoveryStatus(`Probe started, but response verification timed out because history is unavailable for ${sessionKey}.`, 'error');
+        }
+        return setRecoveryStatus(`Probe started, but no assistant response detected within wait window on ${sessionKey}.`, 'error');
+    },
+
+    async diagnose() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getAgentSessionSnapshot(agentId);
+        if (info.error) {
+            const tried = (info.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Diag failed: sessions.list error: ${info.error?.message || 'unknown'}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
+        if (!info.target) return setRecoveryStatus(`Diag: no sessions for ${agentId}.`, 'error');
+
+        const targetKey = info.target.key;
+        const targetType = info.main ? 'main' : 'latest';
+        const targetMins = info.target.updatedAt ? Math.round((Date.now() - new Date(info.target.updatedAt).getTime()) / 60000) : null;
+        const cronSessions = info.sessions.filter(s => String(s.key || '').includes(':cron:'));
+
+        const localCount = (window.state?.chat?.messages || []).filter(m => String(m?._sessionKey || '').toLowerCase() === String(targetKey).toLowerCase()).length;
+        const recentAssistant = findAssistantResponseInState(targetKey, Date.now() - (15 * 60 * 1000));
+
+        setRecoveryStatus(`Diag: connected=yes · sessions=${info.sessions.length} (cron=${cronSessions.length}) · target(${targetType})=${targetKey}${targetMins !== null ? ` (${targetMins}m)` : ''} · localMsgs=${localCount} · recentAssistant=${recentAssistant ? 'yes' : 'no'} · main=${info.main ? 'present' : 'missing'}.`, 'success');
+    },
+
+    async rebindMain() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        const mainKey = `agent:${agentId}:main`;
+        try {
+            if (typeof switchToSession === 'function') {
+                await switchToSession(mainKey);
+                setRecoveryStatus(`Rebound to main session: ${mainKey}.`, 'success');
+            } else {
+                setRecoveryStatus(`Main session key: ${mainKey} (manual switch needed).`, 'success');
+            }
+        } catch (e) {
+            setRecoveryStatus(`Rebind failed: ${e?.message || e}`, 'error');
+        }
+    },
+
+    async replayContext() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        const info = await getAgentSessionSnapshot(agentId);
+        if (info.error || !info.latest) return setRecoveryStatus(`No source session available for ${agentId}.`, 'error');
+
+        const targetKey = `agent:${agentId}:main`;
+        const lockedSource = getLockedSourceSession(agentId);
+        const sourceKey = lockedSource || pickBestContextSourceSession(agentId, targetKey) || info.latest.key;
+        let history = buildReplayContextLines(sourceKey, 12);
+        if (!history.length && String(sourceKey).toLowerCase() !== String(targetKey).toLowerCase()) {
+            history = buildReplayContextLines(targetKey, 12);
+        }
+
+        if (!history.length) return setRecoveryStatus(`No local context found to replay for ${agentId}.`, 'error');
+
+        const packet = [
+            `Context recovery packet for ${agentId}.`,
+            `Source session: ${sourceKey}`,
+            `Target session: ${targetKey}`,
+            'Please continue exactly where this conversation left off. First: summarize last state in 1-2 bullets. Then continue execution.',
+            'Recent context:',
+            ...history
+        ].join('\n');
+
+        const res = await safeGatewayRequest(['chat.send', 'chat_send'], {
+            sessionKey: targetKey,
+            message: packet,
+            idempotencyKey: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `replay-${Date.now()}`
+        });
+
+        if (!res.ok) {
+            const msg = String(res.error?.message || 'unknown error');
+            const tried = (res.attempts || []).map(a => `${a.method}${a.ok ? ':ok' : ':err'}`).join(', ');
+            return setRecoveryStatus(`Replay failed: ${msg}${tried ? ` · tried ${tried}` : ''}`, 'error');
+        }
+
+        setRecoveryStatus(`Context replay sent to ${targetKey} from ${sourceKey}.`, 'success');
+    },
+
+    async fullRecover() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        if (!gateway || !gateway.isConnected()) return setRecoveryStatus('Gateway not connected.', 'error');
+
+        try {
+            await this.refreshSources();
+            setRecoveryStatus(`Full recover started for ${agentId}: refresh + rebind + replay + probe...`);
+            if (typeof fetchSessions === 'function') await fetchSessions();
+            await this.rebindMain();
+            await sleep(300);
+            await this.replayContext();
+            await sleep(400);
+            await this.probe();
+        } catch (e) {
+            setRecoveryStatus(`Full recover failed: ${e?.message || e}`, 'error');
+        }
+    },
+
+    openChat() {
+        const agentId = getRecoveryAgentId();
+        if (!agentId) return setRecoveryStatus('No agent selected. Open an individual agent dashboard page first.', 'error');
+        try {
+            if (typeof switchToAgent === 'function') switchToAgent(agentId);
+            if (typeof showPage === 'function') showPage('chat');
+            setRecoveryStatus(`Opened chat for ${agentId}.`, 'success');
+        } catch (e) {
+            setRecoveryStatus(`Open chat failed: ${e.message || e}`, 'error');
+        }
+    },
+
+    async refresh() {
+        try {
+            if (typeof fetchSessions === 'function') await fetchSessions();
+            setRecoveryStatus('Sessions refreshed.', 'success');
+        } catch (e) {
+            setRecoveryStatus(`Refresh failed: ${e.message || e}`, 'error');
+        }
+    }
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initAgentStatusPanel, 2000);
 });
@@ -2685,7 +3366,6 @@ const commands = [
     { id: 'chat', icon: '💬', title: 'Go to Chat', desc: 'Open chat page', shortcut: 'C', action: () => showPage('chat') },
     { id: 'system', icon: '🔧', title: 'System Messages', desc: 'View system/debug messages', shortcut: 'S', action: () => showPage('system') },
     { id: 'health', icon: '🏥', title: 'Model Health', desc: 'Check model status', shortcut: 'H', action: () => showPage('health') },
-    { id: 'memory', icon: '🧠', title: 'Memory Lane', desc: 'Browse memory files', shortcut: 'M', action: () => showPage('memory') },
     { id: 'settings', icon: '⚙️', title: 'Settings', desc: 'Open settings modal', shortcut: ',', action: () => openSettingsModal() },
     { id: 'theme', icon: '🎨', title: 'Themes', desc: 'Open theme picker', shortcut: 'T', action: () => toggleTheme() },
     { id: 'new-session', icon: '➕', title: 'New Session', desc: 'Create a new chat session', shortcut: 'N', action: () => createNewSession() },
@@ -2875,8 +3555,8 @@ document.addEventListener('keydown', (e) => {
     // Don't trigger shortcuts when typing in inputs (except specific ones)
     const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
     
-    // Command palette: Cmd/Ctrl + K
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    // Command palette: Cmd/Ctrl + Shift + K
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
         e.preventDefault();
         if (commandPaletteOpen) {
             closeCommandPalette();
@@ -2918,9 +3598,6 @@ document.addEventListener('keydown', (e) => {
             break;
         case 'h':
             showPage('health');
-            break;
-        case 'm':
-            showPage('memory');
             break;
         case 'd':
             showPage('dashboard');
@@ -2994,7 +3671,7 @@ document.addEventListener('DOMContentLoaded', () => {
 let currentMemoryFile = null;
 
 // View a memory file in the modal
-window.viewMemoryFile = async function(filePath) {
+if (typeof window.viewMemoryFile !== 'function') window.viewMemoryFile = async function(filePath) {
     const titleEl = document.getElementById('memory-file-title');
     const contentEl = document.getElementById('memory-file-content');
     const saveBtn = document.getElementById('memory-save-btn');
@@ -3050,7 +3727,7 @@ window.viewMemoryFile = async function(filePath) {
 };
 
 // Save memory file changes
-window.saveMemoryFile = async function() {
+if (typeof window.saveMemoryFile !== 'function') window.saveMemoryFile = async function() {
     if (!currentMemoryFile) return;
     
     const contentEl = document.getElementById('memory-file-content');
@@ -3103,7 +3780,7 @@ window.saveMemoryFile = async function() {
 };
 
 // Close memory modal
-window.closeMemoryModal = function() {
+if (typeof window.closeMemoryModal !== 'function') window.closeMemoryModal = function() {
     currentMemoryFile = null;
     hideModal('memory-file-modal');
 };
@@ -3395,6 +4072,18 @@ function isSystemMessage(text, from) {
     // Heartbeat prompts
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
 
+    // Memory/housekeeping prompts injected by automation should not appear as user chat
+    if (trimmed.startsWith('Write lasting notes to memory/')) return true;
+    if (trimmed.includes('Reply with NO_REPLY if nothing durable.')) return true;
+    if (trimmed.includes('Current time:') && trimmed.includes('America/Detroit')) return true;
+
+    // Watchdog / automation chatter
+    if (lowerTrimmed.includes('watchdog check')) return true;
+    if (lowerTrimmed.includes('watchdog ping')) return true;
+    if (lowerTrimmed.includes('agent-to-agent announce step')) return true;
+    if (lowerTrimmed.includes('reply with a one-line ack')) return true;
+    if (/^(ack|announce_skip|reply_skip)$/i.test(trimmed)) return true;
+
     // Short heartbeat patterns
     if (from === 'solobot' && trimmed.length < 200) {
         const exactStartPatterns = [
@@ -3412,6 +4101,12 @@ function isSystemMessage(text, from) {
 
     // Don't filter anything else
     return false;
+}
+
+function normalizeGuardedModel(modelId) {
+    const resolved = resolveFullModelId(modelId);
+    if (!resolved) return { model: resolved, redirected: false };
+    return { model: resolved, redirected: false };
 }
 
 // Provider and Model selection functions
@@ -3517,7 +4212,7 @@ window.refreshModels = async function () {
             await populateProviderDropdown();
             // Update model dropdown for current provider (use currentProvider variable as fallback)
             const providerSelect = document.getElementById('provider-select');
-            const provider = providerSelect?.value || currentProvider || 'anthropic';
+            const provider = providerSelect?.value || currentProvider || 'openai-codex';
             await updateModelDropdown(provider);
 
             // Also refresh current model info from server
@@ -3551,7 +4246,10 @@ window.refreshModels = async function () {
  */
 window.changeSessionModel = async function () {
     const modelSelect = document.getElementById('model-select');
-    const selectedModel = modelSelect?.value;
+    const selectedModelRaw = modelSelect?.value;
+    let selectedModel = selectedModelRaw === 'global/default'
+        ? selectedModelRaw
+        : resolveFullModelId(selectedModelRaw);
 
     if (!selectedModel) {
         showToast('Please select a model', 'warning');
@@ -3564,6 +4262,16 @@ window.changeSessionModel = async function () {
     } else if (!selectedModel.includes('/')) {
         showToast('Invalid model format. Please select a valid model.', 'warning');
         return;
+    }
+
+    if (selectedModel !== 'global/default') {
+        const guard = normalizeGuardedModel(selectedModel);
+        if (guard.redirected) {
+            selectedModel = guard.model;
+            if (modelSelect) modelSelect.value = selectedModel;
+            showToast(`gpt-5.3-codex is unavailable in this OAuth profile. Using ${selectedModel.split('/').pop()} instead.`, 'warning');
+            console.warn(`[Dashboard] Model guard redirected ${guard.original} -> ${selectedModel}`);
+        }
     }
 
     if (!gateway || !gateway.isConnected()) {
@@ -3694,7 +4402,7 @@ window.changeSessionModel = async function () {
 window.changeGlobalModel = async function () {
     const modelSelect = document.getElementById('setting-model');
     const providerSelect = document.getElementById('setting-provider');
-    const selectedModel = modelSelect?.value;
+    let selectedModel = modelSelect?.value;
     const selectedProvider = providerSelect?.value;
 
     if (!selectedModel) {
@@ -3705,6 +4413,14 @@ window.changeGlobalModel = async function () {
     if (!selectedModel.includes('/')) {
         showToast('Invalid model format. Please select a valid model.', 'warning');
         return;
+    }
+
+    const guard = normalizeGuardedModel(selectedModel);
+    if (guard.redirected) {
+        selectedModel = guard.model;
+        if (modelSelect) modelSelect.value = selectedModel;
+        showToast(`gpt-5.3-codex is unavailable in this OAuth profile. Global default set to ${selectedModel.split('/').pop()}.`, 'warning');
+        console.warn(`[Dashboard] Global model guard redirected ${guard.original} -> ${selectedModel}`);
     }
 
     if (selectedModel.includes('ERROR')) {
@@ -3937,7 +4653,14 @@ async function fetchModelsFromGateway() {
 
         let configData = config;
         if (typeof config === 'string') configData = JSON.parse(config);
-        if (configData?.raw) configData = JSON.parse(configData.raw);
+        if (configData?.raw) {
+            try {
+                configData = JSON.parse(configData.raw);
+            } catch (e) {
+                console.warn('[Dashboard] Falling back to structured config due to raw parse error:', e.message);
+                if (configData.config) configData = configData.config;
+            }
+        }
 
         const modelConfig = configData?.agents?.defaults?.model;
         if (!modelConfig) return;
@@ -4071,7 +4794,7 @@ function resolveFullModelId(modelStr) {
 
     // Well-known provider prefixes
     const knownPrefixes = {
-        'claude': 'anthropic',
+        'claude': 'openrouter',
         'gpt': 'openai-codex',
         'o1': 'openai',
         'o3': 'openai',
@@ -4084,6 +4807,7 @@ function resolveFullModelId(modelStr) {
 
     return modelStr;
 }
+window.resolveFullModelId = resolveFullModelId;
 
 /**
  * Extracts the provider from a full model ID correctly, handling edge cases
@@ -4132,8 +4856,9 @@ function syncModelDisplay(model, provider) {
         }
     }
 
-    // Resolve bare model names to full provider/model IDs
-    model = resolveFullModelId(model);
+    // Resolve bare model names to full provider/model IDs and guard blocked models.
+    const guarded = normalizeGuardedModel(model);
+    model = guarded.model;
 
     if (model === currentModel && provider === currentProvider) return;
 
@@ -4193,6 +4918,32 @@ function syncModelDisplay(model, provider) {
 
 // Track models loaded from config to prevent gateway overrides
 window._configModelLocks = window._configModelLocks || {};
+window._sessionModelEnforcement = window._sessionModelEnforcement || {};
+
+// Ensure the gateway session model matches the locked config model.
+// This prevents drift when a session was previously patched to a different provider/model.
+window.enforceSessionModelLock = async function enforceSessionModelLock(sessionKey, model, reason = 'config-lock') {
+    if (!sessionKey || !model || model === 'global/default') return;
+    const normalizedModel = resolveFullModelId(model);
+    if (!normalizedModel) return;
+
+    const gw = window.gateway || (typeof gateway !== 'undefined' ? gateway : null);
+    if (!gw || typeof gw.isConnected !== 'function' || !gw.isConnected()) return;
+
+    const now = Date.now();
+    const prev = window._sessionModelEnforcement[sessionKey];
+    if (prev && prev.model === normalizedModel && (now - prev.ts) < 10000) {
+        return;
+    }
+    window._sessionModelEnforcement[sessionKey] = { model: normalizedModel, ts: now };
+
+    try {
+        await gw.patchSession(sessionKey, { model: normalizedModel });
+        console.log(`[Dashboard] Enforced session model for ${sessionKey}: ${normalizedModel} (${reason})`);
+    } catch (e) {
+        console.warn(`[Dashboard] Failed to enforce session model for ${sessionKey}: ${e?.message || e}`);
+    }
+};
 
 // Apply per-session model override — openclaw.json is SOURCE OF TRUTH
 async function applySessionModelOverride(sessionKey) {
@@ -4230,9 +4981,31 @@ async function applySessionModelOverride(sessionKey) {
     }
 
     if (sessionModel) {
-        sessionModel = resolveFullModelId(sessionModel);
+        const guard = normalizeGuardedModel(sessionModel);
+        sessionModel = guard.model;
+
+        if (guard.redirected) {
+            console.warn(`[Dashboard] Session model guard redirected ${guard.original} -> ${sessionModel} for ${sessionKey}`);
+            if (window._configModelLocks) {
+                window._configModelLocks[sessionKey] = sessionModel;
+            }
+
+            // Best-effort: patch active session immediately so chat sends stop failing.
+            try {
+                if (gateway && gateway.isConnected()) {
+                    gateway.request('sessions.patch', { key: sessionKey, model: sessionModel });
+                }
+            } catch (_) { }
+        }
+
         const provider = window.getProviderFromModelId(sessionModel) || currentProvider;
         syncModelDisplay(sessionModel, provider);
+
+        // Always enforce the lock on the actual gateway session entry.
+        // Display lock alone is not enough because chat.send uses server-side session model.
+        if (typeof window.enforceSessionModelLock === 'function') {
+            window.enforceSessionModelLock(sessionKey, sessionModel, 'session-switch').catch(() => { });
+        }
     } else {
         console.warn(`[Dashboard] No model found for session ${sessionKey}, keeping current display`);
     }
@@ -4270,11 +5043,14 @@ function selectModelInDropdowns(model) {
 document.addEventListener('DOMContentLoaded', async function () {
     try {
         // Optimistically load from localStorage first to prevent UI flashes (e.g. "openrouter/free" flash)
-        let modelId = localStorage.getItem('selected_model');
+        let modelId = resolveFullModelId(localStorage.getItem('selected_model'));
         let provider = localStorage.getItem('selected_provider');
 
         if (modelId) {
             provider = provider || window.getProviderFromModelId(modelId);
+            // Persist normalized full model IDs so stale short IDs do not get reused.
+            localStorage.setItem('selected_model', modelId);
+            if (provider) localStorage.setItem('selected_provider', provider);
             window.currentModel = modelId;
             window.currentProvider = provider;
 
@@ -4332,7 +5108,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         // Populate model dropdown for current provider and select current model
 
         // Set up periodic model sync (every 5 minutes)
-        setInterval(async () => {
+        let modelSyncInterval = setInterval(async () => {
             try {
                 const response = await fetch('/api/models/current');
                 const modelInfo = await response.json();
@@ -4347,6 +5123,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 // Silent fail for periodic sync
             }
         }, 5 * 60 * 1000); // 5 minutes
+        
+        // Export cleanup for SPA navigation
+        window._modelsCleanup = () => clearInterval(modelSyncInterval);
+        
         await updateModelDropdown(window.currentProvider);
         selectModelInDropdowns(window.currentModel);
 
@@ -4369,8 +5149,6 @@ const defaultSettings = {
     showDocs: true
 };
 
-
-
 // === notifications.js ===
 // js/notifications.js — Cross-session notifications, unread badges, toasts
 
@@ -4381,6 +5159,288 @@ const READ_ACK_PREFIX = '[[read_ack]]';
 const unreadSessions = new Map(); // sessionKey → count
 const NOTIFICATION_DEBUG = false;
 function notifLog(...args) { if (NOTIFICATION_DEBUG) console.log(...args); }
+const NOTIFICATIONS_RUNTIME_MARK = '2026-02-22.3';
+if (window.__notificationsRuntimeMark !== NOTIFICATIONS_RUNTIME_MARK) {
+    window.__notificationsRuntimeMark = NOTIFICATIONS_RUNTIME_MARK;
+    console.log(`[Notifications] notifications.js loaded (${NOTIFICATIONS_RUNTIME_MARK})`);
+}
+const FINAL_DEDUPE_WINDOW_MS = 15000;
+const recentFinalFingerprints = new Map(); // fingerprint -> timestamp
+let _streamingRunId = null;
+const TRANSIENT_RETRY_DELAY_MS = 1400;
+const MAX_TRANSIENT_RETRIES_PER_RUN = 1;
+const _retryScheduledForRun = new Set();
+
+function isTransientGatewayError(errorMessage, errorKind) {
+    if (errorKind === 'upstream_transient') return true;
+    const msg = String(errorMessage || '').toLowerCase();
+    if (!msg) return false;
+    if (msg.includes('502 bad gateway')) return true;
+    if (msg.includes('cloudflare')) return true;
+    return msg.includes('<html') && msg.includes('bad gateway');
+}
+
+function clearPendingSendByRunId(runId) {
+    if (!runId) return;
+    const map = window._chatPendingSends;
+    if (map instanceof Map) map.delete(runId);
+    _retryScheduledForRun.delete(runId);
+}
+
+function tryRetryTransientSend({ runId, sessionKey, errorMessage, errorKind }) {
+    if (!runId) return;
+    if (!isTransientGatewayError(errorMessage, errorKind)) return;
+    if (_retryScheduledForRun.has(runId)) return;
+
+    const map = window._chatPendingSends;
+    if (!(map instanceof Map)) return;
+    const pending = map.get(runId);
+    if (!pending) return;
+
+    const activeSession = String(currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const pendingSession = String(pending.sessionKey || sessionKey || '').toLowerCase();
+    if (!activeSession || !pendingSession || activeSession !== pendingSession) return;
+    if (Number(pending.retries || 0) >= MAX_TRANSIENT_RETRIES_PER_RUN) return;
+
+    _retryScheduledForRun.add(runId);
+    showToast('Transient gateway outage detected. Retrying once...', 'warning');
+
+    setTimeout(async () => {
+        const latest = map.get(runId);
+        if (!latest) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+        if (Number(latest.retries || 0) >= MAX_TRANSIENT_RETRIES_PER_RUN) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+        if (!gateway || !gateway.isConnected()) {
+            _retryScheduledForRun.delete(runId);
+            return;
+        }
+
+        latest.retries = Number(latest.retries || 0) + 1;
+        map.set(runId, latest);
+
+        try {
+            let retryResult = null;
+            if (Array.isArray(latest.images) && latest.images.length > 0) {
+                retryResult = await gateway.sendMessageWithImages(latest.text || 'Image', latest.images);
+            } else {
+                retryResult = await gateway.sendMessage(latest.text || '');
+            }
+            if (retryResult?.runId) {
+                map.set(retryResult.runId, {
+                    ...latest,
+                    createdAt: Date.now()
+                });
+            }
+            map.delete(runId);
+            showToast('Retry sent after temporary upstream error.', 'success');
+        } catch (err) {
+            console.error('[Notifications] Auto-retry failed:', err);
+            showToast('Retry failed. Please send once more.', 'warning');
+        } finally {
+            _retryScheduledForRun.delete(runId);
+        }
+    }, TRANSIENT_RETRY_DELAY_MS);
+}
+
+function normalizeMessageText(text) {
+    return String(text || '').replace(/\r\n/g, '\n');
+}
+
+function extractHistoryTextFromPart(part) {
+    if (!part || typeof part !== 'object') return '';
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.input_text === 'string') return part.input_text;
+    if (typeof part.output_text === 'string') return part.output_text;
+    if (typeof part.content === 'string' && part.type !== 'image') return part.content;
+    return '';
+}
+
+function resolveInterSessionMeta(primary, secondary = null) {
+    const sourceSession = String(primary?.sourceSession || secondary?.sourceSession || '').trim();
+    const sourceAgentRaw = String(primary?.sourceAgent || primary?.sourceAgentId || secondary?.sourceAgent || secondary?.sourceAgentId || '').trim();
+    const sourceAgentName = String(primary?.sourceAgentName || secondary?.sourceAgentName || '').trim();
+
+    let sourceAgent = sourceAgentRaw;
+    if (!sourceAgent && sourceSession) {
+        const m = sourceSession.match(/^agent:([^:]+):/i);
+        if (m) sourceAgent = m[1];
+    }
+    if (!sourceSession && !sourceAgent && !sourceAgentName) return null;
+
+    const canonicalAgent = (typeof window.resolveAgentId === 'function')
+        ? window.resolveAgentId(sourceAgent || 'main')
+        : (sourceAgent || 'main');
+    const displayName = sourceAgentName || (typeof getAgentDisplayName === 'function' ? getAgentDisplayName(canonicalAgent) : canonicalAgent);
+
+    return {
+        _sourceSession: sourceSession || null,
+        _sourceAgent: canonicalAgent || null,
+        _sourceAgentName: displayName || null,
+        _agentId: canonicalAgent || (window.currentAgentId || 'main'),
+        _isInterSession: true
+    };
+}
+
+function extractHistoryText(container) {
+    if (!container) return '';
+    let text = '';
+
+    if (Array.isArray(container.content)) {
+        for (const part of container.content) {
+            text += extractHistoryTextFromPart(part);
+        }
+    } else if (typeof container.content === 'string') {
+        text += container.content;
+    }
+
+    // Some providers return output blocks with nested content parts.
+    if (Array.isArray(container.output)) {
+        for (const block of container.output) {
+            if (!block || typeof block !== 'object') continue;
+            if (typeof block.text === 'string') text += block.text;
+            if (typeof block.output_text === 'string') text += block.output_text;
+            if (Array.isArray(block.content)) {
+                for (const part of block.content) {
+                    text += extractHistoryTextFromPart(part);
+                }
+            }
+        }
+    }
+
+    if (!text && typeof container.output_text === 'string') text = container.output_text;
+    if (!text && typeof container.text === 'string') text = container.text;
+    return (text || '').trim();
+}
+
+function mergeStreamingDelta(previousText, incomingText) {
+    const prev = normalizeMessageText(previousText);
+    const next = normalizeMessageText(incomingText);
+    if (!next) return prev;
+    if (!prev) return next;
+
+    // Cumulative snapshot (ideal path): replace with latest full snapshot
+    if (next.startsWith(prev)) return next;
+    // Out-of-order shorter snapshot: keep longer one
+    if (prev.startsWith(next)) return prev;
+    // Duplicate chunk already present
+    if (prev.includes(next)) return prev;
+
+    // Token/chunk streaming fallback: append chunk
+    return prev + next;
+}
+
+function pruneRecentFinalFingerprints(now = Date.now()) {
+    for (const [key, ts] of recentFinalFingerprints.entries()) {
+        if (now - ts > FINAL_DEDUPE_WINDOW_MS) {
+            recentFinalFingerprints.delete(key);
+        }
+    }
+}
+
+function buildFinalFingerprint({ runId, sessionKey, text, images, from = 'solobot' }) {
+    const session = String(sessionKey || '').toLowerCase();
+    const sender = String(from || 'solobot').toLowerCase();
+    if (runId) return `run:${session}:${sender}:${runId}`;
+
+    const normalizedText = String(text || '').trim();
+    const imageCount = Array.isArray(images) ? images.length : 0;
+    const firstImageSig = imageCount > 0 && typeof images[0] === 'string'
+        ? images[0].slice(0, 32)
+        : '';
+    return `text:${session}:${sender}:${normalizedText}:${imageCount}:${firstImageSig}`;
+}
+
+function canonicalMessageFingerprint(msg = {}) {
+    const session = String(msg._sessionKey || msg.sessionKey || currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const sender = String(msg.from || msg.role || '').toLowerCase();
+    const text = String(msg.text || '').trim();
+    const images = Array.isArray(msg.images) ? msg.images : (msg.image ? [msg.image] : []);
+    return buildFinalFingerprint({
+        runId: msg.runId,
+        sessionKey: session,
+        text,
+        images,
+        from: sender
+    });
+}
+
+function shouldKeepDistinctDuplicate(existing, msg) {
+    const existingText = String(existing?.text || '').trim();
+    const msgText = String(msg?.text || '').trim();
+    if (!existingText || !msgText) return false;
+    if (existingText !== msgText) return true;
+
+    const isShort = existingText.length < 25 && !existingText.includes('\n');
+    const existingTime = Number(existing?.time || 0);
+    const msgTime = Number(msg?.time || 0);
+    const farApart = Math.abs(msgTime - existingTime) > 15 * 60 * 1000;
+
+    return isShort && farApart;
+}
+
+function collapseDuplicateMessages(messages = []) {
+    const sorted = [...messages].sort((a, b) => (a.time || 0) - (b.time || 0));
+    const kept = [];
+    const seen = new Map();
+
+    for (const msg of sorted) {
+        if (!msg) continue;
+        const text = String(msg.text || '').trim();
+        const imageCount = Array.isArray(msg.images) ? msg.images.length : (msg.image ? 1 : 0);
+        if (!text && imageCount === 0) continue;
+
+        const fp = canonicalMessageFingerprint(msg);
+        const existing = seen.get(fp);
+        if (!existing) {
+            seen.set(fp, msg);
+            kept.push(msg);
+            continue;
+        }
+
+        const existingTime = Number(existing.time || 0);
+        const msgTime = Number(msg.time || 0);
+        const existingId = String(existing.id || '');
+        const msgId = String(msg.id || '');
+        const localVsServerPair = (!!msgId && !msgId.startsWith('m') && existingId.startsWith('m'))
+            || (!!existingId && !existingId.startsWith('m') && msgId.startsWith('m'));
+        const withinWindow = Math.abs(msgTime - existingTime) <= 15000;
+
+        if (!withinWindow && !localVsServerPair && shouldKeepDistinctDuplicate(existing, msg)) {
+            const variantKey = `${fp}:${msgTime}`;
+            seen.set(variantKey, msg);
+            kept.push(msg);
+            continue;
+        }
+
+        const preferCurrent = (!!msg.runId && !existing.runId)
+            || (!!msgId && !msgId.startsWith('m') && existingId.startsWith('m'))
+            || ((msg.images?.length || 0) > (existing.images?.length || 0));
+
+        if (preferCurrent) {
+            const idx = kept.indexOf(existing);
+            if (idx >= 0) kept[idx] = msg;
+            seen.set(fp, msg);
+        }
+    }
+
+    return kept;
+}
+
+function hasRecentFinalFingerprint(fingerprint) {
+    const now = Date.now();
+    pruneRecentFinalFingerprints(now);
+    return recentFinalFingerprints.has(fingerprint);
+}
+
+function rememberFinalFingerprint(fingerprint) {
+    pruneRecentFinalFingerprints();
+    recentFinalFingerprints.set(fingerprint, Date.now());
+}
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -4499,14 +5559,22 @@ function navigateToSession(sessionKey) {
 }
 
 // In-app toast notification — always visible, no browser permission needed
-function showNotificationToast(title, body, sessionKey) {
+function showNotificationToast(title, body, sessionKey, onClick = null, duration = 12000) {
     // Create toast container if it doesn't exist
-    let container = document.getElementById('notification-toast-container');
+    let container = document.getElementById('toast-container') || document.getElementById('notification-toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-toast-container';
-        container.style.cssText = 'position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
+        container.style.cssText = 'position: fixed; bottom: 96px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; pointer-events: none;';
         document.body.appendChild(container);
+    }
+
+    // Keep all notification toasts in the same visible corner.
+    if (container.id === 'toast-container') {
+        container.style.position = 'fixed';
+        container.style.bottom = '96px';
+        container.style.right = '20px';
+        container.style.flexDirection = 'column';
     }
 
     // Determine agent color from session key
@@ -4517,7 +5585,7 @@ function showNotificationToast(title, body, sessionKey) {
         if (typeof updateAgentChatButton === 'function') updateAgentChatButton(agentId);
     }
     const agentId = agentMatch ? (window.resolveAgentId ? window.resolveAgentId(agentMatch[1]) : agentMatch[1]) : 'main';
-    const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6' };
+    const agentColors = { main: '#BC2026', dev: '#6366F1', exec: '#F59E0B', coo: '#10B981', cfo: '#EAB308', cmp: '#EC4899', family: '#14B8A6', tax: '#78716C', sec: '#3B82F6', smm: '#8B5CF6', pulse: '#00D4FF' };
     const color = agentColors[agentId] || '#BC2026';
 
     const toast = document.createElement('div');
@@ -4539,16 +5607,20 @@ function showNotificationToast(title, body, sessionKey) {
             <strong style="color: var(--text-primary, #e0e0e0); font-size: 13px;">${title}</strong>
             <span style="margin-left: auto; color: var(--text-muted, #666); font-size: 11px; cursor: pointer;" class="toast-close">✕</span>
         </div>
-        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body.replace(/</g, '&lt;')}</div>
+        <div style="color: var(--text-secondary, #c9c9c9); font-size: 12px; line-height: 1.4; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${body?.replace(/</g, '&lt;') || ''}</div>
     `;
 
-    // Click toast → navigate to session
+    // Click toast → navigate to session (for message notifications) or call custom action (for system/gateway notices)
     toast.addEventListener('click', (e) => {
         if (e.target.classList?.contains('toast-close')) {
             dismissToast(toast);
             return;
         }
-        navigateToSession(sessionKey);
+        if (typeof onClick === 'function') {
+            onClick();
+        } else if (sessionKey) {
+            navigateToSession(sessionKey);
+        }
         dismissToast(toast);
     });
 
@@ -4561,8 +5633,8 @@ function showNotificationToast(title, body, sessionKey) {
         toast.style.transform = 'translateX(0)';
     });
 
-    // Auto-dismiss after 12 seconds
-    const timer = setTimeout(() => dismissToast(toast), 12000);
+    // Auto-dismiss after specified duration
+    const timer = setTimeout(() => dismissToast(toast), duration);
     toast._dismissTimer = timer;
 
     // Limit to 4 toasts max
@@ -4621,6 +5693,14 @@ function playNotificationSound() {
 }
 
 function updateUnreadBadges() {
+    // Build agent -> department map from sidebar DOM (for collapsed group badges)
+    const agentDeptMap = new Map();
+    document.querySelectorAll('.sidebar-agent[data-agent][data-dept]').forEach(el => {
+        const agentId = el.getAttribute('data-agent');
+        const dept = el.getAttribute('data-dept');
+        if (agentId && dept) agentDeptMap.set(agentId, dept);
+    });
+
     // Update session dropdown badges
     document.querySelectorAll('.session-option, [data-session-key]').forEach(el => {
         const key = el.dataset?.sessionKey || el.getAttribute('data-session-key');
@@ -4667,6 +5747,47 @@ function updateUnreadBadges() {
             dot.textContent = agentUnread > 99 ? '99+' : agentUnread;
         } else if (dot) {
             dot.remove();
+        }
+    });
+
+    // Update department/group header badges (so collapsed groups still show unread)
+    const unreadByDept = new Map();
+    for (const [key, count] of unreadSessions) {
+        const match = String(key || '').match(/^agent:([^:]+):/);
+        const rawAgentId = match ? match[1] : 'main';
+        const agentId = (window.resolveAgentId ? window.resolveAgentId(rawAgentId) : rawAgentId) || 'main';
+        const dept = agentDeptMap.get(agentId);
+        if (!dept) continue;
+        unreadByDept.set(dept, (unreadByDept.get(dept) || 0) + (count || 0));
+    }
+
+    document.querySelectorAll('.sidebar-agent-group[data-dept]').forEach(groupEl => {
+        const dept = groupEl.getAttribute('data-dept');
+        const header = groupEl.querySelector('.sidebar-agent-group-header');
+        if (!dept || !header) return;
+
+        const groupUnread = unreadByDept.get(dept) || 0;
+        let badge = header.querySelector('.group-unread-badge');
+        const countBadge = header.querySelector('.sidebar-agent-group-count');
+
+        if (groupUnread > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'group-unread-badge';
+                badge.style.cssText = 'margin-left: auto; margin-right: 6px; background: var(--brand-red, #BC2026); color: white; border-radius: 999px; min-width: 18px; height: 18px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; pointer-events: none;';
+
+                // Keep unread badge inside header, but before the normal group-count pill.
+                if (countBadge) {
+                    header.insertBefore(badge, countBadge);
+                } else {
+                    header.appendChild(badge);
+                }
+            }
+            badge.textContent = groupUnread > 99 ? '99+' : groupUnread;
+            groupEl.classList.add('has-unread');
+        } else {
+            if (badge) badge.remove();
+            groupEl.classList.remove('has-unread');
         }
     });
 
@@ -4751,18 +5872,18 @@ function disconnectFromGateway() {
 // Restart gateway directly via WebSocket RPC (no bot involved)
 window.requestGatewayRestart = async function () {
     if (!gateway || !gateway.isConnected()) {
-        showToast('Not connected to gateway', 'warning');
+        showNotificationToast('Gateway', 'Not connected to gateway', null, null, 5000);
         return;
     }
 
-    showToast('Restarting gateway...', 'info');
+    showNotificationToast('Gateway', 'Restarting gateway...', null, null, 5000);
 
     try {
         await gateway.restartGateway('manual restart from dashboard');
-        showToast('Gateway restart initiated. Reconnecting...', 'success');
+        showNotificationToast('Gateway', 'Gateway restart initiated. Reconnecting...', null, null, 5000);
     } catch (err) {
         console.error('[Dashboard] Gateway restart failed:', err);
-        showToast('Restart failed: ' + err.message, 'error');
+        showNotificationToast('Gateway', 'Restart failed: ' + err.message, null, null, 5000);
     }
 };
 
@@ -4824,7 +5945,7 @@ function handleChatEvent(event) {
     if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
         window.ModelValidator.handleGatewayEvent(event);
     }
-    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId } = event;
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind, sourceSession, sourceAgent, sourceAgentId, sourceAgentName } = event;
 
     // HARD GATE: only render events for the active session. Period.
     // Cross-session notifications are handled separately by onCrossSessionMessage.
@@ -4885,12 +6006,15 @@ function handleChatEvent(event) {
             return;
         }
 
+        const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+        const from = interMeta ? 'solobot' : 'user';
+
         // Check if we already have this message (to avoid duplicates from our own sends)
         const isDuplicate = state.chat.messages.some(m =>
-            m.from === 'user' && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
+            m.from === from && m.text?.trim() === content.trim() && (Date.now() - m.time) < 5000
         );
         if (!isDuplicate) {
-            addLocalChatMessage(content, 'user');
+            addLocalChatMessage(content, from, null, null, null, interMeta);
         }
         return;
     }
@@ -4901,14 +6025,20 @@ function handleChatEvent(event) {
         case 'thinking':
             // AI has started processing - show typing indicator
             isProcessing = true;
-            streamingText = '';  // Clear any stale streaming text
+            streamingText = ''; // Clear stale stream from previous runs
+            _streamingRunId = runId || null;
             renderChat();
             renderChatPage();
             break;
 
         case 'delta':
-            // Streaming response - content is cumulative, so REPLACE not append
-            streamingText = content;
+            // Some providers send cumulative snapshots, others send token chunks.
+            // Merge robustly so final content doesn't collapse to partial text.
+            if (runId && _streamingRunId && runId !== _streamingRunId) {
+                streamingText = '';
+            }
+            if (runId) _streamingRunId = runId;
+            streamingText = mergeStreamingDelta(streamingText, content);
             _streamingSessionKey = sessionKey || currentSessionName || '';
             isProcessing = true;
             renderChat();
@@ -4916,30 +6046,53 @@ function handleChatEvent(event) {
             break;
 
         case 'final':
+            clearPendingSendByRunId(runId);
             // Final response from assistant
-            // Prefer streamingText if available for consistency (avoid content mismatch)
-            const finalContent = streamingText || content;
+            const streamedText = normalizeMessageText(streamingText);
+            const payloadText = normalizeMessageText(content);
+
+            // Prefer the longer/more complete variant on final.
+            let finalContent = '';
+            if (payloadText && streamedText) {
+                finalContent = payloadText.length >= streamedText.length ? payloadText : streamedText;
+            } else {
+                finalContent = payloadText || streamedText;
+            }
+
             // Skip gateway-injected internal messages
             if (finalContent && /^\s*\[read-sync\]\s*(\n\s*\[\[read_ack\]\])?\s*$/s.test(finalContent)) {
                 streamingText = '';
+                _streamingRunId = null;
                 isProcessing = false;
                 lastProcessingEndTime = Date.now();
                 break;
             }
-            if (finalContent && role !== 'user') {
+
+            if ((finalContent || images?.length > 0) && role !== 'user') {
                 // Check for duplicate - by runId first, then by trimmed text within 10 seconds
                 const trimmed = finalContent.trim();
-                const isDuplicate = state.chat.messages.some(m =>
+                const runtimeDuplicate = state.chat.messages.some(m =>
                     (runId && m.runId === runId) ||
-                    (m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
+                    (trimmed && m.from === 'solobot' && m.text?.trim() === trimmed && (Date.now() - m.time) < 10000)
                 );
-                if (!isDuplicate) {
-                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider);
+                const finalFingerprint = buildFinalFingerprint({
+                    runId,
+                    sessionKey,
+                    text: trimmed,
+                    images,
+                    from: 'solobot'
+                });
+                const recentDuplicate = hasRecentFinalFingerprint(finalFingerprint);
+                if (!runtimeDuplicate && !recentDuplicate) {
+                    const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+                    const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider, interMeta);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
+                    rememberFinalFingerprint(finalFingerprint);
                 }
             }
             streamingText = '';
+            _streamingRunId = null;
             isProcessing = false;
             lastProcessingEndTime = Date.now();
             // Schedule a history refresh (guarded, won't spam)
@@ -4949,6 +6102,7 @@ function handleChatEvent(event) {
             break;
 
         case 'error':
+            tryRetryTransientSend({ runId, sessionKey, errorMessage, errorKind });
             addLocalChatMessage(`Error: ${errorMessage || 'Unknown error'}`, 'system');
             streamingText = '';
             isProcessing = false;
@@ -4966,10 +6120,9 @@ function loadHistoryMessages(messages) {
     const allLocalChatMessages = state.chat.messages.filter(m => {
         // Skip non-local messages (have real IDs from server)
         if (!m.id?.startsWith('m')) return false;
-        // If the message was tagged with a session, only keep if it matches
-        // If NOT tagged, assume it's from current session (conservative - old messages)
-        if (m._sessionKey && m._sessionKey.toLowerCase() !== currentKey) return false;
-        return true;
+        // Strict isolation: untagged messages are treated as unsafe legacy data and dropped.
+        const msgSession = (m._sessionKey || m.sessionKey || '').toLowerCase();
+        return !!msgSession && !!currentKey && msgSession === currentKey;
     });
 
     const chatMessages = [];
@@ -4982,10 +6135,8 @@ function loadHistoryMessages(messages) {
 
         if (Array.isArray(container.content)) {
             for (const part of container.content) {
-                if (part.type === 'text') {
-                    text += part.text || '';
-                } else if (part.type === 'input_text') {
-                    text += part.text || part.input_text || '';
+                if (part.type === 'text' || part.type === 'input_text' || part.type === 'output_text') {
+                    text += extractHistoryTextFromPart(part);
                 } else if (part.type === 'image') {
                     // Image attachment - reconstruct data URI
                     if (part.content && part.mimeType) {
@@ -5003,9 +6154,8 @@ function loadHistoryMessages(messages) {
                     images.push(part.image_url.url);
                 }
             }
-        } else if (typeof container.content === 'string') {
-            text = container.content;
         }
+        if (!text) text = extractHistoryText(container);
 
         // Check for attachments array (our send format)
         if (Array.isArray(container.attachments)) {
@@ -5016,11 +6166,15 @@ function loadHistoryMessages(messages) {
             }
         }
 
-        if (!text && typeof container.text === 'string') text = container.text;
         return { text: (text || '').trim(), images };
     };
 
     messages.forEach(msg => {
+        const historySession = String(msg?.sessionKey || msg?.message?.sessionKey || '').toLowerCase();
+        if (historySession && currentKey && historySession !== currentKey) {
+            return;
+        }
+
         // Skip tool results and tool calls - only show actual text responses
         if (msg.role === 'toolResult' || msg.role === 'tool') {
             return;
@@ -5044,32 +6198,37 @@ function loadHistoryMessages(messages) {
             images: content.images, // All images
             time: msg.timestamp || Date.now(),
             model: msg.model, // Preserve model from gateway history
+            runId: msg.runId || msg.message?.runId || null,
             // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
             _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-            _agentId: window.currentAgentId || 'main'
+            _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
+            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
+            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
+            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
+            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
         };
 
         // Classify and route
-        if (isSystemMessage(content.text, message.from)) {
+        if (isSystemMessage(content.text, message.from) || message._isInterSession || message._sourceSession || message._sourceAgent) {
             systemMessages.push(message);
         } else {
             chatMessages.push(message);
         }
     });
 
-    // Merge chat: combine gateway history with ALL local messages
-    // Dedupe by ID first, then by exact text match (not snippet) to be safer
+    // Merge chat: combine gateway history with ALL local messages.
+    // Dedupe ONLY by ID. Text-based dedupe caused legit repeated messages
+    // (e.g., "yes", "ok", "thanks") to disappear after refresh/switch.
     const historyIds = new Set(chatMessages.map(m => m.id));
-    const historyExactTexts = new Set(chatMessages.map(m => m.text));
-    const uniqueLocalMessages = allLocalChatMessages.filter(m => {
-        // Keep local message if: different ID AND different exact text
-        return !historyIds.has(m.id) && !historyExactTexts.has(m.text);
-    });
+    const uniqueLocalMessages = allLocalChatMessages.filter(m => !historyIds.has(m.id));
 
     // Patch history messages: if we have a local copy with a real model, prefer it
     // (history may return "openrouter/free" while local has the resolved model)
     const localByText = {};
-    allLocalChatMessages.forEach(m => { if (m.text) localByText[m.text.trim()] = m; });
+    allLocalChatMessages.forEach(m => {
+        const key = (m.text || '').trim();
+        if (key) localByText[key] = m;
+    });
     chatMessages.forEach(m => {
         const local = localByText[m.text?.trim()];
         if (local?.model && (!m.model || m.model === 'openrouter/free' || m.model === 'unknown')) {
@@ -5078,8 +6237,10 @@ function loadHistoryMessages(messages) {
         }
     });
 
-    state.chat.messages = [...chatMessages, ...uniqueLocalMessages];
-    console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local)`);
+    const mergedMessages = collapseDuplicateMessages([...chatMessages, ...uniqueLocalMessages]);
+    const migratedSystem = mergedMessages.filter(m => typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from));
+    state.chat.messages = collapseDuplicateMessages(mergedMessages.filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(m.text, m.from))));
+    console.log(`[Dashboard] Set ${state.chat.messages.length} chat messages (${chatMessages.length} from history, ${uniqueLocalMessages.length} local, migrated ${migratedSystem.length} to system)`);
 
     // Sort chat by time and trim
     state.chat.messages.sort((a, b) => a.time - b.time);
@@ -5088,7 +6249,7 @@ function loadHistoryMessages(messages) {
     }
 
     // Merge system messages with existing (they're local noise, but good to show from history too)
-    state.system.messages = [...state.system.messages, ...systemMessages];
+    state.system.messages = [...state.system.messages, ...systemMessages, ...migratedSystem];
     state.system.messages.sort((a, b) => a.time - b.time);
     if (state.system.messages.length > GATEWAY_CONFIG.maxMessages) {
         state.system.messages = state.system.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -5115,6 +6276,12 @@ function _doHistoryRefresh() {
     if (Date.now() - lastProcessingEndTime < 1500) return;
     if (_historyRefreshInFlight) return; // Prevent overlapping calls
     if (Date.now() - _lastHistoryLoadTime < HISTORY_MIN_INTERVAL) return; // Rate limit
+    const activeSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const gatewaySession = (gateway.sessionKey || '').toLowerCase();
+    if (activeSession && gatewaySession && activeSession !== gatewaySession) {
+        notifLog(`[Notifications] _doHistoryRefresh: Skipped (gateway session mismatch ${gatewaySession} vs ${activeSession})`);
+        return;
+    }
     _historyRefreshInFlight = true;
     _lastHistoryLoadTime = Date.now();
     const pollVersion = sessionVersion;
@@ -5124,6 +6291,12 @@ function _doHistoryRefresh() {
         _historyRefreshInFlight = false;
         if (pollVersion !== sessionVersion) {
             notifLog(`[Notifications] _doHistoryRefresh: Skipped (version mismatch ${pollVersion} vs ${sessionVersion})`);
+            return;
+        }
+        const currentActive = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+        const currentGateway = (gateway.sessionKey || '').toLowerCase();
+        if (currentActive && currentGateway && currentActive !== currentGateway) {
+            notifLog(`[Notifications] _doHistoryRefresh: Skipped merge (post-load mismatch ${currentGateway} vs ${currentActive})`);
             return;
         }
         if (result?.messages) {
@@ -5178,36 +6351,33 @@ function mergeHistoryMessages(messages) {
         return;
     }
 
+    const existingChatMessages = state.chat.messages.filter(m => {
+        const msgSession = (m?._sessionKey || m?.sessionKey || '').toLowerCase();
+        return !!msgSession && msgSession === activeSession;
+    });
+
     // Removed verbose log - called on every history poll
     // Merge new messages from history without duplicates, classify as chat vs system
     // This catches user messages from other clients that weren't broadcast as events
-    const existingIds = new Set(state.chat.messages.map(m => m.id));
+    const existingIds = new Set(existingChatMessages.map(m => m.id));
     const existingSystemIds = new Set(state.system.messages.map(m => m.id));
     // Also track existing text content (trimmed) to prevent duplicates when IDs differ
     // (local messages use 'm' + Date.now(), history messages have server IDs)
-    const existingTexts = new Set(state.chat.messages.map(m => (m.text || '').trim()));
+    const existingTexts = new Set(existingChatMessages.map(m => (m.text || '').trim()));
     const existingSystemTexts = new Set(state.system.messages.map(m => (m.text || '').trim()));
     // Track runIds from real-time messages for dedup
-    const existingRunIds = new Set(state.chat.messages.filter(m => m.runId).map(m => m.runId));
+    const existingRunIds = new Set(existingChatMessages.filter(m => m.runId).map(m => m.runId));
     let newChatCount = 0;
     let newSystemCount = 0;
 
-    const extractContentText = (container) => {
-        if (!container) return '';
-        let text = '';
-        if (Array.isArray(container.content)) {
-            for (const part of container.content) {
-                if (part.type === 'text') text += part.text || '';
-                if (part.type === 'input_text') text += part.text || part.input_text || '';
-            }
-        } else if (typeof container.content === 'string') {
-            text = container.content;
-        }
-        if (!text && typeof container.text === 'string') text = container.text;
-        return (text || '').trim();
-    };
+    const extractContentText = (container) => extractHistoryText(container);
 
     for (const msg of messages) {
+        const historySession = String(msg?.sessionKey || msg?.message?.sessionKey || '').toLowerCase();
+        if (historySession && historySession !== activeSession) {
+            continue;
+        }
+
         const msgId = msg.id || 'm' + msg.timestamp;
 
         // Skip if already exists in either array (by ID)
@@ -5233,7 +6403,8 @@ function mergeHistoryMessages(messages) {
 
             // Only add if we have content and it's not a duplicate
             if (textContent) {
-                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot');
+                const interMeta = resolveInterSessionMeta(msg, msg.message);
+                const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot') || !!interMeta;
 
                 // Skip if runId matches a real-time message we already have
                 if (msg.runId && existingRunIds.has(msg.runId)) {
@@ -5241,22 +6412,17 @@ function mergeHistoryMessages(messages) {
                 }
 
                 // Skip if we already have this exact text content (trimmed, prevents duplicates when IDs differ)
-                if (isSystemMsg && existingSystemTexts.has(textContent)) {
-                    continue;
-                }
-                if (!isSystemMsg && existingTexts.has(textContent)) {
-                    continue;
-                }
+                // Keep repeated content messages; rely on ID/runId dedupe.
 
                 // Time guard: skip non-user assistant messages if we have any local message added within the last 5 seconds
                 // Uses client-side time (m.time) to avoid clock skew with server timestamps
                 if (msg.role !== 'user') {
-                    const hasRecentLocal = state.chat.messages.some(m =>
+                    const hasRecentLocal = existingChatMessages.some(m =>
                         m.from === 'solobot' && (Date.now() - m.time) < 5000
                     );
                     if (hasRecentLocal && !existingIds.has(msgId)) {
                         // Check if this message's text matches a recent local one (likely the same)
-                        const recentMatch = state.chat.messages.some(m =>
+                        const recentMatch = existingChatMessages.some(m =>
                             m.from === 'solobot' && (Date.now() - m.time) < 5000 && m.text?.trim() === textContent
                         );
                         if (recentMatch) continue;
@@ -5269,7 +6435,14 @@ function mergeHistoryMessages(messages) {
                     text: textContent,
                     time: msg.timestamp || Date.now(),
                     model: msg.model || null,
-                    provider: msg.provider || null
+                    provider: msg.provider || null,
+                    runId: msg.runId || msg.message?.runId || null,
+                    _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+                    _agentId: interMeta?._agentId || (window.currentAgentId || 'main'),
+            _sourceSession: interMeta?._sourceSession || null,
+            _sourceAgent: interMeta?._sourceAgent || null,
+            _sourceAgentName: interMeta?._sourceAgentName || null,
+            _isInterSession: !!interMeta
                 };
 
                 // Classify and route
@@ -5279,7 +6452,9 @@ function mergeHistoryMessages(messages) {
                     newSystemCount++;
                 } else {
                     state.chat.messages.push(message);
+                    existingChatMessages.push(message);
                     existingIds.add(msgId);
+                    if (message.runId) existingRunIds.add(message.runId);
                     existingTexts.add(textContent); // already trimmed by extractContentText
                     newChatCount++;
                 }
@@ -5290,7 +6465,8 @@ function mergeHistoryMessages(messages) {
     if (newChatCount > 0 || newSystemCount > 0) {
         notifLog(`[Notifications] mergeHistoryMessages: Merged ${newChatCount} chat, ${newSystemCount} system messages for session ${activeSession}`);
 
-        // Sort and trim chat
+        // Sort, dedupe, and trim chat
+        state.chat.messages = collapseDuplicateMessages(state.chat.messages);
         state.chat.messages.sort((a, b) => a.time - b.time);
         if (state.chat.messages.length > GATEWAY_CONFIG.maxMessages) {
             state.chat.messages = state.chat.messages.slice(-GATEWAY_CONFIG.maxMessages);
@@ -5334,8 +6510,6 @@ function mergeHistoryMessages(messages) {
         }
     }
 }
-
-
 
 // === security.js ===
 // js/security.js — Security & Access Log page
@@ -5499,36 +6673,52 @@ function sessLog(...args) { if (SESSION_DEBUG) console.log(...args); }
 // Agent persona names and role labels
 const AGENT_PERSONAS = {
     'main': { name: 'Halo', role: 'PA' },
-    'exec': { name: 'Elon', role: 'CoS' },
-    'cto': { name: 'Orion', role: 'CTO' },
-    'coo': { name: 'Atlas', role: 'COO' },
-    'cfo': { name: 'Sterling', role: 'CFO' },
-    'cmp': { name: 'Vector', role: 'CMP' },
+    'elon': { name: 'Elon', role: 'CoS' },
+    'orion': { name: 'Orion', role: 'CTO' },
+    'atlas': { name: 'Atlas', role: 'COO' },
+    'sterling': { name: 'Sterling', role: 'CFO' },
+    'vector': { name: 'Vector', role: 'CMP' },
     'dev': { name: 'Dev', role: 'ENG' },
-    'devops': { name: 'Forge', role: 'DEVOPS' },
-    'ui': { name: 'Quill', role: 'FE/UI' },
-    'swe': { name: 'Chip', role: 'SWE' },
-    'youtube': { name: 'Snip', role: 'YT' },
-    'sec': { name: 'Knox', role: 'SEC' },
-    'net': { name: 'Sentinel', role: 'NET' },
-    'smm': { name: 'Nova', role: 'SMM' },
-    'family': { name: 'Haven', role: 'FAM' },
-    'tax': { name: 'Ledger', role: 'TAX' },
-    'docs': { name: 'Canon', role: 'DOC' },
-    'art': { name: 'Luma', role: 'ART' }
+    'forge': { name: 'Forge', role: 'DEVOPS' },
+    'quill': { name: 'Quill', role: 'FE/UI' },
+    'chip': { name: 'Chip', role: 'SWE' },
+    'chase': { name: 'Chase', role: 'Content Ops' },
+    'snip': { name: 'Snip', role: 'YT/VEO' },
+    'knox': { name: 'Knox', role: 'SEC' },
+    'sentinel': { name: 'Sentinel', role: 'NET' },
+    'nova': { name: 'Nova', role: 'SMM (X/FB/IG/LI/Threads/Pinterest)' },
+    'haven': { name: 'Haven', role: 'FAM' },
+    'ledger': { name: 'Ledger', role: 'TAX' },
+    'canon': { name: 'Canon', role: 'DOC' },
+    'luma': { name: 'Luma', role: 'ART' }
 };
 
 // Helper to extract friendly name from session key (strips agent:agentId: prefix)
 function normalizeDashboardSessionKey(key) {
     if (!key || key === 'main') return 'agent:main:main';
 
-    // Auto-migrate legacy agent session keys (e.g. from before agent IDs were stabilized)
+    // Auto-migrate legacy role-based IDs to canonical name-based IDs.
     const legacyMigrateMap = {
-        'quill': 'ui',
-        'forge': 'devops',
-        'orion': 'cto',
-        'halo': 'main',
-        'atlas': 'coo'
+        'exec': 'elon',
+        'cto': 'orion',
+        'coo': 'atlas',
+        'cfo': 'sterling',
+        'cmp': 'vector',
+        'devops': 'forge',
+        'ui': 'quill',
+        'swe': 'chip',
+        'youtube': 'snip',
+        'veo': 'snip',
+        'veoflow': 'snip',
+        'sec': 'knox',
+        'net': 'sentinel',
+        'smm': 'nova',
+        'family': 'haven',
+        'tax': 'ledger',
+        'docs': 'canon',
+        'creative': 'luma',
+        'art': 'luma',
+        'halo': 'main'
     };
 
     let normalized = key;
@@ -5552,7 +6742,19 @@ function getFriendlySessionName(key) {
         const sessionSuffix = match[2];
         const persona = AGENT_PERSONAS[agentId];
         const name = persona ? persona.name : agentId.toUpperCase();
-        return sessionSuffix === 'main' ? name : `${name} (${sessionSuffix})`;
+
+        if (sessionSuffix === 'main') return name;
+
+        const cronMatch = sessionSuffix.match(/^cron:([a-f0-9-]{8,})$/i);
+        if (cronMatch) {
+            const jobId = cronMatch[1];
+            const cronName = typeof window.getCronFriendlyNameById === 'function'
+                ? window.getCronFriendlyNameById(jobId)
+                : null;
+            return cronName ? `${name} (${cronName})` : `${name} (cron:${jobId.slice(0, 8)}…)`;
+        }
+
+        return `${name} (${sessionSuffix})`;
     }
     return key;
 }
@@ -5564,9 +6766,17 @@ window.currentSessionName = window.currentSessionName || null;
 function initCurrentSessionName() {
     const localSession = localStorage.getItem('gateway_session');
     const gatewaySession = (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG?.sessionKey) ? GATEWAY_CONFIG.sessionKey : null;
+    const preferredSession = localSession || gatewaySession || 'agent:main:main';
+    const normalizedSession = normalizeDashboardSessionKey(preferredSession);
 
     // localStorage is authoritative (user's explicit choice)
-    window.currentSessionName = normalizeDashboardSessionKey(localSession || gatewaySession || 'agent:main:main');
+    window.currentSessionName = normalizedSession;
+    if (preferredSession !== normalizedSession) {
+        try { localStorage.setItem('gateway_session', normalizedSession); } catch { }
+        if (typeof GATEWAY_CONFIG !== 'undefined' && GATEWAY_CONFIG) {
+            GATEWAY_CONFIG.sessionKey = normalizedSession;
+        }
+    }
 
     console.log('[initCurrentSessionName] localStorage:', localSession);
     console.log('[initCurrentSessionName] GATEWAY_CONFIG:', gatewaySession);
@@ -5632,17 +6842,40 @@ document.addEventListener('click', function (e) {
 
 // Session Management
 let availableSessions = [];
+window.availableSessions = availableSessions; // Shared session cache for other modules (agents dashboard, heatmap, sidebar, etc.)
+
+function setAvailableSessions(next) {
+    availableSessions = Array.isArray(next) ? next : [];
+    window.availableSessions = availableSessions;
+    return availableSessions;
+}
+
 window.currentAgentId = window.currentAgentId || 'main'; // Track which agent's sessions we're viewing
 let _switchInFlight = false;
 let _sessionSwitchQueue = []; // Queue array for rapid switches
 
-// Helper for legacy agent session keys (preserves chat history for old alias IDs)
+// Legacy role IDs and old aliases that should resolve to name-based canonical IDs.
 const LEGACY_AGENT_MAP = {
-    'chip': 'swe',
-    'quill': 'ui',
-    'forge': 'devops',
-    'snip': 'youtube',
-    'creative': 'art'
+    'exec': 'elon',
+    'cto': 'orion',
+    'coo': 'atlas',
+    'cfo': 'sterling',
+    'cmp': 'vector',
+    'devops': 'forge',
+    'ui': 'quill',
+    'swe': 'chip',
+    'youtube': 'snip',
+    'veo': 'snip',
+    'veoflow': 'snip',
+    'sec': 'knox',
+    'net': 'sentinel',
+    'smm': 'nova',
+    'family': 'haven',
+    'tax': 'ledger',
+    'docs': 'canon',
+    'creative': 'luma',
+    'art': 'luma',
+    'halo': 'main'
 };
 
 function resolveAgentId(id) {
@@ -5651,6 +6884,29 @@ function resolveAgentId(id) {
     return LEGACY_AGENT_MAP[id] || id;
 }
 window.resolveAgentId = resolveAgentId;
+
+function migrateLegacyAgentSessionPrefs() {
+    try {
+        const key = 'agent_last_sessions';
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+        let changed = false;
+        const migrated = {};
+        for (const [agentId, sessionKey] of Object.entries(parsed)) {
+            const canonicalAgent = resolveAgentId(agentId);
+            const canonicalSession = normalizeDashboardSessionKey(sessionKey);
+            if (canonicalAgent !== agentId || canonicalSession !== sessionKey) changed = true;
+            migrated[canonicalAgent] = canonicalSession;
+        }
+        if (changed) {
+            localStorage.setItem(key, JSON.stringify(migrated));
+            console.log('[Sessions] Migrated local agent session preferences to name-based IDs');
+        }
+    } catch { }
+}
+migrateLegacyAgentSessionPrefs();
 
 // Get the agent ID from a session key (e.g., "agent:dev:main" -> "dev")
 function getAgentIdFromSession(sessionKey) {
@@ -5733,6 +6989,27 @@ function handleSubagentSessionAgent() {
 
 let _fetchSessionsInFlight = false;
 let _fetchSessionsQueued = false;
+
+function _sessionTimestamp(value) {
+    if (!value) return 0;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+}
+
+function canonicalizeSessionEntries(entries) {
+    const byKey = new Map();
+    for (const entry of (entries || [])) {
+        if (!entry || !entry.key) continue;
+        const canonicalKey = normalizeDashboardSessionKey(entry.key);
+        const normalized = { ...entry, key: canonicalKey };
+        const existing = byKey.get(canonicalKey);
+        if (!existing || _sessionTimestamp(normalized.updatedAt) >= _sessionTimestamp(existing.updatedAt)) {
+            byKey.set(canonicalKey, normalized);
+        }
+    }
+    return Array.from(byKey.values());
+}
+
 async function fetchSessions() {
     // Debounce: if already fetching, queue one follow-up call
     if (_fetchSessionsInFlight) { _fetchSessionsQueued = true; return availableSessions; }
@@ -5740,7 +7017,11 @@ async function fetchSessions() {
 
     try {
         // Preserve locally-added sessions that might not be in gateway yet
-        const localSessions = availableSessions.filter(s => s.sessionId === null);
+        const localSessions = canonicalizeSessionEntries(
+            availableSessions
+                .filter(s => s.sessionId === null)
+                .map(s => ({ ...s, key: normalizeDashboardSessionKey(s.key) }))
+        );
 
         // Try gateway first if connected (direct RPC call)
         if (gateway && gateway.isConnected()) {
@@ -5748,10 +7029,10 @@ async function fetchSessions() {
                 const result = await gateway.listSessions({});
                 let sessions = result?.sessions || [];
 
-                const gatewaySessions = sessions.map(s => {
+                const gatewaySessions = canonicalizeSessionEntries(sessions.map(s => {
                     const friendlyName = getFriendlySessionName(s.key);
                     return {
-                        key: s.key,
+                        key: normalizeDashboardSessionKey(s.key),
                         name: friendlyName,
                         displayName: friendlyName,
                         updatedAt: s.updatedAt,
@@ -5759,16 +7040,22 @@ async function fetchSessions() {
                         model: s.model || 'unknown',
                         sessionId: s.sessionId
                     };
-                });
+                }));
 
                 const gatewayKeys = new Set(gatewaySessions.map(s => s.key));
                 const mergedLocalSessions = localSessions.filter(s => !gatewayKeys.has(s.key));
-                availableSessions = [...gatewaySessions, ...mergedLocalSessions];
+                setAvailableSessions(canonicalizeSessionEntries([...gatewaySessions, ...mergedLocalSessions]));
 
                 sessLog(`[Dashboard] Fetched ${gatewaySessions.length} from gateway + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
                 handleSubagentSessionAgent();
+                try {
+            if (typeof populateSessionDropdown === 'function') {
                 populateSessionDropdown();
+            }
+        } catch (dropdownErr) {
+            sessLog(`[Dashboard] Non-fatal populateSessionDropdown error: ${dropdownErr?.message || dropdownErr}`);
+        }
                 if (typeof updateSidebarAgentsFromSessions === 'function') {
                     try { updateSidebarAgentsFromSessions(availableSessions); } catch (e) { console.warn('[SidebarAgents] update failed:', e.message); }
                 }
@@ -5785,10 +7072,10 @@ async function fetchSessions() {
         const data = await response.json();
         const rawServerSessions = data.sessions || [];
 
-        const serverSessions = rawServerSessions.map(s => {
+        const serverSessions = canonicalizeSessionEntries(rawServerSessions.map(s => {
             const friendlyName = getFriendlySessionName(s.key);
             return {
-                key: s.key,
+                key: normalizeDashboardSessionKey(s.key),
                 name: friendlyName,
                 displayName: s.displayName || friendlyName,
                 updatedAt: s.updatedAt,
@@ -5796,11 +7083,11 @@ async function fetchSessions() {
                 model: s.model || 'unknown',
                 sessionId: s.sessionId
             };
-        });
+        }));
 
         const serverKeys = new Set(serverSessions.map(s => s.key));
         const mergedLocalSessions = localSessions.filter(s => !serverKeys.has(s.key));
-        availableSessions = [...serverSessions, ...mergedLocalSessions];
+        setAvailableSessions(canonicalizeSessionEntries([...serverSessions, ...mergedLocalSessions]));
 
         sessLog(`[Dashboard] Fetched ${serverSessions.length} from server + ${mergedLocalSessions.length} local = ${availableSessions.length} total`);
 
@@ -5849,19 +7136,22 @@ function populateSessionDropdown() {
         const isActive = s.key === currentSessionName;
         const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString() : '';
         const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const friendlyFallback = getFriendlySessionName(s.key);
+        const rawLabel = s.displayName || s.name || s.key || 'unnamed';
+        const sessionLabel = (rawLabel && /\bcron:[a-f0-9-]{8,}\b/i.test(rawLabel)) ? friendlyFallback : (rawLabel || friendlyFallback);
 
         return `
         <div class="session-dropdown-item ${isActive ? 'active' : ''}" data-session-key="${s.key}" onclick="if(event.target.closest('.session-edit-btn')) return; switchToSession('${s.key}')">
             <div class="session-info">
-                <div class="session-name">${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
+                <div class="session-name">${escapeHtml(sessionLabel)}${unreadSessions.get(s.key) ? ` <span class="unread-badge" style="background: var(--brand-red, #BC2026); color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; margin-left: 4px;">${unreadSessions.get(s.key)}</span>` : ''}</div>
                 <div class="session-meta">${dateStr} ${timeStr} • ${s.totalTokens?.toLocaleString() || 0} tokens</div>
             </div>
             <span class="session-model">${s.model}</span>
             <div class="session-actions">
-                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Rename session">
+                <button class="session-edit-btn" onclick="editSessionName('${s.key}', '${escapeHtml(sessionLabel)}')" title="Rename session">
                     ✏️
                 </button>
-                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(s.displayName || s.name || s.key || 'unnamed')}')" title="Delete session" style="color: var(--error);">
+                <button class="session-edit-btn" onclick="deleteSession('${s.key}', '${escapeHtml(sessionLabel)}')" title="Delete session" style="color: var(--error);">
                     🗑️
                 </button>
             </div>
@@ -5914,9 +7204,10 @@ window.editSessionName = function (sessionKey, currentName) {
                 populateSessionDropdown();
                 if (sessionKey === currentSessionName) {
                     const nameEl = document.getElementById('chat-page-session-name');
-                    // Even if displayName changes, keep the visible label as the session key
+                    // Keep human-friendly label in header (cron sessions resolve to cron job name)
                     if (nameEl) {
-                        nameEl.textContent = sessionKey;
+                        const headerLabel = session.displayName || getFriendlySessionName(sessionKey);
+                        nameEl.textContent = headerLabel;
                         nameEl.title = sessionKey;
                     }
                 }
@@ -5949,7 +7240,7 @@ window.deleteSession = async function (sessionKey, sessionName) {
             if (result && result.ok) {
                 showToast(`Session "${sessionName}" deleted`, 'success');
                 // Remove from local list
-                availableSessions = availableSessions.filter(s => s.key !== sessionKey);
+                setAvailableSessions(availableSessions.filter(s => s.key !== sessionKey));
                 populateSessionDropdown();
             } else {
                 showToast(`Failed to delete: ${result?.error || 'Unknown error'}`, 'error');
@@ -5966,55 +7257,62 @@ window.deleteSession = async function (sessionKey, sessionName) {
 window.switchToSessionKey = window.switchToSession = async function (sessionKey) {
     sessionKey = normalizeDashboardSessionKey(sessionKey);
 
-    // Enqueue switch request (FIFO)
+    // Keep only the latest requested session to avoid A→B→C lag (drop stale middle clicks).
     _sessionSwitchQueue.push({ sessionKey, timestamp: Date.now() });
+    if (_sessionSwitchQueue.length > 1) {
+        const latest = _sessionSwitchQueue[_sessionSwitchQueue.length - 1];
+        _sessionSwitchQueue = [latest];
+    }
 
-    // If switch already in progress, queue will be processed after current completes
+    // If switch already in progress, latest request will run after current completes.
     if (_switchInFlight) {
         return;
     }
 
-    // Process queue until empty (defeats rapid clicks by processing all)
     while (_sessionSwitchQueue.length > 0) {
-        const { sessionKey: nextKey } = _sessionSwitchQueue.shift();
+        // Always execute the most recent queued request (LIFO for responsiveness)
+        const { sessionKey: nextKey } = _sessionSwitchQueue.pop();
+        _sessionSwitchQueue.length = 0; // hard-drop stale queued targets
 
-        // Skip if already on this session
         if (nextKey === currentSessionName) {
             populateSessionDropdown();
             continue;
         }
 
         await executeSessionSwitch(nextKey);
-
-        // Check if a newer request superseded this one
-        // If queue has items that came in AFTER we started this switch, process them
-        // If queue is empty or only has our own re-submit, we're done
     }
 }
 
 // Core switch execution (no queue handling)
 async function executeSessionSwitch(sessionKey) {
     _switchInFlight = true;
+    const switchStart = performance.now();
 
     try {
-        toggleChatPageSessionMenu();
+        try {
+            if (typeof toggleChatPageSessionMenu === 'function') {
+                toggleChatPageSessionMenu();
+            }
+        } catch (menuErr) {
+            sessLog(`[Dashboard] Non-fatal menu toggle error: ${menuErr?.message || menuErr}`);
+        }
 
         // Clear unread notifications for this session
         clearUnreadForSession(sessionKey);
 
         showToast(`Switching to ${getFriendlySessionName(sessionKey)}...`, 'info');
 
-        // FIRST: nuke all rendering state synchronously — before any async work
+        // Save current chat in the background (don't block UX switch path)
+        saveCurrentChat().catch(() => {});
+        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
+
+        // THEN: nuke all rendering state synchronously
         streamingText = '';
         _streamingSessionKey = '';
         isProcessing = false;
         state.chat.messages = [];
         renderChat();
         renderChatPage();
-
-        // 1. Save current chat and cache it for fast switching back
-        await saveCurrentChat();
-        cacheSessionMessages(currentSessionName || GATEWAY_CONFIG.sessionKey, state.chat.messages);
 
         // 2. Increment session version to invalidate any in-flight history loads
         sessionVersion++;
@@ -6039,7 +7337,20 @@ async function executeSessionSwitch(sessionKey) {
         }
 
         // 4. Clear current chat display
-        await clearChatHistory(true, true);
+        try {
+            if (typeof clearChatHistory === 'function') {
+                await clearChatHistory(true, true);
+            } else {
+                state.chat.messages = [];
+                if (typeof renderChat === 'function') renderChat();
+                if (typeof renderChatPage === 'function') renderChatPage();
+            }
+        } catch (clearErr) {
+            sessLog(`[Dashboard] Non-fatal clearChatHistory error: ${clearErr?.message || clearErr}`);
+            state.chat.messages = [];
+            if (typeof renderChat === 'function') renderChat();
+            if (typeof renderChatPage === 'function') renderChatPage();
+        }
 
         // 4a. Check in-memory cache for instant switch
         const cached = getCachedSessionMessages(sessionKey);
@@ -6067,26 +7378,43 @@ async function executeSessionSwitch(sessionKey) {
         // Update UI immediately (don't wait for network)
         const nameEl = document.getElementById('chat-page-session-name');
         if (nameEl) {
-            nameEl.textContent = sessionKey;
+            nameEl.textContent = getFriendlySessionName(sessionKey);
             nameEl.title = sessionKey;
         }
         populateSessionDropdown();
 
-        // Wait for history (critical path)
-        await historyPromise;
-        await modelPromise;
-
-        if (agentMatch) {
-            setActiveSidebarAgent(agentMatch[1]);
-            saveLastAgentSession(agentMatch[1], sessionKey);
-        } else {
-            setActiveSidebarAgent(null);
+        // Persist active agent/session mapping immediately for correctness
+        try {
+            if (agentMatch) {
+                const canonicalAgent = (typeof resolveAgentId === 'function')
+                    ? resolveAgentId(agentMatch[1])
+                    : agentMatch[1];
+                if (typeof setActiveSidebarAgent === 'function') {
+                    setActiveSidebarAgent(canonicalAgent);
+                }
+                if (typeof saveLastAgentSession === 'function') {
+                    saveLastAgentSession(canonicalAgent, sessionKey);
+                }
+            } else if (typeof setActiveSidebarAgent === 'function') {
+                setActiveSidebarAgent(null);
+            }
+        } catch (agentUiErr) {
+            sessLog(`[Dashboard] Non-fatal agent UI sync error for ${sessionKey}: ${agentUiErr?.message || agentUiErr}`);
         }
 
+        // Do not block switch completion on network history/model fetch.
+        historyPromise.catch((e) => sessLog(`[Dashboard] history refresh failed for ${sessionKey}: ${e?.message || e}`));
+        modelPromise.catch(() => {});
+
+        const switchMs = Math.round(performance.now() - switchStart);
+        sessLog(`[Dashboard] Session switch UI complete in ${switchMs}ms -> ${sessionKey}`);
         showToast(`Switched to ${getFriendlySessionName(sessionKey)}`, 'success');
     } catch (e) {
         console.error('[Dashboard] Failed to switch session:', e);
-        showToast('Failed to switch session', 'error');
+        try {
+            sessLog(`[Dashboard] switch error for ${sessionKey}: ${e?.message || e}`);
+        } catch {}
+        showToast(`Failed to switch session: ${e?.message || 'unknown error'}`, 'error');
     } finally {
         _switchInFlight = false;
     }
@@ -6161,9 +7489,17 @@ async function saveCurrentChat() {
 
 async function loadSessionHistory(sessionKey) {
     const loadVersion = sessionVersion;
+    const normalizedSessionKey = normalizeDashboardSessionKey(sessionKey);
+
+    function sessionLikelyHasHistory(targetSessionKey) {
+        const session = availableSessions.find(s => s.key === targetSessionKey);
+        if (!session) return false;
+        const tokens = Number(session.totalTokens || 0);
+        return Number.isFinite(tokens) && tokens > 0;
+    }
 
     // Helper: attempt to load from gateway
-    async function tryGatewayLoad() {
+    async function tryGatewayLoad(attempt = 1) {
         if (!gateway || !gateway.isConnected()) return false;
         try {
             const result = await gateway.loadHistory();
@@ -6171,15 +7507,28 @@ async function loadSessionHistory(sessionKey) {
                 sessLog(`[Dashboard] Ignoring stale history load for ${sessionKey}`);
                 return true; // Stale but don't retry
             }
-            if (result?.messages && result.messages.length > 0) {
+            const messages = Array.isArray(result?.messages) ? result.messages : [];
+            if (messages.length > 0) {
                 if (state.chat?.messages?.length > 0) {
-                    mergeHistoryMessages(result.messages);
+                    mergeHistoryMessages(messages);
                 } else {
-                    loadHistoryMessages(result.messages);
+                    loadHistoryMessages(messages);
                 }
-                sessLog(`[Dashboard] Loaded ${result.messages.length} messages from gateway for ${sessionKey}`);
+                sessLog(`[Dashboard] Loaded ${messages.length} messages from gateway for ${sessionKey}`);
                 return true;
             }
+
+            // Gateway session switch can race with immediate history fetch.
+            // If this session is known to have tokens, retry once before falling back.
+            if (attempt < 2 && sessionLikelyHasHistory(normalizedSessionKey)) {
+                sessLog(`[Dashboard] Empty history on attempt ${attempt} for ${sessionKey}; retrying once`);
+                await new Promise(r => setTimeout(r, 350));
+                if (loadVersion !== sessionVersion) return true;
+                return tryGatewayLoad(attempt + 1);
+            }
+
+            // Empty history is still a valid load result.
+            return true;
         } catch (e) {
             console.warn('[Dashboard] Gateway history failed:', e.message);
         }
@@ -6250,13 +7599,14 @@ function initGateway() {
 
             // Update session name displays
             const nameEl = document.getElementById('current-session-name');
+            const friendlySessionLabel = getFriendlySessionName(intendedSession);
             if (nameEl) {
-                nameEl.textContent = intendedSession;
+                nameEl.textContent = friendlySessionLabel;
                 nameEl.title = intendedSession;
             }
             const chatPageNameEl = document.getElementById('chat-page-session-name');
             if (chatPageNameEl) {
-                chatPageNameEl.textContent = intendedSession;
+                chatPageNameEl.textContent = friendlySessionLabel;
                 chatPageNameEl.title = intendedSession;
             }
 
@@ -6302,8 +7652,13 @@ function initGateway() {
         },
         onToolEvent: (event) => {
             // Add tool event to terminal in real-time
-            if (event.phase === 'start' && event.summary) {
-                addTerminalLog(event.summary, 'info', event.timestamp);
+            if ((event.phase === 'start' || event.phase === 'complete' || event.phase === 'end' || event.phase === 'done') && event.summary) {
+                addTerminalLog(event.phase === 'start' ? event.summary : `✅ ${event.summary}`, 'info', event.timestamp);
+            }
+        },
+        onPresenceEvent: (event) => {
+            if (window.AgentPresence && typeof window.AgentPresence.ingestEvent === 'function') {
+                window.AgentPresence.ingestEvent(event);
             }
         },
         onCrossSessionMessage: (msg) => {
@@ -6570,7 +7925,7 @@ async function checkRestartToast() {
         if (!response.ok) return;
         const state = await response.json();
         if (state.restartPending) {
-            showToast('Gateway restarted successfully', 'success');
+            showNotificationToast('Gateway', 'Gateway restarted successfully');
             delete state.restartPending;
             await fetch('/api/sync', {
                 method: 'POST',
@@ -6582,8 +7937,6 @@ async function checkRestartToast() {
         console.warn('[Dashboard] Restart toast check failed:', e);
     }
 }
-
-
 
 // === sidebar-agents.js ===
 // js/sidebar-agents.js — Dynamic sidebar Agents list (hide/reorder)
@@ -6597,6 +7950,16 @@ async function checkRestartToast() {
 const SIDEBAR_AGENTS_ORDER_KEY = 'sidebar_agents_order_v1';
 const SIDEBAR_AGENTS_HIDDEN_KEY = 'sidebar_agents_hidden_v1';
 const SIDEBAR_AGENTS_PREFS_KEY = 'sidebar_agents_prefs_v1';
+
+// Grouping / departments
+const SIDEBAR_AGENT_DEPT_OVERRIDES_KEY = 'sidebar_agents_dept_overrides_v1';
+const SIDEBAR_AGENT_GROUP_COLLAPSED_KEY = 'sidebar_agents_group_collapsed_v1';
+const SIDEBAR_AGENT_ORDER_BY_DEPT_KEY = 'sidebar_agents_order_by_dept_v1';
+
+// Note: AGENT_ID_ALIASES, DEFAULT_DEPARTMENTS, ALLOWED_AGENT_IDS, 
+// normalizeAgentId, getAgentDepartment are now in utils.js
+
+const DEPARTMENT_ORDER = ['Executive', 'Technology', 'Operations', 'Marketing & Product', 'Finance', 'Family / Household', 'Other'];
 
 function getSidebarAgentsPrefs() {
     try {
@@ -6628,6 +7991,7 @@ function setSidebarAgentsHiddenSet(set) {
 }
 
 function getSidebarAgentsOrder() {
+    // Legacy global order (kept for backwards compatibility)
     try {
         const arr = JSON.parse(localStorage.getItem(SIDEBAR_AGENTS_ORDER_KEY) || '[]');
         return Array.isArray(arr) ? arr : [];
@@ -6642,6 +8006,65 @@ function setSidebarAgentsOrder(order) {
     } catch { }
 }
 
+function getSidebarDeptOverrides() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+        return {};
+    }
+}
+
+function setSidebarDeptOverrides(map) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY, JSON.stringify(map || {}));
+    } catch { }
+}
+
+function getSidebarCollapsedGroupsSet() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY) || '[]');
+        return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function setSidebarCollapsedGroupsSet(set) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY, JSON.stringify(Array.from(set || [])));
+    } catch { }
+}
+
+function getSidebarOrderByDept() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+        return {};
+    }
+}
+
+function setSidebarOrderByDept(map) {
+    try {
+        localStorage.setItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY, JSON.stringify(map || {}));
+    } catch { }
+}
+
+// Note: normalizeAgentId is now in utils.js
+
+function getAgentDepartment(agentId) {
+    const overrides = getSidebarDeptOverrides();
+    const normalized = normalizeAgentId(agentId);
+    return overrides[normalized] || DEFAULT_DEPARTMENTS[normalized] || 'Other';
+}
+
+function setAgentDepartment(agentId, dept) {
+    const overrides = getSidebarDeptOverrides();
+    overrides[normalizeAgentId(agentId)] = dept;
+    setSidebarDeptOverrides(overrides);
+}
+
 function getSidebarAgentsContainer() {
     return document.getElementById('sidebar-agents-list');
 }
@@ -6652,33 +8075,46 @@ function getSidebarAgentElements() {
     return Array.from(container.querySelectorAll('.sidebar-agent[data-agent]'));
 }
 
-function applySidebarAgentsOrder() {
+function getSidebarGroupElements() {
     const container = getSidebarAgentsContainer();
-    if (!container) return;
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('.sidebar-agent-group[data-dept]'));
+}
 
-    const order = getSidebarAgentsOrder();
-    if (!order.length) return;
+function getGroupListEl(dept) {
+    const container = getSidebarAgentsContainer();
+    if (!container) return null;
+    return container.querySelector(`.sidebar-agent-group[data-dept="${CSS.escape(dept)}"] .sidebar-agent-group-list`);
+}
 
-    const map = new Map();
-    for (const el of getSidebarAgentElements()) {
-        map.set(el.getAttribute('data-agent'), el);
+function applySidebarAgentsOrder() {
+    // Apply ordering within each department group.
+    const byDept = getSidebarOrderByDept();
+
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        if (!dept || !listEl) continue;
+
+        const desired = Array.isArray(byDept[dept]) ? byDept[dept] : [];
+        if (!desired.length) continue;
+
+        const els = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]'));
+        const map = new Map(els.map(el => [el.getAttribute('data-agent'), el]));
+
+        for (const id of desired) {
+            const el = map.get(id);
+            if (el) listEl.appendChild(el);
+            map.delete(id);
+        }
+        for (const el of map.values()) listEl.appendChild(el);
+
+        // Save normalized order for this group
+        const normalized = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]')).map(el => el.getAttribute('data-agent'));
+        byDept[dept] = normalized;
     }
 
-    // Append in saved order first
-    for (const id of order) {
-        const el = map.get(id);
-        if (el) container.appendChild(el);
-        map.delete(id);
-    }
-
-    // Append any new agents not in saved order
-    for (const el of map.values()) {
-        container.appendChild(el);
-    }
-
-    // Save normalized order (includes any new agents)
-    const normalized = getSidebarAgentElements().map(el => el.getAttribute('data-agent'));
-    setSidebarAgentsOrder(normalized);
+    setSidebarOrderByDept(byDept);
 }
 
 function applySidebarAgentsHidden() {
@@ -6735,11 +8171,23 @@ function updateSidebarAgentsFromSessions(availableSessions) {
 
 let sidebarAgentsDragging = false;
 
+function persistDeptOrdersFromDOM() {
+    const byDept = {};
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        if (!dept || !listEl) continue;
+        byDept[dept] = Array.from(listEl.querySelectorAll('.sidebar-agent[data-agent]'))
+            .map(el => el.getAttribute('data-agent'));
+    }
+    setSidebarOrderByDept(byDept);
+}
+
 function setupSidebarAgentsDragAndDrop() {
     const els = getSidebarAgentElements();
     if (!els.length) return;
 
-    // Add a drag handle (if not present) and make elements draggable
+    // Make agent elements draggable + ensure handle
     for (const el of els) {
         el.setAttribute('draggable', 'true');
         el.classList.add('draggable');
@@ -6749,7 +8197,6 @@ function setupSidebarAgentsDragAndDrop() {
             handle.className = 'agent-drag-handle';
             handle.title = 'Drag to reorder';
             handle.textContent = '⠿';
-            // Prevent handle clicks from triggering agent switch
             handle.addEventListener('click', (e) => e.stopPropagation());
             handle.addEventListener('mousedown', (e) => e.stopPropagation());
             el.insertBefore(handle, el.firstChild);
@@ -6765,9 +8212,7 @@ function setupSidebarAgentsDragAndDrop() {
         el.addEventListener('dragend', () => {
             sidebarAgentsDragging = false;
             el.classList.remove('dragging');
-            // Persist current DOM order
-            const order = getSidebarAgentElements().map(x => x.getAttribute('data-agent'));
-            setSidebarAgentsOrder(order);
+            persistDeptOrdersFromDOM();
         });
 
         el.addEventListener('dragover', (e) => {
@@ -6777,16 +8222,65 @@ function setupSidebarAgentsDragAndDrop() {
 
         el.addEventListener('drop', (e) => {
             e.preventDefault();
-            const container = getSidebarAgentsContainer();
-            if (!container) return;
-
             const draggedId = e.dataTransfer.getData('text/plain');
-            const draggedEl = container.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
+            if (!draggedId) return;
+
+            const draggedEl = document.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
             if (!draggedEl || draggedEl === el) return;
 
-            // Insert dragged before drop target
-            container.insertBefore(draggedEl, el);
+            // If dropped onto an agent, insert before it (within that agent's department list)
+            const targetDept = el.getAttribute('data-dept') || getAgentDepartment(el.getAttribute('data-agent'));
+            const listEl = getGroupListEl(targetDept);
+            if (!listEl) return;
+
+            // Re-home if moved across departments
+            if (draggedEl.getAttribute('data-dept') !== targetDept) {
+                setAgentDepartment(draggedId, targetDept);
+            }
+
+            listEl.insertBefore(draggedEl, el);
+            draggedEl.setAttribute('data-dept', targetDept);
+            persistDeptOrdersFromDOM();
         });
+    }
+
+    // Allow dropping into empty space within a department group
+    for (const groupEl of getSidebarGroupElements()) {
+        const dept = groupEl.getAttribute('data-dept');
+        const listEl = groupEl.querySelector('.sidebar-agent-group-list');
+        const headerEl = groupEl.querySelector('.sidebar-agent-group-header');
+        if (!dept || !listEl) continue;
+
+        const onDropIntoGroup = (e) => {
+            e.preventDefault();
+            const draggedId = e.dataTransfer.getData('text/plain');
+            if (!draggedId) return;
+            const draggedEl = document.querySelector(`.sidebar-agent[data-agent="${CSS.escape(draggedId)}"]`);
+            if (!draggedEl) return;
+
+            if (draggedEl.getAttribute('data-dept') !== dept) {
+                setAgentDepartment(draggedId, dept);
+            }
+
+            listEl.appendChild(draggedEl);
+            draggedEl.setAttribute('data-dept', dept);
+            persistDeptOrdersFromDOM();
+        };
+
+        listEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        listEl.addEventListener('drop', onDropIntoGroup);
+
+        // Header drop = quick move to group (Notion-ish)
+        if (headerEl) {
+            headerEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+            headerEl.addEventListener('drop', onDropIntoGroup);
+        }
     }
 
     // Guard: if user clicks while dragging, ignore
@@ -6883,7 +8377,12 @@ function renderSidebarAgentsModal() {
 }
 
 function resetSidebarAgentsOrder() {
-    try { localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY); } catch { }
+    try {
+        localStorage.removeItem(SIDEBAR_AGENTS_ORDER_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_ORDER_BY_DEPT_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_DEPT_OVERRIDES_KEY);
+        localStorage.removeItem(SIDEBAR_AGENT_GROUP_COLLAPSED_KEY);
+    } catch { }
     // Reload page for clean order restore
     location.reload();
 }
@@ -6901,20 +8400,29 @@ function setupSidebarAgentsManageButton() {
 // Avatar resolution: check for .png first, fall back to .svg, then emoji/initial
 const AVATAR_EXTENSIONS = ['png', 'svg'];
 
+// Avatar resolution - now uses centralized function from utils.js
+// Keeping wrapper for backward compatibility
 function resolveAvatarUrl(agentId) {
-    // Main agent has a special avatar
-    if (agentId === 'main') return '/avatars/solobot.png';
-    // Others: try {id}.png, {id}.svg
-    return `/avatars/${agentId}.png`;
+    return getAvatarUrl(agentId);
 }
 
 function agentDisplayName(agent) {
-    const id = agent.id || agent.name;
+    const id = normalizeAgentId(agent.id || agent.name);
     const persona = (typeof AGENT_PERSONAS !== 'undefined') && AGENT_PERSONAS[id];
     if (persona) return `${persona.name} (${persona.role})`;
-    if (agent.isDefault) return 'Halo (PA)';
-    const name = agent.name || agent.id;
+    if (agent.isDefault || id === 'main') return 'Halo (PA)';
+    const name = agent.name || id;
     return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function sanitizeAgentEmoji(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return '';
+    // Reject template/noise phrases leaking from uninitialized IDENTITY.md files.
+    if (/your signature|pick one|workspace-relative|data uri|ghost in the machine/i.test(v)) return '';
+    // Keep short values only (emoji, small token).
+    if (v.length > 8) return '';
+    return v;
 }
 
 async function loadSidebarAgents() {
@@ -6928,35 +8436,147 @@ async function loadSidebarAgents() {
 
         // Include main agent (it's excluded from /api/agents since it uses the shared workspace)
         // Add it at the front if not present
-        const hasMain = agents.some(a => a.isDefault || a.id === 'main');
-        const allAgents = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+        const hasMain = agents.some(a => normalizeAgentId(a.id) === 'main' || a.isDefault);
+        const allAgentsRaw = hasMain ? agents : [{ id: 'main', name: 'main', emoji: '', isDefault: true }, ...agents];
+
+        // Normalize IDs, dedupe alias/canonical duplicates, and drop unknown/noise IDs.
+        // This prevents stray workspace names or template text from becoming sidebar agents.
+        const dedupedByCanonicalId = new Map();
+        for (const agent of allAgentsRaw) {
+            const canonicalId = normalizeAgentId(agent.id);
+            if (!ALLOWED_AGENT_IDS.has(canonicalId)) continue;
+
+            const existing = dedupedByCanonicalId.get(canonicalId);
+            const normalizedAgent = {
+                ...agent,
+                id: canonicalId,
+                isDefault: canonicalId === 'main' || agent.isDefault === true
+            };
+
+            // Prefer canonical/native entries over alias entries when both exist
+            if (!existing || existing.id !== canonicalId || agent.id === canonicalId) {
+                dedupedByCanonicalId.set(canonicalId, normalizedAgent);
+            }
+        }
+
+        const allAgents = Array.from(dedupedByCanonicalId.values());
 
         // Sort: default first, then by id
         allAgents.sort((a, b) => {
             if (a.isDefault) return -1;
             if (b.isDefault) return 1;
-            return a.id.localeCompare(b.id);
+            return (a.id || '').localeCompare(b.id || '');
         });
 
-        container.innerHTML = allAgents.map(agent => {
-            const avatarUrl = resolveAvatarUrl(agent.id);
-            const displayName = agentDisplayName(agent);
-            const emoji = agent.emoji || '';
-            const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+        // Group agents by department
+        const groups = {};
+        for (const agent of allAgents) {
+            const dept = getAgentDepartment(agent.id);
+            groups[dept] = groups[dept] || [];
+            groups[dept].push(agent);
+        }
+
+        // Stable group order (Notion-ish)
+        const groupNames = Array.from(new Set([
+            ...DEPARTMENT_ORDER,
+            ...Object.keys(groups).sort()
+        ])).filter((d) => groups[d] && groups[d].length > 0);
+
+        // Apply stored per-dept ordering, or default sort by id
+        const orderByDept = getSidebarOrderByDept();
+        for (const dept of groupNames) {
+            const desired = Array.isArray(orderByDept[dept]) ? orderByDept[dept] : [];
+            if (!desired.length) {
+                groups[dept].sort((a, b) => {
+                    if (a.isDefault) return -1;
+                    if (b.isDefault) return 1;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
+                continue;
+            }
+
+            const map = new Map(groups[dept].map(a => [a.id, a]));
+            const ordered = [];
+            for (const id of desired) {
+                const a = map.get(id);
+                if (a) ordered.push(a);
+                map.delete(id);
+            }
+            for (const a of map.values()) ordered.push(a);
+            groups[dept] = ordered;
+        }
+
+        const collapsed = getSidebarCollapsedGroupsSet();
+
+        container.innerHTML = groupNames.map((dept) => {
+            const isCollapsed = collapsed.has(dept);
+            const listHtml = groups[dept].map(agent => {
+                const avatarUrl = resolveAvatarUrl(agent.id);
+                const displayName = agentDisplayName(agent);
+                const emoji = sanitizeAgentEmoji(agent.emoji);
+                const fallbackInitial = (agent.name || agent.id).charAt(0).toUpperCase();
+
+                return `
+                    <div class="sidebar-agent" data-agent="${agent.id}" data-dept="${dept}">
+                        <img class="agent-avatar"
+                             src="${avatarUrl}"
+                             alt="${agent.id}"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
+                            ${emoji || fallbackInitial}
+                        </span>
+                        <span class="sidebar-item-text">${displayName}</span>
+                    </div>
+                `;
+            }).join('');
 
             return `
-                <div class="sidebar-agent" data-agent="${agent.id}">
-                    <img class="agent-avatar"
-                         src="${avatarUrl}"
-                         alt="${agent.id}"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                    <span class="agent-avatar-fallback" style="display:none; width:28px; height:28px; border-radius:50%; background:var(--surface-3); align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
-                        ${emoji || fallbackInitial}
-                    </span>
-                    <span class="sidebar-item-text">${displayName}</span>
+                <div class="sidebar-agent-group" data-dept="${dept}">
+                    <div class="sidebar-agent-group-header" role="button" tabindex="0" title="Toggle ${dept}">
+                        <span class="sidebar-agent-group-caret">${isCollapsed ? '▶' : '▼'}</span>
+                        <span class="sidebar-agent-group-title">${dept}</span>
+                        <span class="sidebar-agent-group-count">${groups[dept].length}</span>
+                    </div>
+                    <div class="sidebar-agent-group-list" style="${isCollapsed ? 'display:none;' : ''}">
+                        ${listHtml}
+                    </div>
                 </div>
             `;
         }).join('');
+
+        // Group collapse handlers
+        for (const groupEl of getSidebarGroupElements()) {
+            const dept = groupEl.getAttribute('data-dept');
+            const header = groupEl.querySelector('.sidebar-agent-group-header');
+            const list = groupEl.querySelector('.sidebar-agent-group-list');
+            const caret = groupEl.querySelector('.sidebar-agent-group-caret');
+            if (!dept || !header || !list || !caret) continue;
+
+            const toggle = () => {
+                const set = getSidebarCollapsedGroupsSet();
+                const nowCollapsed = !set.has(dept);
+                if (nowCollapsed) set.add(dept); else set.delete(dept);
+                setSidebarCollapsedGroupsSet(set);
+                const isCollapsedNow = set.has(dept);
+                list.style.display = isCollapsedNow ? 'none' : '';
+                caret.textContent = isCollapsedNow ? '▶' : '▼';
+            };
+
+            header.addEventListener('click', (e) => {
+                // Don't collapse when dropping onto header
+                if (sidebarAgentsDragging) return;
+                e.preventDefault();
+                e.stopPropagation();
+                toggle();
+            });
+
+            header.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                }
+            });
+        }
 
         // Re-init after dynamic load
         applySidebarAgentsOrder();
@@ -6970,6 +8590,11 @@ async function loadSidebarAgents() {
 
         if (window.availableSessions) {
             updateSidebarAgentActivityIndicators(window.availableSessions);
+        }
+
+        // Re-apply unread badges after sidebar re-render (notifications.js)
+        if (typeof updateUnreadBadges === 'function') {
+            updateUnreadBadges();
         }
 
         console.log(`[Sidebar] Loaded ${allAgents.length} agents dynamically`);
@@ -7000,11 +8625,14 @@ window.updateSidebarAgentsFromSessions = updateSidebarAgentsFromSessions;
 let skillsList = [];
 let skillsInterval = null;
 let skillsPageBound = false;
+const SKILLS_CACHE_KEY = 'skillsStatusCache.v1';
 
 const skillsUi = {
     search: '',
     onlyIssues: false,
-    onlyInstalled: true
+    status: '',      // 'enabled', 'disabled', or ''
+    source: '',      // 'bundled', 'installed', 'clawhub', or ''
+    agent: ''       // agent id or ''
 };
 
 function getHiddenSkills() {
@@ -7017,62 +8645,192 @@ function setHiddenSkills(arr) {
 
 function initSkillsPage() {
     bindSkillsPageControls();
-    loadSkills();
+    loadSkills({ useCache: true });
 
     if (skillsInterval) clearInterval(skillsInterval);
-    skillsInterval = setInterval(loadSkills, 60000);
+    skillsInterval = setInterval(() => loadSkills({ useCache: false }), 60000);
+}
+
+function readSkillsCache() {
+    try {
+        const cached = JSON.parse(localStorage.getItem(SKILLS_CACHE_KEY) || 'null');
+        if (!cached || !Array.isArray(cached.skills)) return null;
+        return cached;
+    } catch {
+        return null;
+    }
+}
+
+function writeSkillsCache(skills) {
+    try {
+        localStorage.setItem(SKILLS_CACHE_KEY, JSON.stringify({ ts: Date.now(), skills }));
+    } catch {}
+}
+
+function getSkillAssignedAgent(skill) {
+    const explicit = String(skill?.assignedAgent || '').trim().toLowerCase();
+    if (explicit) return explicit;
+
+    const candidates = [
+        skill?.name,
+        skill?.id,
+        skill?.skillKey,
+        skill?.path,
+        skill?.directory,
+    ]
+        .filter(Boolean)
+        .map(value => String(value).trim().toLowerCase());
+
+    const knownAgents = [
+        'halo', 'nova', 'luma', 'vector', 'canon', 'snip', 'haven', 'dev', 'sterling'
+    ];
+
+    for (const candidate of candidates) {
+        for (const agent of knownAgents) {
+            if (candidate === agent || candidate.startsWith(`${agent}-`) || candidate.includes(`/${agent}-`) || candidate.includes(`/${agent}/`)) {
+                return agent;
+            }
+        }
+    }
+
+    return '';
 }
 
 function bindSkillsPageControls() {
     if (skillsPageBound) return;
     skillsPageBound = true;
 
+    // Search input
     const search = document.getElementById('skills-search');
-    const onlyIssues = document.getElementById('skills-only-issues');
-    const refresh = document.getElementById('skills-refresh');
-
     if (search) {
         search.addEventListener('input', () => {
             skillsUi.search = (search.value || '').trim().toLowerCase();
             renderSkills();
+            updateActiveFilters();
         });
     }
 
+    // Issues toggle
+    const onlyIssues = document.getElementById('skills-only-issues');
     if (onlyIssues) {
         onlyIssues.addEventListener('change', () => {
             skillsUi.onlyIssues = Boolean(onlyIssues.checked);
             renderSkills();
+            updateActiveFilters();
         });
     }
 
-    const onlyInstalled = document.getElementById('skills-only-installed');
-    if (onlyInstalled) {
-        onlyInstalled.checked = skillsUi.onlyInstalled;
-        onlyInstalled.addEventListener('change', () => {
-            skillsUi.onlyInstalled = Boolean(onlyInstalled.checked);
-            renderSkills();
-        });
-    }
-
-    const showHidden = document.getElementById('skills-show-hidden');
-    if (showHidden) {
-        showHidden.addEventListener('change', () => {
-            skillsUi.showHidden = Boolean(showHidden.checked);
-            renderSkills();
-        });
-    }
-
+    // Refresh button
+    const refresh = document.getElementById('skills-refresh');
     if (refresh) {
-        refresh.addEventListener('click', () => loadSkills());
+        refresh.addEventListener('click', () => loadSkills({ useCache: false }));
     }
+
+    // Clear filters button
+    const clearBtn = document.getElementById('skills-clear-filters');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            skillsUi.search = '';
+            skillsUi.onlyIssues = false;
+            skillsUi.status = '';
+            skillsUi.source = '';
+            skillsUi.agent = '';
+            
+            if (search) search.value = '';
+            if (onlyIssues) onlyIssues.checked = false;
+            
+            // Reset dropdowns
+            document.querySelectorAll('.skills-filter-popover-trigger').forEach(trigger => {
+                const filter = trigger.dataset.filter;
+                trigger.classList.remove('open');
+                trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                    opt.classList.toggle('active', opt.dataset.value === '');
+                });
+                const valueEl = document.getElementById(`skills-${filter}-value`);
+                if (valueEl) valueEl.textContent = filter === 'agent' ? 'All' : 'All';
+            });
+            
+            renderSkills();
+            updateActiveFilters();
+        });
+    }
+
+    // Filter popover triggers
+    document.querySelectorAll('.skills-filter-popover-trigger').forEach(trigger => {
+        const filter = trigger.dataset.filter;
+        const dropdown = trigger.querySelector('.skills-filter-dropdown');
+        
+        // Click on trigger to toggle
+        trigger.querySelector('.skills-filter-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            
+            // Close other open dropdowns
+            document.querySelectorAll('.skills-filter-popover-trigger.open').forEach(t => {
+                if (t !== trigger) t.classList.remove('open');
+            });
+            
+            trigger.classList.toggle('open');
+        });
+        
+        // Click on options
+        dropdown.querySelectorAll('.skills-filter-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                const label = option.textContent;
+                
+                // Update active state
+                dropdown.querySelectorAll('.skills-filter-option').forEach(opt => {
+                    opt.classList.toggle('active', opt === option);
+                });
+                
+                // Update UI
+                const valueEl = document.getElementById(`skills-${filter}-value`);
+                if (valueEl) valueEl.textContent = label;
+                
+                // Update state
+                if (filter === 'status') skillsUi.status = value;
+                else if (filter === 'source') skillsUi.source = value;
+                else if (filter === 'agent') skillsUi.agent = value;
+                
+                // Close dropdown
+                trigger.classList.remove('open');
+                
+                renderSkills();
+                updateActiveFilters();
+            });
+        });
+    });
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.skills-filter-popover-trigger')) {
+            document.querySelectorAll('.skills-filter-popover-trigger.open').forEach(t => {
+                t.classList.remove('open');
+            });
+        }
+    });
 }
 
-async function loadSkills() {
+async function loadSkills({ useCache = true } = {}) {
     const container = document.getElementById('skills-list');
     if (!container) return;
 
+    const startedAt = performance.now();
+
+    if (useCache) {
+        const cached = readSkillsCache();
+        if (cached?.skills?.length) {
+            skillsList = cached.skills;
+            renderSkills();
+            console.log(`[Perf][Skills] Rendered cached skills in ${Math.round(performance.now() - startedAt)}ms (${skillsList.length} skills)`);
+        }
+    }
+
     if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div class="empty-state">Connect to gateway to view skills</div>';
+        if (!skillsList.length) {
+            container.innerHTML = '<div class="empty-state">Connect to gateway to view skills</div>';
+        }
         return;
     }
 
@@ -7080,18 +8838,24 @@ async function loadSkills() {
         // Prefer skills.status (rich, includes install options + requirements).
         // Fallback to skills.list for older gateways.
         let result;
+        let source = 'skills.status';
         try {
             result = await gateway._request('skills.status', {});
             skillsList = result?.skills || [];
         } catch (e) {
+            source = 'skills.list';
             result = await gateway._request('skills.list', {});
             skillsList = result?.skills || result || [];
         }
 
+        writeSkillsCache(skillsList);
         renderSkills();
+        console.log(`[Perf][Skills] ${source} + render: ${Math.round(performance.now() - startedAt)}ms (${Array.isArray(skillsList) ? skillsList.length : 0} skills)`);
     } catch (e) {
         console.warn('[Skills] Failed:', e.message);
-        container.innerHTML = '<div class="empty-state">Could not load skills. The skills RPC may not be available.</div>';
+        if (!skillsList.length) {
+            container.innerHTML = '<div class="empty-state">Could not load skills. The skills RPC may not be available.</div>';
+        }
     }
 }
 
@@ -7196,21 +8960,24 @@ function renderSkills() {
             return name.toLowerCase().includes(query) || desc.toLowerCase().includes(query) || key.toLowerCase().includes(query);
         })
         .filter(skill => {
-            if (!skillsUi.onlyInstalled) return true;
-            // "Installed" means actually usable: ready (no missing bins) AND eligible for this OS
-            const missing = skill?.missing || {};
-            const missingBins = (missing.bins?.length || 0) + (missing.anyBins?.length || 0);
-            const missingOs = (missing.os || []).length > 0;
-            if (missingOs || missingBins > 0) return false;
-            return skill?.installed === true || skill?.bundled === true || skill?.enabled !== false;
+            if (!skillsUi.status) return true;
+            const enabled = !skill?.disabled && skill?.enabled !== false;
+            if (skillsUi.status === 'enabled') return enabled;
+            if (skillsUi.status === 'disabled') return !enabled;
+            return true;
+        })
+        .filter(skill => {
+            if (!skillsUi.source) return true;
+            if (skillsUi.source === 'bundled') return skill?.bundled === true;
+            if (skillsUi.source === 'installed') return skill?.installed === true;
+            if (skillsUi.source === 'clawhub') return skill?.source === 'clawhub';
+            return true;
+        })
+        .filter(skill => {
+            if (!skillsUi.agent) return true;
+            return getSkillAssignedAgent(skill) === skillsUi.agent;
         })
         .filter(skill => skillsUi.onlyIssues ? skillHasIssues(skill) : true)
-        .filter(skill => {
-            if (skillsUi.showHidden) return true;
-            const hidden = getHiddenSkills();
-            const key = skill?.skillKey || skill?.name || '';
-            return !hidden.includes(key);
-        })
         .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
 
     container.innerHTML = filtered.map(skill => {
@@ -7228,6 +8995,7 @@ function renderSkills() {
         const desc = skill?.description || '';
         const emoji = skill?.emoji || '🧩';
         const source = skill?.source ? `• ${escapeHtml(skill.source)}` : '';
+        const assignedAgent = getSkillAssignedAgent(skill);
 
         const topBadges = [
             showEligible ? (eligible ? '<span style="font-size: 10px; color: var(--success);">Ready</span>' : '<span style="font-size: 10px; color: var(--warning);">Needs attention</span>') : '',
@@ -7253,6 +9021,7 @@ function renderSkills() {
                     ${desc ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${escapeHtml(desc)}</div>` : ''}
                     <div style="margin-top: 6px; display:flex; align-items:center; gap: 10px; flex-wrap: wrap;">
                         <span style="font-size: 10px; color: var(--text-faint);">skillKey: <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">${escapeHtml(skillKey)}</span></span>
+                        ${assignedAgent ? `<span style="font-size: 10px; color: var(--text-faint);">agent: <span style="text-transform: capitalize;">${escapeHtml(assignedAgent)}</span></span>` : ''}
                         ${homepage}
                     </div>
                     ${missingBadges}
@@ -7265,6 +9034,12 @@ function renderSkills() {
                             style="padding: 4px 10px; font-size: 11px;"
                             title="View and edit skill files">
                         📂 Files
+                    </button>
+                    <button onclick="openEditSkillModal('${escapeHtml(skillKey)}')"
+                            class="btn btn-ghost"
+                            style="padding: 4px 10px; font-size: 11px;"
+                            title="Edit skill settings">
+                        ✏️ Edit
                     </button>
                     <button onclick="toggleSkill('${escapeHtml(skillKey)}', ${enabled ? 'false' : 'true'})"
                             class="btn ${enabled ? 'btn-ghost' : 'btn-primary'}"
@@ -7654,6 +9429,202 @@ window.saveSkillFile = async function(relPath) {
     }
 };
 
+window.openEditSkillModal = function(skillKey) {
+    const skill = skillsList.find(s => (s?.skillKey || s?.name || '') === skillKey);
+    if (!skill) {
+        showToast('Skill not found', 'error');
+        return;
+    }
+
+    document.getElementById('edit-skill-key').value = skillKey;
+    document.getElementById('edit-skill-name').value = skill?.name || skillKey;
+    document.getElementById('edit-skill-description').value = skill?.description || '';
+
+    const enabled = !skill?.disabled && skill?.enabled !== false;
+    document.getElementById('edit-skill-enabled').checked = enabled;
+
+    // Get env vars from skill config if available
+    const envText = skill?.envEntries
+        ? Object.entries(skill.envEntries).map(([k, v]) => `${k}=${v}`).join('\n')
+        : '';
+    document.getElementById('edit-skill-env').value = envText;
+
+    // Get agent assignment if configured
+    const agentSelect = document.getElementById('edit-skill-agent');
+    if (agentSelect) {
+        agentSelect.value = getSkillAssignedAgent(skill);
+    }
+
+    document.getElementById('edit-skill-modal-subtitle').textContent = skill?.skillKey || skillKey;
+
+    showModal('edit-skill-modal');
+};
+
+window.submitEditSkill = async function() {
+    const skillKey = document.getElementById('edit-skill-key')?.value?.trim();
+    if (!skillKey) {
+        showToast('Skill key is required', 'error');
+        return;
+    }
+
+    const description = document.getElementById('edit-skill-description')?.value?.trim();
+    const enabled = document.getElementById('edit-skill-enabled')?.checked;
+    const envText = document.getElementById('edit-skill-env')?.value?.trim() || '';
+    const assignedAgent = document.getElementById('edit-skill-agent')?.value?.trim();
+
+    // Parse env vars
+    const envEntries = {};
+    if (envText) {
+        envText.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed) return;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+                const key = trimmed.substring(0, eqIdx).trim();
+                const value = trimmed.substring(eqIdx + 1).trim();
+                if (key) envEntries[key] = value;
+            }
+        });
+    }
+
+    // Build the skill config patch
+    const patch = {
+        enabled: enabled
+    };
+
+    if (description) {
+        patch.description = description;
+    }
+
+    if (Object.keys(envEntries).length > 0) {
+        patch.envEntries = envEntries;
+    }
+
+    if (assignedAgent) {
+        patch.assignedAgent = assignedAgent;
+    }
+
+    try {
+        const resp = await fetch('/api/skills/config', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skillKey, patch })
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to save skill settings');
+        }
+
+        showToast(`${skillKey} settings updated`, 'success');
+        hideModal('edit-skill-modal');
+        loadSkills({ useCache: false });
+    } catch (e) {
+        showToast('Failed to save: ' + e.message, 'error');
+    }
+};
+
+function updateActiveFilters() {
+    const container = document.getElementById('skills-active-filters');
+    const clearBtn = document.getElementById('skills-clear-filters');
+    const countEl = document.getElementById('skills-filter-count');
+    if (!container) return;
+
+    const filters = [];
+    
+    if (skillsUi.search) {
+        filters.push({ type: 'search', label: `"${skillsUi.search}"` });
+    }
+    if (skillsUi.status) {
+        filters.push({ type: 'status', label: skillsUi.status });
+    }
+    if (skillsUi.source) {
+        filters.push({ type: 'source', label: skillsUi.source });
+    }
+    if (skillsUi.agent) {
+        filters.push({ type: 'agent', label: skillsUi.agent });
+    }
+    if (skillsUi.onlyIssues) {
+        filters.push({ type: 'issues', label: '⚠ Issues' });
+    }
+
+    // Update count
+    const count = filters.length;
+    if (countEl) countEl.textContent = count;
+    
+    if (filters.length === 0) {
+        container.style.display = 'none';
+        if (clearBtn) clearBtn.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'flex';
+    if (clearBtn) clearBtn.style.display = 'flex';
+
+    const filterLabels = {
+        'search': 'Search',
+        'status': 'Status',
+        'source': 'Source',
+        'agent': 'Agent',
+        'issues': 'Issues'
+    };
+
+    container.innerHTML = filters.map(f => `
+        <span class="filter-chip">
+            <span style="opacity: 0.6; font-size: 10px;">${filterLabels[f.type]}:</span>
+            ${escapeHtml(f.label)}
+            <button onclick="clearFilter('${f.type}')">✕</button>
+        </span>
+    `).join('');
+}
+
+window.clearFilter = function(type) {
+    if (type === 'search') {
+        skillsUi.search = '';
+        const el = document.getElementById('skills-search');
+        if (el) el.value = '';
+    } else if (type === 'status') {
+        skillsUi.status = '';
+        const trigger = document.getElementById('skills-status-filter');
+        if (trigger) {
+            trigger.classList.remove('open');
+            trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === '');
+            });
+            const valueEl = document.getElementById('skills-status-value');
+            if (valueEl) valueEl.textContent = 'All';
+        }
+    } else if (type === 'source') {
+        skillsUi.source = '';
+        const trigger = document.getElementById('skills-source-filter');
+        if (trigger) {
+            trigger.classList.remove('open');
+            trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === '');
+            });
+            const valueEl = document.getElementById('skills-source-value');
+            if (valueEl) valueEl.textContent = 'All';
+        }
+    } else if (type === 'agent') {
+        skillsUi.agent = '';
+        const trigger = document.getElementById('skills-agent-filter');
+        if (trigger) {
+            trigger.classList.remove('open');
+            trigger.querySelectorAll('.skills-filter-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === '');
+            });
+            const valueEl = document.getElementById('skills-agent-value');
+            if (valueEl) valueEl.textContent = 'All';
+        }
+    } else if (type === 'issues') {
+        skillsUi.onlyIssues = false;
+        const el = document.getElementById('skills-only-issues');
+        if (el) el.checked = false;
+    }
+    renderSkills();
+    updateActiveFilters();
+};
+
 // === system.js ===
 // js/system.js — System page rendering
 
@@ -7807,7 +9778,7 @@ function renderStatus() {
 
     const providerEl = document.getElementById('provider-name');
     if (providerEl) {
-        providerEl.textContent = state.provider || 'anthropic';
+        providerEl.textContent = state.provider || 'openai-codex';
     }
 
     if (state.currentTask) {
@@ -7891,10 +9862,6 @@ function hideModal(id) {
 async function openSettingsModal() {
     showModal('settings-modal');
 
-    // Init memory layout setting
-    const layoutSel = document.getElementById('setting-memory-layout');
-    if (layoutSel && window._memoryCards) layoutSel.value = window._memoryCards.getLayout();
-
     try {
         // Get current model from OpenClaw
         const response = await fetch('/api/models/current');
@@ -7918,16 +9885,16 @@ async function openSettingsModal() {
         
     } catch (error) {
         console.error('[Dashboard] Failed to get current model:', error);
-        // Fallback
-        document.getElementById('current-provider-display').textContent = 'anthropic';
-        document.getElementById('current-model-display').textContent = 'anthropic/claude-opus-4-5';
-        document.getElementById('setting-provider').value = 'anthropic';
-        await updateModelDropdown('anthropic');
+        // Fallback (approved providers only)
+        document.getElementById('current-provider-display').textContent = 'openai-codex';
+        document.getElementById('current-model-display').textContent = 'openai-codex/gpt-5.3-codex';
+        document.getElementById('setting-provider').value = 'openai-codex';
+        await updateModelDropdown('openai-codex');
         
         // Set fallback model after dropdown is populated
         const settingModelSelect = document.getElementById('setting-model');
         if (settingModelSelect) {
-            settingModelSelect.value = 'anthropic/claude-opus-4-5';
+            settingModelSelect.value = 'openai-codex/gpt-5.3-codex';
         }
     }
 
@@ -8320,9 +10287,12 @@ async function syncActivitiesFromFile() {
 }
 
 // Poll for activity updates every 30 seconds
-setInterval(syncActivitiesFromFile, 30000);
+let activitySyncInterval = setInterval(syncActivitiesFromFile, 30000);
 // Also sync on load
 setTimeout(syncActivitiesFromFile, 2000);
+
+// Cleanup function for SPA navigation
+window._uiHandlersCleanup = () => clearInterval(activitySyncInterval);
 
 function toggleConsoleExpand() {
     const section = document.getElementById('console-section');
@@ -8450,84 +10420,1347 @@ function closeAllTaskMenus() {
 
 let cronJobs = [];
 let cronInterval = null;
+let cronRunCache = new Map();
+let cronDiagnostics = new Map();
+let activeCronJobId = null;
+let activeCronTimeline = [];
+let cronDetailLoadToken = 0;
+let cronListFilter = 'all';
+let cronListQuery = '';
+let cronVisibleCount = 24;
+let cronDetailDrawerOpen = false;
+let cronAgentFilter = 'all';
+let cronEnabledFilter = 'all';
+let cronActivityFilter = 'all';
+let cronSortBy = 'nextRun';
+let cronSortDirection = 'asc';
+let cronAdvancedControlsOpen = false;
+let cronListLoadPromise = null;
+let cronLastLoadedAt = 0;
+const CRON_CACHE_KEY = 'cronListCache.v1';
+const CRON_NAME_MAP_KEY = 'cronJobNameMap.v1';
+const CRON_MIN_REFRESH_INTERVAL_MS = 15000;
+const CRON_REQUEST_TIMEOUT_MS = 10000;
+const CRON_DETAIL_INITIAL_RUN_LIMIT = 12;
+const CRON_DETAIL_FULL_RUN_LIMIT = 40;
 
 function initCronPage() {
-    loadCronJobs();
+    const searchInput = document.getElementById('cron-search-input');
+    if (searchInput && !searchInput.dataset.bound) {
+        searchInput.dataset.bound = 'true';
+        searchInput.addEventListener('input', (event) => {
+            cronListQuery = event.target.value.trim().toLowerCase();
+            renderCronJobs();
+        });
+    }
+    if (searchInput) searchInput.value = cronListQuery;
+
+    const agentFilter = document.getElementById('cron-agent-filter');
+    if (agentFilter && !agentFilter.dataset.bound) {
+        agentFilter.dataset.bound = 'true';
+        agentFilter.addEventListener('change', (event) => {
+            cronAgentFilter = event.target.value || 'all';
+            updateCronAdvancedControlsUI();
+            renderCronJobs();
+        });
+    }
+
+    const enabledFilter = document.getElementById('cron-enabled-filter');
+    if (enabledFilter && !enabledFilter.dataset.bound) {
+        enabledFilter.dataset.bound = 'true';
+        enabledFilter.addEventListener('change', (event) => {
+            cronEnabledFilter = event.target.value || 'all';
+            updateCronAdvancedControlsUI();
+            renderCronJobs();
+        });
+    }
+    if (enabledFilter) enabledFilter.value = cronEnabledFilter;
+
+    const activityFilter = document.getElementById('cron-activity-filter');
+    if (activityFilter && !activityFilter.dataset.bound) {
+        activityFilter.dataset.bound = 'true';
+        activityFilter.addEventListener('change', (event) => {
+            cronActivityFilter = event.target.value || 'all';
+            updateCronAdvancedControlsUI();
+            renderCronJobs();
+        });
+    }
+    if (activityFilter) activityFilter.value = cronActivityFilter;
+
+    const sortBySelect = document.getElementById('cron-sort-by');
+    if (sortBySelect && !sortBySelect.dataset.bound) {
+        sortBySelect.dataset.bound = 'true';
+        sortBySelect.addEventListener('change', (event) => {
+            cronSortBy = event.target.value || 'nextRun';
+            renderCronJobs();
+        });
+    }
+    if (sortBySelect) sortBySelect.value = cronSortBy;
+
+    const sortDirectionBtn = document.getElementById('cron-sort-direction-btn');
+    if (sortDirectionBtn && !sortDirectionBtn.dataset.bound) {
+        sortDirectionBtn.dataset.bound = 'true';
+        sortDirectionBtn.addEventListener('click', () => {
+            cronSortDirection = cronSortDirection === 'asc' ? 'desc' : 'asc';
+            updateCronSortDirectionButton();
+            renderCronJobs();
+        });
+    }
+
+    updateCronFilterChips();
+    updateCronSortDirectionButton();
+    updateCronAdvancedControlsUI();
+    const hydratedFromCache = hydrateCronJobsFromCache();
+    if (!hydratedFromCache) {
+        populateCronAgentFilterOptions();
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const hasDeepLinkedJob = window.location.pathname === '/cron' && params.has('job');
+    if (hasDeepLinkedJob) {
+        renderEmptyDetailState();
+        setCronDetailDrawerOpen(false);
+        syncCronViewFromURL();
+    } else {
+        activeCronJobId = null;
+        activeCronTimeline = [];
+        renderEmptyDetailState();
+        setCronDetailDrawerOpen(false);
+    }
+
+    const shouldRefresh = !cronJobs.length || (Date.now() - cronLastLoadedAt > CRON_MIN_REFRESH_INTERVAL_MS);
+    if (shouldRefresh) {
+        loadCronJobs({ silent: hydratedFromCache });
+    } else {
+        renderCronJobs();
+    }
+
     if (cronInterval) clearInterval(cronInterval);
-    cronInterval = setInterval(loadCronJobs, 30000);
+    cronInterval = setInterval(() => {
+        const cronPage = document.getElementById('page-cron');
+        if (!cronPage || !cronPage.classList.contains('active')) return;
+
+        if (activeCronJobId && cronDetailDrawerOpen) {
+            openCronDetailView(activeCronJobId, { refresh: true, pushState: false });
+        } else {
+            loadCronJobs({ silent: true });
+        }
+    }, 30000);
 }
 
-async function loadCronJobs() {
-    const container = document.getElementById('cron-jobs-list');
-    if (!container) return;
+function formatCronScheduleHuman(schedule) {
+    if (!schedule) return '--';
+    if (typeof schedule === 'string') {
+        // Try to parse as cron expression
+        return cronToHuman(schedule);
+    }
 
-    if (!gateway || !gateway.isConnected()) {
-        container.innerHTML = '<div class="empty-state">Connect to gateway to manage cron jobs</div>';
+    if (schedule.kind === 'cron') {
+        return cronToHuman(schedule.expr);
+    }
+    if (schedule.kind === 'every') {
+        const ms = Number(schedule.everyMs || 0);
+        if (!ms) return 'every --';
+        const seconds = Math.floor(ms / 1000);
+        if (seconds < 60) return `every ${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `every ${minutes}m`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `every ${hours}h`;
+        const days = Math.floor(hours / 24);
+        return `every ${days}d`;
+    }
+    if (schedule.kind === 'at') {
+        try {
+            return `at ${new Date(schedule.at).toLocaleString()}`;
+        } catch {
+            return `at ${schedule.at || '--'}`;
+        }
+    }
+
+    return JSON.stringify(schedule);
+}
+
+function cronToHuman(expr) {
+    if (!expr || typeof expr !== 'string') return expr || '--';
+
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length < 5) return expr;
+
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+    // Every X minutes: */X
+    if (minute.startsWith('*/')) {
+        const interval = minute.substring(2);
+        return `Every ${interval} minutes`;
+    }
+
+    // Every hour at minute X: X * * * *
+    if (hour === '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        return `Every hour at minute ${minute}`;
+    }
+
+    // Daily at X: X Y * * *
+    if (dayOfMonth === '*' && dayOfWeek === '*') {
+        const h = parseInt(hour);
+        const m = parseInt(minute);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        return `Daily at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // Weekly on X at Y: X Y * * Z
+    if (dayOfMonth === '*' && dayOfWeek !== '*') {
+        const h = parseInt(hour);
+        const m = parseInt(minute);
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        return `Weekly on ${days[parseInt(dayOfWeek)]} at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // Monthly on X at Y: X Y Z * *
+    if (dayOfMonth !== '*') {
+        const h = parseInt(hour);
+        const m = parseInt(minute);
+        const d = parseInt(dayOfMonth);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        const suffix = getOrdinalSuffix(d);
+        return `Monthly on the ${d}${suffix} at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    // Fallback to raw expression with timezone
+    return expr;
+}
+
+function formatCronSchedule(schedule) {
+    return formatCronScheduleHuman(schedule);
+}
+
+function formatDateTime(value) {
+    if (value == null || value === '') return '--';
+    const numeric = Number(value);
+    const date = Number.isFinite(numeric) && numeric > 0 ? new Date(numeric) : new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString();
+}
+
+function getCronState(job) {
+    return job?.state || {};
+}
+
+function formatNextRun(job) {
+    const state = getCronState(job);
+    const next = state.nextRunAtMs || job.nextRunAtMs || job.nextRun;
+    return formatDateTime(next);
+}
+
+function formatLastRun(job) {
+    const state = getCronState(job);
+    const last = state.lastRunAtMs || job.lastRunAtMs || job.lastRun;
+    if (!last) return 'Never';
+    if (typeof timeAgo === 'function') return timeAgo(Number(last));
+    return formatDateTime(last);
+}
+
+function getLastStatus(job) {
+    const state = getCronState(job);
+    return state.lastRunStatus || state.lastStatus || job.lastRunStatus || job.lastStatus || '--';
+}
+
+function getLastError(job) {
+    const state = getCronState(job);
+    return state.lastError || job.lastError || null;
+}
+
+function getPayloadSummary(job) {
+    const payload = job?.payload;
+    if (!payload) return '';
+    if (payload.kind === 'systemEvent') return payload.text || '';
+    if (payload.kind === 'agentTurn') return payload.message || '';
+    return '';
+}
+
+function getCronDelivery(job) {
+    return job?.delivery && typeof job.delivery === 'object' ? job.delivery : null;
+}
+
+function hasUnsupportedWebchatAnnounce(job) {
+    const delivery = getCronDelivery(job);
+    if (!delivery || delivery.mode !== 'announce') return false;
+    const channel = String(delivery.channel || '').trim().toLowerCase();
+    const to = String(delivery.to || '').trim().toLowerCase();
+    return channel === 'webchat' || to === 'webchat';
+}
+
+function getCronDeliveryWarning(job) {
+    if (!hasUnsupportedWebchatAnnounce(job)) return null;
+    return 'WebChat is not a supported cron announce channel in this build. Use Main session for dashboard-visible reminders, or use webhook / a real provider channel.';
+}
+
+function buildCronWebchatMigrationPatch(job) {
+    const payloadText = getPayloadSummary(job) || job?.payload?.text || job?.payload?.message || '';
+    const patch = {
+        delivery: null
+    };
+
+    if ((job?.sessionTarget || 'main') !== 'main') {
+        patch.sessionTarget = 'main';
+        patch.payload = {
+            kind: 'systemEvent',
+            text: payloadText
+        };
+        patch.wakeMode = 'now';
+    }
+
+    return patch;
+}
+
+function getJobById(jobId) {
+    return cronJobs.find(job => String(job.id) === String(jobId));
+}
+
+function persistCronNameMap() {
+    try {
+        const map = {};
+        for (const job of cronJobs) {
+            if (!job || !job.id) continue;
+            map[String(job.id)] = String(job.name || job.id);
+        }
+        localStorage.setItem(CRON_NAME_MAP_KEY, JSON.stringify(map));
+    } catch (e) {
+        console.warn('[Cron] Failed to persist cron name map:', e?.message || e);
+    }
+}
+
+window.getCronFriendlyNameById = function (jobId) {
+    if (!jobId) return null;
+    try {
+        const raw = localStorage.getItem(CRON_NAME_MAP_KEY);
+        if (!raw) return null;
+        const map = JSON.parse(raw);
+        const value = map && map[String(jobId)];
+        return value ? String(value) : null;
+    } catch {
+        return null;
+    }
+};
+
+function summarizeRuns(runs = []) {
+    const sorted = [...runs].sort((a, b) => Number(b.runAtMs || b.ts || 0) - Number(a.runAtMs || a.ts || 0));
+    const failures = sorted.filter(r => (r.status || '').toLowerCase() === 'error' || (r.status || '').toLowerCase() === 'failed');
+    const successes = sorted.filter(r => (r.status || '').toLowerCase() === 'ok' || (r.status || '').toLowerCase() === 'success');
+    const latest = sorted[0] || null;
+    const latestFailure = failures[0] || null;
+    const latestSuccess = successes[0] || null;
+
+    return {
+        latest,
+        latestFailure,
+        latestSuccess,
+        failureCount: failures.length,
+        successCount: successes.length,
+        totalCount: sorted.length
+    };
+}
+
+function getCachedCronRuns(jobId) {
+    const cached = cronRunCache.get(jobId);
+    if (Array.isArray(cached)) return cached;
+    if (cached && Array.isArray(cached.runs)) return cached.runs;
+    return [];
+}
+
+function getCachedCronRunLimit(jobId) {
+    const cached = cronRunCache.get(jobId);
+    if (Array.isArray(cached)) return cached.length;
+    if (cached && Number.isFinite(Number(cached.limit))) return Number(cached.limit);
+    if (cached && Array.isArray(cached.runs)) return cached.runs.length;
+    return 0;
+}
+
+async function fetchCronRuns(jobId, { refresh = false, limit = 20 } = {}) {
+    const cachedRuns = getCachedCronRuns(jobId);
+    const cachedLimit = getCachedCronRunLimit(jobId);
+    if (!refresh && cachedRuns.length && cachedLimit >= limit) return cachedRuns;
+
+    const result = await gateway._request('cron.runs', { jobId, limit }, CRON_REQUEST_TIMEOUT_MS);
+    const runs = result?.entries || result?.runs || [];
+    cronRunCache.set(jobId, {
+        runs,
+        limit,
+        ts: Date.now()
+    });
+    cronDiagnostics.set(jobId, summarizeRuns(runs));
+    return runs;
+}
+
+async function hydrateCronDiagnostics() {
+    const jobs = cronJobs.slice(0, 6);
+    if (!jobs.length) return;
+
+    const startedAt = performance.now();
+    await Promise.all(jobs.map(async (job) => {
+        if (!job?.id) return;
+        try {
+            await fetchCronRuns(job.id, { limit: 10 });
+        } catch (e) {
+            console.warn('[Cron] Failed to fetch diagnostics for job', job.id, e.message);
+        }
+    }));
+
+    renderCronJobs();
+    console.log(`[Perf][Cron] Warmed diagnostics for ${jobs.length}/${cronJobs.length} jobs in ${Math.round(performance.now() - startedAt)}ms`);
+}
+
+function buildDetailURL(jobId) {
+    const url = new URL(window.location.href);
+    url.pathname = '/cron';
+    if (jobId) url.searchParams.set('job', jobId);
+    else url.searchParams.delete('job');
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function getCronJobStatusTone(job) {
+    const status = String(getLastStatus(job) || '').toLowerCase();
+    if (job?.enabled === false) return 'disabled';
+    if (status === 'error' || status === 'failed') return 'error';
+    if (status === 'ok' || status === 'success') return 'success';
+    return 'neutral';
+}
+
+function getRunStatusTone(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'ok' || normalized === 'success') return 'success';
+    if (normalized === 'error' || normalized === 'failed') return 'error';
+    return 'neutral';
+}
+
+function getCronJobAccentColor(job) {
+    const tone = getCronJobStatusTone(job);
+    if (tone === 'error') return 'var(--error)';
+    if (tone === 'success') return 'var(--success)';
+    if (tone === 'disabled') return 'var(--text-muted)';
+    return 'var(--brand, var(--text-primary))';
+}
+
+function getCronJobOwnerAgent(job) {
+    const owner = String(job?.agentId || job?.ownerAgentId || '').trim();
+    return owner;
+}
+
+function parseTimestamp(value) {
+    if (value == null || value === '') return 0;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getCronJobLastRunMs(job) {
+    const state = getCronState(job);
+    return parseTimestamp(state.lastRunAtMs || job?.lastRunAtMs || job?.lastRun);
+}
+
+function getCronJobNextRunMs(job) {
+    const state = getCronState(job);
+    return parseTimestamp(state.nextRunAtMs || job?.nextRunAtMs || job?.nextRun);
+}
+
+function getCronJobFailureCount(job) {
+    const diagnostics = cronDiagnostics.get(job?.id);
+    if (diagnostics && Number.isFinite(Number(diagnostics.failureCount))) {
+        return Number(diagnostics.failureCount);
+    }
+    return getCronJobStatusTone(job) === 'error' ? 1 : 0;
+}
+
+function getCronJobConsecutiveErrors(job) {
+    return Number(getCronState(job).consecutiveErrors || 0);
+}
+
+function compareNumbers(a, b, direction = 'asc') {
+    const left = Number(a || 0);
+    const right = Number(b || 0);
+    if (left === right) return 0;
+    if (direction === 'asc') return left < right ? -1 : 1;
+    return left > right ? -1 : 1;
+}
+
+function compareStrings(a, b, direction = 'asc') {
+    const left = String(a || '');
+    const right = String(b || '');
+    const result = left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
+    return direction === 'asc' ? result : -result;
+}
+
+function getCronStatusSeverity(job) {
+    const tone = getCronJobStatusTone(job);
+    if (tone === 'error') return 4;
+    if (tone === 'disabled') return 3;
+    if (tone === 'neutral') return 2;
+    if (tone === 'success') return 1;
+    return 0;
+}
+
+function getComparableNextRunMs(job) {
+    const next = getCronJobNextRunMs(job);
+    if (next > 0) return next;
+    return cronSortDirection === 'asc' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+}
+
+function getComparableLastRunMs(job) {
+    const last = getCronJobLastRunMs(job);
+    if (last > 0) return last;
+    return cronSortDirection === 'asc' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+}
+
+function matchesCronListAdvancedFilters(job) {
+    const owner = getCronJobOwnerAgent(job);
+    if (cronAgentFilter === '__unassigned') {
+        if (owner) return false;
+    } else if (cronAgentFilter !== 'all' && owner !== cronAgentFilter) {
+        return false;
+    }
+
+    const enabled = job?.enabled !== false;
+    if (cronEnabledFilter === 'enabled' && !enabled) return false;
+    if (cronEnabledFilter === 'disabled' && enabled) return false;
+
+    const now = Date.now();
+    const lastRunMs = getCronJobLastRunMs(job);
+    const nextRunMs = getCronJobNextRunMs(job);
+    if (cronActivityFilter === 'ran_24h' && !(lastRunMs > now - (24 * 60 * 60 * 1000))) return false;
+    if (cronActivityFilter === 'stale_7d' && !(lastRunMs > 0 && lastRunMs < now - (7 * 24 * 60 * 60 * 1000))) return false;
+    if (cronActivityFilter === 'never' && lastRunMs > 0) return false;
+    if (cronActivityFilter === 'next_24h' && !(nextRunMs > now && nextRunMs <= now + (24 * 60 * 60 * 1000))) return false;
+
+    return true;
+}
+
+function sortCronJobs(jobs = []) {
+    const sorted = [...jobs];
+    sorted.sort((a, b) => {
+        let result = 0;
+
+        if (cronSortBy === 'name') {
+            result = compareStrings(a?.name || a?.id, b?.name || b?.id, cronSortDirection);
+        } else if (cronSortBy === 'agent') {
+            result = compareStrings(getCronJobOwnerAgent(a) || 'zzzzzz', getCronJobOwnerAgent(b) || 'zzzzzz', cronSortDirection);
+        } else if (cronSortBy === 'nextRun') {
+            result = compareNumbers(getComparableNextRunMs(a), getComparableNextRunMs(b), cronSortDirection);
+        } else if (cronSortBy === 'lastRun') {
+            result = compareNumbers(getComparableLastRunMs(a), getComparableLastRunMs(b), cronSortDirection);
+        } else if (cronSortBy === 'status') {
+            result = compareNumbers(getCronStatusSeverity(a), getCronStatusSeverity(b), cronSortDirection);
+        } else if (cronSortBy === 'errors') {
+            result = compareNumbers(getCronJobConsecutiveErrors(a), getCronJobConsecutiveErrors(b), cronSortDirection);
+        } else if (cronSortBy === 'failures') {
+            result = compareNumbers(getCronJobFailureCount(a), getCronJobFailureCount(b), cronSortDirection);
+        }
+
+        if (result !== 0) return result;
+        return compareStrings(a?.name || a?.id, b?.name || b?.id, 'asc');
+    });
+    return sorted;
+}
+
+function populateCronAgentFilterOptions() {
+    const select = document.getElementById('cron-agent-filter');
+    if (!select) return;
+
+    const currentValue = cronAgentFilter;
+    const owners = Array.from(new Set(cronJobs.map(getCronJobOwnerAgent).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+    const hasUnassigned = cronJobs.some(job => !getCronJobOwnerAgent(job));
+
+    select.innerHTML = '';
+    const addOption = (value, label) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+    };
+
+    addOption('all', 'All agents');
+    if (hasUnassigned) addOption('__unassigned', 'Unassigned');
+    owners.forEach((owner) => addOption(owner, owner));
+
+    if (currentValue === 'all') {
+        select.value = 'all';
+        return;
+    }
+    if (currentValue === '__unassigned' && hasUnassigned) {
+        select.value = currentValue;
+        return;
+    }
+    if (owners.includes(currentValue)) {
+        select.value = currentValue;
         return;
     }
 
-    try {
-        const result = await gateway._request('cron.list', {});
-        cronJobs = result?.jobs || result || [];
-        renderCronJobs();
-    } catch (e) {
-        console.warn('[Cron] Failed to fetch jobs:', e.message);
-        container.innerHTML = '<div class="empty-state">Could not load cron jobs. The cron RPC may not be available.</div>';
+    cronAgentFilter = 'all';
+    select.value = 'all';
+}
+
+function updateCronSortDirectionButton() {
+    const button = document.getElementById('cron-sort-direction-btn');
+    if (!button) return;
+    button.textContent = cronSortDirection === 'asc' ? 'Asc' : 'Desc';
+    button.title = cronSortDirection === 'asc' ? 'Sort ascending' : 'Sort descending';
+}
+
+function updateCronAdvancedControlsUI() {
+    const advanced = document.getElementById('cron-advanced-controls');
+    const toggle = document.getElementById('cron-advanced-toggle-btn');
+    const activeAdvancedCount = Number(cronAgentFilter !== 'all') +
+        Number(cronEnabledFilter !== 'all') +
+        Number(cronActivityFilter !== 'all');
+
+    if (advanced) advanced.classList.toggle('hidden', !cronAdvancedControlsOpen);
+    if (toggle) {
+        const badge = activeAdvancedCount > 0 ? ` (${activeAdvancedCount})` : '';
+        toggle.textContent = cronAdvancedControlsOpen ? `Hide filters${badge}` : `Filters${badge}`;
+        toggle.setAttribute('aria-expanded', cronAdvancedControlsOpen ? 'true' : 'false');
     }
+}
+
+function getCronSortLabel() {
+    if (cronSortBy === 'name') return 'name';
+    if (cronSortBy === 'agent') return 'agent owner';
+    if (cronSortBy === 'nextRun') return 'next run';
+    if (cronSortBy === 'lastRun') return 'last run';
+    if (cronSortBy === 'status') return 'status';
+    if (cronSortBy === 'errors') return 'consecutive errors';
+    if (cronSortBy === 'failures') return 'failure count';
+    return 'next run';
+}
+
+function matchesCronListFilter(job) {
+    const tone = getCronJobStatusTone(job);
+    const lastRunAt = Number(getCronState(job).lastRunAtMs || job?.lastRunAtMs || job?.lastRun || 0);
+    const isRecent = lastRunAt > Date.now() - (24 * 60 * 60 * 1000);
+
+    if (cronListFilter === 'failing') return tone === 'error';
+    if (cronListFilter === 'healthy') return tone === 'success';
+    if (cronListFilter === 'disabled') return tone === 'disabled';
+    if (cronListFilter === 'recent') return isRecent;
+    return true;
+}
+
+function matchesCronListQuery(job) {
+    if (!cronListQuery) return true;
+    const haystack = [
+        job?.name,
+        job?.id,
+        formatCronSchedule(job?.schedule || job?.cron),
+        job?.description,
+        getPayloadSummary(job),
+        getLastStatus(job)
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(cronListQuery);
+}
+
+function readCronCache() {
+    try {
+        const cached = JSON.parse(localStorage.getItem(CRON_CACHE_KEY) || 'null');
+        if (!cached || !Array.isArray(cached.jobs)) return null;
+        return cached;
+    } catch {
+        return null;
+    }
+}
+
+function writeCronCache(jobs) {
+    try {
+        localStorage.setItem(CRON_CACHE_KEY, JSON.stringify({ ts: Date.now(), jobs }));
+    } catch {}
+}
+
+function hydrateCronJobsFromCache() {
+    const cached = readCronCache();
+    if (!cached || !Array.isArray(cached.jobs) || !cached.jobs.length) return false;
+
+    cronJobs = cached.jobs;
+    cronLastLoadedAt = Number(cached.ts || 0);
+    populateCronAgentFilterOptions();
+    renderCronJobs();
+    return true;
+}
+
+function getVisibleCronJobs() {
+    const filtered = cronJobs.filter(job =>
+        matchesCronListFilter(job) &&
+        matchesCronListQuery(job) &&
+        matchesCronListAdvancedFilters(job)
+    );
+    return sortCronJobs(filtered);
+}
+
+function getRenderedCronJobs() {
+    return getVisibleCronJobs().slice(0, cronVisibleCount);
+}
+
+function updateCronListMeta(total = cronJobs.length, visible = getVisibleCronJobs().length) {
+    const meta = document.getElementById('cron-list-meta');
+    if (!meta) return;
+    const countText = visible === total
+        ? `${total} jobs`
+        : `${visible} of ${total} jobs shown`;
+    meta.textContent = countText;
+}
+
+function truncateForList(value, maxChars = 220) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+function updateCronFilterChips() {
+    document.querySelectorAll('[data-cron-filter]').forEach((button) => {
+        const isActive = button.dataset.cronFilter === cronListFilter;
+        button.classList.toggle('is-active', isActive);
+    });
+}
+
+function setCronDetailDrawerOpen(open) {
+    const shouldOpen = Boolean(open && activeCronJobId);
+    const page = document.getElementById('page-cron');
+    const detailView = document.getElementById('cron-detail-view');
+    const peekButton = document.getElementById('cron-detail-peek-btn');
+
+    cronDetailDrawerOpen = shouldOpen;
+    if (page) page.classList.toggle('cron-detail-open', shouldOpen);
+    if (detailView) detailView.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+    if (peekButton) {
+        const shouldShowPeek = !shouldOpen && Boolean(activeCronJobId);
+        peekButton.classList.toggle('hidden', !shouldShowPeek);
+    }
+}
+
+function renderEmptyDetailState(message = 'Choose a cron job on the left to inspect its schedule, failures, and recent runs.') {
+    activeCronTimeline = [];
+    const summary = document.getElementById('cron-detail-summary');
+    const meta = document.getElementById('cron-detail-meta');
+    const timeline = document.getElementById('cron-detail-timeline');
+    const error = document.getElementById('cron-detail-error');
+    const title = document.getElementById('cron-detail-title');
+    const subtitle = document.getElementById('cron-detail-subtitle');
+
+    if (title) title.textContent = activeCronJobId ? 'Loading cron job…' : 'Select a cron job';
+    if (subtitle) subtitle.textContent = message;
+    if (summary) summary.innerHTML = '';
+    if (meta) meta.innerHTML = '<div class="empty-state">Select a job to see metadata and configuration details.</div>';
+    if (timeline) timeline.innerHTML = '<div class="empty-state">Select a job to view its recent run timeline.</div>';
+    if (error) {
+        error.classList.add('hidden');
+        error.innerHTML = '';
+    }
+}
+
+function syncCronViewFromURL() {
+    const cronPage = document.getElementById('page-cron');
+    if (cronPage && !cronPage.classList.contains('active')) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const jobId = params.get('job');
+    if (window.location.pathname === '/cron' && jobId) {
+        openCronDetailView(jobId, { pushState: false });
+    } else {
+        showCronListView();
+    }
+}
+
+function showCronListView() {
+    activeCronJobId = null;
+    cronDetailLoadToken += 1;
+    document.getElementById('cron-list-view')?.classList.remove('hidden');
+    document.getElementById('cron-detail-view')?.classList.remove('hidden');
+    renderCronJobs();
+    renderEmptyDetailState();
+    setCronDetailDrawerOpen(false);
+}
+
+function setCronDetailURL(jobId) {
+    const url = new URL(window.location.href);
+    url.pathname = '/cron';
+    if (jobId) url.searchParams.set('job', jobId);
+    else url.searchParams.delete('job');
+
+    const targetPath = `${url.pathname}${url.search}${url.hash}`;
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (targetPath === currentPath) return;
+
+    history.pushState({ page: 'cron', jobId }, '', targetPath);
+}
+
+function renderSummaryCard(label, value, tone = 'default', subtext = '') {
+    const toneClass = tone === 'error' || tone === 'success' ? ` cron-tone-${tone}` : '';
+    return `
+        <div class="cron-summary-card${toneClass}">
+            <div class="cron-summary-label">${escapeHtml(label)}</div>
+            <div class="cron-summary-value">${escapeHtml(value || '--')}</div>
+            ${subtext ? `<div class="cron-summary-subtext">${escapeHtml(subtext)}</div>` : ''}
+        </div>`;
+}
+
+function renderCronDetailSummary(job, diagnostics) {
+    const state = getCronState(job);
+    return [
+        renderSummaryCard('Last run', formatDateTime(diagnostics.latest?.runAtMs || diagnostics.latest?.ts), (diagnostics.latest?.status || '').toLowerCase() === 'error' ? 'error' : 'default', diagnostics.latest?.status || '--'),
+        renderSummaryCard('Last failed attempt', diagnostics.latestFailure ? formatDateTime(diagnostics.latestFailure.runAtMs || diagnostics.latestFailure.ts) : 'None in recent history', diagnostics.latestFailure ? 'error' : 'success', diagnostics.latestFailure?.provider || ''),
+        renderSummaryCard('Last successful attempt', diagnostics.latestSuccess ? formatDateTime(diagnostics.latestSuccess.runAtMs || diagnostics.latestSuccess.ts) : 'None in recent history', diagnostics.latestSuccess ? 'success' : 'default', diagnostics.latestSuccess?.provider || ''),
+        renderSummaryCard('History window', `${diagnostics.totalCount} attempts`, 'default', `${diagnostics.failureCount} failed · ${diagnostics.successCount} successful`),
+        renderSummaryCard('Consecutive errors', String(state.consecutiveErrors || 0), (state.consecutiveErrors || 0) > 0 ? 'error' : 'success', `Current status: ${getLastStatus(job)}`),
+        renderSummaryCard('Next run', formatNextRun(job), 'default', job.enabled !== false ? 'Enabled' : 'Disabled')
+    ].join('');
+}
+
+function downloadJson(filename, data) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function copyJsonToClipboard(data, successMessage = 'Copied JSON to clipboard') {
+    const text = JSON.stringify(data, null, 2);
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast(successMessage, 'success');
+    } catch (e) {
+        console.warn('[Cron] Clipboard copy failed:', e.message);
+        showToast('Clipboard copy failed', 'error');
+    }
+}
+
+function buildCronListExport() {
+    return {
+        exportedAt: new Date().toISOString(),
+        page: 'cron-list',
+        totalJobs: cronJobs.length,
+        jobs: cronJobs.map((job) => ({
+            ...job,
+            diagnostics: cronDiagnostics.get(job.id) || null,
+            recentRuns: getCachedCronRuns(job.id)
+        }))
+    };
+}
+
+function buildCronTimelineExport(jobId) {
+    const job = getJobById(jobId);
+    return {
+        exportedAt: new Date().toISOString(),
+        page: 'cron-timeline',
+        jobId,
+        job,
+        diagnostics: cronDiagnostics.get(jobId) || (activeCronTimeline.length ? summarizeRuns(activeCronTimeline) : null),
+        runs: activeCronTimeline
+    };
+}
+
+function getCronJobDisplayModel(job, diagnostics = null) {
+    // 1. Explicit payload model (set via the cron edit model selector)
+    const payloadModel = String(job?.payload?.model || '').trim();
+    if (payloadModel) return payloadModel;
+
+    // 2. Root-level model field on the job itself
+    const rootModel = String(job?.model || '').trim();
+    if (rootModel) return rootModel;
+
+    // 3. Model from the most recent run history (diagnostics load asynchronously,
+    //    so this only helps after the detail view has been opened at least once)
+    if (diagnostics) {
+        const latestModel = String(
+            diagnostics?.latest?.model ||
+            diagnostics?.latestSuccess?.model ||
+            diagnostics?.latestFailure?.model ||
+            ''
+        ).trim();
+        if (latestModel) return latestModel;
+    }
+
+    return '--';
+}
+
+function renderDetailMeta(job, runs, diagnostics) {
+    const state = getCronState(job);
+    const delivery = getCronDelivery(job);
+    const deliveryLabel = delivery
+        ? `${delivery.mode || '--'} · ${delivery.channel || 'last'}${delivery.to ? ` → ${delivery.to}` : ''}`
+        : '--';
+    const deliveryWarning = getCronDeliveryWarning(job);
+    const jobIdJs = String(job.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const meta = [
+        ['Job ID', job.id || '--'],
+        ['Agent', job.agentId || '--'],
+        ['Session target', job.sessionTarget || '--'],
+        ['Wake mode', job.wakeMode || '--'],
+        ['Model', getCronJobDisplayModel(job, diagnostics)],
+        ['Delivery', deliveryLabel],
+        ['Enabled', job.enabled !== false ? 'Yes' : 'No'],
+        ['Schedule', formatCronSchedule(job.schedule)],
+        ['Next scheduled run', formatNextRun(job)],
+        ['Current status', getLastStatus(job)],
+        ['Consecutive errors', String(state.consecutiveErrors || 0)],
+        ['History URL', buildDetailURL(job.id)]
+    ];
+
+    const payloadPreview = getPayloadSummary(job);
+
+    document.getElementById('cron-detail-meta').innerHTML = `
+        <div class="cron-meta-header">
+            <div class="cron-meta-title">Job metadata</div>
+            <div class="cron-meta-window">Showing ${runs.length} recent attempts</div>
+        </div>
+        <div class="cron-meta-grid">
+            ${meta.map(([k, v]) => `
+                <div class="cron-meta-item">
+                    <div class="cron-meta-label">${escapeHtml(k)}</div>
+                    <div class="cron-meta-value${k === 'History URL' || k === 'Job ID' ? ' is-code' : ''}">${escapeHtml(v)}</div>
+                </div>`).join('')}
+        </div>
+        ${payloadPreview ? `
+            <div class="cron-meta-payload">
+                <div class="cron-meta-label">Payload preview</div>
+                <p class="cron-meta-payload-text">${escapeHtml(payloadPreview)}</p>
+            </div>` : ''}
+        ${deliveryWarning ? `
+            <div class="cron-job-warning">
+                <div class="cron-job-warning-label">Unsupported WebChat delivery</div>
+                <div class="cron-job-warning-text">${escapeHtml(deliveryWarning)}</div>
+                <div class="cron-job-warning-actions">
+                    <button class="btn btn-primary cron-small-btn" onclick="migrateUnsupportedWebchatCron('${jobIdJs}')">Migrate to Main session</button>
+                </div>
+            </div>` : ''}
+    `;
+
+    const errorEl = document.getElementById('cron-detail-error');
+    if (diagnostics.latestFailure) {
+        errorEl.classList.remove('hidden');
+        errorEl.innerHTML = `
+            <div class="cron-run-error-label">Latest failed attempt</div>
+            <div class="cron-run-at">${escapeHtml(formatDateTime(diagnostics.latestFailure.runAtMs || diagnostics.latestFailure.ts))}</div>
+            <div class="cron-run-error-text">${escapeHtml(diagnostics.latestFailure.error || diagnostics.latestFailure.summary || 'No error message recorded')}</div>
+            <div class="cron-run-subline">Status: ${escapeHtml(diagnostics.latestFailure.status || '--')} · Duration: ${escapeHtml(String(diagnostics.latestFailure.durationMs || '--'))}ms · Provider: ${escapeHtml(diagnostics.latestFailure.provider || '--')} · Model: ${escapeHtml(diagnostics.latestFailure.model || '--')}</div>
+        `;
+    } else {
+        errorEl.classList.add('hidden');
+        errorEl.innerHTML = '';
+    }
+}
+
+function renderDetailTimeline(runs = []) {
+    const timeline = document.getElementById('cron-detail-timeline');
+    if (!runs.length) {
+        timeline.innerHTML = '<div class="empty-state">No run history available for this job.</div>';
+        return;
+    }
+
+    timeline.innerHTML = runs.map((entry, index) => {
+        const tone = getRunStatusTone(entry.status);
+        const summary = truncateForList(entry.summary || '', 900);
+        const error = truncateForList(entry.error || entry.deliveryError || entry.errorMessage || '', 700);
+        const usage = entry.usage
+            ? Object.entries(entry.usage).map(([k, v]) => `${k}: ${v}`).join(' • ')
+            : '';
+
+        return `
+            <article class="cron-timeline-item">
+                <div class="cron-timeline-rail">
+                    <div class="cron-timeline-dot cron-tone-${tone}"></div>
+                    ${index < runs.length - 1 ? '<div class="cron-timeline-line"></div>' : ''}
+                </div>
+                <div class="cron-timeline-card">
+                    <div class="cron-run-head">
+                        <div>
+                            <div class="cron-run-badges">
+                                <span class="badge cron-tone-${tone}">${escapeHtml(entry.status || 'unknown')}</span>
+                                <span class="badge">${escapeHtml(entry.action || 'run')}</span>
+                                ${entry.deliveryStatus ? `<span class="badge">delivery: ${escapeHtml(entry.deliveryStatus)}</span>` : ''}
+                            </div>
+                            <div class="cron-run-at">${escapeHtml(formatDateTime(entry.runAtMs || entry.ts))}</div>
+                            <div class="cron-run-subline">Duration: ${escapeHtml(String(entry.durationMs || '--'))}ms · Next run: ${escapeHtml(formatDateTime(entry.nextRunAtMs))}</div>
+                        </div>
+                        <div class="cron-run-tech">
+                            <div>Provider: ${escapeHtml(entry.provider || '--')}</div>
+                            <div>Model: ${escapeHtml(entry.model || '--')}</div>
+                            <div>Session: ${escapeHtml(entry.sessionId || '--')}</div>
+                        </div>
+                    </div>
+
+                    ${error ? `
+                        <div class="cron-run-error">
+                            <div class="cron-run-error-label">Error details</div>
+                            <div class="cron-run-error-text">${escapeHtml(error)}</div>
+                        </div>` : ''}
+
+                    ${summary ? `
+                        <div class="cron-run-summary">
+                            <div class="cron-run-summary-label">Summary / output</div>
+                            <div class="cron-run-summary-text">${escapeHtml(summary)}</div>
+                        </div>` : ''}
+
+                    <div class="cron-run-grid">
+                        <div class="cron-run-cell">
+                            <div class="cron-run-cell-label">Session key</div>
+                            <div class="cron-run-cell-value is-code">${escapeHtml(entry.sessionKey || '--')}</div>
+                        </div>
+                        <div class="cron-run-cell">
+                            <div class="cron-run-cell-label">Token usage</div>
+                            <div class="cron-run-cell-value">${escapeHtml(usage || '--')}</div>
+                        </div>
+                        <div class="cron-run-cell">
+                            <div class="cron-run-cell-label">Delivery</div>
+                            <div class="cron-run-cell-value">${escapeHtml(entry.delivered ? 'Delivered' : 'Not delivered')} ${entry.deliveryError ? `• ${escapeHtml(entry.deliveryError)}` : ''}</div>
+                        </div>
+                    </div>
+                </div>
+            </article>`;
+    }).join('');
+}
+
+async function openCronDetailView(jobId, { refresh = false, pushState = true } = {}) {
+    const detailView = document.getElementById('cron-detail-view');
+    const listView = document.getElementById('cron-list-view');
+    const timeline = document.getElementById('cron-detail-timeline');
+    if (!detailView || !listView || !timeline) return;
+
+    const detailStartedAt = performance.now();
+    const loadToken = ++cronDetailLoadToken;
+    activeCronJobId = jobId;
+    listView.classList.remove('hidden');
+    detailView.classList.remove('hidden');
+    setCronDetailDrawerOpen(true);
+    renderCronJobs();
+    timeline.innerHTML = '<div class="empty-state">Loading run timeline...</div>';
+    document.getElementById('cron-detail-summary').innerHTML = '';
+    document.getElementById('cron-detail-meta').innerHTML = '<div class="empty-state">Loading job metadata...</div>';
+    document.getElementById('cron-detail-error').classList.add('hidden');
+    document.getElementById('cron-detail-error').innerHTML = '';
+
+    if (pushState) setCronDetailURL(jobId);
+
+    const initialRunLimit = refresh ? Math.min(CRON_DETAIL_FULL_RUN_LIMIT, 24) : CRON_DETAIL_INITIAL_RUN_LIMIT;
+    const initialRunsPromise = fetchCronRuns(jobId, { refresh, limit: initialRunLimit });
+
+    let job = getJobById(jobId);
+    let listReadyAt = performance.now();
+    if (!job) {
+        await loadCronJobs({ silent: true, skipDiagnostics: true });
+        if (loadToken !== cronDetailLoadToken) return;
+        job = getJobById(jobId);
+        listReadyAt = performance.now();
+    }
+    if (!job) {
+        initialRunsPromise.catch(() => {});
+        if (loadToken !== cronDetailLoadToken) return;
+        activeCronJobId = null;
+        setCronDetailDrawerOpen(false);
+        renderCronJobs();
+        renderEmptyDetailState('That cron job could not be found.');
+        return;
+    }
+
+    document.getElementById('cron-detail-title').textContent = job.name || job.id || 'Cron Job History';
+    document.getElementById('cron-detail-subtitle').textContent = `${formatCronSchedule(job.schedule)} · ${job.id}`;
+
+    document.getElementById('cron-detail-run-btn').onclick = () => runCronJob(job.id);
+    document.getElementById('cron-detail-refresh-btn').onclick = () => openCronDetailView(job.id, { refresh: true, pushState: false });
+    document.getElementById('cron-detail-copy-btn').onclick = () => copyCronTimelineJson();
+    document.getElementById('cron-detail-export-btn').onclick = () => exportCronTimelineJson();
+
+    try {
+        const runs = await initialRunsPromise;
+        if (loadToken !== cronDetailLoadToken) return;
+        activeCronTimeline = runs;
+        const diagnostics = cronDiagnostics.get(job.id) || summarizeRuns(runs);
+        document.getElementById('cron-detail-summary').innerHTML = renderCronDetailSummary(job, diagnostics);
+        renderDetailMeta(job, runs, diagnostics);
+        renderDetailTimeline(runs);
+        console.log(`[Perf][Cron] detail open for ${job.id}: list ready ${Math.round(listReadyAt - detailStartedAt)}ms, initial runs ${Math.round(performance.now() - listReadyAt)}ms`);
+
+        const cachedLimit = getCachedCronRunLimit(job.id);
+        if (!refresh && cachedLimit < CRON_DETAIL_FULL_RUN_LIMIT) {
+            setTimeout(async () => {
+                try {
+                    const fullRuns = await fetchCronRuns(job.id, { refresh: true, limit: CRON_DETAIL_FULL_RUN_LIMIT });
+                    if (loadToken !== cronDetailLoadToken) return;
+                    if (String(activeCronJobId) !== String(job.id) || !cronDetailDrawerOpen) return;
+
+                    activeCronTimeline = fullRuns;
+                    const fullDiagnostics = cronDiagnostics.get(job.id) || summarizeRuns(fullRuns);
+                    document.getElementById('cron-detail-summary').innerHTML = renderCronDetailSummary(job, fullDiagnostics);
+                    renderDetailMeta(job, fullRuns, fullDiagnostics);
+                    renderDetailTimeline(fullRuns);
+                } catch (backgroundErr) {
+                    console.warn('[Cron] Background timeline expansion failed:', backgroundErr?.message || backgroundErr);
+                }
+            }, 0);
+        }
+    } catch (e) {
+        if (loadToken !== cronDetailLoadToken) return;
+        timeline.innerHTML = `<div class="empty-state">Failed to load run timeline: ${escapeHtml(e.message || 'Unknown error')}</div>`;
+    }
+}
+
+window.closeCronDetailView = function() {
+    showCronListView();
+    activeCronTimeline = [];
+    const targetPath = buildDetailURL(null);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (targetPath !== currentPath) {
+        history.pushState({ page: 'cron' }, '', targetPath);
+    }
+};
+
+window.tuckCronDetailView = function() {
+    setCronDetailDrawerOpen(false);
+};
+
+window.reopenCronDetailView = function() {
+    if (!activeCronJobId) {
+        showToast('Select a cron job first', 'warning');
+        return;
+    }
+    openCronDetailView(activeCronJobId, { pushState: false });
+};
+
+window.setCronListFilter = function(filter) {
+    cronListFilter = filter || 'all';
+    updateCronFilterChips();
+    renderCronJobs();
+};
+
+window.toggleCronAdvancedControls = function() {
+    cronAdvancedControlsOpen = !cronAdvancedControlsOpen;
+    updateCronAdvancedControlsUI();
+};
+
+window.resetCronListControls = function() {
+    cronListFilter = 'all';
+    cronListQuery = '';
+    cronAgentFilter = 'all';
+    cronEnabledFilter = 'all';
+    cronActivityFilter = 'all';
+    cronSortBy = 'nextRun';
+    cronSortDirection = 'asc';
+    cronAdvancedControlsOpen = false;
+
+    const searchInput = document.getElementById('cron-search-input');
+    if (searchInput) searchInput.value = '';
+    const enabledFilter = document.getElementById('cron-enabled-filter');
+    if (enabledFilter) enabledFilter.value = 'all';
+    const activityFilter = document.getElementById('cron-activity-filter');
+    if (activityFilter) activityFilter.value = 'all';
+    const sortBySelect = document.getElementById('cron-sort-by');
+    if (sortBySelect) sortBySelect.value = 'nextRun';
+    populateCronAgentFilterOptions();
+
+    updateCronFilterChips();
+    updateCronSortDirectionButton();
+    updateCronAdvancedControlsUI();
+    renderCronJobs();
+};
+
+window.copyCronListJson = async function() {
+    await copyJsonToClipboard(buildCronListExport(), 'Copied cron list JSON');
+};
+
+window.exportCronListJson = function() {
+    downloadJson(`cron-list-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, buildCronListExport());
+    showToast('Cron list JSON exported', 'success');
+};
+
+window.copyCronTimelineJson = async function() {
+    if (!activeCronJobId) {
+        showToast('Open a cron timeline first', 'warning');
+        return;
+    }
+    await copyJsonToClipboard(buildCronTimelineExport(activeCronJobId), 'Copied cron timeline JSON');
+};
+
+window.exportCronTimelineJson = function() {
+    if (!activeCronJobId) {
+        showToast('Open a cron timeline first', 'warning');
+        return;
+    }
+    downloadJson(`cron-timeline-${activeCronJobId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`, buildCronTimelineExport(activeCronJobId));
+    showToast('Cron timeline JSON exported', 'success');
+};
+
+async function loadCronJobs({ silent = false, skipDiagnostics = false } = {}) {
+    const container = document.getElementById('cron-jobs-list');
+    if (!container) return cronJobs;
+
+    if (cronListLoadPromise) {
+        return cronListLoadPromise;
+    }
+
+    const startedAt = performance.now();
+
+    if (!silent && !cronJobs.length) {
+        container.innerHTML = '<div class="empty-state">Loading cron jobs...</div>';
+    }
+
+    if (!gateway || !gateway.isConnected()) {
+        if (!cronJobs.length) {
+            container.innerHTML = '<div class="empty-state">Connect to gateway to manage cron jobs</div>';
+        }
+        return cronJobs;
+    }
+
+    cronListLoadPromise = (async () => {
+        try {
+            const result = await gateway._request('cron.list', { includeDisabled: true }, CRON_REQUEST_TIMEOUT_MS);
+            cronJobs = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
+            cronLastLoadedAt = Date.now();
+            writeCronCache(cronJobs);
+            persistCronNameMap();
+            populateCronAgentFilterOptions();
+            if (activeCronJobId && !getJobById(activeCronJobId)) {
+                activeCronJobId = null;
+                renderEmptyDetailState('The previously selected job is no longer available.');
+                setCronDetailDrawerOpen(false);
+            }
+            renderCronJobs();
+            console.log(`[Perf][Cron] cron.list + first render: ${Math.round(performance.now() - startedAt)}ms for ${cronJobs.length} jobs`);
+            if (!skipDiagnostics) {
+                console.log('[Perf][Cron] Skipping history warm-up on initial page load');
+            }
+            return cronJobs;
+        } catch (e) {
+            console.warn('[Cron] Failed to fetch jobs:', e.message);
+            if (!cronJobs.length) {
+                container.innerHTML = `<div class="empty-state">Could not load cron jobs: ${escapeHtml(e.message || 'Unknown error')}</div>`;
+            } else if (!silent && typeof showToast === 'function') {
+                showToast('Using cached cron jobs while refresh retries', 'warning');
+            }
+            return cronJobs;
+        } finally {
+            cronListLoadPromise = null;
+        }
+    })();
+
+    return cronListLoadPromise;
 }
 
 function renderCronJobs() {
     const container = document.getElementById('cron-jobs-list');
     if (!container) return;
 
+    updateCronFilterChips();
+
     if (cronJobs.length === 0) {
+        updateCronListMeta(0, 0);
         container.innerHTML = '<div class="empty-state">No cron jobs configured</div>';
         return;
     }
 
-    container.innerHTML = cronJobs.map((job, idx) => {
+    const visibleJobs = getVisibleCronJobs();
+    updateCronListMeta(cronJobs.length, visibleJobs.length);
+
+    if (!visibleJobs.length) {
+        container.innerHTML = '<div class="empty-state">No jobs match the current search/filter.</div>';
+        return;
+    }
+
+    container.innerHTML = visibleJobs.map((job, idx) => {
         const enabled = job.enabled !== false;
-        const lastStatus = job.lastRunStatus || job.lastStatus || '--';
-        const statusClass = lastStatus === 'success' ? 'success' : lastStatus === 'error' ? 'error' : '';
-        const nextRun = job.nextRun ? new Date(job.nextRun).toLocaleString() : '--';
-        const lastRun = job.lastRun ? timeAgo(new Date(job.lastRun).getTime()) : 'Never';
+        const lastStatus = getLastStatus(job);
+        const statusTone = getRunStatusTone(lastStatus);
+        const nextRun = formatNextRun(job);
+        const lastRun = formatLastRun(job);
+        const scheduleText = formatCronSchedule(job.schedule || job.cron);
+        const payloadPreview = truncateForList(getPayloadSummary(job) || job.description || 'No summary available');
+        const state = getCronState(job);
+        const diagnostics = cronDiagnostics.get(job.id);
+        const latestFailure = diagnostics?.latestFailure;
+        const latestFailureMessage = latestFailure?.error || latestFailure?.summary || getLastError(job) || '';
+        const accent = getCronJobAccentColor(job);
+        const jobId = String(job.id || idx);
+        const jobIdJs = jobId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isActive = String(activeCronJobId) === jobId;
+        const failureCount = diagnostics?.failureCount || 0;
+        const successCount = diagnostics?.successCount || 0;
+        const ownerAgent = getCronJobOwnerAgent(job);
+        const activeClass = isActive ? ' is-active' : '';
+        const statusToneClass = statusTone !== 'neutral' ? ` cron-tone-${statusTone}` : '';
+        const deliveryWarning = getCronDeliveryWarning(job);
+        const displayModel = getCronJobDisplayModel(job, diagnostics);
 
         return `
-        <div class="cron-job-card" style="background: var(--surface-1); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-weight: 600; font-size: 14px;">${escapeHtml(job.name || job.id || 'Unnamed Job')}</span>
-                        ${!enabled ? '<span class="badge" style="background: var(--surface-2); font-size: 10px;">Disabled</span>' : ''}
-                        ${statusClass ? `<span class="badge badge-${statusClass}" style="font-size: 10px;">${lastStatus}</span>` : ''}
+        <article class="cron-job-card${activeClass}" style="--cron-accent: ${accent};" role="button" tabindex="0" onclick="openCronDetailView('${jobIdJs}')" onkeydown="if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); openCronDetailView('${jobIdJs}'); }">
+            <div class="cron-job-header">
+                <div class="cron-job-main">
+                    <div class="cron-job-title-row">
+                        <span class="cron-job-status-dot"></span>
+                        <span class="cron-job-title">${escapeHtml(job.name || job.id || 'Unnamed Job')}</span>
+                        ${ownerAgent ? `<span class="badge cron-job-badge">${escapeHtml(ownerAgent)}</span>` : ''}
+                        ${!enabled ? '<span class="badge cron-job-badge">Disabled</span>' : ''}
+                        ${lastStatus && lastStatus !== '--' ? `<span class="badge cron-job-badge${statusToneClass}">${escapeHtml(lastStatus)}</span>` : ''}
+                        ${job.sessionTarget ? `<span class="badge cron-job-badge">${escapeHtml(job.sessionTarget)}</span>` : ''}
+                        ${displayModel && displayModel !== '--' ? `<span class="badge cron-job-badge">${escapeHtml(displayModel)}</span>` : ''}
+                        ${deliveryWarning ? '<span class="badge cron-job-badge cron-tone-error">webchat unsupported</span>' : ''}
                     </div>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                        <code style="background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 11px;">${escapeHtml(job.schedule || job.cron || '--')}</code>
-                        <span style="margin-left: 8px;">Next: ${nextRun}</span>
-                        <span style="margin-left: 8px;">Last: ${lastRun}</span>
-                    </div>
-                    ${job.description ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(job.description)}</div>` : ''}
+                    <div class="cron-job-id">${escapeHtml(job.id || '--')}</div>
+                    <p class="cron-job-preview">${escapeHtml(payloadPreview)}</p>
                 </div>
-                <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
-                    <button onclick="toggleCronJob('${job.id || idx}', ${!enabled})" class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px;" title="${enabled ? 'Disable' : 'Enable'}">
-                        ${enabled ? '⏸' : '▶'}
-                    </button>
-                    <button onclick="runCronJob('${job.id || idx}')" class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px;" title="Run Now">
-                        🚀
-                    </button>
-                    <button onclick="showCronHistory('${job.id || idx}')" class="btn btn-ghost" style="padding: 4px 8px; font-size: 11px;" title="History">
-                        📋
-                    </button>
+                <div class="cron-job-actions" onclick="event.stopPropagation();">
+                    <button onclick="event.stopPropagation(); toggleCronJob('${jobIdJs}', ${!enabled});" class="cron-job-action-btn" title="${enabled ? 'Disable job' : 'Enable job'}">${enabled ? 'Pause' : 'Enable'}</button>
+                    <button onclick="event.stopPropagation(); runCronJob('${jobIdJs}');" class="cron-job-action-btn cron-job-action-run" title="Run now">Run now</button>
+                    <button onclick="event.stopPropagation(); openEditCronModal('${jobIdJs}');" class="cron-job-action-btn" title="Edit job">Edit</button>
                 </div>
             </div>
-            <div id="cron-history-${job.id || idx}" class="cron-history hidden" style="margin-top: 8px; border-top: 1px solid var(--border-default); padding-top: 8px;"></div>
-        </div>`;
+
+            <div class="cron-job-divider"></div>
+
+            <div class="cron-job-kpis">
+                <div class="cron-job-kpi">
+                    <div class="cron-job-kpi-label">Next run</div>
+                    <div class="cron-job-kpi-value">${escapeHtml(nextRun)}</div>
+                </div>
+                <div class="cron-job-kpi">
+                    <div class="cron-job-kpi-label">Last result</div>
+                    <div class="cron-job-kpi-value">${escapeHtml(lastRun)}</div>
+                </div>
+            </div>
+
+            <div class="cron-job-divider"></div>
+
+            <div class="cron-job-footer">
+                <code class="cron-schedule-code">${escapeHtml(scheduleText)}</code>
+                ${state.consecutiveErrors ? `<span class="cron-job-consecutive-errors">${escapeHtml(String(state.consecutiveErrors))} consecutive errors</span>` : ''}
+                ${(failureCount || successCount) ? `<span>${failureCount} failed · ${successCount} successful</span>` : ''}
+            </div>
+
+            ${deliveryWarning ? `
+                <div class="cron-job-warning">
+                    <div class="cron-job-warning-label">Unsupported WebChat delivery</div>
+                    <div class="cron-job-warning-text">${escapeHtml(deliveryWarning)}</div>
+                    <div class="cron-job-warning-actions">
+                        <button onclick="event.stopPropagation(); migrateUnsupportedWebchatCron('${jobIdJs}');" class="btn btn-primary cron-small-btn" type="button">Migrate to Main session</button>
+                    </div>
+                </div>` : ''}
+            ${latestFailureMessage && getCronJobStatusTone(job) === 'error' ? `
+                <div class="cron-job-latest-failure">
+                    <div class="cron-job-latest-failure-label">Latest failure</div>
+                    <div class="cron-job-latest-failure-text">${escapeHtml(latestFailureMessage)}</div>
+                </div>` : ''}
+        </article>`;
     }).join('');
 }
 
 async function toggleCronJob(jobId, enable) {
     try {
-        await gateway._request('cron.toggle', { id: jobId, enabled: enable });
+        await gateway._request('cron.update', { jobId, patch: { enabled: enable } });
         showToast(`Job ${enable ? 'enabled' : 'disabled'}`, 'success');
         loadCronJobs();
     } catch (e) {
@@ -8537,41 +11770,55 @@ async function toggleCronJob(jobId, enable) {
 
 async function runCronJob(jobId) {
     try {
-        await gateway._request('cron.run', { id: jobId });
+        await gateway._request('cron.run', { jobId, mode: 'force' });
         showToast('Job triggered', 'success');
+        cronRunCache.delete(jobId);
+        cronDiagnostics.delete(jobId);
+        if (activeCronJobId === jobId && cronDetailDrawerOpen) {
+            openCronDetailView(jobId, { refresh: true, pushState: false });
+        } else {
+            loadCronJobs({ silent: true });
+        }
     } catch (e) {
         showToast('Failed: ' + e.message, 'error');
     }
 }
 
-async function showCronHistory(jobId) {
-    const el = document.getElementById(`cron-history-${jobId}`);
-    if (!el) return;
-    if (!el.classList.contains('hidden')) {
-        el.classList.add('hidden');
+window.migrateUnsupportedWebchatCron = async function(jobId) {
+    const job = getJobById(jobId || activeCronJobId);
+    if (!job) {
+        showToast('Select a cron job to migrate', 'warning');
         return;
     }
 
-    el.innerHTML = '<div style="font-size: 11px; color: var(--text-muted);">Loading...</div>';
-    el.classList.remove('hidden');
+    if (!hasUnsupportedWebchatAnnounce(job)) {
+        showToast('This cron job is not using unsupported WebChat announce delivery', 'success');
+        return;
+    }
+
+    const patch = buildCronWebchatMigrationPatch(job);
 
     try {
-        const result = await gateway._request('cron.runs', { id: jobId, limit: 10 });
-        const runs = result?.runs || [];
-        if (runs.length === 0) {
-            el.innerHTML = '<div style="font-size: 11px; color: var(--text-muted);">No run history</div>';
-            return;
+        await gateway._request('cron.update', { jobId: job.id, patch });
+        const convertedToMain = patch.sessionTarget === 'main';
+        showToast(convertedToMain
+            ? 'Cron job migrated: WebChat announce removed and session switched to Main'
+            : 'Cron job migrated: unsupported WebChat announce removed', 'success');
+        await loadCronJobs();
+        if (String(activeCronJobId) === String(job.id)) {
+            openCronDetailView(job.id, { refresh: true, pushState: false });
         }
-        el.innerHTML = runs.map(r => {
-            const status = r.status || 'unknown';
-            const time = r.startedAt ? new Date(r.startedAt).toLocaleString() : '--';
-            const cls = status === 'success' ? 'color: var(--success)' : status === 'error' ? 'color: var(--error)' : '';
-            return `<div style="font-size: 11px; padding: 2px 0;"><span style="${cls}">${status}</span> — ${time}${r.duration ? ` (${r.duration}ms)` : ''}</div>`;
-        }).join('');
     } catch (e) {
-        el.innerHTML = '<div style="font-size: 11px; color: var(--error);">Failed to load history</div>';
+        showToast('Migration failed: ' + e.message, 'error');
     }
-}
+};
+
+window.refreshCronDiagnostics = async function() {
+    cronRunCache.clear();
+    cronDiagnostics.clear();
+    await loadCronJobs();
+    showToast('Cron diagnostics refreshed', 'success');
+};
 
 window.openAddCronModal = function() {
     const modal = document.getElementById('add-cron-modal');
@@ -8583,18 +11830,106 @@ window.closeAddCronModal = function() {
     if (modal) modal.classList.remove('visible');
 };
 
+// Schedule builder functions
+window.updateCronScheduleBuilder = function(prefix) {
+    const type = document.getElementById(`cron-${prefix}-schedule-type`)?.value;
+    const rows = ['daily', 'weekly', 'monthly', 'hourly', 'minutes'];
+    rows.forEach(row => {
+        const el = document.getElementById(`cron-${prefix}-schedule-${row}`);
+        if (el) el.classList.toggle('hidden', row !== type);
+    });
+    updateCronScheduleFromBuilder(prefix);
+};
+
+window.updateCronScheduleFromBuilder = function(prefix) {
+    const type = document.getElementById(`cron-${prefix}-schedule-type`)?.value;
+    const preview = document.getElementById(`cron-${prefix}-schedule-preview`);
+    const hiddenInput = document.getElementById(`cron-${prefix}-schedule`);
+    let expr = '';
+    let previewText = '';
+
+    if (type === 'daily') {
+        const time = document.getElementById(`cron-${prefix}-daily-time`)?.value || '09:00';
+        const [h, m] = time.split(':').map(Number);
+        expr = `${m} ${h} * * *`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        previewText = `Daily at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } else if (type === 'weekly') {
+        const day = parseInt(document.getElementById(`cron-${prefix}-weekly-day`)?.value || '0');
+        const time = document.getElementById(`cron-${prefix}-weekly-time`)?.value || '09:00';
+        const [h, m] = time.split(':').map(Number);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        expr = `${m} ${h} * * ${day}`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        previewText = `Weekly on ${days[day]}s at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } else if (type === 'monthly') {
+        const day = parseInt(document.getElementById(`cron-${prefix}-monthly-day`)?.value || '1');
+        const time = document.getElementById(`cron-${prefix}-monthly-time`)?.value || '09:00';
+        const [h, m] = time.split(':').map(Number);
+        expr = `${m} ${h} ${day} * *`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hour12 = h % 12 || 12;
+        const suffix = getOrdinalSuffix(day);
+        previewText = `Monthly on the ${day}${suffix} at ${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } else if (type === 'hourly') {
+        expr = '0 * * * *';
+        previewText = 'Every hour at minute 0';
+    } else if (type === 'minutes') {
+        const interval = parseInt(document.getElementById(`cron-${prefix}-minutes-interval`)?.value || '15');
+        expr = `*/${interval} * * * *`;
+        previewText = `Every ${interval} minutes`;
+    }
+
+    if (hiddenInput) hiddenInput.value = expr;
+    if (preview) preview.textContent = previewText;
+};
+
+function getOrdinalSuffix(n) {
+    if (n >= 11 && n <= 13) return 'th';
+    switch (n % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+    }
+}
+
 window.submitNewCronJob = async function() {
     const name = document.getElementById('cron-new-name')?.value?.trim();
-    const schedule = document.getElementById('cron-new-schedule')?.value?.trim();
+    const scheduleExpr = document.getElementById('cron-new-schedule')?.value?.trim();
     const command = document.getElementById('cron-new-command')?.value?.trim();
+    const agentId = document.getElementById('cron-new-agent')?.value?.trim();
+    const sessionTarget = document.getElementById('cron-new-session-target')?.value?.trim() || 'main';
 
-    if (!name || !schedule) {
-        showToast('Name and schedule are required', 'warning');
+    if (!name || !scheduleExpr || !command) {
+        showToast('Name, schedule, and message are required', 'warning');
         return;
     }
 
+    const job = {
+        name,
+        schedule: {
+            kind: 'cron',
+            expr: scheduleExpr,
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        },
+        sessionTarget,
+        wakeMode: 'now',
+        payload: {
+            kind: 'systemEvent',
+            text: command
+        },
+        enabled: true
+    };
+
+    if (agentId) {
+        job.agentId = agentId;
+    }
+
     try {
-        await gateway._request('cron.add', { name, schedule, command });
+        await gateway._request('cron.add', job);
         showToast('Cron job added', 'success');
         closeAddCronModal();
         loadCronJobs();
@@ -8602,6 +11937,419 @@ window.submitNewCronJob = async function() {
         showToast('Failed: ' + e.message, 'error');
     }
 };
+
+let editingCronJobId = null;
+let cronEditModelCatalog = null;
+
+async function fetchCronModelCatalog() {
+    if (cronEditModelCatalog) return cronEditModelCatalog;
+    const response = await fetch('/api/models/list');
+    if (!response.ok) throw new Error(`Failed to load models (${response.status})`);
+    cronEditModelCatalog = await response.json();
+    return cronEditModelCatalog;
+}
+
+function getCronModelProviderFromId(modelId) {
+    if (!modelId) return '';
+    if (typeof window.getProviderFromModelId === 'function') {
+        return window.getProviderFromModelId(modelId) || '';
+    }
+    if (typeof modelId === 'string' && modelId.includes('/')) {
+        return modelId.startsWith('openrouter/') ? 'openrouter' : modelId.split('/')[0];
+    }
+    return '';
+}
+
+async function populateCronEditProviderDropdown(selectedProvider = '', selectedModel = '') {
+    const providerSelect = document.getElementById('cron-edit-model-provider');
+    if (!providerSelect) return [];
+
+    const catalog = await fetchCronModelCatalog();
+    const providers = Object.keys(catalog || {});
+    const inferredProvider = selectedProvider || getCronModelProviderFromId(selectedModel) || '';
+
+    providerSelect.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default / unchanged';
+    providerSelect.appendChild(defaultOption);
+
+    providers.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider;
+        option.textContent = provider.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        if (provider === inferredProvider) option.selected = true;
+        providerSelect.appendChild(option);
+    });
+
+    await populateCronEditModelDropdown(providerSelect.value || inferredProvider || '', selectedModel);
+    return providers;
+}
+
+async function populateCronEditModelDropdown(provider, selectedModel = '') {
+    const modelSelect = document.getElementById('cron-edit-model');
+    if (!modelSelect) return;
+
+    modelSelect.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default / unchanged';
+    modelSelect.appendChild(defaultOption);
+
+    if (!provider) {
+        modelSelect.value = '';
+        return;
+    }
+
+    const catalog = await fetchCronModelCatalog();
+    const models = Array.isArray(catalog?.[provider]) ? catalog[provider] : [];
+    const normalizedSelectedModel = selectedModel && typeof window.resolveFullModelId === 'function'
+        ? window.resolveFullModelId(selectedModel)
+        : selectedModel;
+
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.name || model.id;
+        if (model.id === normalizedSelectedModel) option.selected = true;
+        modelSelect.appendChild(option);
+    });
+
+    if (!normalizedSelectedModel) {
+        modelSelect.value = '';
+    }
+}
+
+window.onCronEditModelProviderChange = async function() {
+    const provider = document.getElementById('cron-edit-model-provider')?.value || '';
+    await populateCronEditModelDropdown(provider, '');
+};
+
+window.openEditCronModal = async function(jobId) {
+    const job = getJobById(jobId || activeCronJobId);
+    if (!job) {
+        showToast('Select a cron job to edit', 'warning');
+        return;
+    }
+
+    editingCronJobId = job.id;
+
+    const deliveryWarning = getCronDeliveryWarning(job);
+    if (deliveryWarning) {
+        showToast('This job still has unsupported WebChat announce delivery. Use Main session for dashboard-visible reminders, or move delivery to webhook / a real provider channel.', 'warning');
+    }
+
+    // Pre-fill the form
+    document.getElementById('cron-edit-id').value = job.id;
+    document.getElementById('cron-edit-name').value = job.name || '';
+    document.getElementById('cron-edit-command').value = getPayloadSummary(job) || '';
+
+    const sessionTarget = document.getElementById('cron-edit-session-target');
+    if (sessionTarget) {
+        sessionTarget.value = job.sessionTarget || 'main';
+    }
+
+    const agentSelect = document.getElementById('cron-edit-agent');
+    if (agentSelect) {
+        agentSelect.value = job.agentId || '';
+    }
+
+    const delivery = getCronDelivery(job);
+    const deliveryModeInput = document.getElementById('cron-edit-delivery-mode');
+    const deliveryChannelInput = document.getElementById('cron-edit-delivery-channel');
+    const deliveryToInput = document.getElementById('cron-edit-delivery-to');
+    if (deliveryModeInput) {
+        deliveryModeInput.value = delivery?.mode || 'none';
+    }
+    if (deliveryChannelInput) {
+        deliveryChannelInput.value = delivery?.channel || '';
+    }
+    if (deliveryToInput) {
+        deliveryToInput.value = delivery?.to || '';
+    }
+    updateCronDeliveryFields('edit');
+
+    const payloadModel = job?.payload?.model || '';
+    const payloadProvider = getCronModelProviderFromId(payloadModel);
+    try {
+        await populateCronEditProviderDropdown(payloadProvider, payloadModel);
+    } catch (e) {
+        console.warn('[Cron] Failed to load model dropdowns:', e.message);
+        showToast('Failed to load model list for cron editor: ' + e.message, 'warning');
+    }
+
+    // Parse cron expression and pre-fill schedule builder
+    const cronExpr = job.schedule?.expr || '';
+    const parsed = parseCronForBuilder(cronExpr);
+    const typeSelect = document.getElementById('cron-edit-schedule-type');
+    if (typeSelect) typeSelect.value = parsed.type;
+    updateCronScheduleBuilder('edit');
+
+    // Fill the specific inputs
+    if (parsed.type === 'daily') {
+        const timeInput = document.getElementById('cron-edit-daily-time');
+        if (timeInput) timeInput.value = parsed.time;
+    } else if (parsed.type === 'weekly') {
+        const daySelect = document.getElementById('cron-edit-weekly-day');
+        if (daySelect) daySelect.value = parsed.day;
+        const timeInput = document.getElementById('cron-edit-weekly-time');
+        if (timeInput) timeInput.value = parsed.time;
+    } else if (parsed.type === 'monthly') {
+        const dayInput = document.getElementById('cron-edit-monthly-day');
+        if (dayInput) dayInput.value = parsed.day;
+        const timeInput = document.getElementById('cron-edit-monthly-time');
+        if (timeInput) timeInput.value = parsed.time;
+    } else if (parsed.type === 'minutes') {
+        const intervalInput = document.getElementById('cron-edit-minutes-interval');
+        if (intervalInput) intervalInput.value = parsed.interval;
+    }
+
+    // Set the hidden cron expression and preview
+    const hiddenInput = document.getElementById('cron-edit-schedule');
+    if (hiddenInput) hiddenInput.value = cronExpr;
+    const preview = document.getElementById('cron-edit-schedule-preview');
+    if (preview) preview.textContent = parsed.previewText;
+
+    const modal = document.getElementById('edit-cron-modal');
+    if (modal) modal.classList.add('visible');
+};
+
+function parseCronForBuilder(expr) {
+    // Returns: { type, time, day, interval, previewText }
+    const result = { type: 'daily', time: '09:00', day: '0', interval: '15', previewText: 'Daily at 9:00 AM' };
+
+    if (!expr) return result;
+
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length < 5) return result;
+
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+    // Every X minutes: */X
+    if (minute.startsWith('*/') && hour === '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        const interval = minute.substring(2);
+        result.type = 'minutes';
+        result.interval = interval;
+        result.previewText = `Every ${interval} minutes`;
+        return result;
+    }
+
+    // Every hour at minute X: X * * * *
+    if (minute !== '*' && hour === '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        result.type = 'hourly';
+        result.time = `${String(hour || 0).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        result.previewText = 'Every hour at minute ' + minute;
+        return result;
+    }
+
+    // Daily at X: X Y * * *
+    if (minute !== '*' && hour !== '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+        result.type = 'daily';
+        result.time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        result.previewText = `Daily at ${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+        return result;
+    }
+
+    // Weekly on X at Y: X Y * * Z
+    if (minute !== '*' && hour !== '*' && dayOfMonth === '*' && dayOfWeek !== '*') {
+        result.type = 'weekly';
+        result.day = dayOfWeek;
+        result.time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        result.previewText = `Weekly on ${days[parseInt(dayOfWeek)]}s at ${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+        return result;
+    }
+
+    // Monthly on X at Y: X Y Z * *
+    if (minute !== '*' && hour !== '*' && dayOfMonth !== '*') {
+        result.type = 'monthly';
+        result.day = dayOfMonth;
+        result.time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        const suffix = getOrdinalSuffix(parseInt(dayOfMonth));
+        result.previewText = `Monthly on the ${dayOfMonth}${suffix} at ${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+        return result;
+    }
+
+    return result;
+}
+
+window.updateCronDeliveryFields = function(mode = 'edit') {
+    const modeValue = document.getElementById(`cron-${mode}-delivery-mode`)?.value || 'none';
+    const announceWrap = document.getElementById(`cron-${mode}-delivery-announce`);
+    const toWrap = document.getElementById(`cron-${mode}-delivery-to-wrap`);
+    const toHint = document.getElementById(`cron-${mode}-delivery-to-hint`);
+
+    if (announceWrap) {
+        announceWrap.classList.toggle('hidden', modeValue !== 'announce');
+    }
+    if (toWrap) {
+        toWrap.classList.toggle('hidden', modeValue === 'none');
+    }
+    if (toHint) {
+        toHint.textContent = modeValue === 'webhook'
+            ? 'Required for webhook. Use a full HTTPS URL.'
+            : 'Optional for announce. Leave blank to use the default announce target if configured.';
+    }
+};
+
+window.closeEditCronModal = function() {
+    editingCronJobId = null;
+    const modal = document.getElementById('edit-cron-modal');
+    if (modal) modal.classList.remove('visible');
+};
+
+window.submitEditCronJob = async function() {
+    const jobId = document.getElementById('cron-edit-id')?.value?.trim();
+    const name = document.getElementById('cron-edit-name')?.value?.trim();
+    const scheduleExpr = document.getElementById('cron-edit-schedule')?.value?.trim();
+    const command = document.getElementById('cron-edit-command')?.value?.trim();
+    const sessionTarget = document.getElementById('cron-edit-session-target')?.value?.trim() || 'main';
+    const agentId = document.getElementById('cron-edit-agent')?.value?.trim();
+    const deliveryMode = document.getElementById('cron-edit-delivery-mode')?.value?.trim() || 'none';
+    const deliveryChannel = document.getElementById('cron-edit-delivery-channel')?.value?.trim();
+    const deliveryTo = document.getElementById('cron-edit-delivery-to')?.value?.trim();
+    const modelProvider = document.getElementById('cron-edit-model-provider')?.value?.trim();
+    const selectedModelRaw = document.getElementById('cron-edit-model')?.value?.trim();
+
+    if (!jobId || !name || !scheduleExpr || !command) {
+        showToast('Name, schedule, and message are required', 'warning');
+        return;
+    }
+
+    if (deliveryMode === 'webhook' && !deliveryTo) {
+        showToast('Webhook delivery requires a destination URL', 'warning');
+        return;
+    }
+
+    const selectedModel = selectedModelRaw && typeof window.resolveFullModelId === 'function'
+        ? window.resolveFullModelId(selectedModelRaw)
+        : selectedModelRaw;
+
+    if (selectedModel && !modelProvider) {
+        showToast('Choose a model provider before selecting a model', 'warning');
+        return;
+    }
+
+    const existingJob = getJobById(jobId || editingCronJobId);
+    const existingPayload = existingJob?.payload && typeof existingJob.payload === 'object' ? existingJob.payload : {};
+    const payloadKind = existingPayload.kind || 'systemEvent';
+    const payload = { kind: payloadKind };
+
+    if (payloadKind === 'agentTurn') {
+        payload.message = command;
+        if (typeof existingPayload.timeoutSeconds === 'number') payload.timeoutSeconds = existingPayload.timeoutSeconds;
+    } else {
+        payload.text = command;
+    }
+
+    const patch = {
+        name,
+        schedule: {
+            kind: 'cron',
+            expr: scheduleExpr,
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        },
+        sessionTarget,
+        payload,
+        delivery: { mode: deliveryMode }
+    };
+
+    if (selectedModel) {
+        patch.payload.model = selectedModel;
+    }
+
+    if (deliveryMode === 'announce') {
+        if (deliveryChannel) patch.delivery.channel = deliveryChannel;
+        if (deliveryTo) patch.delivery.to = deliveryTo;
+    } else if (deliveryMode === 'webhook') {
+        patch.delivery.to = deliveryTo;
+    }
+
+    if (agentId) {
+        patch.agentId = agentId;
+    } else {
+        patch.agentId = null; // Clear agent if not specified
+    }
+
+    try {
+        await gateway._request('cron.update', { jobId, patch });
+        showToast('Cron job updated', 'success');
+        closeEditCronModal();
+        loadCronJobs();
+
+        // Refresh detail view if this job is selected
+        if (String(activeCronJobId) === String(jobId)) {
+            openCronDetailView(jobId, { refresh: true, pushState: false });
+        }
+    } catch (e) {
+        showToast('Failed: ' + e.message, 'error');
+    }
+};
+
+window._cronJobs = Object.assign(window._cronJobs || {}, {
+    ensureLoaded: async function (options = {}) {
+        return loadCronJobs(options);
+    },
+    getJobs: function () {
+        return Array.isArray(cronJobs) ? cronJobs.slice() : [];
+    },
+    getOwnerAgent: function (job) {
+        return getCronJobOwnerAgent(job);
+    },
+    getLastStatus: function (job) {
+        return getLastStatus(job);
+    },
+    getPayloadSummary: function (job) {
+        return getPayloadSummary(job);
+    },
+    formatSchedule: function (job) {
+        return formatCronSchedule(job?.schedule || job?.cron);
+    },
+    formatNextRun: function (job) {
+        return formatNextRun(job);
+    },
+    formatLastRun: function (job) {
+        return formatLastRun(job);
+    },
+    isConnected: function () {
+        return Boolean(gateway && typeof gateway.isConnected === 'function' && gateway.isConnected());
+    },
+    openPage: function () {
+        if (typeof showPage === 'function') showPage('cron');
+    },
+    openJob: function (jobId) {
+        const safeJobId = String(jobId || '').trim();
+        if (!safeJobId) return;
+
+        const openDetail = (attempts = 0) => {
+            const detailView = document.getElementById('cron-detail-view');
+            if (detailView && typeof openCronDetailView === 'function') {
+                openCronDetailView(safeJobId, { pushState: true });
+                return;
+            }
+            if (attempts < 8) {
+                setTimeout(() => openDetail(attempts + 1), 80);
+            }
+        };
+
+        if (typeof showPage === 'function') showPage('cron');
+        setTimeout(() => openDetail(), 80);
+    }
+});
+
+window.addEventListener('popstate', () => {
+    if (window.location.pathname === '/cron') {
+        syncCronViewFromURL();
+    }
+});
 
 // === health.js ===
 // js/health.js — System health monitoring
@@ -8675,8 +12423,8 @@ async function loadHealthModels() {
     }
 }
 
-// Test a single model by creating a dedicated session, patching its model, and sending a test message
-// Now waits for the actual LLM response event via WebSocket
+// Test a single model using EXACT same path as chat (same session, same WebSocket, same auth)
+// Uses gateway.sendTestMessage() which mirrors sendMessage() but with a model override
 async function testSingleModel(modelId) {
     const startTime = Date.now();
 
@@ -8690,61 +12438,52 @@ async function testSingleModel(modelId) {
             };
         }
 
-        // Create a unique health-check session for this model
+        // Create a unique health-check session for this model to ensure isolation
         const healthSessionKey = 'health-check-' + modelId.replace(/\//g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+        console.log(`[Health] Testing model ${modelId} using session ${healthSessionKey}`);
 
-        // Step 1: Patch the session to use the target model
-        console.log(`[Health] Setting model for session ${healthSessionKey} to ${modelId}`);
+        // Patch session to use the target model (ensures gateway uses correct model)
         try {
-            await gateway._request('sessions.patch', {
-                key: healthSessionKey,
-                model: modelId
-            }, 10000); // 10s timeout for patch
-        } catch (patchError) {
-            console.error(`[Health] Failed to patch session model: ${patchError.message}`);
-            return {
-                success: false,
-                error: `Model config failed: ${patchError.message}`,
-                latencyMs: Date.now() - startTime
-            };
+            await gateway.patchSession(healthSessionKey, { model: modelId });
+        } catch (patchErr) {
+            console.warn(`[Health] Session patch failed (may not exist yet): ${patchErr.message}`);
         }
 
-        // Step 2: Create a promise that waits for the actual LLM response event
+        // Wait for the response event on this specific session
         const responsePromise = new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
-                if (pendingHealthChecks.has(healthSessionKey)) {
-                    pendingHealthChecks.delete(healthSessionKey);
-                    reject(new Error('Response timeout (60s)'));
-                }
-            }, 60000); // 60s timeout for LLM response
-
-            pendingHealthChecks.set(healthSessionKey, {
+                reject(new Error('Response timeout (60s)'));
+            }, 60000);
+            
+            // Store resolver so chat event handler can call it
+            window._healthCheckResolvers = window._healthCheckResolvers || {};
+            window._healthCheckResolvers[healthSessionKey] = {
                 resolve: (res) => {
                     clearTimeout(timer);
+                    delete window._healthCheckResolvers[healthSessionKey];
                     resolve(res);
                 },
                 reject: (err) => {
                     clearTimeout(timer);
+                    delete window._healthCheckResolvers[healthSessionKey];
                     reject(err);
                 }
-            });
+            };
         });
 
-        // Step 3: Send a test message using that session
-        console.log(`[Health] Sending test message to ${modelId}`);
-        await gateway._request('chat.send', {
-            message: 'Respond with exactly: OK',
-            sessionKey: healthSessionKey,
-            idempotencyKey: crypto.randomUUID()
-        }, 10000); // 10s timeout for the SEND REQUEST itself
+        // Send test message via chat.send - same path as regular chat
+        const result = await gateway.sendTestMessage('OK', modelId, healthSessionKey);
+        console.log(`[Health] Message sent, runId: ${result?.runId}, waiting for response...`);
 
-        // Step 4: Wait for the ACTUAL response event
-        const result = await responsePromise;
+        // Wait for actual LLM response
+        const response = await responsePromise;
         const latencyMs = Date.now() - startTime;
-
+        
+        console.log(`[Health] ✅ Model ${modelId} responded: ${response?.content?.substring(0, 50)}...`);
+        
         return {
             success: true,
-            response: result?.content || 'OK',
+            response: response?.content || 'OK',
             latencyMs
         };
 
@@ -8950,6 +12689,69 @@ if (typeof originalShowPage === 'function') {
 
 const CHAT_DEBUG = false;
 function chatLog(...args) { if (CHAT_DEBUG) console.log(...args); }
+const CHAT_RUNTIME_MARK = '2026-02-22.3';
+if (window.__chatRuntimeMark !== CHAT_RUNTIME_MARK) {
+    window.__chatRuntimeMark = CHAT_RUNTIME_MARK;
+    console.log(`[Chat] chat.js loaded (${CHAT_RUNTIME_MARK})`);
+}
+window._chatPendingSends = window._chatPendingSends || new Map();
+
+function getCurrentChatAgentId() {
+    return (window.resolveAgentId ? window.resolveAgentId(window.currentAgentId || currentAgentId || 'main') : (window.currentAgentId || currentAgentId || 'main'));
+}
+
+function updateChatAgentRail() {
+    const agentId = getCurrentChatAgentId();
+    const avatar = document.getElementById('chat-agent-rail-avatar');
+    const label = document.getElementById('chat-agent-rail-label');
+    const subtitle = document.getElementById('chat-agent-rail-subtitle');
+    const status = document.getElementById('chat-agent-rail-status');
+    const card = document.getElementById('chat-agent-rail-card');
+    if (!avatar || !label || !subtitle || !status || !card) return;
+
+    const displayName = getAgentDisplayName(agentId);
+    avatar.src = getAvatarUrl(agentId);
+    avatar.alt = `${displayName} avatar`;
+    label.textContent = displayName;
+
+    const sessionLabel = (typeof getFriendlySessionName === 'function')
+        ? getFriendlySessionName(currentSessionName || GATEWAY_CONFIG?.sessionKey || '')
+        : (currentSessionName || GATEWAY_CONFIG?.sessionKey || 'main');
+    subtitle.textContent = sessionLabel ? `Chatting in ${sessionLabel}` : 'Current chat agent';
+
+    const connected = Boolean(gateway?.isConnected?.());
+    status.style.background = connected ? '#22c55e' : '#71717a';
+    status.style.boxShadow = connected
+        ? '0 0 0 4px rgba(34, 197, 94, 0.14)'
+        : '0 0 0 4px rgba(113, 113, 122, 0.14)';
+    card.title = `Open ${displayName}'s agent page`;
+}
+
+window.openCurrentChatAgentPage = function() {
+    const agentId = getCurrentChatAgentId();
+    if (window._memoryCards?.openAgentMemory) {
+        window._memoryCards.openAgentMemory(agentId, { updateURL: true, forceAgentsPage: true });
+        return;
+    }
+    if (typeof showPage === 'function') {
+        showPage('agents', false);
+    }
+};
+
+function trackPendingSend(runId, payload) {
+    if (!runId || !payload) return;
+    const map = window._chatPendingSends;
+    if (!(map instanceof Map)) return;
+    map.set(runId, {
+        ...payload,
+        retries: Number(payload.retries || 0),
+        createdAt: Date.now()
+    });
+    if (map.size > 100) {
+        const oldest = [...map.entries()].sort((a, b) => (a[1]?.createdAt || 0) - (b[1]?.createdAt || 0)).slice(0, map.size - 100);
+        for (const [key] of oldest) map.delete(key);
+    }
+}
 
 /**
  * Converts plain text to HTML with clickable links.
@@ -9343,31 +13145,9 @@ function setVoiceState(state, targetInput = 'chat-input') {
 let activeVoiceTarget = 'chat-input';
 
 function toggleVoiceInputChatPage() {
+    // Set target before calling the main function
     activeVoiceTarget = 'chat-page-input';
     toggleVoiceInput();
-}
-
-// Override the original toggleVoiceInput to use the sidebar input
-const originalToggleVoiceInput = toggleVoiceInput;
-function toggleVoiceInput() {
-    // If called directly (not via chat page), target sidebar
-    // Only set to chat-input if we're starting a NEW recording
-    if (activeVoiceTarget !== 'chat-page-input' && voiceInputState !== 'listening') {
-        activeVoiceTarget = 'chat-input';
-    }
-
-    if (!voiceRecognition) {
-        showToast('Voice input not available', 'error');
-        return;
-    }
-
-    if (voiceInputState === 'listening') {
-        stopVoiceInput();
-    } else {
-        startVoiceInput();
-    }
-
-    // Don't reset target here - it should persist until onend resets it
 }
 
 // Toggle auto-send setting
@@ -9428,6 +13208,37 @@ function isTypingInInput(element) {
 // Image handling - supports multiple images
 let pendingImages = [];
 
+function getImageDataUri(value) {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && typeof value.data === 'string') return value.data;
+    return '';
+}
+
+function isValidImageDataUri(value) {
+    const dataUri = getImageDataUri(value);
+    if (!dataUri) return false;
+    const match = dataUri.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,([\s\S]*)$/);
+    if (!match) return false;
+    return match[1].trim().length > 0;
+}
+
+function sanitizeImageAttachments(items, sourceLabel = 'chat') {
+    const source = Array.isArray(items) ? items : [];
+    const valid = [];
+    let dropped = 0;
+    for (const item of source) {
+        if (isValidImageDataUri(item)) {
+            valid.push(item);
+        } else {
+            dropped += 1;
+        }
+    }
+    if (dropped > 0) {
+        chatLog(`[Chat] Skipped ${dropped} invalid image attachment(s) (${sourceLabel})`);
+    }
+    return { valid, dropped };
+}
+
 function handleImageSelect(event) {
     const files = event.target.files;
     for (const file of files) {
@@ -9452,6 +13263,42 @@ function handlePaste(event) {
 }
 
 let chatInputSelection = { start: 0, end: 0 };
+let _chatSendInFlight = false;
+let _lastChatSendSignature = '';
+let _lastChatSendAt = 0;
+
+function buildChatSendSignature(text, images) {
+    const normalizedText = String(text || '').replace(/\s+/g, ' ').trim();
+    const sessionKey = String(currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
+    const imageList = Array.isArray(images) ? images : [];
+    const imageSig = imageList.map((img) => {
+        const data = typeof img === 'string' ? img : img?.data;
+        if (typeof data !== 'string') return '0:';
+        return `${data.length}:${data.slice(-16)}`;
+    }).join('|');
+    return `${sessionKey}|${normalizedText}|${imageList.length}|${imageSig}`;
+}
+
+function shouldSuppressDuplicateSend(signature) {
+    const now = Date.now();
+    if (signature !== _lastChatSendSignature) return false;
+
+    // Immediate double-click / enter+click duplicate
+    if (now - _lastChatSendAt < 1200) return true;
+    // Same payload while previous send is still in-flight
+    if (_chatSendInFlight && now - _lastChatSendAt < 10000) return true;
+    return false;
+}
+
+function markChatSendStart(signature) {
+    _chatSendInFlight = true;
+    _lastChatSendSignature = signature;
+    _lastChatSendAt = Date.now();
+}
+
+function markChatSendEnd() {
+    _chatSendInFlight = false;
+}
 
 function handleChatInputKeydown(event) {
     const input = event.target;
@@ -9547,8 +13394,16 @@ function processImageFile(file) {
     reader.onload = async (e) => {
         // Compress image if larger than 200KB
         let imageData = e.target.result;
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Invalid image data. Please select the file again.', 'warning');
+            return;
+        }
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
+        }
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Image processing failed. Please try another image.', 'warning');
+            return;
         }
 
         pendingImages.push({
@@ -9614,15 +13469,32 @@ async function sendChatMessage() {
     }
 
     // Get images to send
-    const imagesToSend = [...pendingImages];
-    const hasImages = imagesToSend.length > 0;
+    const rawImagesToSend = [...pendingImages];
+    const { valid: imagesToSend, dropped: droppedImages } = sanitizeImageAttachments(rawImagesToSend, 'chat-input');
+    if (droppedImages > 0) {
+        showToast(`Skipped ${droppedImages} invalid image attachment${droppedImages > 1 ? 's' : ''}.`, 'warning');
+    }
+    const imageDataArray = imagesToSend.map(img => getImageDataUri(img)).filter(Boolean);
+    const hasImages = imageDataArray.length > 0;
+    if (!text && !hasImages) {
+        clearImagePreviews();
+        addLocalChatMessage('Failed to send: selected image is empty or invalid.', 'system');
+        renderChat();
+        renderChatPage();
+        return;
+    }
+    const sendSignature = buildChatSendSignature(text, imageDataArray);
+    if (shouldSuppressDuplicateSend(sendSignature)) {
+        chatLog('[Chat] Suppressed duplicate send (chat-input)');
+        return;
+    }
+    markChatSendStart(sendSignature);
 
     // Add to local display
     if (hasImages) {
         // Show all images in local preview
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        const imageDataArray = imagesToSend.map(img => img.data);
         addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
@@ -9642,23 +13514,33 @@ async function sendChatMessage() {
     // Send via Gateway WebSocket
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
+        let result = null;
         if (hasImages) {
             // Send with image attachments (send all images)
-            const imageDataArray = imagesToSend.map(img => img.data);
-            await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
+            result = await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
-            await gateway.sendMessage(text);
+            result = await gateway.sendMessage(text);
+        }
+
+        if (result?.runId) {
+            trackPendingSend(result.runId, {
+                sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
+                text: hasImages ? (text || 'Image') : text,
+                images: hasImages ? imageDataArray : []
+            });
         }
     } catch (err) {
         console.error('Failed to send message:', err);
         addLocalChatMessage(`Failed to send: ${err.message}`, 'system');
+    } finally {
+        markChatSendEnd();
     }
 }
 
-function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null) {
+function addLocalChatMessage(text, from, imageOrModel = null, model = null, provider = null, meta = null) {
     // DEFENSIVE: Hard session gate - validate incoming messages match current session
     // Check if this message already has a session tag from outside
-    const incomingSession = (imageOrModel?._sessionKey || '').toLowerCase();
+    const incomingSession = (meta?._sessionKey || imageOrModel?._sessionKey || '').toLowerCase();
     const currentSession = (currentSessionName || GATEWAY_CONFIG?.sessionKey || '').toLowerCase();
 
     if (incomingSession && currentSession && incomingSession !== currentSession) {
@@ -9696,7 +13578,7 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
     chatLog(`[Chat] addLocalChatMessage: text="${text?.slice(0, 50)}", from=${from}, images=${images.length}, model=${messageModel}`);
 
     const message = {
-        id: 'm' + Date.now(),
+        id: 'm' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
         from,
         text,
         time: Date.now(),
@@ -9704,11 +13586,15 @@ function addLocalChatMessage(text, from, imageOrModel = null, model = null, prov
         images: images, // New array field
         model: messageModel, // Store which AI model generated this response
         provider: provider, // Store which provider (e.g., 'google', 'anthropic')
-        _sessionKey: window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
-        _agentId: window.currentAgentId || 'main' // Fix #3: Store agent at message creation time for correct display later
+        _sessionKey: meta?._sessionKey || window.currentSessionName || GATEWAY_CONFIG?.sessionKey || '', // Tag with session to prevent cross-session bleed
+        _agentId: meta?._agentId || window.currentAgentId || 'main', // attribution owner
+        _sourceSession: meta?._sourceSession || null,
+        _sourceAgent: meta?._sourceAgent || null,
+        _sourceAgentName: meta?._sourceAgentName || null,
+        _isInterSession: !!(meta?._isInterSession)
     };
 
-    const isSystem = isSystemMessage(text, from);
+    const isSystem = isSystemMessage(text, from) || !!(message._isInterSession || message._sourceSession || message._sourceAgent);
 
     // Route to appropriate message array
     if (isSystem) {
@@ -9751,10 +13637,14 @@ function syncChatToVPS() {
     if (chatSyncTimeout) clearTimeout(chatSyncTimeout);
     chatSyncTimeout = setTimeout(async () => {
         try {
+            const sessionKey = normalizeSessionKey(currentSessionName || GATEWAY_CONFIG?.sessionKey || 'agent:main:main');
             await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: state.chat.messages.slice(-100) })
+                body: JSON.stringify({
+                    messages: state.chat.messages.slice(-100),
+                    sessionKey
+                })
             });
         } catch (e) {
             // Chat sync failed - not critical
@@ -9773,12 +13663,12 @@ function renderChat() {
     }
     // Removed verbose log: renderChat called frequently
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
     const isConnected = gateway?.isConnected();
 
     // Save scroll state BEFORE clearing
     const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 5;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const previousScrollTop = container.scrollTop;
 
     // Clear container
     container.innerHTML = '';
@@ -9799,7 +13689,7 @@ function renderChat() {
     messages.forEach(msg => {
         // Defensive: Skip messages from other sessions
         const msgSession = (msg._sessionKey || '').toLowerCase();
-        if (msgSession && activeKey && msgSession !== activeKey) {
+        if (!msgSession || !activeKey || msgSession !== activeKey) {
             chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKey}`);
             return;
         }
@@ -9821,33 +13711,53 @@ function renderChat() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceState = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabel = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatus = !streamingText && (
+        isProcessing || (_presenceState && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceState.state))
+    );
+    if (_showCompactStatus) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.innerHTML = `
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabel}</span>
         `;
         container.appendChild(typingIndicator);
     }
 
-    // Auto-scroll if was at bottom, otherwise maintain position
+    // Auto-scroll only if user was at bottom; otherwise preserve exact reading position
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     } else {
-        // Restore position by maintaining same distance from bottom
-        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
+        container.scrollTop = previousScrollTop;
     }
+}
+
+function shouldHideFromMainChat(msg) {
+    if (!msg) return false;
+    if (msg._isInterSession || msg._sourceSession || msg._sourceAgent) return true;
+    if (typeof isSystemMessage === 'function' && isSystemMessage(msg.text, msg.from)) return true;
+    return false;
+}
+
+function getMainChatRenderableMessages(messages) {
+    return (messages || []).filter(msg => !shouldHideFromMainChat(msg));
 }
 
 function createChatMessageElement(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
 
     // Create message container
@@ -9921,6 +13831,14 @@ function createChatMessageElement(msg) {
             modelBadge.title = bestModel;
             header.appendChild(modelBadge);
         }
+    }
+
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: var(--space-2);';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
     }
 
     // Message content
@@ -10132,6 +14050,7 @@ function forceRefreshHistory() {
 
 function renderChatPage() {
     const container = document.getElementById('chat-page-messages');
+    updateChatAgentRail();
     if (!container) {
         return;
     }
@@ -10152,7 +14071,7 @@ function renderChatPage() {
         statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
     }
 
-    const messages = state.chat?.messages || [];
+    const messages = getMainChatRenderableMessages(state.chat?.messages || []);
 
     // Avoid clearing selection: if user is selecting text in chat, skip re-render
     const selection = window.getSelection();
@@ -10187,8 +14106,8 @@ function renderChatPage() {
 
     // Check if at bottom BEFORE clearing (use strict check to avoid unwanted scrolling)
     const wasAtBottom = isAtBottom(container);
-    // Save distance from bottom (how far up the user has scrolled)
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // Preserve the exact reading position when user has scrolled up
+    const previousScrollTop = container.scrollTop;
 
     // === Incremental rendering — only touch DOM for changes ===
 
@@ -10239,7 +14158,7 @@ function renderChatPage() {
             // Defensive: Skip messages from other sessions
             const msg = messages[i];
             const msgSession = (msg._sessionKey || '').toLowerCase();
-            if (msgSession && activeKeyCP && msgSession !== activeKeyCP) {
+            if (!msgSession || !activeKeyCP || msgSession !== activeKeyCP) {
                 chatLog(`[Chat] RENDER BLOCKED: msg session=${msgSession}, current=${activeKeyCP}`);
                 continue;
             }
@@ -10264,8 +14183,17 @@ function renderChatPage() {
         if (streamingMsg) container.appendChild(streamingMsg);
     }
 
-    // Show typing indicator when processing but no streaming text yet
-    if (isProcessing && !streamingText) {
+    // Compact live status indicator (same footprint as Thinking...)
+    const _presenceStateCP = (window.AgentPresence && typeof window.AgentPresence.getSessionState === 'function')
+        ? window.AgentPresence.getSessionState(currentSessionName || '')
+        : null;
+    const _presenceLabelCP = (window.AgentPresence && typeof window.AgentPresence.getSessionLabel === 'function')
+        ? window.AgentPresence.getSessionLabel(currentSessionName || '')
+        : 'Thinking...';
+    const _showCompactStatusCP = !streamingText && (
+        isProcessing || (_presenceStateCP && ['running', 'waiting_tool', 'waiting_user', 'stalled', 'error', 'done'].includes(_presenceStateCP.state))
+    );
+    if (_showCompactStatusCP) {
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.style.cssText = 'margin: 12px 0 12px 12px;';
@@ -10273,7 +14201,7 @@ function renderChatPage() {
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
-            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">Thinking...</span>
+            <span style="margin-left: 8px; color: var(--text-muted); font-size: 12px;">${_presenceLabelCP}</span>
         `;
         container.appendChild(typingIndicator);
     }
@@ -10282,7 +14210,7 @@ function renderChatPage() {
     if (wasAtBottom) {
         container.scrollTop = container.scrollHeight;
     } else {
-        container.scrollTop = container.scrollHeight - container.clientHeight - distanceFromBottom;
+        container.scrollTop = previousScrollTop;
     }
 }
 
@@ -10291,13 +14219,14 @@ function createChatPageMessage(msg) {
     if (!msg || typeof msg.text !== 'string') return null;
     if (!msg.text.trim() && !msg.image) return null;
 
-    const isUser = msg.from === 'user';
+    const isInterSession = !!(msg._isInterSession || msg._sourceSession || msg._sourceAgent);
+    const isUser = msg.from === 'user' && !isInterSession;
     const isSystem = msg.from === 'system';
     const isBot = !isUser && !isSystem;
 
     // Message wrapper
     const wrapper = document.createElement('div');
-    wrapper.className = `chat-page-message ${msg.from}${msg.isStreaming ? ' streaming' : ''}`;
+    wrapper.className = `chat-page-message ${isUser ? 'user' : (isSystem ? 'system' : 'solobot')}${msg.isStreaming ? ' streaming' : ''}`;
     wrapper.setAttribute('data-msg-id', msg.id || '');
 
     // Avatar (for bot and user messages, not system)
@@ -10311,15 +14240,11 @@ function createChatPageMessage(msg) {
             avatar.textContent = 'U';
         } else {
             // Bot avatar - agent-specific image and color
-            const agentId = currentAgentId || 'main';
+            const agentId = msg._agentId || currentAgentId || 'main';
             avatar.setAttribute('data-agent', agentId);
 
-            // Get avatar path (fallback to main for agents without custom avatars)
-            const avatarPath = ['main', 'dev', 'exec', 'coo', 'cfo', 'cmp', 'family', 'smm'].includes(agentId)
-                ? `/avatars/${agentId === 'main' ? 'solobot' : agentId}.png`
-                : (agentId === 'tax' || agentId === 'sec')
-                    ? `/avatars/${agentId}.svg`
-                    : '/avatars/solobot.png';
+            // Get avatar path - use centralized avatar resolution
+            const avatarPath = getAvatarUrl(agentId);
 
             const avatarImg = document.createElement('img');
             avatarImg.src = avatarPath;
@@ -10400,6 +14325,14 @@ function createChatPageMessage(msg) {
 
     bubble.appendChild(header);
 
+    if (isInterSession && !isSystem) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-bottom: 6px;';
+        const fromName = msg._sourceAgentName || getAgentDisplayName(msg._agentId || currentAgentId);
+        badge.textContent = `Inter-session • from ${fromName}`;
+        bubble.appendChild(badge);
+    }
+
     // Content
     const content = document.createElement('div');
     content.className = 'chat-page-bubble-content';
@@ -10428,6 +14361,17 @@ function createChatPageMessage(msg) {
         };
         actions.appendChild(copyBtn);
 
+        // Forward button
+        const forwardBtn = document.createElement('button');
+        forwardBtn.className = 'chat-action-btn';
+        forwardBtn.innerHTML = '↪';
+        forwardBtn.title = 'Forward to agent';
+        forwardBtn.onclick = (e) => {
+            e.stopPropagation();
+            openForwardMessageModal(msg);
+        };
+        actions.appendChild(forwardBtn);
+
         bubble.appendChild(actions);
     }
 
@@ -10451,6 +14395,138 @@ function copyToClipboard(text) {
         showToast('Copied to clipboard!', 'success', 2000);
     });
 }
+
+function getForwardableAgents() {
+    const baseAgents = ['main', 'dev', 'orion', 'forge', 'quill', 'chip', 'sentinel', 'knox', 'atlas', 'canon', 'vector', 'nova', 'snip', 'luma', 'pulse', 'sterling', 'ledger', 'haven'];
+    return [...new Set(baseAgents.map(id => window.resolveAgentId ? window.resolveAgentId(id) : id))];
+}
+
+function buildForwardedMessageText(msg) {
+    const senderName = msg?.isUser
+        ? 'You'
+        : msg?.isSystem
+            ? 'System'
+            : getAgentDisplayName(msg?._agentId || currentAgentId || 'main');
+    return `Forwarded message from ${senderName}:\n\n${msg?.text || ''}`;
+}
+
+function ensureForwardMessageModal() {
+    let modal = document.getElementById('forward-message-modal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'forward-message-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 560px; width: calc(100vw - 32px);">
+            <div class="modal-header">
+                <h3 class="modal-title">Forward message</h3>
+                <button onclick="closeForwardMessageModal()" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Target agent</label>
+                    <select id="forward-message-agent" class="input"></select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Message</label>
+                    <textarea id="forward-message-text" class="input" rows="8" style="width:100%; resize:vertical;"></textarea>
+                    <div style="font-size:11px; color: var(--text-muted); margin-top:6px;">This switches you to the target agent’s latest session, or creates a new forwarded session if none exists, then drops the forwarded text into the composer.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeForwardMessageModal()" class="btn btn-ghost">Cancel</button>
+                <button onclick="submitForwardMessage()" class="btn btn-primary">Forward</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+window.openForwardMessageModal = function(msg) {
+    const modal = ensureForwardMessageModal();
+    modal._forwardMessage = msg;
+
+    const agentSelect = document.getElementById('forward-message-agent');
+    if (agentSelect) {
+        const current = (msg?._agentId || currentAgentId || 'main');
+        agentSelect.innerHTML = getForwardableAgents().map(agentId => {
+            const selected = agentId !== current && agentId === (window.currentAgentId || currentAgentId || 'main') ? ' selected' : '';
+            return `<option value="${agentId}"${selected}>${escapeHtml(getAgentDisplayName(agentId))}</option>`;
+        }).join('');
+        if (!agentSelect.value) {
+            agentSelect.value = getForwardableAgents().find(id => id !== current) || 'main';
+        }
+    }
+
+    const textarea = document.getElementById('forward-message-text');
+    if (textarea) {
+        textarea.value = buildForwardedMessageText(msg);
+    }
+
+    requestAnimationFrame(() => {
+        modal.classList.add('visible');
+        textarea?.focus();
+        textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+};
+
+window.closeForwardMessageModal = function() {
+    const modal = document.getElementById('forward-message-modal');
+    if (!modal) return;
+    modal.classList.remove('visible');
+};
+
+function buildAutoForwardSessionKey(agentId) {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    return `agent:${agentId}:${agentId}-forwarded-${stamp}`;
+}
+
+window.submitForwardMessage = async function() {
+    const agentId = document.getElementById('forward-message-agent')?.value?.trim();
+    const text = document.getElementById('forward-message-text')?.value?.trim();
+    if (!agentId || !text) {
+        showToast('Target agent and message are required', 'warning');
+        return;
+    }
+
+    try {
+        let targetSessionKey = null;
+        const pool = Array.isArray(window.availableSessions) ? window.availableSessions.slice() : (Array.isArray(availableSessions) ? availableSessions.slice() : []);
+        const agentSessions = typeof filterSessionsForAgent === 'function'
+            ? filterSessionsForAgent(pool, agentId)
+            : pool.filter(s => (s?.key || '').startsWith(`agent:${agentId}:`));
+
+        if (agentSessions.length > 0) {
+            agentSessions.sort((a, b) => {
+                const aTs = new Date(a.updatedAt || a.lastMessageAt || a.createdAt || 0).getTime() || 0;
+                const bTs = new Date(b.updatedAt || b.lastMessageAt || b.createdAt || 0).getTime() || 0;
+                return bTs - aTs;
+            });
+            targetSessionKey = agentSessions[0].key;
+        } else {
+            targetSessionKey = buildAutoForwardSessionKey(agentId);
+        }
+
+        if (typeof switchToSession === 'function') {
+            await switchToSession(targetSessionKey);
+        }
+
+        const input = document.getElementById('chat-page-input');
+        if (input) {
+            input.value = text;
+            if (typeof resizeChatPageInput === 'function') resizeChatPageInput();
+            input.focus();
+        }
+
+        closeForwardMessageModal();
+        showToast(`Forward loaded for ${getAgentDisplayName(agentId)}${agentSessions.length ? '' : ' in a new session'}`, 'success');
+    } catch (err) {
+        console.error('Forward failed:', err);
+        showToast(`Forward failed: ${err?.message || err}`, 'error');
+    }
+};
 
 // Notify of new message (for indicator)
 function notifyChatPageNewMessage() {
@@ -10490,8 +14566,16 @@ function processChatPageImageFile(file) {
     reader.onload = async (e) => {
         // Compress image if larger than 200KB
         let imageData = e.target.result;
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Invalid image data. Please select the file again.', 'warning');
+            return;
+        }
         if (imageData.length > 200 * 1024) {
             imageData = await compressImage(imageData);
+        }
+        if (!isValidImageDataUri(imageData)) {
+            showToast('Image processing failed. Please try another image.', 'warning');
+            return;
         }
 
         chatPagePendingImages.push({
@@ -10618,17 +14702,46 @@ function forceSyncActiveAgent(agentId) {
 }
 
 // Track last-used session per agent (persisted to localStorage)
+function sessionBelongsToAgent(sessionKey, agentId) {
+    if (!sessionKey || !agentId) return false;
+    const normalizedSession = normalizeDashboardSessionKey(sessionKey);
+    const match = normalizedSession.match(/^agent:([^:]+):/);
+    if (!match) return false;
+    const sessionAgent = window.resolveAgentId ? window.resolveAgentId(match[1]) : match[1];
+    const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+    return sessionAgent === canonicalAgent;
+}
+
 function getLastAgentSession(agentId) {
     try {
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
-        return map[agentId] || null;
+        const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+        const rawSession = map[canonicalAgent] || map[agentId] || null;
+        if (!rawSession) return null;
+
+        const normalizedSession = normalizeDashboardSessionKey(rawSession);
+        if (!sessionBelongsToAgent(normalizedSession, canonicalAgent)) {
+            // Self-heal corrupted mapping so a click can never jump to another agent's session.
+            delete map[canonicalAgent];
+            delete map[agentId];
+            localStorage.setItem('agent_last_sessions', JSON.stringify(map));
+            chatLog(`[Sessions] Cleared invalid last-session mapping for ${canonicalAgent}: ${normalizedSession}`);
+            return null;
+        }
+        return normalizedSession;
     } catch { return null; }
 }
 
 function saveLastAgentSession(agentId, sessionKey) {
     try {
+        const canonicalAgent = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
+        const normalizedSession = normalizeDashboardSessionKey(sessionKey);
+        if (!sessionBelongsToAgent(normalizedSession, canonicalAgent)) {
+            chatLog(`[Sessions] Skipping invalid last-session save for ${canonicalAgent}: ${normalizedSession}`);
+            return;
+        }
         const map = JSON.parse(localStorage.getItem('agent_last_sessions') || '{}');
-        map[agentId] = sessionKey;
+        map[canonicalAgent] = normalizedSession;
         localStorage.setItem('agent_last_sessions', JSON.stringify(map));
     } catch { }
 }
@@ -10640,15 +14753,17 @@ function setupSidebarAgents() {
     const activateAgentFromEl = (el) => {
         const agentId = el.getAttribute('data-agent');
         if (!agentId) return;
+        const canonicalAgentId = window.resolveAgentId ? window.resolveAgentId(agentId) : agentId;
 
         // IMMEDIATE UI feedback - show active state before switch completes
-        forceSyncActiveAgent(agentId);
+        forceSyncActiveAgent(canonicalAgentId);
 
         // Update current agent ID first so dropdown filters correctly
-        currentAgentId = agentId;
+        currentAgentId = canonicalAgentId;
 
         // Restore last session for this agent, or default to main
-        const sessionKey = getLastAgentSession(agentId) || `agent:${agentId}:main`;
+        const remembered = getLastAgentSession(canonicalAgentId);
+        const sessionKey = remembered || `agent:${canonicalAgentId}:main`;
         showPage('chat');
 
         // Fire-and-forget switch (queue in sessions.js handles ordering)
@@ -10722,13 +14837,30 @@ async function sendChatPageMessage() {
         return;
     }
 
-    const imagesToSend = [...chatPagePendingImages];
-    const hasImages = imagesToSend.length > 0;
+    const rawImagesToSend = [...chatPagePendingImages];
+    const { valid: imagesToSend, dropped: droppedImages } = sanitizeImageAttachments(rawImagesToSend, 'chat-page');
+    if (droppedImages > 0) {
+        showToast(`Skipped ${droppedImages} invalid image attachment${droppedImages > 1 ? 's' : ''}.`, 'warning');
+    }
+    const imageDataArray = imagesToSend.map(img => getImageDataUri(img)).filter(Boolean);
+    const hasImages = imageDataArray.length > 0;
+    if (!text && !hasImages) {
+        clearChatPageImagePreviews();
+        addLocalChatMessage('Failed: selected image is empty or invalid.', 'system');
+        renderChat();
+        renderChatPage();
+        return;
+    }
+    const sendSignature = buildChatSendSignature(text, imageDataArray);
+    if (shouldSuppressDuplicateSend(sendSignature)) {
+        chatLog('[Chat] Suppressed duplicate send (chat-page-input)');
+        return;
+    }
+    markChatSendStart(sendSignature);
 
     if (hasImages) {
         const imgCount = imagesToSend.length;
         const displayText = text || (imgCount > 1 ? `📷 ${imgCount} Images` : '📷 Image');
-        const imageDataArray = imagesToSend.map(img => img.data);
         addLocalChatMessage(displayText, 'user', imageDataArray);
     } else {
         addLocalChatMessage(text, 'user');
@@ -10754,7 +14886,6 @@ async function sendChatPageMessage() {
     try {
         chatLog(`[Chat] Sending message with model: ${currentModel}`);
         if (hasImages) {
-            const imageDataArray = imagesToSend.map(img => img.data);
             await gateway.sendMessageWithImages(text || 'Image', imageDataArray);
         } else {
             await gateway.sendMessage(text);
@@ -10764,6 +14895,8 @@ async function sendChatPageMessage() {
         addLocalChatMessage(`Failed: ${err.message}`, 'system');
         renderChat();
         renderChatPage();
+    } finally {
+        markChatSendEnd();
     }
 }
 
@@ -10863,7 +14996,3 @@ function clearChatSearchHighlights() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initChatSearch, 100); // Small delay to ensure DOM is ready
 });
-
-
-
-

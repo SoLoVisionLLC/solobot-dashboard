@@ -334,7 +334,7 @@ function initSparklineData() {
 initSparklineData();
 
 // Update stats every minute
-setInterval(updateQuickStats, 60000);
+let quickStatsInterval = setInterval(updateQuickStats, 60000);
 
 // Export for use in other modules
 window.QuickStats = {
@@ -342,5 +342,6 @@ window.QuickStats = {
     generateSparkline,
     generateProgressRing,
     generateMiniHeatmap,
-    generateActivityHeatmap
+    generateActivityHeatmap,
+    cleanup: () => clearInterval(quickStatsInterval)
 };
