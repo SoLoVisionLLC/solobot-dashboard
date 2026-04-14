@@ -18,10 +18,17 @@ let notionLastFetch = 0;
 const NOTION_CACHE_TTL = 60 * 1000; // 1 minute cache
 
 // Notion Status Mapping
+// NOTE: Any unmapped status silently falls through to 'todo' — always keep this complete
 const STATUS_MAP_REV = {
   'To Do': 'todo',
   'In Progress': 'progress',
-  'Done': 'done'
+  'Done': 'done',
+  'Not Started': 'todo',   // No status yet — treat as backlog
+  'Completed': 'done',      // Done
+  'Cancelled': 'archive',   // Cancelled tasks → archive
+  'Blocked': 'progress',    // Blocked is a form of in-progress
+  'Asset Ready': 'done',    // Asset Ready means done
+  'Active': 'progress',     // Active means in progress
 };
 const STATUS_MAP_FWD = {
   'todo': 'To Do',
@@ -39,55 +46,73 @@ const PRIORITY_MAP_REV = {
 
 async function fetchNotionTasks() {
   if (!NOTION_API_KEY) return null;
-  
+
   // Return cached if fresh
   if (notionTasksCache && (Date.now() - notionLastFetch < NOTION_CACHE_TTL)) {
     return notionTasksCache;
   }
 
-  try {
-    console.log('[Notion] Fetching tasks from database...');
-    const response = await new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: 'api.notion.com',
-        path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NOTION_API_KEY}`,
-          'Notion-Version': '2022-06-28',
-          'Content-Type': 'application/json'
-        }
-      }, res => {
-        let data = '';
-        res.on('data', c => data += c);
-        res.on('end', () => resolve(JSON.parse(data)));
-      });
-      req.on('error', reject);
-      req.write(JSON.stringify({ 
-        page_size: 100, 
-        filter: { 
-          property: 'Status', 
-          select: { 
-            is_not_empty: true 
-          } 
-        } 
-      }));
-      req.end();
+  // Helper to make a single Notion query request
+  const notionRequest = (body) => new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.notion.com',
+      path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      }
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve(JSON.parse(data)));
     });
+    req.on('error', reject);
+    req.write(JSON.stringify(body));
+    req.end();
+  });
 
-    if (!response.results) {
-      console.error('[Notion] Failed to fetch tasks:', response);
-      return null;
-    }
+  try {
+    console.log('[Notion] Fetching tasks from database (paginated)...');
+    const allPages = [];
+    let cursor = undefined;
+    let pageCount = 0;
+
+    do {
+      const body = {
+        page_size: 100,
+        filter: {
+          property: 'Status',
+          select: {
+            is_not_empty: true
+          }
+        }
+      };
+      if (cursor) body.start_cursor = cursor;
+
+      const response = await notionRequest(body);
+      if (!response.results) {
+        console.error('[Notion] Failed to fetch tasks:', response);
+        return null;
+      }
+
+      allPages.push(...response.results);
+      pageCount++;
+      cursor = response.has_more ? response.next_cursor : undefined;
+      console.log(`[Notion] Page ${pageCount}: +${response.results.length} tasks (total: ${allPages.length}, has_more: ${response.has_more})`);
+    } while (cursor);
+
+    console.log(`[Notion] Fetched ${allPages.length} total tasks across ${pageCount} pages`);
 
     // Transform to Dashboard format
     const tasks = { todo: [], progress: [], done: [], archive: [] };
-    
-    for (const page of response.results) {
+
+    for (const page of allPages) {
       const props = page.properties;
       const statusVal = props.Status?.select?.name;
       const listName = STATUS_MAP_REV[statusVal] || 'todo';
-      
+
       const task = {
         id: page.id,
         title: props.Task?.title?.[0]?.plain_text || 'Untitled',
@@ -100,6 +125,10 @@ async function fetchNotionTasks() {
 
       if (tasks[listName]) {
         tasks[listName].push(task);
+      } else {
+        // Unknown bucket — put in todo but log warning
+        console.warn(`[Notion] Unknown status "${statusVal}" for task "${task.title}" — routing to todo`);
+        tasks.todo.push(task);
       }
     }
 
