@@ -534,11 +534,16 @@ function isNoiseMessageForMetrics(msg, text, role) {
   if (!lower) return false;
 
   if (
+    lower === 'ack' ||
     lower === 'heartbeat_ok' ||
     lower === 'announce_skip' ||
+    lower === 'reply_skip' ||
     lower === 'no_reply' ||
+    lower === 'no' ||
     lower === '[read-sync]' ||
-    lower === '[[read_ack]]'
+    lower === '[[read_ack]]' ||
+    trimmed.startsWith('[[read_ack]]') ||
+    /^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(trimmed)
   ) return true;
 
   if (/(keepalive|heartbeat check|agent-to-agent announce step|continue where you left off|retry heartbeat|wake request)/i.test(lower)) {
@@ -1605,7 +1610,7 @@ function normalizeGroupMessages(messages) {
     .map(normalizeGroupMessage)
     .filter((message) => {
       const key = message.id || message.messageKey || message.key;
-      if (!message.internal && message.senderType === 'AGENT' && !message.text && !message.body) return false;
+      if (isNoiseMessageForMetrics(message, message.text || message.body, message.senderType?.toLowerCase())) return false;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

@@ -1,12 +1,30 @@
 // js/models.js — isSystemMessage, provider/model management
 
+function isInternalControlMessage(text) {
+    if (!text) return false;
+    const trimmed = String(text).trim();
+    const lowerTrimmed = trimmed.toLowerCase();
+
+    if (/^(ack|heartbeat_ok|no_reply|no|reply_skip|announce_skip)$/i.test(trimmed)) return true;
+    if (trimmed === '[read-sync]') return true;
+    if (trimmed === '[[read_ack]]') return true;
+    if (trimmed.startsWith('[[read_ack]]')) return true;
+    if (/^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(trimmed)) return true;
+    if (lowerTrimmed.includes('agent-to-agent announce step')) return true;
+    if (lowerTrimmed.includes('reply with a one-line ack')) return true;
+    return false;
+}
+
 function isSystemMessage(text, from) {
-    // DEBUG MODE: Show everything in chat
+    if (!text) return false;
+
+    // These are protocol/control messages, never user-facing — even in debug mode.
+    if (isInternalControlMessage(text)) return true;
+
+    // DEBUG MODE: Show everything else in chat
     if (DISABLE_SYSTEM_FILTER) {
         return false; // Everything goes to chat
     }
-
-    if (!text) return false;
 
     const trimmed = text.trim();
     const lowerTrimmed = trimmed.toLowerCase();

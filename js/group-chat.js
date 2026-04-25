@@ -102,6 +102,7 @@ function normalizeGroupMessages(messages) {
     .map(normalizeGroupMessage)
     .filter(message => {
       const text = messageText(message);
+      if (typeof isSystemMessage === 'function' && isSystemMessage(text, message.from || message.senderName || message.senderId)) return false;
       if (!message.internal && message.senderType === 'AGENT' && !text) return false;
       const key = messageIdentity(message);
       if (seen.has(key)) return false;
@@ -791,9 +792,10 @@ function renderGroupChat(roomId) {
 
   // Render messages
   const allMessages = groupChatState.messages.get(roomId) || [];
-  const visibleMessages = groupChatState.showInternal
+  const visibleMessages = (groupChatState.showInternal
     ? allMessages
-    : allMessages.filter(m => !m.internal && m.senderType !== 'SYSTEM');
+    : allMessages.filter(m => !m.internal && m.senderType !== 'SYSTEM'))
+    .filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(messageText(m), m.from || m.senderName || m.senderId)));
 
   if (visibleMessages.length === 0) {
     container.innerHTML = `
