@@ -1507,7 +1507,7 @@ function readPage(name) {
   }
 }
 
-const PAGE_NAMES = ['dashboard', 'agents', 'chat', 'system', 'products', 'business', 'cron', 'security', 'skills', 'model-validator'];
+const PAGE_NAMES = ['dashboard', 'agents', 'chat', 'group-chat', 'system', 'products', 'business', 'cron', 'security', 'skills', 'model-validator'];
 
 function assemblePage(activePage) {
   // Build all pages, marking the active one
@@ -1552,6 +1552,87 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
+function normalizeGroupRoom(room) {
+  const memberIds = Array.isArray(room?.memberIds) ? room.memberIds : (Array.isArray(room?.members) ? room.members : []);
+  return {
+    ...room,
+    id: room?.id,
+    title: room?.title || 'Untitled room',
+    purpose: room?.purpose || '',
+    memberIds,
+    members: memberIds,
+    unreadCount: Number.isFinite(room?.unreadCount) ? room.unreadCount : 0,
+    active: room?.active !== false,
+    voiceMode: room?.voiceMode || 'Auto',
+    lastActivity: room?.lastActivity || 'Now',
+    createdAt: Number.isFinite(room?.createdAt) ? room.createdAt : Date.now(),
+    isLocal: room?.isLocal !== false,
+  };
+}
+
+function normalizeGroupMessage(message, index = 0) {
+  const id = message?.id || message?.messageKey || message?.key || message?._remoteKey || `message-${index}`;
+  const text = String(message?.text ?? message?.body ?? '').trim();
+  const senderType = String(message?.senderType || '').trim().toUpperCase()
+    || (String(message?.from || '').toLowerCase() === 'solo' ? 'USER' : 'AGENT');
+  const fromAgentId = message?.fromAgentId || (senderType === 'AGENT' ? message?.senderId : undefined);
+  const from = String(message?.from ?? message?.senderName ?? message?.senderId ?? 'Unknown').trim() || 'Unknown';
+  const time = message?.time || message?.timestampMs || message?.timestamp || Date.now();
+  return {
+    ...message,
+    id,
+    key: message?.key || message?.messageKey || id,
+    messageKey: message?.messageKey || message?.key || id,
+    text,
+    body: message?.body ?? text,
+    from,
+    senderName: message?.senderName || from,
+    senderId: message?.senderId || fromAgentId || (senderType === 'USER' ? 'solo' : from),
+    senderRole: message?.senderRole || (senderType === 'USER' ? 'Operator' : senderType === 'SYSTEM' ? 'System' : 'Agent'),
+    senderType,
+    time,
+    timestampMs: message?.timestampMs || time,
+    timestampLabel: message?.timestampLabel || 'Now',
+    fromAgentId,
+    spoken: Boolean(message?.spoken),
+    internal: Boolean(message?.internal),
+  };
+}
+
+function normalizeGroupMessages(messages) {
+  const seen = new Set();
+  return (Array.isArray(messages) ? messages : [])
+    .map(normalizeGroupMessage)
+    .filter((message) => {
+      const key = message.id || message.messageKey || message.key;
+      if (!message.internal && message.senderType === 'AGENT' && !message.text && !message.body) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeGroupRoomsState(payload = {}) {
+  const rooms = (Array.isArray(payload.rooms) ? payload.rooms : [])
+    .map(normalizeGroupRoom)
+    .filter(room => room.id);
+  const messages = {};
+  if (payload.messages && typeof payload.messages === 'object') {
+    for (const [roomId, roomMessages] of Object.entries(payload.messages)) {
+      messages[roomId] = normalizeGroupMessages(roomMessages);
+    }
+  }
+  return {
+    rooms,
+    messages,
+    sessionKeys: payload.sessionKeys && typeof payload.sessionKeys === 'object' ? payload.sessionKeys : {},
+    memberNames: payload.memberNames && typeof payload.memberNames === 'object' ? payload.memberNames : {},
+    replyCursors: payload.replyCursors && typeof payload.replyCursors === 'object' ? payload.replyCursors : {},
+    version: Number.isFinite(payload.version) ? payload.version : 1,
+    updatedAt: Number.isFinite(payload.updatedAt) ? payload.updatedAt : Date.now(),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1581,6 +1662,32 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
     return res.end(JSON.stringify(responseState));
+  }
+
+  if (url.pathname === '/api/group-rooms-state' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    const payload = normalizeGroupRoomsState(
+      state.groupRoomsState && typeof state.groupRoomsState === 'object'
+        ? state.groupRoomsState
+        : { rooms: [], messages: {}, sessionKeys: {}, memberNames: {}, replyCursors: {}, version: 1, updatedAt: null }
+    );
+    return res.end(JSON.stringify(payload));
+  }
+
+  if (url.pathname === '/api/group-rooms-state' && req.method === 'PUT') {
+    let body = '';
+    try {
+      for await (const chunk of req) { body += chunk; }
+      const payload = JSON.parse(body || '{}');
+      state.groupRoomsState = normalizeGroupRoomsState(payload);
+      saveState();
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ ok: true, updatedAt: state.groupRoomsState.updatedAt }));
+    } catch (e) {
+      res.writeHead(400);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
   }
 
   if (url.pathname === '/api/sync' && req.method === 'POST') {
@@ -3667,6 +3774,7 @@ const server = http.createServer(async (req, res) => {
     '/agents': 'agents',
     '/memory': 'agents',      // legacy redirect
     '/chat': 'chat',
+    '/group-chat': 'group-chat',
     '/system': 'system',
     '/products': 'products',
     '/business': 'business',
