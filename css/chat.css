@@ -1041,3 +1041,366 @@ body:has(#page-dashboard.active) .footer {
     pointer-events: none;
     transform: scale(0.8);
 }
+
+/* =================== GROUP CHAT STYLES =================== */
+
+/* Group chat page: fixed viewport below header */
+#page-group-chat {
+    position: fixed;
+    top: 60px;
+    left: 64px;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    z-index: 50;
+    background: var(--surface-base);
+}
+
+.sidebar.pinned~.app-content #page-group-chat,
+.sidebar:hover~.app-content #page-group-chat {
+    left: 240px;
+}
+
+body:has(#page-group-chat.active) .footer {
+    display: none;
+}
+
+#group-chat-messages {
+    padding-top: 12px;
+}
+
+.group-chat-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-1);
+}
+
+.group-chat-toolbar-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.group-chat-toolbar-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.group-chat-room-browser {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-2);
+    overflow-x: auto;
+}
+
+.group-chat-room-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    min-width: 180px;
+    border-radius: 12px;
+    border: 1px solid var(--border-default);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.group-chat-room-chip:hover {
+    transform: translateY(-1px);
+    border-color: var(--brand-red);
+}
+
+.group-chat-room-chip.active {
+    border-color: var(--brand-red);
+    background: rgba(188, 32, 38, 0.08);
+}
+
+.group-chat-room-chip-copy {
+    min-width: 0;
+    text-align: left;
+}
+
+.group-chat-room-chip-title {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-chat-room-chip-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-chat-room-chip-empty {
+    padding: 14px 16px;
+    border: 1px dashed var(--border-default);
+    border-radius: 12px;
+    color: var(--text-muted);
+    background: var(--surface-1);
+    min-width: 280px;
+}
+
+/* Group rooms list in sidebar */
+#sidebar-group-rooms-section {
+    margin-top: 8px;
+}
+
+.group-room-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+}
+
+.group-room-item:hover {
+    background: var(--surface-2);
+}
+
+.group-room-item.active {
+    background: var(--accent-color);
+    color: white;
+}
+
+.group-room-item.active .group-room-delete-btn {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.group-room-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+    color: var(--text-muted);
+}
+
+.group-room-item:hover .group-room-delete-btn {
+    opacity: 1;
+}
+
+.group-room-delete-btn:hover {
+    background: rgba(188, 32, 38, 0.2);
+    color: var(--brand-red);
+}
+
+/* Unread badge */
+.unread-badge {
+    background: var(--brand-red);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: var(--radius-full);
+    min-width: 16px;
+    text-align: center;
+}
+
+/* Group chat messages */
+.group-chat-message {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    animation: messageSlideIn 0.2s ease-out;
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.group-chat-message.user {
+    flex-direction: row-reverse;
+}
+
+.group-chat-message.system {
+    opacity: 0.7;
+}
+
+.group-chat-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    border: 2px solid var(--border-default);
+    background: var(--surface-2);
+}
+
+.group-chat-avatar.user-avatar {
+    background: linear-gradient(135deg, var(--brand-red) 0%, #8b1419 100%);
+    color: white;
+    border-color: var(--brand-red);
+}
+
+.group-chat-avatar.system-avatar {
+    background: var(--surface-3);
+    border-color: var(--border-default);
+}
+
+.group-chat-bubble {
+    max-width: 70%;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    border: 1px solid var(--border-default);
+}
+
+.group-chat-message.user .group-chat-bubble {
+    background: linear-gradient(135deg, var(--brand-red) 0%, #8b1419 100%);
+    color: white;
+    border-bottom-right-radius: 4px;
+    border-color: transparent;
+}
+
+.group-chat-message.system .group-chat-bubble {
+    background: var(--warning-muted);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    font-size: 13px;
+}
+
+.group-chat-message.agent .group-chat-bubble {
+    border-bottom-left-radius: 4px;
+    background: linear-gradient(135deg, #1b2232 0%, #2a3548 100%);
+    border: 1px solid rgba(169, 178, 188, 0.2);
+    color: #ffffff;
+}
+
+.group-chat-bubble-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+    font-size: 12px;
+}
+
+.group-chat-message.user .group-chat-bubble-header {
+    justify-content: flex-end;
+}
+
+.group-chat-sender {
+    font-weight: 600;
+}
+
+.group-chat-time {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.group-chat-message.user .group-chat-time {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.group-chat-bubble-content {
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.group-chat-bubble-content a {
+    color: var(--brand-red);
+    text-decoration: underline;
+    word-break: break-all;
+}
+
+.group-chat-bubble-content a:hover {
+    opacity: 0.8;
+}
+
+/* Create room modal agent list */
+.group-room-agent-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 13px;
+}
+
+.group-room-agent-option:hover {
+    background: var(--surface-2);
+}
+
+.group-room-agent-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* Toggle internal messages button */
+#group-chat-toggle-internal.active {
+    background: var(--surface-2);
+    color: var(--text-primary);
+}
+
+/* Group chat header */
+#group-chat-header {
+    flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .group-chat-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .group-chat-room-browser {
+        padding: 10px 12px;
+    }
+
+    .group-chat-room-chip,
+    .group-chat-room-chip-empty {
+        min-width: 220px;
+    }
+
+    .group-chat-message {
+        max-width: 100%;
+        padding: 0 var(--space-3);
+    }
+    
+    .group-chat-bubble {
+        max-width: 80%;
+    }
+    
+    .group-room-delete-btn {
+        opacity: 1;
+    }
+}

@@ -7,7 +7,6 @@
 <script src="js/state.js?v=4.9.10"></script>
 <script src="js/utils.js?v=4.9.28"></script>
 <script src="js/ui.js?v=4.9.25"></script>
-<script src="js/focus-timer.js?v=4.9.1"></script>
 <script src="js/quick-stats.js?v=4.9.27?v=4.9.1"></script>
 <script src="js/keyboard.js?v=4.9.2"></script>
 <script src="js/models.js?v=4.9.27?v=4.9.9"></script>
@@ -38,6 +37,7 @@
 <script src="js/skills-mgr.js?v=4.9.1"></script>
 <script src="js/subagent-monitor.js?v=4.9.27?v=4.9.1"></script>
 <script src="js/heatmap.js?v=4.9.27?v=4.9.1"></script>
+<script src="js/dashboard-layout.js?v=4.10.1"></script>
 <!-- Phase 1: Visual Design Foundation -->
 <script src="js/phase1-visuals.js?v=4.9.1"></script>
 <!-- Phase 2: Motion & Microinteractions -->
@@ -70,6 +70,8 @@
 <script src="js/phase14-polish.js?v=4.9.1"></script>
 <script src="js/phase15-keyboard.js?v=4.9.1"></script>
 <script src="js/phase16-business.js?v=4.9.1"></script>
+<!-- Group Chat -->
+<script src="js/group-chat.js?v=1.1"></script>
 <!-- Main init (must be last) -->
 <script src="dashboard.js?v=4.9.1"></script>
 <script>
@@ -86,6 +88,7 @@
         "dashboard",
         "agents",
         "chat",
+        "group-chat",
         "system",
         "products",
         "business",
@@ -251,6 +254,32 @@
         if (pageName === "security" && typeof initSecurityPage === "function") initSecurityPage();
         if (pageName === "skills" && typeof initSkillsPage === "function") initSkillsPage();
         if (pageName === "business" && typeof BusinessFeatures !== "undefined") BusinessFeatures.renderAll();
+
+        // Group chat page
+        if (pageName === 'group-chat') {
+            if (groupChatState.selectedRoomId) {
+                renderGroupChat(groupChatState.selectedRoomId);
+                startGroupPolling();
+            } else {
+                // Show empty state when no room selected
+                const header = document.getElementById('group-chat-header');
+                const container = document.getElementById('group-chat-messages');
+                if (header) header.innerHTML = '';
+                if (container) {
+                    container.innerHTML = `
+                        <div class="chat-page-empty">
+                            <div class="chat-page-empty-icon">👥</div>
+                            <div class="chat-page-empty-text">
+                                <p>No group room selected.</p>
+                                <p style="margin-top: 8px; font-size: 13px;">
+                                    <a href="#" onclick="openCreateGroupRoomModal(); return false;">Create a room</a> or pick one from the sidebar.
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
     }
 
     // Handle browser back/forward buttons
