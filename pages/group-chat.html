@@ -1,48 +1,41 @@
                     <!-- =================== GROUP CHAT PAGE =================== -->
                     <div id="page-group-chat" class="page">
-                        <div class="chat-page-wrapper">
-                            <div class="chat-page-header">
-                                <div class="chat-page-title">
-                                    <span style="font-size: 14px; font-weight: 600; color: var(--text-primary)">Group Chat</span>
-                                </div>
-                                <div class="chat-page-actions">
-                                    <button id="group-chat-toggle-internal" class="btn btn-ghost" onclick="toggleGroupInternalMessages()" title="Toggle internal messages">
-                                        👁️ Show internal
-                                    </button>
-                                    <button onclick="showPage('chat')" class="btn btn-ghost" title="Back to direct chat">
-                                        ← Back
+                        <div class="group-chat-shell">
+                            <aside class="group-chat-rooms-panel" aria-label="Group chat rooms">
+                                <div class="group-chat-panel-header">
+                                    <div>
+                                        <div class="group-chat-eyebrow">Coordination</div>
+                                        <h2>Rooms</h2>
+                                    </div>
+                                    <button class="btn btn-primary group-chat-create-btn" onclick="openCreateGroupRoomModal()" title="Create room">
+                                        +
                                     </button>
                                 </div>
-                            </div>
-
-                            <div class="group-chat-toolbar">
-                                <div class="group-chat-toolbar-copy">
-                                    <div class="group-chat-toolbar-title">Rooms</div>
-                                    <div class="group-chat-toolbar-subtitle">Create a room or jump back into an existing one.</div>
+                                <div class="group-chat-panel-copy">
+                                    Multi-agent rooms for planning, decisions, and handoffs.
                                 </div>
-                                <button class="btn btn-primary" onclick="openCreateGroupRoomModal()">
-                                    ➕ Create Room
-                                </button>
-                            </div>
+                                <div id="group-chat-room-browser" class="group-chat-room-browser">
+                                    <!-- Room list rendered dynamically -->
+                                </div>
+                            </aside>
 
-                            <div id="group-chat-room-browser" class="group-chat-room-browser">
-                                <!-- Room chips rendered dynamically -->
-                            </div>
+                            <main class="group-chat-main-panel" aria-label="Group conversation">
+                                <div id="group-chat-header" class="group-chat-room-header">
+                                    <!-- Room header rendered dynamically -->
+                                </div>
 
-                            <div id="group-chat-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-default); background: var(--surface-1);">
-                                <!-- Room header rendered dynamically -->
-                            </div>
+                                <div id="group-chat-messages" class="group-chat-messages">
+                                    <!-- Messages rendered dynamically -->
+                                </div>
 
-                            <div id="group-chat-messages" class="chat-page-messages">
-                                <!-- Messages rendered dynamically -->
-                            </div>
-
-                            <div class="chat-page-input-area">
-                                <div class="chat-page-input-container">
-                                    <div class="chat-page-input-row">
+                                <div class="group-chat-composer">
+                                    <div class="group-chat-composer-hint">
+                                        Use <strong>@all</strong> for everyone or <strong>@agent</strong> for one teammate.
+                                    </div>
+                                    <div class="group-chat-input-row">
                                         <textarea
                                             id="group-chat-input"
-                                            placeholder="Message the group... (@all, @agent, or just type)"
+                                            placeholder="Message the room..."
                                             autocomplete="off"
                                             autocorrect="off"
                                             autocapitalize="off"
@@ -55,7 +48,13 @@
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </main>
+
+                            <aside class="group-chat-context-panel" aria-label="Room context">
+                                <div id="group-chat-context">
+                                    <!-- Room context rendered dynamically -->
+                                </div>
+                            </aside>
                         </div>
                     </div>
                     <!-- END GROUP CHAT PAGE -->

@@ -689,7 +689,8 @@ function stopGroupPolling() {
 function renderGroupRoomsList() {
   const sidebarContainer = document.getElementById('group-rooms-list');
   const browserContainer = document.getElementById('group-chat-room-browser');
-  const rooms = Array.from(groupChatState.rooms.values());
+  const rooms = Array.from(groupChatState.rooms.values())
+    .sort((a, b) => getRoomLastActivityMs(b.id) - getRoomLastActivityMs(a.id));
 
   if (sidebarContainer) {
     if (rooms.length === 0) {
@@ -707,11 +708,11 @@ function renderGroupRoomsList() {
 
         return `
           <div class="group-room-item ${isActive ? 'active' : ''}" data-room-id="${room.id}" onclick="selectGroupRoom('${room.id}')">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
               <span style="font-size: 16px;">👥</span>
               <div style="flex: 1; min-width: 0;">
-                <div style="font-weight: 500; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-                  ${escapeHtml(room.title)}
+                <div style="font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                  <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(room.title)}</span>
                   ${unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
                 </div>
                 <div style="font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -732,7 +733,8 @@ function renderGroupRoomsList() {
     if (rooms.length === 0) {
       browserContainer.innerHTML = `
         <div class="group-chat-room-chip-empty">
-          No rooms yet. Click <strong>➕ Create Room</strong> to start one.
+          <strong>No rooms yet.</strong><br>
+          Create a coordination room to bring agents into one focused thread.
         </div>
       `;
     } else {
@@ -743,16 +745,24 @@ function renderGroupRoomsList() {
         const unread = getRoomUnreadCount(room.id);
         return `
           <button class="group-chat-room-chip ${isActive ? 'active' : ''}" onclick="selectGroupRoom('${room.id}')">
-            <span style="font-size: 18px;">👥</span>
+            <span class="group-chat-room-icon">👥</span>
             <span class="group-chat-room-chip-copy">
               <span class="group-chat-room-chip-title">${escapeHtml(room.title)}</span>
-              <span class="group-chat-room-chip-meta">${escapeHtml(members)}${unread > 0 ? ` · ${unread} new` : ''}</span>
+              <span class="group-chat-room-chip-meta">${escapeHtml(members || 'No members')} · ${formatSmartTime(getRoomLastActivityMs(room.id))}</span>
             </span>
+            ${unread > 0 ? `<span class="group-chat-room-unread">${unread > 99 ? '99+' : unread}</span>` : ''}
           </button>
         `;
       }).join('');
     }
   }
+}
+
+function getRoomLastActivityMs(roomId) {
+  const room = groupChatState.rooms.get(roomId);
+  const messages = groupChatState.messages.get(roomId) || [];
+  const lastMessage = messages[messages.length - 1];
+  return messageTimestamp(lastMessage || {}) || room?.createdAt || Date.now();
 }
 
 function getRoomUnreadCount(roomId) {
@@ -776,44 +786,110 @@ function renderGroupChat(roomId) {
   const room = groupChatState.rooms.get(roomId);
   if (!room) return;
 
-  // Update header
   const memberNames = groupChatState.memberNames.get(roomId) || {};
-  header.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <span style="font-size: 18px;">👥</span>
-      <div>
-        <div style="font-weight: 600; font-size: 14px;">${escapeHtml(room.title)}</div>
-        <div style="font-size: 11px; color: var(--text-muted);">
-          ${room.memberIds.map(id => memberNames[id] || id).join(', ')}
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Render messages
   const allMessages = groupChatState.messages.get(roomId) || [];
   const visibleMessages = (groupChatState.showInternal
     ? allMessages
     : allMessages.filter(m => !m.internal && m.senderType !== 'SYSTEM'))
     .filter(m => !(typeof isSystemMessage === 'function' && isSystemMessage(messageText(m), m.from || m.senderName || m.senderId)));
+  const memberSummary = room.memberIds.map(id => memberNames[id] || id).join(', ');
+  const purpose = room.purpose || 'Focused multi-agent coordination room.';
+
+  header.innerHTML = `
+    <div class="group-chat-room-header-inner">
+      <div class="group-chat-room-heading">
+        <div class="group-chat-room-title-row">
+          <span class="group-chat-room-icon">👥</span>
+          <h1>${escapeHtml(room.title)}</h1>
+          <span class="group-chat-status-pill"><span class="group-chat-status-dot"></span>${groupChatState.isPolling ? 'Live sync' : 'Ready'}</span>
+        </div>
+        <div class="group-chat-room-purpose">${escapeHtml(purpose)}</div>
+      </div>
+      <div class="group-chat-room-actions">
+        <span class="group-chat-member-pill">${room.memberIds.length} member${room.memberIds.length === 1 ? '' : 's'}</span>
+        <button id="group-chat-toggle-internal" class="btn btn-ghost ${groupChatState.showInternal ? 'active' : ''}" onclick="toggleGroupInternalMessages()" title="Toggle internal messages">
+          ${groupChatState.showInternal ? '🙈 Hide internal' : '👁️ Show internal'}
+        </button>
+        <button onclick="showPage('chat')" class="btn btn-ghost" title="Back to direct chat">← Direct</button>
+      </div>
+    </div>
+  `;
 
   if (visibleMessages.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-        <div style="font-size: 32px; margin-bottom: 12px;">💬</div>
-        <div style="font-size: 14px;">Start the conversation!</div>
-        <div style="font-size: 12px; margin-top: 8px;">
-          Mention @all to reach everyone, or @agent to target someone specific.
+      <div style="text-align: center; max-width: 420px; margin: 80px auto; padding: 32px; color: var(--text-muted); border: 1px dashed var(--border-default); border-radius: var(--radius-xl); background: var(--surface-1);">
+        <div style="font-size: 36px; margin-bottom: 12px;">💬</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--text-primary);">Start the room conversation</div>
+        <div style="font-size: 13px; margin-top: 8px; line-height: 1.5;">
+          Mention <strong>@all</strong> to reach everyone, or <strong>@agent</strong> to target one teammate.
         </div>
       </div>
     `;
-    return;
+  } else {
+    container.innerHTML = normalizeGroupMessages(visibleMessages).map(msg => createGroupMessageElement(msg, memberNames)).join('');
+    container.scrollTop = container.scrollHeight;
   }
 
-  container.innerHTML = normalizeGroupMessages(visibleMessages).map(msg => createGroupMessageElement(msg, memberNames)).join('');
+  renderGroupContext(room, memberNames, visibleMessages, memberSummary);
+}
 
-  // Scroll to bottom
-  container.scrollTop = container.scrollHeight;
+function renderGroupContext(room, memberNames, visibleMessages, memberSummary) {
+  const context = document.getElementById('group-chat-context');
+  if (!context || !room) return;
+
+  const lastMessage = visibleMessages[visibleMessages.length - 1];
+  const lastActivity = lastMessage ? formatSmartTime(messageTimestamp(lastMessage)) : 'No messages yet';
+  const participantRows = room.memberIds.map(agentId => {
+    const name = memberNames[agentId] || getAgentLabel(agentId) || agentId;
+    const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${agentId}`).trim() || 'var(--brand-primary)';
+    return `
+      <div class="group-chat-participant">
+        <span class="group-chat-participant-avatar" style="color:${color}; border-color: color-mix(in srgb, ${color} 30%, var(--border-default)); background: color-mix(in srgb, ${color} 10%, var(--surface-2));">
+          ${escapeHtml(name.charAt(0).toUpperCase())}
+        </span>
+        <span style="min-width:0;">
+          <span class="group-chat-participant-name">${escapeHtml(name)}</span>
+          <span class="group-chat-participant-role">${escapeHtml(agentId)}</span>
+        </span>
+        <span class="group-chat-status-dot" title="Available"></span>
+      </div>
+    `;
+  }).join('');
+
+  const targetingCodes = ['@all', ...room.memberIds.map(id => `@${id}`)].slice(0, 10);
+
+  context.innerHTML = `
+    <div class="group-chat-context-card">
+      <div class="group-chat-context-title">Room Brief</div>
+      <div class="group-chat-context-muted">${escapeHtml(room.purpose || 'No purpose set. Use the first message to define the outcome you want.')}</div>
+      <div style="margin-top: 12px;" class="group-chat-context-muted"><strong>Last activity:</strong> ${escapeHtml(lastActivity)}</div>
+      <div class="group-chat-context-muted"><strong>Visible messages:</strong> ${visibleMessages.length}</div>
+    </div>
+
+    <div class="group-chat-context-card">
+      <div class="group-chat-context-title">Participants <span>${room.memberIds.length}</span></div>
+      <div class="group-chat-participant-list">${participantRows || '<div class="group-chat-context-muted">No participants yet.</div>'}</div>
+    </div>
+
+    <div class="group-chat-context-card">
+      <div class="group-chat-context-title">Targeting</div>
+      <div class="group-chat-code-list">
+        ${targetingCodes.map(code => `<code>${escapeHtml(code)}</code>`).join('')}
+      </div>
+      <div class="group-chat-context-muted" style="margin-top: 10px;">Use direct mentions to reduce noise. Use @all when the whole room needs context.</div>
+    </div>
+
+    <div class="group-chat-context-card">
+      <div class="group-chat-context-title">Controls</div>
+      <div class="group-chat-context-actions">
+        <button id="group-chat-toggle-internal-context" class="btn btn-ghost ${groupChatState.showInternal ? 'active' : ''}" onclick="toggleGroupInternalMessages()">
+          ${groupChatState.showInternal ? 'Hide internal messages' : 'Show internal messages'}
+        </button>
+        <button class="btn btn-ghost" onclick="syncLocalRoomReplies('${room.id}', true)">Sync replies now</button>
+        <button class="btn btn-ghost" onclick="confirmDeleteGroupRoom('${room.id}')">Delete room</button>
+      </div>
+    </div>
+  `;
 }
 
 function createGroupMessageElement(msg, memberNames) {
@@ -824,6 +900,7 @@ function createGroupMessageElement(msg, memberNames) {
   let avatar = '';
   let senderColor = 'var(--text-primary)';
   let bubbleClass = '';
+  let style = '';
 
   if (isUser) {
     avatar = '<div class="group-chat-avatar user-avatar">U</div>';
@@ -835,14 +912,15 @@ function createGroupMessageElement(msg, memberNames) {
     const agentId = msg.fromAgentId || 'main';
     const color = getComputedStyle(document.documentElement).getPropertyValue(`--agent-${agentId}`).trim() || '#888';
     senderColor = color;
-    avatar = `<div class="group-chat-avatar" style="background: ${color}20; color: ${color}; border-color: ${color}40;">
-      ${(memberNames[agentId] || messageSender(msg) || 'A').charAt(0).toUpperCase()}
+    style = `--agent-message-color:${color};`;
+    avatar = `<div class="group-chat-avatar" style="background: color-mix(in srgb, ${color} 10%, var(--surface-2)); color: ${color}; border-color: color-mix(in srgb, ${color} 32%, var(--border-default));">
+      ${escapeHtml((memberNames[agentId] || messageSender(msg) || 'A').charAt(0).toUpperCase())}
     </div>`;
     bubbleClass = 'agent';
   }
 
   return `
-    <div class="group-chat-message ${bubbleClass}" data-msg-id="${msg.id}">
+    <div class="group-chat-message ${bubbleClass}" data-msg-id="${msg.id}" style="${style}">
       ${avatar}
       <div class="group-chat-bubble">
         <div class="group-chat-bubble-header">
@@ -1010,35 +1088,28 @@ async function initGroupChat() {
       groupChatPage.id = 'page-group-chat';
       groupChatPage.className = 'page';
       groupChatPage.innerHTML = `
-        <div class="chat-page-wrapper">
-          <div class="chat-page-header">
-            <div class="chat-page-title">
-              <span style="font-size: 14px; font-weight: 600; color: var(--text-primary)">Group Chat</span>
+        <div class="group-chat-shell">
+          <aside class="group-chat-rooms-panel" aria-label="Group chat rooms">
+            <div class="group-chat-panel-header">
+              <div>
+                <div class="group-chat-eyebrow">Coordination</div>
+                <h2>Rooms</h2>
+              </div>
+              <button class="btn btn-primary group-chat-create-btn" onclick="openCreateGroupRoomModal()" title="Create room">+</button>
             </div>
-            <div class="chat-page-actions">
-              <button id="group-chat-toggle-internal" class="btn btn-ghost" onclick="toggleGroupInternalMessages()" title="Toggle internal messages">
-                👁️ Show internal
-              </button>
-              <button onclick="showPage('chat')" class="btn btn-ghost" title="Back to direct chat">
-                ← Back
-              </button>
-            </div>
-          </div>
+            <div class="group-chat-panel-copy">Multi-agent rooms for planning, decisions, and handoffs.</div>
+            <div id="group-chat-room-browser" class="group-chat-room-browser"></div>
+          </aside>
 
-          <div id="group-chat-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-default); background: var(--surface-1);">
-            <!-- Room header rendered dynamically -->
-          </div>
-
-          <div id="group-chat-messages" class="chat-page-messages">
-            <!-- Messages rendered dynamically -->
-          </div>
-
-          <div class="chat-page-input-area">
-            <div class="chat-page-input-container">
-              <div class="chat-page-input-row">
+          <main class="group-chat-main-panel" aria-label="Group conversation">
+            <div id="group-chat-header" class="group-chat-room-header"></div>
+            <div id="group-chat-messages" class="group-chat-messages"></div>
+            <div class="group-chat-composer">
+              <div class="group-chat-composer-hint">Use <strong>@all</strong> for everyone or <strong>@agent</strong> for one teammate.</div>
+              <div class="group-chat-input-row">
                 <textarea
                   id="group-chat-input"
-                  placeholder="Message the group... (@all, @agent, or just type)"
+                  placeholder="Message the room..."
                   autocomplete="off"
                   autocorrect="off"
                   autocapitalize="off"
@@ -1046,12 +1117,14 @@ async function initGroupChat() {
                   rows="1"
                   onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendGroupChatMessage();}"
                 ></textarea>
-                <button onclick="sendGroupChatMessage()" class="btn btn-primary">
-                  Send
-                </button>
+                <button onclick="sendGroupChatMessage()" class="btn btn-primary">Send</button>
               </div>
             </div>
-          </div>
+          </main>
+
+          <aside class="group-chat-context-panel" aria-label="Room context">
+            <div id="group-chat-context"></div>
+          </aside>
         </div>
       `;
       chatPage.parentNode.insertBefore(groupChatPage, chatPage.nextSibling);
