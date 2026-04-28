@@ -1,561 +1,1252 @@
 /* ========================================
-               DESIGN SYSTEM - SoLoVision Brand
-               ======================================== */
+   DESIGN SYSTEM - SoLoVision / SoLoClaw Android parity
+   Generated from SoLoClaw-Andoid Theme.kt values, then extended with dashboard CSS tokens.
+   ======================================== */
 
-            :root {
-                /* Brand Colors */
-                --brand-red: #bc2026;
-                --brand-red-hover: #a51c21;
-                --brand-navy: #1b2232;
-                --brand-grey: #a9b2bc;
-                --brand-white: #ffffff;
-                --accent: #bc2026;
+:root {
+    --brand-navy: #1b2232;
+    --brand-grey: #a9b2bc;
+    --brand-white: #ffffff;
+    --agent-main: #BC2026;
+    --agent-dev: #6366F1;
+    --agent-exec: #F59E0B;
+    --agent-coo: #10B981;
+    --agent-cfo: #EAB308;
+    --agent-cmp: #EC4899;
+    --agent-family: #14B8A6;
+    --agent-tax: #78716C;
+    --agent-sec: #3B82F6;
+    --agent-smm: #8B5CF6;
+    --agent-pulse: #00D4FF;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 18px;
+    --radius-full: 9999px;
+    --transition-fast: 150ms ease;
+    --transition-normal: 200ms ease;
+    --font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --surface-base: #0F1115;
+    --surface-0: #0F1115;
+    --surface-1: #161922;
+    --surface-2: #1E212B;
+    --surface-3: #252A36;
+    --surface-overlay: #252A36;
+    --surface-elevated: #252A36;
+    --surface-hover: #1E212B;
+    --surface-secondary: #1E212B;
+    --bg-body: #0F1115;
+    --bg-card: #252A36;
+    --bg-card-hover: #1E212B;
+    --card-bg: #252A36;
+    --glass-bg: color-mix(in srgb, #252A36 78%, transparent);
+    --glass-border: #2A2E3A;
+    --text-primary: #F0F1F5;
+    --text-main: #F0F1F5;
+    --text-secondary: #A0A3B1;
+    --text-muted: #5A5E6E;
+    --text-faint: color-mix(in srgb, #5A5E6E 56%, transparent);
+    --border-default: #2A2E3A;
+    --border: #2A2E3A;
+    --border-color: #2A2E3A;
+    --border-light: #3A3F4D;
+    --border-subtle: color-mix(in srgb, #2A2E3A 62%, transparent);
+    --border-strong: #3A3F4D;
+    --border-focus: color-mix(in srgb, #60A5FA 68%, transparent);
+    --control-bg: #252A36;
+    --control-border: #2A2E3A;
+    --control-focus: #2660A5FA;
+    --accent: #60A5FA;
+    --accent-color: #60A5FA;
+    --accent-light: #93C5FD;
+    --accent-hover: #93C5FD;
+    --accent-soft: #2660A5FA;
+    --brand-red: #60A5FA;
+    --brand: #60A5FA;
+    --brand-primary: #60A5FA;
+    --brand-red-hover: #93C5FD;
+    --brand-primary-hover: #93C5FD;
+    --success: #4ADE80;
+    --success-muted: color-mix(in srgb, #4ADE80 18%, transparent);
+    --warning: #FBBF24;
+    --warning-muted: color-mix(in srgb, #FBBF24 18%, transparent);
+    --error: #FB7185;
+    --error-muted: color-mix(in srgb, #FB7185 18%, transparent);
+    --info: #60A5FA;
+    --scrollbar-track: #1E212B;
+    --scrollbar-thumb: #5A5E6E;
+    --surface-1-rgb: 22, 25, 34;
+    --surface-2-rgb: 30, 33, 43;
+    --surface-3-rgb: 37, 42, 54;
+    --text-muted-rgb: 90, 94, 110;
+    --brand-red-rgb: 96, 165, 250;
+    --chat-canvas-bg: linear-gradient(180deg, #0F1115 0%, #1E212B 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #252A36 96%, #60A5FA 4%) 0%, #252A36 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #60A5FA 0%, #93C5FD 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #252A36 0%, #1E212B 100%);
+    --chat-bot-bubble-text: #F0F1F5;
+    --chat-bot-bubble-border: #2A2E3A;
+    --chat-system-bubble-bg: color-mix(in srgb, #FBBF24 13%, #252A36);
+    --chat-system-bubble-border: color-mix(in srgb, #FBBF24 35%, #2A2E3A);
+    --chat-action-bg: color-mix(in srgb, #0F1115 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #0F1115 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #0F1115 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #0F1115 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #0F1115 48%, transparent);
+}
 
-                /* Agent Colors */
-                --agent-main: #BC2026;
-                --agent-dev: #6366F1;
-                --agent-exec: #F59E0B;
-                --agent-coo: #10B981;
-                --agent-cfo: #EAB308;
-                --agent-cmp: #EC4899;
-                --agent-family: #14B8A6;
-                --agent-tax: #78716C;
-                --agent-sec: #3B82F6;
-                --agent-smm: #8B5CF6;
-                --agent-pulse: #00D4FF;
+body.theme-transitioning, body.theme-transitioning * {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+}
 
-                /* Fallback theme values (midnight) — ensures UI isn't transparent
-                   if themes.css loads late or fails */
-                --surface-base: #0c0d10;
-                --surface-1: #14161a;
-                --surface-2: #1c1e23;
-                --surface-3: #24262c;
-                --surface-overlay: #2c2f36;
-                --text-primary: #ffffff;
-                --text-secondary: #a9b2bc;
-                --text-muted: rgba(169, 178, 188, 0.6);
-                --text-faint: rgba(169, 178, 188, 0.4);
-                --border-default: rgba(169, 178, 188, 0.12);
-                --border-subtle: rgba(169, 178, 188, 0.08);
-                --border-strong: rgba(169, 178, 188, 0.2);
-                --border-focus: rgba(188, 32, 38, 0.5);
-                --control-bg: #1b2232;
-                --control-border: rgba(169, 178, 188, 0.2);
-                --control-focus: rgba(188, 32, 38, 0.3);
-                --success: #22c55e;
-                --success-muted: rgba(34, 197, 94, 0.15);
-                --warning: #bc2026;
-                --warning-muted: rgba(188, 32, 38, 0.15);
-                --error: #ef4444;
-                --error-muted: rgba(239, 68, 68, 0.15);
-                --scrollbar-track: #14161a;
-                --scrollbar-thumb: #a9b2bc;
+/* Midnight — Android Theme.kt parity */
+[data-theme="dark"], [data-theme="midnight"] {
+    --surface-base: #0F1115;
+    --surface-0: #0F1115;
+    --surface-1: #161922;
+    --surface-2: #1E212B;
+    --surface-3: #252A36;
+    --surface-overlay: #252A36;
+    --surface-elevated: #252A36;
+    --surface-hover: #1E212B;
+    --surface-secondary: #1E212B;
+    --bg-body: #0F1115;
+    --bg-card: #252A36;
+    --bg-card-hover: #1E212B;
+    --card-bg: #252A36;
+    --glass-bg: color-mix(in srgb, #252A36 78%, transparent);
+    --glass-border: #2A2E3A;
+    --text-primary: #F0F1F5;
+    --text-main: #F0F1F5;
+    --text-secondary: #A0A3B1;
+    --text-muted: #5A5E6E;
+    --text-faint: color-mix(in srgb, #5A5E6E 56%, transparent);
+    --border-default: #2A2E3A;
+    --border: #2A2E3A;
+    --border-color: #2A2E3A;
+    --border-light: #3A3F4D;
+    --border-subtle: color-mix(in srgb, #2A2E3A 62%, transparent);
+    --border-strong: #3A3F4D;
+    --border-focus: color-mix(in srgb, #60A5FA 68%, transparent);
+    --control-bg: #252A36;
+    --control-border: #2A2E3A;
+    --control-focus: #2660A5FA;
+    --accent: #60A5FA;
+    --accent-color: #60A5FA;
+    --accent-light: #93C5FD;
+    --accent-hover: #93C5FD;
+    --accent-soft: #2660A5FA;
+    --brand-red: #60A5FA;
+    --brand: #60A5FA;
+    --brand-primary: #60A5FA;
+    --brand-red-hover: #93C5FD;
+    --brand-primary-hover: #93C5FD;
+    --success: #4ADE80;
+    --success-muted: color-mix(in srgb, #4ADE80 18%, transparent);
+    --warning: #FBBF24;
+    --warning-muted: color-mix(in srgb, #FBBF24 18%, transparent);
+    --error: #FB7185;
+    --error-muted: color-mix(in srgb, #FB7185 18%, transparent);
+    --info: #60A5FA;
+    --scrollbar-track: #1E212B;
+    --scrollbar-thumb: #5A5E6E;
+    --surface-1-rgb: 22, 25, 34;
+    --surface-2-rgb: 30, 33, 43;
+    --surface-3-rgb: 37, 42, 54;
+    --text-muted-rgb: 90, 94, 110;
+    --brand-red-rgb: 96, 165, 250;
+    --chat-canvas-bg: linear-gradient(180deg, #0F1115 0%, #1E212B 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #252A36 96%, #60A5FA 4%) 0%, #252A36 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #60A5FA 0%, #93C5FD 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #252A36 0%, #1E212B 100%);
+    --chat-bot-bubble-text: #F0F1F5;
+    --chat-bot-bubble-border: #2A2E3A;
+    --chat-system-bubble-bg: color-mix(in srgb, #FBBF24 13%, #252A36);
+    --chat-system-bubble-border: color-mix(in srgb, #FBBF24 35%, #2A2E3A);
+    --chat-action-bg: color-mix(in srgb, #0F1115 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #0F1115 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #0F1115 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #0F1115 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #0F1115 48%, transparent);
+}
 
-                /* Spacing Scale (8px base) */
-                --space-1: 4px;
-                --space-2: 8px;
-                --space-3: 12px;
-                --space-4: 16px;
-                --space-5: 20px;
-                --space-6: 24px;
-                --space-8: 32px;
-                --space-10: 40px;
-                --space-12: 48px;
+/* Obsidian — Android Theme.kt parity */
+[data-theme="obsidian"] {
+    --surface-base: #000000;
+    --surface-0: #000000;
+    --surface-1: #0A0A0A;
+    --surface-2: #141414;
+    --surface-3: #1A1A1A;
+    --surface-overlay: #1A1A1A;
+    --surface-elevated: #1A1A1A;
+    --surface-hover: #141414;
+    --surface-secondary: #141414;
+    --bg-body: #000000;
+    --bg-card: #1A1A1A;
+    --bg-card-hover: #141414;
+    --card-bg: #1A1A1A;
+    --glass-bg: color-mix(in srgb, #1A1A1A 78%, transparent);
+    --glass-border: #262626;
+    --text-primary: #FFFFFF;
+    --text-main: #FFFFFF;
+    --text-secondary: #A3A3A3;
+    --text-muted: #737373;
+    --text-faint: color-mix(in srgb, #737373 56%, transparent);
+    --border-default: #262626;
+    --border: #262626;
+    --border-color: #262626;
+    --border-light: #404040;
+    --border-subtle: color-mix(in srgb, #262626 62%, transparent);
+    --border-strong: #404040;
+    --border-focus: color-mix(in srgb, #FFFFFF 68%, transparent);
+    --control-bg: #1A1A1A;
+    --control-border: #262626;
+    --control-focus: #1AFFFFFF;
+    --accent: #FFFFFF;
+    --accent-color: #FFFFFF;
+    --accent-light: #E5E5E5;
+    --accent-hover: #E5E5E5;
+    --accent-soft: #1AFFFFFF;
+    --brand-red: #FFFFFF;
+    --brand: #FFFFFF;
+    --brand-primary: #FFFFFF;
+    --brand-red-hover: #E5E5E5;
+    --brand-primary-hover: #E5E5E5;
+    --success: #22C55E;
+    --success-muted: color-mix(in srgb, #22C55E 18%, transparent);
+    --warning: #F59E0B;
+    --warning-muted: color-mix(in srgb, #F59E0B 18%, transparent);
+    --error: #EF4444;
+    --error-muted: color-mix(in srgb, #EF4444 18%, transparent);
+    --info: #3B82F6;
+    --scrollbar-track: #141414;
+    --scrollbar-thumb: #737373;
+    --surface-1-rgb: 10, 10, 10;
+    --surface-2-rgb: 20, 20, 20;
+    --surface-3-rgb: 26, 26, 26;
+    --text-muted-rgb: 115, 115, 115;
+    --brand-red-rgb: 255, 255, 255;
+    --chat-canvas-bg: linear-gradient(180deg, #000000 0%, #141414 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #1A1A1A 96%, #FFFFFF 4%) 0%, #1A1A1A 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #FFFFFF 0%, #E5E5E5 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #1A1A1A 0%, #141414 100%);
+    --chat-bot-bubble-text: #FFFFFF;
+    --chat-bot-bubble-border: #262626;
+    --chat-system-bubble-bg: color-mix(in srgb, #F59E0B 13%, #1A1A1A);
+    --chat-system-bubble-border: color-mix(in srgb, #F59E0B 35%, #262626);
+    --chat-action-bg: color-mix(in srgb, #000000 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #000000 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #000000 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #000000 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #000000 48%, transparent);
+}
 
-                /* Border Radius */
-                --radius-sm: 4px;
-                --radius-md: 8px;
-                --radius-lg: 12px;
-                --radius-full: 9999px;
+/* Nord — Android Theme.kt parity */
+[data-theme="nord"] {
+    --surface-base: #2E3440;
+    --surface-0: #2E3440;
+    --surface-1: #3B4252;
+    --surface-2: #434C5E;
+    --surface-3: #4C566A;
+    --surface-overlay: #4C566A;
+    --surface-elevated: #4C566A;
+    --surface-hover: #434C5E;
+    --surface-secondary: #434C5E;
+    --bg-body: #2E3440;
+    --bg-card: #4C566A;
+    --bg-card-hover: #434C5E;
+    --card-bg: #4C566A;
+    --glass-bg: color-mix(in srgb, #4C566A 78%, transparent);
+    --glass-border: #434C5E;
+    --text-primary: #ECEFF4;
+    --text-main: #ECEFF4;
+    --text-secondary: #D8DEE9;
+    --text-muted: #81A1C1;
+    --text-faint: color-mix(in srgb, #81A1C1 56%, transparent);
+    --border-default: #434C5E;
+    --border: #434C5E;
+    --border-color: #434C5E;
+    --border-light: #4C566A;
+    --border-subtle: color-mix(in srgb, #434C5E 62%, transparent);
+    --border-strong: #4C566A;
+    --border-focus: color-mix(in srgb, #88C0D0 68%, transparent);
+    --control-bg: #4C566A;
+    --control-border: #434C5E;
+    --control-focus: #3388C0D0;
+    --accent: #88C0D0;
+    --accent-color: #88C0D0;
+    --accent-light: #8FBCBB;
+    --accent-hover: #8FBCBB;
+    --accent-soft: #3388C0D0;
+    --brand-red: #88C0D0;
+    --brand: #88C0D0;
+    --brand-primary: #88C0D0;
+    --brand-red-hover: #8FBCBB;
+    --brand-primary-hover: #8FBCBB;
+    --success: #A3BE8C;
+    --success-muted: color-mix(in srgb, #A3BE8C 18%, transparent);
+    --warning: #EBCB8B;
+    --warning-muted: color-mix(in srgb, #EBCB8B 18%, transparent);
+    --error: #BF616A;
+    --error-muted: color-mix(in srgb, #BF616A 18%, transparent);
+    --info: #5E81AC;
+    --scrollbar-track: #434C5E;
+    --scrollbar-thumb: #81A1C1;
+    --surface-1-rgb: 59, 66, 82;
+    --surface-2-rgb: 67, 76, 94;
+    --surface-3-rgb: 76, 86, 106;
+    --text-muted-rgb: 129, 161, 193;
+    --brand-red-rgb: 136, 192, 208;
+    --chat-canvas-bg: linear-gradient(180deg, #2E3440 0%, #434C5E 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #4C566A 96%, #88C0D0 4%) 0%, #4C566A 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #88C0D0 0%, #8FBCBB 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #4C566A 0%, #434C5E 100%);
+    --chat-bot-bubble-text: #ECEFF4;
+    --chat-bot-bubble-border: #434C5E;
+    --chat-system-bubble-bg: color-mix(in srgb, #EBCB8B 13%, #4C566A);
+    --chat-system-bubble-border: color-mix(in srgb, #EBCB8B 35%, #434C5E);
+    --chat-action-bg: color-mix(in srgb, #2E3440 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #2E3440 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #2E3440 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #2E3440 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #2E3440 48%, transparent);
+}
 
-                /* Transitions */
-                --transition-fast: 150ms ease;
-                --transition-normal: 200ms ease;
-            }
+/* Dracula — Android Theme.kt parity */
+[data-theme="dracula"] {
+    --surface-base: #282A36;
+    --surface-0: #282A36;
+    --surface-1: #44475A;
+    --surface-2: #6272A4;
+    --surface-3: #44475A;
+    --surface-overlay: #44475A;
+    --surface-elevated: #44475A;
+    --surface-hover: #6272A4;
+    --surface-secondary: #6272A4;
+    --bg-body: #282A36;
+    --bg-card: #44475A;
+    --bg-card-hover: #6272A4;
+    --card-bg: #44475A;
+    --glass-bg: color-mix(in srgb, #44475A 78%, transparent);
+    --glass-border: #44475A;
+    --text-primary: #F8F8F2;
+    --text-main: #F8F8F2;
+    --text-secondary: #BD93F9;
+    --text-muted: #6272A4;
+    --text-faint: color-mix(in srgb, #6272A4 56%, transparent);
+    --border-default: #44475A;
+    --border: #44475A;
+    --border-color: #44475A;
+    --border-light: #6272A4;
+    --border-subtle: color-mix(in srgb, #44475A 62%, transparent);
+    --border-strong: #6272A4;
+    --border-focus: color-mix(in srgb, #FF79C6 68%, transparent);
+    --control-bg: #44475A;
+    --control-border: #44475A;
+    --control-focus: #33FF79C6;
+    --accent: #FF79C6;
+    --accent-color: #FF79C6;
+    --accent-light: #FFB86C;
+    --accent-hover: #FFB86C;
+    --accent-soft: #33FF79C6;
+    --brand-red: #FF79C6;
+    --brand: #FF79C6;
+    --brand-primary: #FF79C6;
+    --brand-red-hover: #FFB86C;
+    --brand-primary-hover: #FFB86C;
+    --success: #50FA7B;
+    --success-muted: color-mix(in srgb, #50FA7B 18%, transparent);
+    --warning: #F1FA8C;
+    --warning-muted: color-mix(in srgb, #F1FA8C 18%, transparent);
+    --error: #FF5555;
+    --error-muted: color-mix(in srgb, #FF5555 18%, transparent);
+    --info: #8BE9FD;
+    --scrollbar-track: #6272A4;
+    --scrollbar-thumb: #6272A4;
+    --surface-1-rgb: 68, 71, 90;
+    --surface-2-rgb: 98, 114, 164;
+    --surface-3-rgb: 68, 71, 90;
+    --text-muted-rgb: 98, 114, 164;
+    --brand-red-rgb: 255, 121, 198;
+    --chat-canvas-bg: linear-gradient(180deg, #282A36 0%, #6272A4 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #44475A 96%, #FF79C6 4%) 0%, #44475A 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #FF79C6 0%, #FFB86C 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #44475A 0%, #6272A4 100%);
+    --chat-bot-bubble-text: #F8F8F2;
+    --chat-bot-bubble-border: #44475A;
+    --chat-system-bubble-bg: color-mix(in srgb, #F1FA8C 13%, #44475A);
+    --chat-system-bubble-border: color-mix(in srgb, #F1FA8C 35%, #44475A);
+    --chat-action-bg: color-mix(in srgb, #282A36 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #282A36 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #282A36 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #282A36 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #282A36 48%, transparent);
+}
 
-            /* Theme transition animation */
-            body.theme-transitioning, body.theme-transitioning * {
-                transition:
-                    background-color 0.3s ease,
-                    color 0.3s ease,
-                    border-color 0.3s ease,
-                    box-shadow 0.3s ease !important;
-            }
+/* Tokyo Night — Android Theme.kt parity */
+[data-theme="tokyo-night"] {
+    --surface-base: #1A1B26;
+    --surface-0: #1A1B26;
+    --surface-1: #24283B;
+    --surface-2: #2A2F45;
+    --surface-3: #343A52;
+    --surface-overlay: #343A52;
+    --surface-elevated: #343A52;
+    --surface-hover: #2A2F45;
+    --surface-secondary: #2A2F45;
+    --bg-body: #1A1B26;
+    --bg-card: #343A52;
+    --bg-card-hover: #2A2F45;
+    --card-bg: #343A52;
+    --glass-bg: color-mix(in srgb, #343A52 78%, transparent);
+    --glass-border: #2A2F45;
+    --text-primary: #C0CAF5;
+    --text-main: #C0CAF5;
+    --text-secondary: #7AA2F7;
+    --text-muted: #565F89;
+    --text-faint: color-mix(in srgb, #565F89 56%, transparent);
+    --border-default: #2A2F45;
+    --border: #2A2F45;
+    --border-color: #2A2F45;
+    --border-light: #343A52;
+    --border-subtle: color-mix(in srgb, #2A2F45 62%, transparent);
+    --border-strong: #343A52;
+    --border-focus: color-mix(in srgb, #7AA2F7 68%, transparent);
+    --control-bg: #343A52;
+    --control-border: #2A2F45;
+    --control-focus: #337AA2F7;
+    --accent: #7AA2F7;
+    --accent-color: #7AA2F7;
+    --accent-light: #BB9AF7;
+    --accent-hover: #BB9AF7;
+    --accent-soft: #337AA2F7;
+    --brand-red: #7AA2F7;
+    --brand: #7AA2F7;
+    --brand-primary: #7AA2F7;
+    --brand-red-hover: #BB9AF7;
+    --brand-primary-hover: #BB9AF7;
+    --success: #9ECE6A;
+    --success-muted: color-mix(in srgb, #9ECE6A 18%, transparent);
+    --warning: #E0AF68;
+    --warning-muted: color-mix(in srgb, #E0AF68 18%, transparent);
+    --error: #F7768E;
+    --error-muted: color-mix(in srgb, #F7768E 18%, transparent);
+    --info: #73DACA;
+    --scrollbar-track: #2A2F45;
+    --scrollbar-thumb: #565F89;
+    --surface-1-rgb: 36, 40, 59;
+    --surface-2-rgb: 42, 47, 69;
+    --surface-3-rgb: 52, 58, 82;
+    --text-muted-rgb: 86, 95, 137;
+    --brand-red-rgb: 122, 162, 247;
+    --chat-canvas-bg: linear-gradient(180deg, #1A1B26 0%, #2A2F45 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #343A52 96%, #7AA2F7 4%) 0%, #343A52 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #7AA2F7 0%, #BB9AF7 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #343A52 0%, #2A2F45 100%);
+    --chat-bot-bubble-text: #C0CAF5;
+    --chat-bot-bubble-border: #2A2F45;
+    --chat-system-bubble-bg: color-mix(in srgb, #E0AF68 13%, #343A52);
+    --chat-system-bubble-border: color-mix(in srgb, #E0AF68 35%, #2A2F45);
+    --chat-action-bg: color-mix(in srgb, #1A1B26 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #1A1B26 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #1A1B26 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #1A1B26 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #1A1B26 48%, transparent);
+}
 
-            /* === DARK THEMES === */
-            [data-theme="dark"], [data-theme="midnight"] {
-                --surface-base: #0c0d10;
-                --surface-1: #14161a;
-                --surface-2: #1c1e23;
-                --surface-3: #24262c;
-                --surface-overlay: #2c2f36;
-                --text-primary: #fff;
-                --text-secondary: #a9b2bc;
-                --text-muted: rgba(169, 178, 188, 0.6);
-                --text-faint: rgba(169, 178, 188, 0.4);
-                --border-default: rgba(169, 178, 188, 0.12);
-                --border-subtle: rgba(169, 178, 188, 0.08);
-                --border-strong: rgba(169, 178, 188, 0.2);
-                --border-focus: rgba(188, 32, 38, 0.5);
-                --control-bg: #1b2232;
-                --control-border: rgba(169, 178, 188, 0.2);
-                --control-focus: rgba(188, 32, 38, 0.3);
-                --success: #22c55e;
-                --success-muted: rgba(34, 197, 94, 0.15);
-                --warning: #bc2026;
-                --warning-muted: rgba(188, 32, 38, 0.15);
-                --error: #ef4444;
-                --error-muted: rgba(239, 68, 68, 0.15);
-                --scrollbar-track: #14161a;
-                --scrollbar-thumb: #a9b2bc;
-                --accent: #bc2026;
-                --brand-red: #bc2026;
-            }
-            [data-theme="obsidian"] {
-                --surface-base: #000;
-                --surface-1: #0a0a0a;
-                --surface-2: #141414;
-                --surface-3: #1f1f1f;
-                --surface-overlay: #2a2a2a;
-                --text-primary: #fff;
-                --text-secondary: #b8b8b8;
-                --text-muted: rgba(184, 184, 184, 0.6);
-                --text-faint: rgba(184, 184, 184, 0.35);
-                --border-default: rgba(255, 255, 255, 0.1);
-                --border-subtle: rgba(255, 255, 255, 0.06);
-                --border-strong: rgba(255, 255, 255, 0.18);
-                --border-focus: rgba(255, 255, 255, 0.3);
-                --control-bg: #141414;
-                --control-border: rgba(255, 255, 255, 0.15);
-                --control-focus: rgba(255, 255, 255, 0.2);
-                --success: #10b981;
-                --success-muted: rgba(16, 185, 129, 0.15);
-                --warning: #f59e0b;
-                --warning-muted: rgba(245, 158, 11, 0.15);
-                --error: #ef4444;
-                --error-muted: rgba(239, 68, 68, 0.15);
-                --scrollbar-track: #0a0a0a;
-                --scrollbar-thumb: #3a3a3a;
-                --accent: #fff;
-                --brand-red: #fff;
-            }
-            [data-theme="nord"] {
-                --surface-base: #2e3440;
-                --surface-1: #3b4252;
-                --surface-2: #434c5e;
-                --surface-3: #4c566a;
-                --surface-overlay: #5e6b7f;
-                --text-primary: #eceff4;
-                --text-secondary: #d8dee9;
-                --text-muted: rgba(216, 222, 233, 0.6);
-                --text-faint: rgba(216, 222, 233, 0.4);
-                --border-default: rgba(76, 86, 106, 0.5);
-                --border-subtle: rgba(76, 86, 106, 0.3);
-                --border-strong: rgba(76, 86, 106, 0.7);
-                --border-focus: rgba(136, 192, 208, 0.5);
-                --control-bg: #3b4252;
-                --control-border: rgba(76, 86, 106, 0.5);
-                --control-focus: rgba(136, 192, 208, 0.3);
-                --success: #a3be8c;
-                --success-muted: rgba(163, 190, 140, 0.2);
-                --warning: #ebcb8b;
-                --warning-muted: rgba(235, 203, 139, 0.2);
-                --error: #bf616a;
-                --error-muted: rgba(191, 97, 106, 0.2);
-                --scrollbar-track: #3b4252;
-                --scrollbar-thumb: #4c566a;
-                --accent: #88c0d0;
-                --brand-red: #88c0d0;
-            }
-            [data-theme="dracula"] {
-                --surface-base: #1e1f29;
-                --surface-1: #282a36;
-                --surface-2: #343746;
-                --surface-3: #44475a;
-                --surface-overlay: #54576a;
-                --text-primary: #f8f8f2;
-                --text-secondary: #bfbfbf;
-                --text-muted: rgba(191, 191, 191, 0.6);
-                --text-faint: rgba(191, 191, 191, 0.4);
-                --border-default: rgba(98, 114, 164, 0.3);
-                --border-subtle: rgba(98, 114, 164, 0.15);
-                --border-strong: rgba(98, 114, 164, 0.45);
-                --border-focus: rgba(255, 121, 198, 0.5);
-                --control-bg: #282a36;
-                --control-border: rgba(98, 114, 164, 0.3);
-                --control-focus: rgba(255, 121, 198, 0.3);
-                --success: #50fa7b;
-                --success-muted: rgba(80, 250, 123, 0.15);
-                --warning: #ffb86c;
-                --warning-muted: rgba(255, 184, 108, 0.15);
-                --error: #ff5555;
-                --error-muted: rgba(255, 85, 85, 0.15);
-                --scrollbar-track: #282a36;
-                --scrollbar-thumb: #6272a4;
-                --accent: #ff79c6;
-                --brand-red: #ff79c6;
-            }
-            [data-theme="tokyo-night"] {
-                --surface-base: #16161e;
-                --surface-1: #1a1b26;
-                --surface-2: #24283b;
-                --surface-3: #2f3549;
-                --surface-overlay: #3b4261;
-                --text-primary: #c0caf5;
-                --text-secondary: #a9b1d6;
-                --text-muted: rgba(169, 177, 214, 0.6);
-                --text-faint: rgba(169, 177, 214, 0.4);
-                --border-default: rgba(122, 162, 247, 0.15);
-                --border-subtle: rgba(122, 162, 247, 0.08);
-                --border-strong: rgba(122, 162, 247, 0.25);
-                --border-focus: rgba(122, 162, 247, 0.5);
-                --control-bg: #1a1b26;
-                --control-border: rgba(122, 162, 247, 0.2);
-                --control-focus: rgba(122, 162, 247, 0.3);
-                --success: #9ece6a;
-                --success-muted: rgba(158, 206, 106, 0.15);
-                --warning: #e0af68;
-                --warning-muted: rgba(224, 175, 104, 0.15);
-                --error: #f7768e;
-                --error-muted: rgba(247, 118, 142, 0.15);
-                --scrollbar-track: #1a1b26;
-                --scrollbar-thumb: #3b4261;
-                --accent: #7aa2f7;
-                --brand-red: #7aa2f7;
-            }
-            [data-theme="monokai"] {
-                --surface-base: #1e1f1c;
-                --surface-1: #272822;
-                --surface-2: #34352f;
-                --surface-3: #414339;
-                --surface-overlay: #4e5046;
-                --text-primary: #f8f8f2;
-                --text-secondary: #a7a699;
-                --text-muted: rgba(167, 166, 153, 0.6);
-                --text-faint: rgba(167, 166, 153, 0.4);
-                --border-default: rgba(117, 113, 94, 0.3);
-                --border-subtle: rgba(117, 113, 94, 0.15);
-                --border-strong: rgba(117, 113, 94, 0.45);
-                --border-focus: rgba(249, 38, 114, 0.5);
-                --control-bg: #272822;
-                --control-border: rgba(117, 113, 94, 0.3);
-                --control-focus: rgba(249, 38, 114, 0.3);
-                --success: #a6e22e;
-                --success-muted: rgba(166, 226, 46, 0.15);
-                --warning: #fd971f;
-                --warning-muted: rgba(253, 151, 31, 0.15);
-                --error: #f92672;
-                --error-muted: rgba(249, 38, 114, 0.15);
-                --scrollbar-track: #272822;
-                --scrollbar-thumb: #75715e;
-                --accent: #fd971f;
-                --brand-red: #fd971f;
-            }
-            [data-theme="catppuccin-mocha"] {
-                --surface-base: #11111b;
-                --surface-1: #1e1e2e;
-                --surface-2: #313244;
-                --surface-3: #45475a;
-                --surface-overlay: #585b70;
-                --text-primary: #cdd6f4;
-                --text-secondary: #bac2de;
-                --text-muted: rgba(186, 194, 222, 0.6);
-                --text-faint: rgba(186, 194, 222, 0.4);
-                --border-default: rgba(127, 132, 156, 0.3);
-                --border-subtle: rgba(127, 132, 156, 0.15);
-                --border-strong: rgba(127, 132, 156, 0.45);
-                --border-focus: rgba(245, 194, 231, 0.5);
-                --control-bg: #1e1e2e;
-                --control-border: rgba(127, 132, 156, 0.3);
-                --control-focus: rgba(245, 194, 231, 0.3);
-                --success: #a6e3a1;
-                --success-muted: rgba(166, 227, 161, 0.15);
-                --warning: #f9e2af;
-                --warning-muted: rgba(249, 226, 175, 0.15);
-                --error: #f38ba8;
-                --error-muted: rgba(243, 139, 168, 0.15);
-                --scrollbar-track: #1e1e2e;
-                --scrollbar-thumb: #585b70;
-                --accent: #f5c2e7;
-                --brand-red: #f5c2e7;
-            }
+/* Monokai — Android Theme.kt parity */
+[data-theme="monokai"] {
+    --surface-base: #272822;
+    --surface-0: #272822;
+    --surface-1: #383830;
+    --surface-2: #49483E;
+    --surface-3: #57584F;
+    --surface-overlay: #57584F;
+    --surface-elevated: #57584F;
+    --surface-hover: #49483E;
+    --surface-secondary: #49483E;
+    --bg-body: #272822;
+    --bg-card: #57584F;
+    --bg-card-hover: #49483E;
+    --card-bg: #57584F;
+    --glass-bg: color-mix(in srgb, #57584F 78%, transparent);
+    --glass-border: #49483E;
+    --text-primary: #F8F8F2;
+    --text-main: #F8F8F2;
+    --text-secondary: #A6E22E;
+    --text-muted: #75715E;
+    --text-faint: color-mix(in srgb, #75715E 56%, transparent);
+    --border-default: #49483E;
+    --border: #49483E;
+    --border-color: #49483E;
+    --border-light: #57584F;
+    --border-subtle: color-mix(in srgb, #49483E 62%, transparent);
+    --border-strong: #57584F;
+    --border-focus: color-mix(in srgb, #FD971F 68%, transparent);
+    --control-bg: #57584F;
+    --control-border: #49483E;
+    --control-focus: #33FD971F;
+    --accent: #FD971F;
+    --accent-color: #FD971F;
+    --accent-light: #F4BF75;
+    --accent-hover: #F4BF75;
+    --accent-soft: #33FD971F;
+    --brand-red: #FD971F;
+    --brand: #FD971F;
+    --brand-primary: #FD971F;
+    --brand-red-hover: #F4BF75;
+    --brand-primary-hover: #F4BF75;
+    --success: #A6E22E;
+    --success-muted: color-mix(in srgb, #A6E22E 18%, transparent);
+    --warning: #E6DB74;
+    --warning-muted: color-mix(in srgb, #E6DB74 18%, transparent);
+    --error: #F92672;
+    --error-muted: color-mix(in srgb, #F92672 18%, transparent);
+    --info: #66D9EF;
+    --scrollbar-track: #49483E;
+    --scrollbar-thumb: #75715E;
+    --surface-1-rgb: 56, 56, 48;
+    --surface-2-rgb: 73, 72, 62;
+    --surface-3-rgb: 87, 88, 79;
+    --text-muted-rgb: 117, 113, 94;
+    --brand-red-rgb: 253, 151, 31;
+    --chat-canvas-bg: linear-gradient(180deg, #272822 0%, #49483E 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #57584F 96%, #FD971F 4%) 0%, #57584F 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #FD971F 0%, #F4BF75 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #57584F 0%, #49483E 100%);
+    --chat-bot-bubble-text: #F8F8F2;
+    --chat-bot-bubble-border: #49483E;
+    --chat-system-bubble-bg: color-mix(in srgb, #E6DB74 13%, #57584F);
+    --chat-system-bubble-border: color-mix(in srgb, #E6DB74 35%, #49483E);
+    --chat-action-bg: color-mix(in srgb, #272822 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #272822 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #272822 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #272822 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #272822 48%, transparent);
+}
 
-            /* === LIGHT THEMES === */
-            [data-theme="light"], [data-theme="snow"] {
-                --surface-base: #f8fafc;
-                --surface-1: #fff;
-                --surface-2: #f1f5f9;
-                --surface-3: #e2e8f0;
-                --surface-overlay: #fff;
-                --text-primary: #1b2232;
-                --text-secondary: #64748b;
-                --text-muted: rgba(27, 34, 50, 0.5);
-                --text-faint: rgba(27, 34, 50, 0.3);
-                --border-default: rgba(27, 34, 50, 0.1);
-                --border-subtle: rgba(27, 34, 50, 0.06);
-                --border-strong: rgba(27, 34, 50, 0.15);
-                --border-focus: rgba(188, 32, 38, 0.4);
-                --control-bg: #fff;
-                --control-border: rgba(27, 34, 50, 0.15);
-                --control-focus: rgba(188, 32, 38, 0.2);
-                --success: #16a34a;
-                --success-muted: rgba(22, 163, 74, 0.1);
-                --warning: #bc2026;
-                --warning-muted: rgba(188, 32, 38, 0.1);
-                --error: #dc2626;
-                --error-muted: rgba(220, 38, 38, 0.1);
-                --scrollbar-track: #f1f5f9;
-                --scrollbar-thumb: #94a3b8;
-                --accent: #bc2026;
-                --brand-red: #bc2026;
-            }
-            [data-theme="latte"] {
-                --surface-base: #eff1f5;
-                --surface-1: #e6e9ef;
-                --surface-2: #ccd0da;
-                --surface-3: #bcc0cc;
-                --surface-overlay: #acb0be;
-                --text-primary: #4c4f69;
-                --text-secondary: #5c5f77;
-                --text-muted: rgba(76, 79, 105, 0.6);
-                --text-faint: rgba(76, 79, 105, 0.35);
-                --border-default: rgba(76, 79, 105, 0.15);
-                --border-subtle: rgba(76, 79, 105, 0.08);
-                --border-strong: rgba(76, 79, 105, 0.25);
-                --border-focus: rgba(234, 118, 203, 0.5);
-                --control-bg: #e6e9ef;
-                --control-border: rgba(76, 79, 105, 0.2);
-                --control-focus: rgba(234, 118, 203, 0.3);
-                --success: #40a02b;
-                --success-muted: rgba(64, 160, 43, 0.12);
-                --warning: #df8e1d;
-                --warning-muted: rgba(223, 142, 29, 0.12);
-                --error: #d20f39;
-                --error-muted: rgba(210, 15, 57, 0.12);
-                --scrollbar-track: #ccd0da;
-                --scrollbar-thumb: #9ca0b0;
-                --accent: #ea76cb;
-                --brand-red: #ea76cb;
-            }
-            [data-theme="rose-pine-dawn"] {
-                --surface-base: #faf4ed;
-                --surface-1: #fffaf3;
-                --surface-2: #f2e9e1;
-                --surface-3: #e8dfd5;
-                --surface-overlay: #fff;
-                --text-primary: #575279;
-                --text-secondary: #797593;
-                --text-muted: rgba(87, 82, 121, 0.5);
-                --text-faint: rgba(87, 82, 121, 0.3);
-                --border-default: rgba(87, 82, 121, 0.12);
-                --border-subtle: rgba(87, 82, 121, 0.06);
-                --border-strong: rgba(87, 82, 121, 0.2);
-                --border-focus: rgba(214, 93, 146, 0.5);
-                --control-bg: #fffaf3;
-                --control-border: rgba(87, 82, 121, 0.15);
-                --control-focus: rgba(214, 93, 146, 0.25);
-                --success: #56949f;
-                --success-muted: rgba(86, 148, 159, 0.12);
-                --warning: #ea9d34;
-                --warning-muted: rgba(234, 157, 52, 0.12);
-                --error: #b4637a;
-                --error-muted: rgba(180, 99, 122, 0.12);
-                --scrollbar-track: #f2e9e1;
-                --scrollbar-thumb: #9893a5;
-                --accent: #d65d92;
-                --brand-red: #d65d92;
-            }
-            [data-theme="solarized-light"] {
-                --surface-base: #fdf6e3;
-                --surface-1: #eee8d5;
-                --surface-2: #e3dcc5;
-                --surface-3: #d9d0b7;
-                --surface-overlay: #eee8d5;
-                --text-primary: #073642;
-                --text-secondary: #586e75;
-                --text-muted: rgba(7, 54, 66, 0.5);
-                --text-faint: rgba(7, 54, 66, 0.3);
-                --border-default: rgba(0, 43, 54, 0.1);
-                --border-subtle: rgba(0, 43, 54, 0.06);
-                --border-strong: rgba(0, 43, 54, 0.15);
-                --border-focus: rgba(38, 139, 210, 0.5);
-                --control-bg: #eee8d5;
-                --control-border: rgba(0, 43, 54, 0.15);
-                --control-focus: rgba(38, 139, 210, 0.25);
-                --success: #859900;
-                --success-muted: rgba(133, 153, 0, 0.12);
-                --warning: #b58900;
-                --warning-muted: rgba(181, 137, 0, 0.12);
-                --error: #dc322f;
-                --error-muted: rgba(220, 50, 47, 0.12);
-                --scrollbar-track: #e3dcc5;
-                --scrollbar-thumb: #93a1a1;
-                --accent: #268bd2;
-                --brand-red: #268bd2;
-            }
-            [data-theme="paper"] {
-                --surface-base: #fff;
-                --surface-1: #fafafa;
-                --surface-2: #f5f5f5;
-                --surface-3: #eee;
-                --surface-overlay: #fafafa;
-                --text-primary: #212121;
-                --text-secondary: #616161;
-                --text-muted: rgba(33, 33, 33, 0.5);
-                --text-faint: rgba(33, 33, 33, 0.3);
-                --border-default: rgba(0, 0, 0, 0.08);
-                --border-subtle: rgba(0, 0, 0, 0.04);
-                --border-strong: rgba(0, 0, 0, 0.12);
-                --border-focus: rgba(33, 33, 33, 0.4);
-                --control-bg: #fafafa;
-                --control-border: rgba(0, 0, 0, 0.1);
-                --control-focus: rgba(33, 33, 33, 0.2);
-                --success: #2e7d32;
-                --success-muted: rgba(46, 125, 50, 0.08);
-                --warning: #f57c00;
-                --warning-muted: rgba(245, 124, 0, 0.08);
-                --error: #c62828;
-                --error-muted: rgba(198, 40, 40, 0.08);
-                --scrollbar-track: #f5f5f5;
-                --scrollbar-thumb: #9e9e9e;
-                --accent: #424242;
-                --brand-red: #424242;
-            }
+/* Catppuccin Mocha — Android Theme.kt parity */
+[data-theme="catppuccin-mocha"] {
+    --surface-base: #1E1E2E;
+    --surface-0: #1E1E2E;
+    --surface-1: #302D41;
+    --surface-2: #414358;
+    --surface-3: #45475A;
+    --surface-overlay: #45475A;
+    --surface-elevated: #45475A;
+    --surface-hover: #414358;
+    --surface-secondary: #414358;
+    --bg-body: #1E1E2E;
+    --bg-card: #45475A;
+    --bg-card-hover: #414358;
+    --card-bg: #45475A;
+    --glass-bg: color-mix(in srgb, #45475A 78%, transparent);
+    --glass-border: #414358;
+    --text-primary: #CDD6F4;
+    --text-main: #CDD6F4;
+    --text-secondary: #B4BEFE;
+    --text-muted: #7F849C;
+    --text-faint: color-mix(in srgb, #7F849C 56%, transparent);
+    --border-default: #414358;
+    --border: #414358;
+    --border-color: #414358;
+    --border-light: #585B70;
+    --border-subtle: color-mix(in srgb, #414358 62%, transparent);
+    --border-strong: #585B70;
+    --border-focus: color-mix(in srgb, #F38BA8 68%, transparent);
+    --control-bg: #45475A;
+    --control-border: #414358;
+    --control-focus: #33F38BA8;
+    --accent: #F38BA8;
+    --accent-color: #F38BA8;
+    --accent-light: #FAB387;
+    --accent-hover: #FAB387;
+    --accent-soft: #33F38BA8;
+    --brand-red: #F38BA8;
+    --brand: #F38BA8;
+    --brand-primary: #F38BA8;
+    --brand-red-hover: #FAB387;
+    --brand-primary-hover: #FAB387;
+    --success: #A6E3A1;
+    --success-muted: color-mix(in srgb, #A6E3A1 18%, transparent);
+    --warning: #F9E2AF;
+    --warning-muted: color-mix(in srgb, #F9E2AF 18%, transparent);
+    --error: #F38BA8;
+    --error-muted: color-mix(in srgb, #F38BA8 18%, transparent);
+    --info: #89DCEB;
+    --scrollbar-track: #414358;
+    --scrollbar-thumb: #7F849C;
+    --surface-1-rgb: 48, 45, 65;
+    --surface-2-rgb: 65, 67, 88;
+    --surface-3-rgb: 69, 71, 90;
+    --text-muted-rgb: 127, 132, 156;
+    --brand-red-rgb: 243, 139, 168;
+    --chat-canvas-bg: linear-gradient(180deg, #1E1E2E 0%, #414358 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #45475A 96%, #F38BA8 4%) 0%, #45475A 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #F38BA8 0%, #FAB387 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #45475A 0%, #414358 100%);
+    --chat-bot-bubble-text: #CDD6F4;
+    --chat-bot-bubble-border: #414358;
+    --chat-system-bubble-bg: color-mix(in srgb, #F9E2AF 13%, #45475A);
+    --chat-system-bubble-border: color-mix(in srgb, #F9E2AF 35%, #414358);
+    --chat-action-bg: color-mix(in srgb, #1E1E2E 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #1E1E2E 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #1E1E2E 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #1E1E2E 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #1E1E2E 48%, transparent);
+}
 
-            /* === SPECIAL THEMES === */
-            [data-theme="solovision-red"] {
-                --surface-base: #0f0506;
-                --surface-1: #1a0a0c;
-                --surface-2: #2d1215;
-                --surface-3: #3d1a1e;
-                --surface-overlay: #4d2327;
-                --text-primary: #fff;
-                --text-secondary: #e5c6c9;
-                --text-muted: rgba(229, 198, 201, 0.6);
-                --text-faint: rgba(229, 198, 201, 0.35);
-                --border-default: rgba(188, 32, 38, 0.2);
-                --border-subtle: rgba(188, 32, 38, 0.1);
-                --border-strong: rgba(188, 32, 38, 0.35);
-                --border-focus: rgba(188, 32, 38, 0.6);
-                --control-bg: #1a0a0c;
-                --control-border: rgba(188, 32, 38, 0.3);
-                --control-focus: rgba(188, 32, 38, 0.4);
-                --success: #22c55e;
-                --success-muted: rgba(34, 197, 94, 0.15);
-                --warning: #f59e0b;
-                --warning-muted: rgba(245, 158, 11, 0.15);
-                --error: #ef4444;
-                --error-muted: rgba(239, 68, 68, 0.15);
-                --scrollbar-track: #1a0a0c;
-                --scrollbar-thumb: #bc2026;
-                --accent: #bc2026;
-                --brand-red: #bc2026;
-            }
-            [data-theme="cyberpunk"] {
-                --surface-base: #0a0e27;
-                --surface-1: #0f1535;
-                --surface-2: #1a1f4d;
-                --surface-3: #252a5f;
-                --surface-overlay: #303571;
-                --text-primary: #00ff9f;
-                --text-secondary: #b4c6ff;
-                --text-muted: rgba(180, 198, 255, 0.6);
-                --text-faint: rgba(180, 198, 255, 0.35);
-                --border-default: rgba(0, 255, 159, 0.2);
-                --border-subtle: rgba(0, 255, 159, 0.1);
-                --border-strong: rgba(0, 255, 159, 0.35);
-                --border-focus: rgba(255, 0, 255, 0.6);
-                --control-bg: #0f1535;
-                --control-border: rgba(0, 255, 159, 0.25);
-                --control-focus: rgba(255, 0, 255, 0.35);
-                --success: #00ff9f;
-                --success-muted: rgba(0, 255, 159, 0.15);
-                --warning: #ffee00;
-                --warning-muted: rgba(255, 238, 0, 0.15);
-                --error: #ff006e;
-                --error-muted: rgba(255, 0, 110, 0.15);
-                --scrollbar-track: #0f1535;
-                --scrollbar-thumb: #00ff9f;
-                --accent: #ff00ff;
-                --brand-red: #ff00ff;
-            }
-            [data-theme="ocean"] {
-                --surface-base: #0a1628;
-                --surface-1: #0e1e33;
-                --surface-2: #15293f;
-                --surface-3: #1d344d;
-                --surface-overlay: #253f5b;
-                --text-primary: #e0f2fe;
-                --text-secondary: #7dd3fc;
-                --text-muted: rgba(125, 211, 252, 0.6);
-                --text-faint: rgba(125, 211, 252, 0.35);
-                --border-default: rgba(14, 165, 233, 0.2);
-                --border-subtle: rgba(14, 165, 233, 0.1);
-                --border-strong: rgba(14, 165, 233, 0.35);
-                --border-focus: rgba(6, 182, 212, 0.6);
-                --control-bg: #0e1e33;
-                --control-border: rgba(14, 165, 233, 0.25);
-                --control-focus: rgba(6, 182, 212, 0.35);
-                --success: #10b981;
-                --success-muted: rgba(16, 185, 129, 0.15);
-                --warning: #f59e0b;
-                --warning-muted: rgba(245, 158, 11, 0.15);
-                --error: #ef4444;
-                --error-muted: rgba(239, 68, 68, 0.15);
-                --scrollbar-track: #0e1e33;
-                --scrollbar-thumb: #0ea5e9;
-                --accent: #06b6d4;
-                --brand-red: #06b6d4;
-            }
+/* Snow — Android Theme.kt parity */
+[data-theme="light"], [data-theme="snow"] {
+    --surface-base: #F8FAFC;
+    --surface-0: #F8FAFC;
+    --surface-1: #FFFFFF;
+    --surface-2: #F1F5F9;
+    --surface-3: #FFFFFF;
+    --surface-overlay: #FFFFFF;
+    --surface-elevated: #FFFFFF;
+    --surface-hover: #F1F5F9;
+    --surface-secondary: #F1F5F9;
+    --bg-body: #F8FAFC;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F1F5F9;
+    --card-bg: #FFFFFF;
+    --glass-bg: color-mix(in srgb, #FFFFFF 78%, transparent);
+    --glass-border: #E2E8F0;
+    --text-primary: #0F172A;
+    --text-main: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --text-faint: color-mix(in srgb, #94A3B8 56%, transparent);
+    --border-default: #E2E8F0;
+    --border: #E2E8F0;
+    --border-color: #E2E8F0;
+    --border-light: #CBD5E1;
+    --border-subtle: color-mix(in srgb, #E2E8F0 62%, transparent);
+    --border-strong: #CBD5E1;
+    --border-focus: color-mix(in srgb, #3B82F6 68%, transparent);
+    --control-bg: #FFFFFF;
+    --control-border: #E2E8F0;
+    --control-focus: #1F3B82F6;
+    --accent: #3B82F6;
+    --accent-color: #3B82F6;
+    --accent-light: #60A5FA;
+    --accent-hover: #60A5FA;
+    --accent-soft: #1F3B82F6;
+    --brand-red: #3B82F6;
+    --brand: #3B82F6;
+    --brand-primary: #3B82F6;
+    --brand-red-hover: #60A5FA;
+    --brand-primary-hover: #60A5FA;
+    --success: #22C55E;
+    --success-muted: color-mix(in srgb, #22C55E 18%, transparent);
+    --warning: #F59E0B;
+    --warning-muted: color-mix(in srgb, #F59E0B 18%, transparent);
+    --error: #EF4444;
+    --error-muted: color-mix(in srgb, #EF4444 18%, transparent);
+    --info: #3B82F6;
+    --scrollbar-track: #F1F5F9;
+    --scrollbar-thumb: #94A3B8;
+    --surface-1-rgb: 255, 255, 255;
+    --surface-2-rgb: 241, 245, 249;
+    --surface-3-rgb: 255, 255, 255;
+    --text-muted-rgb: 148, 163, 184;
+    --brand-red-rgb: 59, 130, 246;
+    --chat-canvas-bg: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #FFFFFF 96%, #3B82F6 4%) 0%, #FFFFFF 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 100%);
+    --chat-bot-bubble-text: #0F172A;
+    --chat-bot-bubble-border: #E2E8F0;
+    --chat-system-bubble-bg: color-mix(in srgb, #F59E0B 13%, #FFFFFF);
+    --chat-system-bubble-border: color-mix(in srgb, #F59E0B 35%, #E2E8F0);
+    --chat-action-bg: color-mix(in srgb, #F8FAFC 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #F8FAFC 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #F8FAFC 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #F8FAFC 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #F8FAFC 48%, transparent);
+}
 
-            /* Light mode overrides for themes with light base — uses :is() to match all light themes */
-            :is(
-                [data-theme="light"],
-                [data-theme="snow"],
-                [data-theme="latte"],
-                [data-theme="rose-pine-dawn"],
-                [data-theme="solarized-light"],
-                [data-theme="paper"]
-            )
-                .system-bubble {
-                background: rgba(27, 34, 50, 0.08);
-                border: 1px solid rgba(188, 32, 38, 0.2);
-            }
+/* Latte — Android Theme.kt parity */
+[data-theme="latte"] {
+    --surface-base: #FAF5F0;
+    --surface-0: #FAF5F0;
+    --surface-1: #FFFFFF;
+    --surface-2: #F5EDE4;
+    --surface-3: #FFFFFF;
+    --surface-overlay: #FFFFFF;
+    --surface-elevated: #FFFFFF;
+    --surface-hover: #F5EDE4;
+    --surface-secondary: #F5EDE4;
+    --bg-body: #FAF5F0;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F5EDE4;
+    --card-bg: #FFFFFF;
+    --glass-bg: color-mix(in srgb, #FFFFFF 78%, transparent);
+    --glass-border: #E8E0D8;
+    --text-primary: #2D2A26;
+    --text-main: #2D2A26;
+    --text-secondary: #6B6560;
+    --text-muted: #9A928C;
+    --text-faint: color-mix(in srgb, #9A928C 56%, transparent);
+    --border-default: #E8E0D8;
+    --border: #E8E0D8;
+    --border-color: #E8E0D8;
+    --border-light: #F0EAE3;
+    --border-subtle: color-mix(in srgb, #E8E0D8 62%, transparent);
+    --border-strong: #F0EAE3;
+    --border-focus: color-mix(in srgb, #F97316 68%, transparent);
+    --control-bg: #FFFFFF;
+    --control-border: #E8E0D8;
+    --control-focus: #1FF97316;
+    --accent: #F97316;
+    --accent-color: #F97316;
+    --accent-light: #FB923C;
+    --accent-hover: #FB923C;
+    --accent-soft: #1FF97316;
+    --brand-red: #F97316;
+    --brand: #F97316;
+    --brand-primary: #F97316;
+    --brand-red-hover: #FB923C;
+    --brand-primary-hover: #FB923C;
+    --success: #4ADE80;
+    --success-muted: color-mix(in srgb, #4ADE80 18%, transparent);
+    --warning: #FBBF24;
+    --warning-muted: color-mix(in srgb, #FBBF24 18%, transparent);
+    --error: #FB7185;
+    --error-muted: color-mix(in srgb, #FB7185 18%, transparent);
+    --info: #60A5FA;
+    --scrollbar-track: #F5EDE4;
+    --scrollbar-thumb: #9A928C;
+    --surface-1-rgb: 255, 255, 255;
+    --surface-2-rgb: 245, 237, 228;
+    --surface-3-rgb: 255, 255, 255;
+    --text-muted-rgb: 154, 146, 140;
+    --brand-red-rgb: 249, 115, 22;
+    --chat-canvas-bg: linear-gradient(180deg, #FAF5F0 0%, #F5EDE4 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #FFFFFF 96%, #F97316 4%) 0%, #FFFFFF 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #F97316 0%, #FB923C 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #FFFFFF 0%, #F5EDE4 100%);
+    --chat-bot-bubble-text: #2D2A26;
+    --chat-bot-bubble-border: #E8E0D8;
+    --chat-system-bubble-bg: color-mix(in srgb, #FBBF24 13%, #FFFFFF);
+    --chat-system-bubble-border: color-mix(in srgb, #FBBF24 35%, #E8E0D8);
+    --chat-action-bg: color-mix(in srgb, #FAF5F0 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #FAF5F0 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #FAF5F0 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #FAF5F0 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #FAF5F0 48%, transparent);
+}
 
-            :is(
-                [data-theme="light"],
-                [data-theme="snow"],
-                [data-theme="latte"],
-                [data-theme="rose-pine-dawn"],
-                [data-theme="solarized-light"],
-                [data-theme="paper"]
-            )
-                .system-bubble-content {
-                color: var(--text-primary);
-            }
+/* Rose Pine Dawn — Android Theme.kt parity */
+[data-theme="rose-pine-dawn"] {
+    --surface-base: #FAF4ED;
+    --surface-0: #FAF4ED;
+    --surface-1: #FFFAF3;
+    --surface-2: #F2E9E1;
+    --surface-3: #FFFAF3;
+    --surface-overlay: #FFFAF3;
+    --surface-elevated: #FFFAF3;
+    --surface-hover: #F2E9E1;
+    --surface-secondary: #F2E9E1;
+    --bg-body: #FAF4ED;
+    --bg-card: #FFFAF3;
+    --bg-card-hover: #F2E9E1;
+    --card-bg: #FFFAF3;
+    --glass-bg: color-mix(in srgb, #FFFAF3 78%, transparent);
+    --glass-border: #F2E9E1;
+    --text-primary: #575279;
+    --text-main: #575279;
+    --text-secondary: #797593;
+    --text-muted: #9893A5;
+    --text-faint: color-mix(in srgb, #9893A5 56%, transparent);
+    --border-default: #F2E9E1;
+    --border: #F2E9E1;
+    --border-color: #F2E9E1;
+    --border-light: #DFDAD9;
+    --border-subtle: color-mix(in srgb, #F2E9E1 62%, transparent);
+    --border-strong: #DFDAD9;
+    --border-focus: color-mix(in srgb, #D7827E 68%, transparent);
+    --control-bg: #FFFAF3;
+    --control-border: #F2E9E1;
+    --control-focus: #26D7827E;
+    --accent: #D7827E;
+    --accent-color: #D7827E;
+    --accent-light: #EA9D34;
+    --accent-hover: #EA9D34;
+    --accent-soft: #26D7827E;
+    --brand-red: #D7827E;
+    --brand: #D7827E;
+    --brand-primary: #D7827E;
+    --brand-red-hover: #EA9D34;
+    --brand-primary-hover: #EA9D34;
+    --success: #56949F;
+    --success-muted: color-mix(in srgb, #56949F 18%, transparent);
+    --warning: #F6C177;
+    --warning-muted: color-mix(in srgb, #F6C177 18%, transparent);
+    --error: #B4637A;
+    --error-muted: color-mix(in srgb, #B4637A 18%, transparent);
+    --info: #286983;
+    --scrollbar-track: #F2E9E1;
+    --scrollbar-thumb: #9893A5;
+    --surface-1-rgb: 255, 250, 243;
+    --surface-2-rgb: 242, 233, 225;
+    --surface-3-rgb: 255, 250, 243;
+    --text-muted-rgb: 152, 147, 165;
+    --brand-red-rgb: 215, 130, 126;
+    --chat-canvas-bg: linear-gradient(180deg, #FAF4ED 0%, #F2E9E1 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #FFFAF3 96%, #D7827E 4%) 0%, #FFFAF3 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #D7827E 0%, #EA9D34 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #FFFAF3 0%, #F2E9E1 100%);
+    --chat-bot-bubble-text: #575279;
+    --chat-bot-bubble-border: #F2E9E1;
+    --chat-system-bubble-bg: color-mix(in srgb, #F6C177 13%, #FFFAF3);
+    --chat-system-bubble-border: color-mix(in srgb, #F6C177 35%, #F2E9E1);
+    --chat-action-bg: color-mix(in srgb, #FAF4ED 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #FAF4ED 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #FAF4ED 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #FAF4ED 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #FAF4ED 48%, transparent);
+}
 
-            :is(
-                [data-theme="light"],
-                [data-theme="snow"],
-                [data-theme="latte"],
-                [data-theme="rose-pine-dawn"],
-                [data-theme="solarized-light"],
-                [data-theme="paper"]
-            )
-                .system-bubble-time {
-                color: var(--text-secondary);
-            }
+/* Solarized Light — Android Theme.kt parity */
+[data-theme="solarized-light"] {
+    --surface-base: #FDF6E3;
+    --surface-0: #FDF6E3;
+    --surface-1: #EEE8D5;
+    --surface-2: #E4DCC9;
+    --surface-3: #EEE8D5;
+    --surface-overlay: #EEE8D5;
+    --surface-elevated: #EEE8D5;
+    --surface-hover: #E4DCC9;
+    --surface-secondary: #E4DCC9;
+    --bg-body: #FDF6E3;
+    --bg-card: #EEE8D5;
+    --bg-card-hover: #E4DCC9;
+    --card-bg: #EEE8D5;
+    --glass-bg: color-mix(in srgb, #EEE8D5 78%, transparent);
+    --glass-border: #E4DCC9;
+    --text-primary: #073642;
+    --text-main: #073642;
+    --text-secondary: #586E75;
+    --text-muted: #93A1A1;
+    --text-faint: color-mix(in srgb, #93A1A1 56%, transparent);
+    --border-default: #E4DCC9;
+    --border: #E4DCC9;
+    --border-color: #E4DCC9;
+    --border-light: #D3CBB8;
+    --border-subtle: color-mix(in srgb, #E4DCC9 62%, transparent);
+    --border-strong: #D3CBB8;
+    --border-focus: color-mix(in srgb, #CB4B16 68%, transparent);
+    --control-bg: #EEE8D5;
+    --control-border: #E4DCC9;
+    --control-focus: #26CB4B16;
+    --accent: #CB4B16;
+    --accent-color: #CB4B16;
+    --accent-light: #DC322F;
+    --accent-hover: #DC322F;
+    --accent-soft: #26CB4B16;
+    --brand-red: #CB4B16;
+    --brand: #CB4B16;
+    --brand-primary: #CB4B16;
+    --brand-red-hover: #DC322F;
+    --brand-primary-hover: #DC322F;
+    --success: #859900;
+    --success-muted: color-mix(in srgb, #859900 18%, transparent);
+    --warning: #B58900;
+    --warning-muted: color-mix(in srgb, #B58900 18%, transparent);
+    --error: #DC322F;
+    --error-muted: color-mix(in srgb, #DC322F 18%, transparent);
+    --info: #268BD2;
+    --scrollbar-track: #E4DCC9;
+    --scrollbar-thumb: #93A1A1;
+    --surface-1-rgb: 238, 232, 213;
+    --surface-2-rgb: 228, 220, 201;
+    --surface-3-rgb: 238, 232, 213;
+    --text-muted-rgb: 147, 161, 161;
+    --brand-red-rgb: 203, 75, 22;
+    --chat-canvas-bg: linear-gradient(180deg, #FDF6E3 0%, #E4DCC9 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #EEE8D5 96%, #CB4B16 4%) 0%, #EEE8D5 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #CB4B16 0%, #DC322F 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #EEE8D5 0%, #E4DCC9 100%);
+    --chat-bot-bubble-text: #073642;
+    --chat-bot-bubble-border: #E4DCC9;
+    --chat-system-bubble-bg: color-mix(in srgb, #B58900 13%, #EEE8D5);
+    --chat-system-bubble-border: color-mix(in srgb, #B58900 35%, #E4DCC9);
+    --chat-action-bg: color-mix(in srgb, #FDF6E3 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #FDF6E3 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #FDF6E3 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #FDF6E3 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #FDF6E3 48%, transparent);
+}
 
-            :is(
-                [data-theme="light"],
-                [data-theme="snow"],
-                [data-theme="latte"],
-                [data-theme="rose-pine-dawn"],
-                [data-theme="solarized-light"],
-                [data-theme="paper"]
-            )
-                .chat-page-message.solobot
-                .chat-page-bubble {
-                background: var(--surface-2);
-                color: var(--text-primary);
-            }
+/* Paper — Android Theme.kt parity */
+[data-theme="paper"] {
+    --surface-base: #FFFFFF;
+    --surface-0: #FFFFFF;
+    --surface-1: #FAFAFA;
+    --surface-2: #F5F5F5;
+    --surface-3: #FFFFFF;
+    --surface-overlay: #FFFFFF;
+    --surface-elevated: #FFFFFF;
+    --surface-hover: #F5F5F5;
+    --surface-secondary: #F5F5F5;
+    --bg-body: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F5F5F5;
+    --card-bg: #FFFFFF;
+    --glass-bg: color-mix(in srgb, #FFFFFF 78%, transparent);
+    --glass-border: #E5E5E5;
+    --text-primary: #171717;
+    --text-main: #171717;
+    --text-secondary: #525252;
+    --text-muted: #A3A3A3;
+    --text-faint: color-mix(in srgb, #A3A3A3 56%, transparent);
+    --border-default: #E5E5E5;
+    --border: #E5E5E5;
+    --border-color: #E5E5E5;
+    --border-light: #D4D4D4;
+    --border-subtle: color-mix(in srgb, #E5E5E5 62%, transparent);
+    --border-strong: #D4D4D4;
+    --border-focus: color-mix(in srgb, #171717 68%, transparent);
+    --control-bg: #FFFFFF;
+    --control-border: #E5E5E5;
+    --control-focus: #14171717;
+    --accent: #171717;
+    --accent-color: #171717;
+    --accent-light: #404040;
+    --accent-hover: #404040;
+    --accent-soft: #14171717;
+    --brand-red: #171717;
+    --brand: #171717;
+    --brand-primary: #171717;
+    --brand-red-hover: #404040;
+    --brand-primary-hover: #404040;
+    --success: #16A34A;
+    --success-muted: color-mix(in srgb, #16A34A 18%, transparent);
+    --warning: #CA8A04;
+    --warning-muted: color-mix(in srgb, #CA8A04 18%, transparent);
+    --error: #DC2626;
+    --error-muted: color-mix(in srgb, #DC2626 18%, transparent);
+    --info: #2563EB;
+    --scrollbar-track: #F5F5F5;
+    --scrollbar-thumb: #A3A3A3;
+    --surface-1-rgb: 250, 250, 250;
+    --surface-2-rgb: 245, 245, 245;
+    --surface-3-rgb: 255, 255, 255;
+    --text-muted-rgb: 163, 163, 163;
+    --brand-red-rgb: 23, 23, 23;
+    --chat-canvas-bg: linear-gradient(180deg, #FFFFFF 0%, #F5F5F5 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #FFFFFF 96%, #171717 4%) 0%, #FFFFFF 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #171717 0%, #404040 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #FFFFFF 0%, #F5F5F5 100%);
+    --chat-bot-bubble-text: #171717;
+    --chat-bot-bubble-border: #E5E5E5;
+    --chat-system-bubble-bg: color-mix(in srgb, #CA8A04 13%, #FFFFFF);
+    --chat-system-bubble-border: color-mix(in srgb, #CA8A04 35%, #E5E5E5);
+    --chat-action-bg: color-mix(in srgb, #FFFFFF 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #FFFFFF 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #FFFFFF 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #FFFFFF 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #FFFFFF 48%, transparent);
+}
+
+/* SoLoVision Red — Android Theme.kt parity */
+[data-theme="solovision-red"] {
+    --surface-base: #0F0505;
+    --surface-0: #0F0505;
+    --surface-1: #1A0A0A;
+    --surface-2: #2A1515;
+    --surface-3: #351515;
+    --surface-overlay: #351515;
+    --surface-elevated: #351515;
+    --surface-hover: #2A1515;
+    --surface-secondary: #2A1515;
+    --bg-body: #0F0505;
+    --bg-card: #351515;
+    --bg-card-hover: #2A1515;
+    --card-bg: #351515;
+    --glass-bg: color-mix(in srgb, #351515 78%, transparent);
+    --glass-border: #451515;
+    --text-primary: #FFE4E4;
+    --text-main: #FFE4E4;
+    --text-secondary: #FF9999;
+    --text-muted: #B36666;
+    --text-faint: color-mix(in srgb, #B36666 56%, transparent);
+    --border-default: #451515;
+    --border: #451515;
+    --border-color: #451515;
+    --border-light: #552525;
+    --border-subtle: color-mix(in srgb, #451515 62%, transparent);
+    --border-strong: #552525;
+    --border-focus: color-mix(in srgb, #DC2626 68%, transparent);
+    --control-bg: #351515;
+    --control-border: #451515;
+    --control-focus: #33DC2626;
+    --accent: #DC2626;
+    --accent-color: #DC2626;
+    --accent-light: #EF4444;
+    --accent-hover: #EF4444;
+    --accent-soft: #33DC2626;
+    --brand-red: #DC2626;
+    --brand: #DC2626;
+    --brand-primary: #DC2626;
+    --brand-red-hover: #EF4444;
+    --brand-primary-hover: #EF4444;
+    --success: #22C55E;
+    --success-muted: color-mix(in srgb, #22C55E 18%, transparent);
+    --warning: #F59E0B;
+    --warning-muted: color-mix(in srgb, #F59E0B 18%, transparent);
+    --error: #FF4444;
+    --error-muted: color-mix(in srgb, #FF4444 18%, transparent);
+    --info: #3B82F6;
+    --scrollbar-track: #2A1515;
+    --scrollbar-thumb: #B36666;
+    --surface-1-rgb: 26, 10, 10;
+    --surface-2-rgb: 42, 21, 21;
+    --surface-3-rgb: 53, 21, 21;
+    --text-muted-rgb: 179, 102, 102;
+    --brand-red-rgb: 220, 38, 38;
+    --chat-canvas-bg: linear-gradient(180deg, #0F0505 0%, #2A1515 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #351515 96%, #DC2626 4%) 0%, #351515 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #DC2626 0%, #EF4444 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #351515 0%, #2A1515 100%);
+    --chat-bot-bubble-text: #FFE4E4;
+    --chat-bot-bubble-border: #451515;
+    --chat-system-bubble-bg: color-mix(in srgb, #F59E0B 13%, #351515);
+    --chat-system-bubble-border: color-mix(in srgb, #F59E0B 35%, #451515);
+    --chat-action-bg: color-mix(in srgb, #0F0505 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #0F0505 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #0F0505 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #0F0505 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #0F0505 48%, transparent);
+}
+
+/* Cyberpunk — Android Theme.kt parity */
+[data-theme="cyberpunk"] {
+    --surface-base: #0D0221;
+    --surface-0: #0D0221;
+    --surface-1: #1A0B2E;
+    --surface-2: #261447;
+    --surface-3: #2E1A5E;
+    --surface-overlay: #2E1A5E;
+    --surface-elevated: #2E1A5E;
+    --surface-hover: #261447;
+    --surface-secondary: #261447;
+    --bg-body: #0D0221;
+    --bg-card: #2E1A5E;
+    --bg-card-hover: #261447;
+    --card-bg: #2E1A5E;
+    --glass-bg: color-mix(in srgb, #2E1A5E 78%, transparent);
+    --glass-border: #3D1F7A;
+    --text-primary: #F0E6FF;
+    --text-main: #F0E6FF;
+    --text-secondary: #C77DFF;
+    --text-muted: #7A3DB8;
+    --text-faint: color-mix(in srgb, #7A3DB8 56%, transparent);
+    --border-default: #3D1F7A;
+    --border: #3D1F7A;
+    --border-color: #3D1F7A;
+    --border-light: #4D2799;
+    --border-subtle: color-mix(in srgb, #3D1F7A 62%, transparent);
+    --border-strong: #4D2799;
+    --border-focus: color-mix(in srgb, #00FF41 68%, transparent);
+    --control-bg: #2E1A5E;
+    --control-border: #3D1F7A;
+    --control-focus: #3300FF41;
+    --accent: #00FF41;
+    --accent-color: #00FF41;
+    --accent-light: #39FF14;
+    --accent-hover: #39FF14;
+    --accent-soft: #3300FF41;
+    --brand-red: #00FF41;
+    --brand: #00FF41;
+    --brand-primary: #00FF41;
+    --brand-red-hover: #39FF14;
+    --brand-primary-hover: #39FF14;
+    --success: #00FF41;
+    --success-muted: color-mix(in srgb, #00FF41 18%, transparent);
+    --warning: #FFEE00;
+    --warning-muted: color-mix(in srgb, #FFEE00 18%, transparent);
+    --error: #FF0066;
+    --error-muted: color-mix(in srgb, #FF0066 18%, transparent);
+    --info: #00CCFF;
+    --scrollbar-track: #261447;
+    --scrollbar-thumb: #7A3DB8;
+    --surface-1-rgb: 26, 11, 46;
+    --surface-2-rgb: 38, 20, 71;
+    --surface-3-rgb: 46, 26, 94;
+    --text-muted-rgb: 122, 61, 184;
+    --brand-red-rgb: 0, 255, 65;
+    --chat-canvas-bg: linear-gradient(180deg, #0D0221 0%, #261447 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #2E1A5E 96%, #00FF41 4%) 0%, #2E1A5E 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #00FF41 0%, #39FF14 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #2E1A5E 0%, #261447 100%);
+    --chat-bot-bubble-text: #F0E6FF;
+    --chat-bot-bubble-border: #3D1F7A;
+    --chat-system-bubble-bg: color-mix(in srgb, #FFEE00 13%, #2E1A5E);
+    --chat-system-bubble-border: color-mix(in srgb, #FFEE00 35%, #3D1F7A);
+    --chat-action-bg: color-mix(in srgb, #0D0221 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #0D0221 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #0D0221 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #0D0221 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #0D0221 48%, transparent);
+}
+
+/* Ocean — Android Theme.kt parity */
+[data-theme="ocean"] {
+    --surface-base: #0C4A6E;
+    --surface-0: #0C4A6E;
+    --surface-1: #075985;
+    --surface-2: #0369A1;
+    --surface-3: #0EA5E9;
+    --surface-overlay: #0EA5E9;
+    --surface-elevated: #0EA5E9;
+    --surface-hover: #0369A1;
+    --surface-secondary: #0369A1;
+    --bg-body: #0C4A6E;
+    --bg-card: #0EA5E9;
+    --bg-card-hover: #0369A1;
+    --card-bg: #0EA5E9;
+    --glass-bg: color-mix(in srgb, #0EA5E9 78%, transparent);
+    --glass-border: #0284C7;
+    --text-primary: #F0F9FF;
+    --text-main: #F0F9FF;
+    --text-secondary: #7DD3FC;
+    --text-muted: #38BDF8;
+    --text-faint: color-mix(in srgb, #38BDF8 56%, transparent);
+    --border-default: #0284C7;
+    --border: #0284C7;
+    --border-color: #0284C7;
+    --border-light: #0EA5E9;
+    --border-subtle: color-mix(in srgb, #0284C7 62%, transparent);
+    --border-strong: #0EA5E9;
+    --border-focus: color-mix(in srgb, #06B6D4 68%, transparent);
+    --control-bg: #0EA5E9;
+    --control-border: #0284C7;
+    --control-focus: #3306B6D4;
+    --accent: #06B6D4;
+    --accent-color: #06B6D4;
+    --accent-light: #22D3EE;
+    --accent-hover: #22D3EE;
+    --accent-soft: #3306B6D4;
+    --brand-red: #06B6D4;
+    --brand: #06B6D4;
+    --brand-primary: #06B6D4;
+    --brand-red-hover: #22D3EE;
+    --brand-primary-hover: #22D3EE;
+    --success: #10B981;
+    --success-muted: color-mix(in srgb, #10B981 18%, transparent);
+    --warning: #F59E0B;
+    --warning-muted: color-mix(in srgb, #F59E0B 18%, transparent);
+    --error: #EF4444;
+    --error-muted: color-mix(in srgb, #EF4444 18%, transparent);
+    --info: #38BDF8;
+    --scrollbar-track: #0369A1;
+    --scrollbar-thumb: #38BDF8;
+    --surface-1-rgb: 7, 89, 133;
+    --surface-2-rgb: 3, 105, 161;
+    --surface-3-rgb: 14, 165, 233;
+    --text-muted-rgb: 56, 189, 248;
+    --brand-red-rgb: 6, 182, 212;
+    --chat-canvas-bg: linear-gradient(180deg, #0C4A6E 0%, #0369A1 100%);
+    --chat-rail-bg: linear-gradient(180deg, color-mix(in srgb, #0EA5E9 96%, #06B6D4 4%) 0%, #0EA5E9 100%);
+    --chat-user-bubble-bg: linear-gradient(135deg, #06B6D4 0%, #22D3EE 100%);
+    --chat-user-bubble-text: #FFFFFF;
+    --chat-bot-bubble-bg: linear-gradient(135deg, #0EA5E9 0%, #0369A1 100%);
+    --chat-bot-bubble-text: #F0F9FF;
+    --chat-bot-bubble-border: #0284C7;
+    --chat-system-bubble-bg: color-mix(in srgb, #F59E0B 13%, #0EA5E9);
+    --chat-system-bubble-border: color-mix(in srgb, #F59E0B 35%, #0284C7);
+    --chat-action-bg: color-mix(in srgb, #0C4A6E 72%, transparent);
+    --chat-action-hover-bg: color-mix(in srgb, #0C4A6E 88%, transparent);
+    --shadow-md: 0 8px 20px color-mix(in srgb, #0C4A6E 38%, transparent);
+    --shadow-lg: 0 14px 32px color-mix(in srgb, #0C4A6E 42%, transparent);
+    --shadow-xl: 0 24px 50px color-mix(in srgb, #0C4A6E 48%, transparent);
+}
+
+:is(
+    [data-theme="light"],
+    [data-theme="snow"],
+    [data-theme="latte"],
+    [data-theme="rose-pine-dawn"],
+    [data-theme="solarized-light"],
+    [data-theme="paper"]
+) .system-bubble {
+    background: var(--chat-system-bubble-bg);
+    border: 1px solid var(--chat-system-bubble-border);
+}
+
+:is(
+    [data-theme="light"],
+    [data-theme="snow"],
+    [data-theme="latte"],
+    [data-theme="rose-pine-dawn"],
+    [data-theme="solarized-light"],
+    [data-theme="paper"]
+) .system-bubble-content {
+    color: var(--text-primary);
+}
+
+:is(
+    [data-theme="light"],
+    [data-theme="snow"],
+    [data-theme="latte"],
+    [data-theme="rose-pine-dawn"],
+    [data-theme="solarized-light"],
+    [data-theme="paper"]
+) .system-bubble-time {
+    color: var(--text-secondary);
+}
+
+:is(
+    [data-theme="light"],
+    [data-theme="snow"],
+    [data-theme="latte"],
+    [data-theme="rose-pine-dawn"],
+    [data-theme="solarized-light"],
+    [data-theme="paper"]
+) .chat-page-message.solobot .chat-page-bubble {
+    background: var(--chat-bot-bubble-bg);
+    color: var(--chat-bot-bubble-text);
+    border-color: var(--chat-bot-bubble-border);
+}
+
+/* Theme picker previews use the same theme variables as the live UI. */
+.theme-card[data-theme] .theme-preview-colors .theme-color:nth-child(1) { background: var(--surface-base) !important; }
+.theme-card[data-theme] .theme-preview-colors .theme-color:nth-child(2) { background: var(--surface-2) !important; }
+.theme-card[data-theme] .theme-preview-colors .theme-color:nth-child(3) { background: var(--text-primary) !important; }
+.theme-card[data-theme] .theme-preview-colors .theme-color:nth-child(4) { background: var(--accent) !important; }
+.theme-card[data-theme] .theme-preview-colors .theme-color:nth-child(5) { background: var(--success) !important; }
+.theme-card[data-theme] .preview-surface { background: var(--surface-1) !important; }
+.theme-card[data-theme] .preview-text { background: var(--text-primary) !important; }
+.theme-card[data-theme] .preview-accent { background: var(--accent) !important; }
+
+/* Native scrollbar theming for Firefox/Chromium surfaces outside explicit component scrollbars. */
+* {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
