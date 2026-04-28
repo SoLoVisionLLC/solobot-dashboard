@@ -800,8 +800,9 @@
             }
 
             .sidebar-agent.active {
-                background: color-mix(in srgb, var(--brand-primary) 8%, var(--surface-1));
-                border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-default));
+                background: var(--surface-2);
+                border-color: var(--border-default);
+                box-shadow: inset 3px 0 0 color-mix(in srgb, var(--brand-primary) 48%, transparent);
             }
 
             .sidebar-agent.is-hidden {
