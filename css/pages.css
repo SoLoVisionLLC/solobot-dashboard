@@ -54,54 +54,6 @@
                 font-family: "SF Mono", "Monaco", "Consolas", monospace;
             }
 
-            /* =================== FOCUS TIMER STYLES =================== */
-            .focus-timer {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-1) var(--space-3);
-                background: var(--surface-2);
-                border: 1px solid var(--border-default);
-                border-radius: var(--radius-full);
-                font-size: 13px;
-                font-weight: 500;
-                margin-right: var(--space-4);
-            }
-            .focus-timer.active {
-                background: var(--success-muted);
-                border-color: var(--success);
-                color: var(--success);
-            }
-            .focus-timer.break {
-                background: var(--warning-muted);
-                border-color: var(--warning);
-                color: var(--warning);
-            }
-            .focus-timer-display {
-                font-family: "SF Mono", "Monaco", monospace;
-                font-size: 14px;
-                min-width: 50px;
-                text-align: center;
-            }
-            .focus-timer-btn {
-                background: none;
-                border: none;
-                cursor: pointer;
-                padding: 2px;
-                color: inherit;
-                display: flex;
-                align-items: center;
-                opacity: 0.8;
-            }
-            .focus-timer-btn:hover {
-                opacity: 1;
-            }
-            .focus-timer-sessions {
-                font-size: 11px;
-                color: var(--text-muted);
-                margin-left: var(--space-1);
-            }
-
             /* =================== NOTIFICATION BELL =================== */
             .notification-bell {
                 position: relative;
@@ -153,123 +105,211 @@
                 background: var(--surface-base);
             }
 
+            .dashboard-shell {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-4);
+                padding-bottom: var(--space-6);
+            }
+
+            .dashboard-hero-panel {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: var(--space-4);
+                padding: var(--space-4);
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                background: linear-gradient(180deg, rgba(188, 32, 38, 0.08), rgba(188, 32, 38, 0.02));
+            }
+
+            .dashboard-hero-copy {
+                max-width: 680px;
+            }
+
+            .dashboard-eyebrow {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--brand-red);
+                margin-bottom: var(--space-2);
+            }
+
+            .dashboard-hero-copy h1 {
+                margin: 0 0 var(--space-2);
+                font-size: 28px;
+                line-height: 1.1;
+            }
+
+            .dashboard-hero-copy p {
+                margin: 0;
+                color: var(--text-secondary);
+                font-size: 14px;
+                line-height: 1.6;
+            }
+
+            .dashboard-hero-actions {
+                display: flex;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+
+            .dashboard-primary-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+                gap: var(--space-4);
+                align-items: start;
+            }
+
+            .dashboard-collapsible-section {
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-lg);
+                background: var(--surface-1);
+                overflow: hidden;
+            }
+
+            .dashboard-section-toggle {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-3);
+                padding: var(--space-4);
+                border: 0;
+                background: transparent;
+                color: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            .dashboard-section-toggle small {
+                display: block;
+                margin-top: 4px;
+                color: var(--text-muted);
+                font-size: 12px;
+            }
+
+            .dashboard-section-toggle-icon {
+                font-size: 20px;
+                line-height: 1;
+                color: var(--text-muted);
+            }
+
+            .dashboard-collapsible-section.is-open .dashboard-section-toggle-icon {
+                transform: rotate(45deg);
+            }
+
+            .dashboard-section-content {
+                display: none;
+                padding: 0 var(--space-4) var(--space-4);
+                border-top: 1px solid var(--border-default);
+            }
+
+            .dashboard-collapsible-section.is-open .dashboard-section-content {
+                display: block;
+            }
+
+            .dashboard-secondary-grid {
+                display: grid;
+                gap: var(--space-3);
+            }
+
+            .dashboard-operations-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .dashboard-insights-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .dashboard-insights-grid .bento-notion-kanban,
+            .dashboard-insights-grid .bento-heatmap-30d {
+                grid-column: 1 / -1;
+            }
+
+            .dashboard-shell.section-operations-collapsed .dashboard-operations-grid,
+            .dashboard-shell.section-insights-collapsed .dashboard-insights-grid {
+                display: none;
+            }
+
+            .dashboard-primary-grid > .dashboard-support-widget {
+                display: none;
+            }
+
             /* Adjust for pinned/hovered sidebar */
             .sidebar.pinned ~ .app-content #page-dashboard,
             .sidebar:hover ~ .app-content #page-dashboard {
                 left: 240px;
             }
 
-            /* Bento grid — 4-column dense layout, all widgets explicitly placed */
+            /* Bento grid */
             .bento-grid {
                 display: grid;
-                grid-template-columns: 1fr 1fr 1fr 1fr;
-                grid-auto-rows: min-content;
                 gap: var(--space-3);
                 width: 100%;
             }
 
-            /* Row 1: Stats Bar (full width, compact) */
             .bento-quick-stats {
-                grid-column: 1 / -1;
-                grid-row: 1;
+                grid-column: 1;
+                min-height: 0;
             }
 
-            /* Row 2: Task Board (cols 1-3) + Activity Timeline (col 4) */
             .bento-task-board {
-                grid-column: 1 / 4;
-                grid-row: 2;
+                grid-column: 1;
                 min-height: 0;
-                max-height: 740px;
+                max-height: 760px;
                 overflow: hidden;
             }
 
-            .bento-activity {
-                grid-column: 4;
-                grid-row: 2;
-                max-height: 740px;
+            .dashboard-primary-grid .bento-quick-stats,
+            .dashboard-primary-grid .bento-task-board {
+                max-width: 100%;
             }
 
-            /* Row 3: Agents (col 1) | Costs (col 2) | Analytics (col 3) | Notes (col 4) */
-            .bento-agents {
+            .dashboard-primary-grid .bento-quick-stats {
+                order: 1;
+            }
+
+            .dashboard-primary-grid .bento-task-board {
+                order: 2;
+            }
+
+            .dashboard-primary-grid {
+                grid-auto-rows: min-content;
+            }
+
+            .dashboard-primary-grid .bento-quick-stats,
+            .dashboard-primary-grid .bento-task-board {
                 grid-column: 1;
-                grid-row: 3;
-                max-height: 300px;
             }
 
-            .bento-costs {
-                grid-column: 2;
-                grid-row: 3;
-                max-height: 300px;
+            .dashboard-primary-grid .bento-quick-stats {
+                margin-bottom: 0;
             }
 
-            .bento-analytics {
-                grid-column: 3;
-                grid-row: 3;
-                max-height: 300px;
+            .dashboard-primary-grid .bento-task-board {
+                align-self: start;
             }
 
-            .bento-notes {
-                grid-column: 4;
-                grid-row: 3;
-                max-height: 300px;
+            .dashboard-operations-grid .bento-terminal,
+            .dashboard-operations-grid .bento-activity,
+            .dashboard-operations-grid .bento-notes,
+            .dashboard-operations-grid .bento-agents,
+            .dashboard-operations-grid .bento-channels,
+            .dashboard-operations-grid .bento-subagents,
+            .dashboard-insights-grid .bento-costs,
+            .dashboard-insights-grid .bento-analytics,
+            .dashboard-insights-grid .bento-heatmap,
+            .dashboard-insights-grid .bento-heatmap-30d,
+            .dashboard-insights-grid .bento-notion-kanban {
+                max-height: 360px;
             }
 
-            /* Row 4: Terminal (cols 1-2) | Heatmap (cols 3-4) */
-            .bento-terminal,
-            .bento-widget.bento-terminal.expanded {
-                grid-column: 1 / 3 !important;
-                grid-row: 4 !important;
-                max-height: 280px;
-            }
-
-            .bento-heatmap {
-                grid-column: 3 / 5;
-                grid-row: 4;
-                max-height: 280px;
-            }
-
-            /* Second heatmap instance (30-day) — must override .bento-heatmap */
-            .bento-heatmap.bento-heatmap-30d {
-                grid-column: 1 / -1;
-                grid-row: 7;
-                max-height: 200px;
-            }
-
-            /* Row 5: Pomodoro (col 1) | Agent Presence (col 2) | AI Insights (cols 3-4) */
-            .bento-pomodoro {
-                grid-column: 1;
-                grid-row: 5;
-                max-height: 300px;
-            }
-
-            .bento-agent-presence {
-                grid-column: 2;
-                grid-row: 5;
-                max-height: 300px;
-            }
-
-            .bento-ai-insights {
-                grid-column: 3 / 5;
-                grid-row: 5;
-                max-height: 300px;
-            }
-
-            /* Row 6: Subagents (col 1-2) | Channels (col 3-4) */
-            .bento-subagents {
-                grid-column: 1 / 3;
-                grid-row: 6;
-                max-height: 250px;
-            }
-
-            .bento-channels {
-                grid-column: 3 / 5;
-                grid-row: 6;
-                max-height: 250px;
-            }
-
-            .bento-chat {
-                grid-column: 1 / -1;
-                grid-row: 8;
+            .dashboard-insights-grid .bento-heatmap-30d,
+            .dashboard-insights-grid .bento-notion-kanban {
+                max-height: 420px;
             }
 
             /* Hide 0-height empty widgets from causing grid gaps */
@@ -277,51 +317,41 @@
                 display: none;
             }
 
-            /* Tablet layout (2 columns) */
+            /* Tablet layout */
             @media (max-width: 1200px) {
-                .bento-grid {
-                    grid-template-columns: 1fr 1fr;
-                    grid-template-rows: auto;
-                }
-                .bento-quick-stats,
-                .bento-task-board,
-                .bento-terminal,
-                .bento-channels,
-                .bento-chat    { grid-column: 1 / -1; grid-row: auto; }
-                .bento-activity,
-                .bento-agents,
-                .bento-costs,
-                .bento-analytics,
-                .bento-heatmap,
-                .bento-notes,
-                .bento-pomodoro,
-                .bento-agent-presence,
-                .bento-ai-insights,
-                .bento-subagents { grid-column: auto; grid-row: auto; }
-            }
-
-            /* Mobile layout (1 column) */
-            @media (max-width: 768px) {
-                .bento-grid {
+                .dashboard-primary-grid,
+                .dashboard-operations-grid,
+                .dashboard-insights-grid {
                     grid-template-columns: 1fr;
                 }
+
+                .dashboard-hero-panel {
+                    flex-direction: column;
+                }
+
+                .dashboard-hero-actions {
+                    justify-content: flex-start;
+                }
+            }
+
+            /* Mobile layout */
+            @media (max-width: 768px) {
+                .dashboard-shell {
+                    gap: var(--space-3);
+                }
+
+                .dashboard-hero-panel {
+                    padding: var(--space-3);
+                }
+
+                .dashboard-hero-copy h1 {
+                    font-size: 22px;
+                }
+
                 .bento-task-board,
                 .bento-quick-stats,
-                .bento-terminal,
-                .bento-activity,
-                .bento-notes,
-                .bento-chat,
-                .bento-agents,
-                .bento-costs,
-                .bento-analytics,
-                .bento-channels,
-                .bento-heatmap,
-                .bento-pomodoro,
-                .bento-agent-presence,
-                .bento-ai-insights,
-                .bento-subagents {
-                    grid-column: 1;
-                    grid-row: auto;
+                .dashboard-operations-grid .bento-widget,
+                .dashboard-insights-grid .bento-widget {
                     max-height: none;
                 }
             }

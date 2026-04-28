@@ -13,7 +13,6 @@ let statsState = {
     history: {
         tasks: JSON.parse(localStorage.getItem('stats_history_tasks') || '[]'),
         messages: JSON.parse(localStorage.getItem('stats_history_messages') || '[]'),
-        focus: JSON.parse(localStorage.getItem('stats_history_focus') || '[]'),
         activity: JSON.parse(localStorage.getItem('stats_history_activity') || '[]')
     }
 };
@@ -172,13 +171,6 @@ function updateQuickStats() {
         updateSparklineData('tasks', tasksDone);
     }
     
-    // Focus sessions
-    const focusEl = document.getElementById('stat-focus-sessions');
-    if (focusEl) {
-        focusEl.textContent = focusTimer.sessions;
-        updateSparklineData('focus', focusTimer.sessions);
-    }
-    
     // Messages today (count from chat)
     const today = new Date().toDateString();
     const messagesToday = (state.chat?.messages || []).filter(m => {
@@ -247,11 +239,6 @@ function renderSparklines() {
         messagesSparklineEl.innerHTML = generateSparkline(statsState.history.messages, 60, 24, 'neutral');
     }
     
-    // Focus sparkline
-    const focusSparklineEl = document.getElementById('sparkline-focus');
-    if (focusSparklineEl) {
-        focusSparklineEl.innerHTML = generateSparkline(statsState.history.focus, 60, 24, 'positive');
-    }
 }
 
 function renderHeatmaps() {
@@ -315,7 +302,7 @@ function updateStreak() {
 
 // Initialize sparkline data if empty
 function initSparklineData() {
-    const keys = ['tasks', 'messages', 'focus', 'activity'];
+    const keys = ['tasks', 'messages', 'activity'];
     keys.forEach(key => {
         const stored = localStorage.getItem(`stats_history_${key}`);
         if (!stored || stored === '[]') {
