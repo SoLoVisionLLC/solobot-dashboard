@@ -800,8 +800,8 @@
             }
 
             .sidebar-agent.active {
-                background: rgba(188, 32, 38, 0.12);
-                border: 1px solid rgba(188, 32, 38, 0.45);
+                background: var(--accent-soft, color-mix(in srgb, var(--brand-primary) 12%, transparent));
+                border-color: var(--border-focus, color-mix(in srgb, var(--brand-primary) 45%, transparent));
             }
 
             .sidebar-agent.is-hidden {
