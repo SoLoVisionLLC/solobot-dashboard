@@ -150,10 +150,20 @@
                                         </button>
                                         <div class="voice-controls">
                                             <button
+                                                id="talk-mode-btn"
+                                                class="talk-mode-btn"
+                                                onclick="toggleTalkMode()"
+                                                title="Start natural Talk Mode"
+                                                aria-pressed="false"
+                                            >
+                                                <span class="talk-mode-waves">≋</span>
+                                                <span class="talk-mode-btn-label">Talk</span>
+                                            </button>
+                                            <button
                                                 id="voice-input-btn-chatpage"
                                                 class="voice-btn"
                                                 onclick="toggleVoiceInputChatPage()"
-                                                title="Voice input (click to speak, or hold spacebar)"
+                                                title="Voice dictation (click to speak, or use Alt+Space)"
                                             >
                                                 <svg
                                                     id="voice-icon-mic-chatpage"
@@ -236,6 +246,16 @@
                                         >
                                             Send
                                         </button>
+                                    </div>
+                                    <div id="talk-mode-panel" class="talk-mode-panel hidden" aria-live="polite">
+                                        <div class="talk-mode-status-row">
+                                            <span id="talk-mode-status" class="talk-mode-dot idle"></span>
+                                            <span id="talk-mode-status-text">Idle</span>
+                                            <span id="talk-mode-provider">Provider unknown</span>
+                                        </div>
+                                        <div id="talk-mode-transcript" class="talk-mode-transcript">
+                                            <div class="talk-mode-empty">Live voice transcript will appear here.</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

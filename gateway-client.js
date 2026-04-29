@@ -319,6 +319,7 @@ class GatewayClient {
         this._nodeEventUnsupported = false;
         this._identityRecoveryAttempted = false;
         this._inFlightSend = null;
+        this._eventListeners = new Set();
 
         // Callbacks
         this.onConnected = options.onConnected || (() => { });
@@ -547,6 +548,16 @@ class GatewayClient {
         return this._request(method, params, timeoutMs);
     }
 
+    addEventListener(listener) {
+        if (typeof listener !== 'function') return () => { };
+        this._eventListeners.add(listener);
+        return () => this._eventListeners.delete(listener);
+    }
+
+    removeEventListener(listener) {
+        this._eventListeners.delete(listener);
+    }
+
     async _request(method, params, timeoutMs = 15000) {
         return new Promise((resolve, reject) => {
             const id = crypto.randomUUID();
@@ -609,6 +620,10 @@ class GatewayClient {
     _handleEvent(frame) {
         const event = frame.event;
         const payload = frame.payload || (frame.payloadJSON ? JSON.parse(frame.payloadJSON) : null);
+
+        for (const listener of this._eventListeners) {
+            try { listener({ event, payload, frame }); } catch (err) { console.warn('[Gateway] Event listener failed:', err); }
+        }
 
         if (event === 'chat') {
             // Only log non-delta chat events (deltas are too noisy — hundreds per response)
