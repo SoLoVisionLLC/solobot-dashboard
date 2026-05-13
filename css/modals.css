@@ -5,7 +5,7 @@
             .modal-overlay {
                 position: fixed;
                 inset: 0;
-                background: rgba(0, 0, 0, 0.7);
+                background: var(--modal-overlay-bg);
                 backdrop-filter: blur(4px);
                 -webkit-backdrop-filter: blur(4px);
                 display: none;
@@ -19,9 +19,8 @@
             }
 
             .modal {
-                background: var(--surface-1, #14161a);
-                border: 1px solid
-                    var(--border-default, rgba(169, 178, 188, 0.12));
+                background: var(--surface-1);
+                border: 1px solid var(--border-default);
                 border-radius: var(--radius-lg);
                 padding: var(--space-6);
                 width: 100%;
@@ -186,17 +185,38 @@
             /* Danger zone */
             .danger-zone {
                 background: var(--error-muted);
-                border: 1px solid rgba(239, 68, 68, 0.2);
+                border: 1px solid color-mix(in srgb, var(--error) 32%, transparent);
                 border-radius: var(--radius-md);
                 padding: var(--space-4);
             }
 
             .btn-danger {
                 background: var(--error);
-                color: white;
+                color: var(--text-on-danger);
             }
             .btn-danger:hover {
-                background: #dc2626;
+                background: var(--error-hover);
+            }
+
+            .confirm-modal-message {
+                margin: 0;
+                color: var(--text-primary);
+                line-height: 1.5;
+                white-space: pre-line;
+            }
+
+            .confirm-modal-footer {
+                display: flex;
+                justify-content: flex-end;
+                gap: var(--space-3);
+                padding: var(--space-4) var(--space-6);
+                border-top: 1px solid var(--border-default);
+            }
+
+            .confirm-modal-task-title {
+                font-size: 13px;
+                color: var(--text-muted);
+                margin-bottom: var(--space-4);
             }
 
             /* ========================================

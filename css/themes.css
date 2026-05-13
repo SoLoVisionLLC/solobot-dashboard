@@ -71,6 +71,11 @@
     --accent-hover: #93C5FD;
     --accent-soft: #2660A5FA;
     --brand-red: #60A5FA;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #60A5FA;
     --brand-primary: #60A5FA;
     --brand-red-hover: #93C5FD;
@@ -147,6 +152,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #93C5FD;
     --accent-soft: #2660A5FA;
     --brand-red: #60A5FA;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #60A5FA;
     --brand-primary: #60A5FA;
     --brand-red-hover: #93C5FD;
@@ -219,6 +229,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #E5E5E5;
     --accent-soft: #1AFFFFFF;
     --brand-red: #FFFFFF;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #FFFFFF;
     --brand-primary: #FFFFFF;
     --brand-red-hover: #E5E5E5;
@@ -291,6 +306,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #8FBCBB;
     --accent-soft: #3388C0D0;
     --brand-red: #88C0D0;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #88C0D0;
     --brand-primary: #88C0D0;
     --brand-red-hover: #8FBCBB;
@@ -363,6 +383,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #FFB86C;
     --accent-soft: #33FF79C6;
     --brand-red: #FF79C6;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #FF79C6;
     --brand-primary: #FF79C6;
     --brand-red-hover: #FFB86C;
@@ -435,6 +460,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #BB9AF7;
     --accent-soft: #337AA2F7;
     --brand-red: #7AA2F7;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #7AA2F7;
     --brand-primary: #7AA2F7;
     --brand-red-hover: #BB9AF7;
@@ -507,6 +537,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #F4BF75;
     --accent-soft: #33FD971F;
     --brand-red: #FD971F;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #FD971F;
     --brand-primary: #FD971F;
     --brand-red-hover: #F4BF75;
@@ -579,6 +614,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #FAB387;
     --accent-soft: #33F38BA8;
     --brand-red: #F38BA8;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #F38BA8;
     --brand-primary: #F38BA8;
     --brand-red-hover: #FAB387;
@@ -651,6 +691,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #60A5FA;
     --accent-soft: #1F3B82F6;
     --brand-red: #3B82F6;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #3B82F6;
     --brand-primary: #3B82F6;
     --brand-red-hover: #60A5FA;
@@ -723,6 +768,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #FB923C;
     --accent-soft: #1FF97316;
     --brand-red: #F97316;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #F97316;
     --brand-primary: #F97316;
     --brand-red-hover: #FB923C;
@@ -795,6 +845,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #EA9D34;
     --accent-soft: #26D7827E;
     --brand-red: #D7827E;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #D7827E;
     --brand-primary: #D7827E;
     --brand-red-hover: #EA9D34;
@@ -867,6 +922,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #DC322F;
     --accent-soft: #26CB4B16;
     --brand-red: #CB4B16;
+    --text-on-accent: #FFFFFF;
+    --text-on-danger: #FFFFFF;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #CB4B16;
     --brand-primary: #CB4B16;
     --brand-red-hover: #DC322F;
@@ -939,6 +999,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #404040;
     --accent-soft: #14171717;
     --brand-red: #171717;
+    --text-on-accent: #FFFFFF;
+    --text-on-danger: #FFFFFF;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #171717;
     --brand-primary: #171717;
     --brand-red-hover: #404040;
@@ -1011,6 +1076,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #EF4444;
     --accent-soft: #33DC2626;
     --brand-red: #DC2626;
+    --text-on-accent: #FFFFFF;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #DC2626;
     --brand-primary: #DC2626;
     --brand-red-hover: #EF4444;
@@ -1083,6 +1153,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #39FF14;
     --accent-soft: #3300FF41;
     --brand-red: #00FF41;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #00FF41;
     --brand-primary: #00FF41;
     --brand-red-hover: #39FF14;
@@ -1155,6 +1230,11 @@ body.theme-transitioning, body.theme-transitioning * {
     --accent-hover: #22D3EE;
     --accent-soft: #3306B6D4;
     --brand-red: #06B6D4;
+    --text-on-accent: #0F1115;
+    --text-on-danger: #0F1115;
+    --error-hover: color-mix(in srgb, var(--error) 86%, var(--text-primary));
+    --modal-overlay-bg: color-mix(in srgb, var(--surface-base) 74%, transparent);
+
     --brand: #06B6D4;
     --brand-primary: #06B6D4;
     --brand-red-hover: #22D3EE;
