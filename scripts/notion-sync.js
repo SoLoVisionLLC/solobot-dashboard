@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const { validateNotionPageForActiveSync } = require('../lib/notion-task-guardrails');
 
 const STATE_FILE = path.join(__dirname, '..', 'data', 'state.json');
 const NOTION_TOKEN = process.env.NOTION_TOKEN || '';
@@ -123,8 +124,10 @@ async function fetchTasks(databaseId) {
             let title = 'Untitled';
             let status = 'todo';
             let priority = 1;
+            let assignedAgent = null;
+            let dueDate = null;
             
-            // Find title (usually "Name" or "Title" property)
+            // Find title (usually "Name", "Task", or "Title" property)
             for (const [key, value] of Object.entries(props)) {
                 if (value.type === 'title' && value.title?.[0]) {
                     title = value.title[0].plain_text;
@@ -139,14 +142,24 @@ async function fetchTasks(databaseId) {
                 else if (s.includes('done') || s.includes('complete')) status = 'done';
                 else status = 'todo';
             }
+
+            const guard = validateNotionPageForActiveSync(page, status);
+            if (!guard.ok) {
+                console.warn(`[Notion Guardrail] ${guard.errors.join(' ')}`);
+                return null;
+            }
             
             // Find priority
             if (props.Priority?.select?.name) {
                 const p = props.Priority.select.name.toLowerCase();
-                if (p.includes('high') || p.includes('urgent') || p === 'p0') priority = 0;
-                else if (p.includes('low') || p === 'p2') priority = 2;
-                else priority = 1;
+                if (p.includes('critical') || p === 'p0') priority = 0;
+                else if (p.includes('high') || p === 'p1') priority = 1;
+                else if (p.includes('low') || p === 'p3') priority = 3;
+                else priority = 2;
             }
+
+            assignedAgent = props['Assigned Agent']?.select?.name || null;
+            dueDate = props['Due Date']?.date?.start || null;
             
             return {
                 id: 'notion_' + page.id.replace(/-/g, '').substring(0, 8),
@@ -154,10 +167,12 @@ async function fetchTasks(databaseId) {
                 title,
                 status,
                 priority,
+                agent: assignedAgent ? assignedAgent.toLowerCase() : null,
+                dueDate,
                 url: page.url,
                 created: new Date(page.created_time).getTime()
             };
-        });
+        }).filter(Boolean);
         
         console.log(`Found ${tasks.length} tasks:\n`);
         tasks.forEach(t => {
@@ -193,6 +208,8 @@ async function syncTasks(databaseId) {
             id: task.id,
             title: task.title,
             priority: task.priority,
+            agent: task.agent,
+            dueDate: task.dueDate,
             created: task.created,
             notionUrl: task.url
         };

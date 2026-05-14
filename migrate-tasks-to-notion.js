@@ -1,6 +1,7 @@
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
+const { appendGuardedNotionProperties } = require('./lib/notion-task-guardrails');
 
 // Configuration
 const STATE_FILE = '/home/solo/.openclaw/workspace/repos/solobot-dashboard/data/state.json';
@@ -12,41 +13,9 @@ if (!NOTION_API_KEY) {
     process.exit(1);
 }
 
-// Mappings
-const STATUS_MAP = {
-    'todo': 'To Do',
-    'progress': 'In Progress',
-    'done': 'Done'
-};
-
-const PRIORITY_MAP = {
-    0: 'P0 Critical',
-    1: 'P1 High',
-    2: 'P2 Medium',
-    3: 'P3 Low'
-};
-
-// Map internal agent IDs to Notion Select Options
-const AGENT_MAP = {
-    'main': 'Halo',
-    'exec': 'Elon',
-    'cto': 'Orion',
-    'dev': 'Dev',
-    'coo': 'Atlas',
-    'cfo': 'Sterling',
-    'cmp': 'Vector',
-    'smm': 'Nova',
-    'sec': 'Knox',
-    'tax': 'Ledger',
-    'family': 'Haven',
-    'creative': 'Luma',
-    'docs': 'Canon',
-    'forge': 'Forge',
-    'quill': 'Dev', 
-    'chip': 'Dev',
-    'snip': 'Dev',
-    'net': 'Dev'
-};
+// Enforcement point: all Task Board page creation goes through
+// lib/notion-task-guardrails.js so active Notion tasks always get Assigned Agent
+// and a Due Date when an explicit date or SLA-derived due date is available.
 
 // Helper to delay (rate limit protection)
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -54,10 +23,6 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Notion API Client
 function createNotionPage(task, status) {
     return new Promise((resolve, reject) => {
-        const notionStatus = STATUS_MAP[status] || 'To Do';
-        const notionPriority = PRIORITY_MAP[task.priority] || 'P2 Medium';
-        const notionAgent = AGENT_MAP[task.agent] || 'Dev';
-        
         const payload = {
             parent: { database_id: NOTION_DATABASE_ID },
             properties: {
@@ -65,18 +30,25 @@ function createNotionPage(task, status) {
                     title: [
                         { text: { content: task.title || 'Untitled Task' } }
                     ]
-                },
-                'Status': {
-                    select: { name: notionStatus }
-                },
-                'Priority': {
-                    select: { name: notionPriority }
-                },
-                'Assigned Agent': {
-                    select: { name: notionAgent }
                 }
             }
         };
+
+        let guard;
+        try {
+            guard = appendGuardedNotionProperties(payload.properties, task, status);
+        } catch (e) {
+            console.error(`[Notion Guardrail] Refusing to create active Task Board item: ${e.message}`);
+            resolve(false);
+            return;
+        }
+
+        if (guard.appliedDefaults.assignedAgent) {
+            console.warn(`[Notion Guardrail] Defaulted Assigned Agent to ${guard.notionAgent} for "${task.title || 'Untitled Task'}"`);
+        }
+        if (guard.appliedDefaults.dueDate) {
+            console.warn(`[Notion Guardrail] Applied SLA Due Date ${guard.dueDate} for "${task.title || 'Untitled Task'}"`);
+        }
 
         if (task.description) {
             payload.properties['Notes'] = {
