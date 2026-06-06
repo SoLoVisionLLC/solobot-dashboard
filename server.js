@@ -3754,6 +3754,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Health check for container/runtime smoke tests.
+  if (url.pathname === '/health' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
