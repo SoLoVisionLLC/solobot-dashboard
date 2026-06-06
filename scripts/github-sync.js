@@ -14,13 +14,18 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-const STATE_FILE = path.join(__dirname, '..', 'data', 'state.json');
+const DATA_DIR = process.env.DASHBOARD_DATA_DIR || path.join(__dirname, '..', 'data');
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const DEFAULT_STATE_FILE = path.join(__dirname, '..', 'data', 'default-state.json');
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
 const REPO = 'solovision24/solobot-dashboard';
 
 function loadState() {
     try {
-        return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        if (fs.existsSync(STATE_FILE)) {
+            return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        }
+        return JSON.parse(fs.readFileSync(DEFAULT_STATE_FILE, 'utf8'));
     } catch (e) {
         console.error('Error loading state:', e.message);
         process.exit(1);
@@ -28,6 +33,7 @@ function loadState() {
 }
 
 function saveState(state) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
