@@ -136,7 +136,7 @@
 
             .btn-primary {
                 background: var(--brand-red);
-                color: white;
+                color: var(--text-on-accent);
             }
             .btn-primary:hover {
                 background: var(--brand-red-hover);
