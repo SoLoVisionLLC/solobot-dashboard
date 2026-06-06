@@ -376,7 +376,8 @@ function parseModelsOutput(output) {
 }
 
 const PORT = process.env.PORT || 3124;
-const STATE_FILE = './data/state.json';
+const DATA_DIR = process.env.DASHBOARD_DATA_DIR || './data';
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const DEFAULT_STATE_FILE = './data/default-state.json';
 // OpenClaw data — uses OPENCLAW_HOME (auto-detected or env var)
 // Falls back to ./memory for local dev without OpenClaw
@@ -384,8 +385,8 @@ const OPENCLAW_DATA = OPENCLAW_HOME;
 const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace'))
   ? path.join(OPENCLAW_DATA, 'workspace')
   : './memory';
-const VERSIONS_DIR = './data/versions';  // Version history storage
-const META_FILE = './data/file-meta.json';  // Track bot updates
+const VERSIONS_DIR = path.join(DATA_DIR, 'versions');  // Version history storage
+const META_FILE = path.join(DATA_DIR, 'file-meta.json');  // Track bot updates
 const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
 const BACKUP_PREFIX = 'state-backup-';
 const BACKUP_RETENTION = 10;
@@ -1119,7 +1120,7 @@ const GDRIVE_REFRESH_TOKEN = process.env.GDRIVE_REFRESH_TOKEN;
 const AUTO_RESTORE_ENABLED = GDRIVE_BACKUP_FILE_ID && GDRIVE_CLIENT_ID && GDRIVE_CLIENT_SECRET && GDRIVE_REFRESH_TOKEN;
 
 // Ensure data directories exist
-if (!fs.existsSync('./data')) fs.mkdirSync('./data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 

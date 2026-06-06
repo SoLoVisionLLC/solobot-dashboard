@@ -1,9 +1,10 @@
 # Dependencies
 node_modules/
 
-# Environment
+# Environment / secrets
 .env
-.env.local
+.env.*
+!.env.example
 
 # OS files
 .DS_Store
@@ -16,12 +17,14 @@ Thumbs.db
 # Logs
 *.log
 
-# Runtime state (use persistent volume in production)
-# Only default-state.json is tracked as a template
+# Runtime state (generated at runtime; use persistent/private storage in production)
+# data/default-state.json is the only state template intended for source control.
 data/state.json
-data/backups/
+data/state*.json
+data/file-meta.json
 data/file-mod-times.json
-data/state.json
-data/state.latest.json
-data/state.latest.json
-data/state.latest.json
+data/test-results.json
+test-results.json
+data/backups/
+data/versions/
+.stash-backups/

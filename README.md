@@ -15,13 +15,16 @@ dashboard/
 ├── index.html          # Main dashboard UI
 ├── dashboard.js        # Client-side JavaScript
 ├── data/
-│   └── state.json      # Shared state file (AI reads/writes)
+│   ├── default-state.json # Non-secret bootstrap template
+│   └── README.md          # Runtime state policy
 ├── scripts/
 │   └── update-state.js # CLI tool for SoLoBot to update state
 └── TASKS.md            # Build progress tracker
 ```
 
 ## AI Integration
+
+SoLoBot uses runtime state generated outside source control. By default the server writes to `./data/state.json`; production can point this at a private persistent volume with `DASHBOARD_DATA_DIR=/path/to/private/data`. Do not commit generated state snapshots, gateway tokens, session keys, or chat transcripts.
 
 SoLoBot uses the CLI script to update dashboard state:
 
