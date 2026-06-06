@@ -5,6 +5,10 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { exec } = require('child_process');
+const {
+  appendGuardedNotionProperties,
+  validateNotionPageForActiveSync
+} = require('./lib/notion-task-guardrails');
 
 process.env.TZ = process.env.TZ || 'America/New_York';
 
@@ -112,13 +116,20 @@ async function fetchNotionTasks() {
       const props = page.properties;
       const statusVal = props.Status?.select?.name;
       const listName = STATUS_MAP_REV[statusVal] || 'todo';
+      const guard = validateNotionPageForActiveSync(page, listName);
+      if (!guard.ok) {
+        console.warn(`[Notion Guardrail] ${guard.errors.join(' ')}`);
+        continue;
+      }
+      const assignedAgent = props['Assigned Agent']?.select?.name;
 
       const task = {
         id: page.id,
         title: props.Task?.title?.[0]?.plain_text || 'Untitled',
         description: props.Notes?.rich_text?.[0]?.plain_text || '',
         priority: PRIORITY_MAP_REV[props.Priority?.select?.name] ?? 2,
-        agent: (props['Assigned Agent']?.select?.name || 'Dev').toLowerCase(),
+        agent: assignedAgent ? assignedAgent.toLowerCase() : '',
+        dueDate: props['Due Date']?.date?.start || null,
         created: new Date(page.created_time).getTime(),
         notionUrl: page.url
       };
@@ -141,14 +152,20 @@ async function fetchNotionTasks() {
   }
 }
 
-async function updateNotionTaskStatus(pageId, newStatus) {
+async function updateNotionTaskStatus(pageId, newStatus, task = {}) {
   if (!NOTION_API_KEY) return;
   
-  const notionStatus = STATUS_MAP_FWD[newStatus];
-  if (!notionStatus) return;
+  const properties = {};
+  let guard;
+  try {
+    guard = appendGuardedNotionProperties(properties, task, newStatus);
+  } catch (e) {
+    console.warn(`[Notion Guardrail] Refusing to sync task ${pageId} to ${newStatus}: ${e.message}`);
+    return;
+  }
 
   try {
-    console.log(`[Notion] Updating task ${pageId} to ${notionStatus}`);
+    console.log(`[Notion] Updating task ${pageId} to ${guard.notionStatus}`);
     const req = https.request({
       hostname: 'api.notion.com',
       path: `/v1/pages/${pageId}`,
@@ -159,11 +176,7 @@ async function updateNotionTaskStatus(pageId, newStatus) {
         'Content-Type': 'application/json'
       }
     });
-    req.write(JSON.stringify({
-      properties: {
-        'Status': { select: { name: notionStatus } }
-      }
-    }));
+    req.write(JSON.stringify({ properties }));
     req.end();
     
     // Invalidate cache to force refresh on next load
@@ -1780,7 +1793,7 @@ const server = http.createServer(async (req, res) => {
               // but Notion API is fast enough for occasional drags.
               // Only update if it looks like a Notion ID (UUID with dashes)
               if (task.id && task.id.length > 20 && task.id.includes('-')) {
-                 updateNotionTaskStatus(task.id, listName);
+                 updateNotionTaskStatus(task.id, listName, task);
               }
             });
           };
