@@ -1,30 +1,105 @@
                     <!-- =================== SKILLS PAGE =================== -->
                     <div id="page-skills" class="page">
-                        <div class="skills-page" style="max-width: 1000px; margin: 0 auto; padding: 24px;">
-                            <div class="page-header" style="margin-bottom: 16px;">
+                        <div class="skills-page">
+                            <div class="page-header">
                                 <h1 class="page-title">🧩 Skills Manager</h1>
                                 <p class="page-subtitle">Install, configure, and troubleshoot skills</p>
                             </div>
 
-                            <div style="display:flex; align-items:center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
-                                <input id="skills-search" class="input" placeholder="Search skills…" style="flex: 1; min-width: 220px;" />
-                                <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
-                                    <input id="skills-only-installed" type="checkbox" checked />
-                                    Installed only
-                                </label>
-                                <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
-                                    <input id="skills-only-issues" type="checkbox" />
-                                    Only issues
-                                </label>
-                                <label style="display:flex; align-items:center; gap: 8px; font-size: 12px; color: var(--text-secondary); user-select: none;">
-                                    <input id="skills-show-hidden" type="checkbox" />
-                                    Show hidden
-                                </label>
-                                <button id="skills-refresh" class="btn btn-ghost" style="font-size: 12px;">Refresh</button>
+                            <!-- Modern Filter Bar -->
+                            <div class="skills-filter-bar">
+                                <div class="skills-filter-bar-left">
+                                    <input id="skills-search" class="input skills-search-input" placeholder="🔍 Search skills…" />
+                                    
+                                    <div class="skills-filter-group">
+                                        <!-- Status Filter -->
+                                        <div class="skills-filter-popover-trigger" id="skills-status-filter" data-filter="status">
+                                            <button class="skills-filter-btn">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                                                <span class="skills-filter-btn-label">Status</span>
+                                                <span class="skills-filter-btn-value" id="skills-status-value">All</span>
+                                                <svg class="skills-filter-btn-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                                            </button>
+                                            <div class="skills-filter-dropdown" id="skills-status-dropdown">
+                                                <button class="skills-filter-option active" data-value="">All</button>
+                                                <button class="skills-filter-option" data-value="enabled">Enabled</button>
+                                                <button class="skills-filter-option" data-value="disabled">Disabled</button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Source Filter -->
+                                        <div class="skills-filter-popover-trigger" id="skills-source-filter" data-filter="source">
+                                            <button class="skills-filter-btn">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                                                <span class="skills-filter-btn-label">Source</span>
+                                                <span class="skills-filter-btn-value" id="skills-source-value">All</span>
+                                                <svg class="skills-filter-btn-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                                            </button>
+                                            <div class="skills-filter-dropdown" id="skills-source-dropdown">
+                                                <button class="skills-filter-option active" data-value="">All</button>
+                                                <button class="skills-filter-option" data-value="bundled">Bundled</button>
+                                                <button class="skills-filter-option" data-value="installed">Installed</button>
+                                                <button class="skills-filter-option" data-value="clawhub">ClawhHub</button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Agent Filter -->
+                                        <div class="skills-filter-popover-trigger" id="skills-agent-filter" data-filter="agent">
+                                            <button class="skills-filter-btn">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                                <span class="skills-filter-btn-label">Agent</span>
+                                                <span class="skills-filter-btn-value" id="skills-agent-value">All</span>
+                                                <svg class="skills-filter-btn-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                                            </button>
+                                            <div class="skills-filter-dropdown skills-filter-dropdown-wide" id="skills-agent-dropdown">
+                                                <button class="skills-filter-option active" data-value="">All Agents</button>
+                                                <button class="skills-filter-option" data-value="main">Halo (Main)</button>
+                                                <button class="skills-filter-option" data-value="elon">Elon</button>
+                                                <button class="skills-filter-option" data-value="orion">Orion</button>
+                                                <button class="skills-filter-option" data-value="dev">Dev</button>
+                                                <button class="skills-filter-option" data-value="forge">Forge</button>
+                                                <button class="skills-filter-option" data-value="quill">Quill</button>
+                                                <button class="skills-filter-option" data-value="chip">Chip</button>
+                                                <button class="skills-filter-option" data-value="sentinel">Sentinel</button>
+                                                <button class="skills-filter-option" data-value="knox">Knox</button>
+                                                <button class="skills-filter-option" data-value="atlas">Atlas</button>
+                                                <button class="skills-filter-option" data-value="canon">Canon</button>
+                                                <button class="skills-filter-option" data-value="vector">Vector</button>
+                                                <button class="skills-filter-option" data-value="nova">Nova</button>
+                                                <button class="skills-filter-option" data-value="snip">Snip</button>
+                                                <button class="skills-filter-option" data-value="luma">Luma</button>
+                                                <button class="skills-filter-option" data-value="sterling">Sterling</button>
+                                                <button class="skills-filter-option" data-value="ledger">Ledger</button>
+                                                <button class="skills-filter-option" data-value="haven">Haven</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Issues Toggle -->
+                                    <label class="skills-issues-toggle" id="skills-issues-toggle">
+                                        <input id="skills-only-issues" type="checkbox" />
+                                        <span class="skills-issues-slider"></span>
+                                        <span class="skills-issues-label">⚠ Issues</span>
+                                    </label>
+                                </div>
+                                
+                                <div class="skills-filter-bar-right">
+                                    <button id="skills-clear-filters" class="skills-clear-btn" style="display: none;">
+                                        Clear <span class="skills-clear-count" id="skills-filter-count">0</span>
+                                    </button>
+                                    <button id="skills-refresh" class="skills-refresh-btn" title="Refresh skills">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                    </button>
+                                </div>
                             </div>
+                            
+                            <!-- Active Filter Pills -->
+                            <div id="skills-active-filters" class="skills-active-filters" style="display: none;"></div>
 
-                            <div id="skills-list">
-                                <div class="empty-state">Loading skills...</div>
+                            <div class="skills-list-container">
+                                <div id="skills-list" style="padding: 12px;">
+                                    <div class="empty-state">Loading skills...</div>
+                                </div>
                             </div>
                         </div>
 
@@ -64,6 +139,75 @@
                                     <div id="skill-file-preview" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-0);">
                                         <div style="color: var(--text-muted); padding: 20px; text-align: center;">Select a file to view</div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Edit Skill Modal -->
+                        <div id="edit-skill-modal" class="modal-overlay" onclick="if(event.target.id==='edit-skill-modal') hideModal('edit-skill-modal')">
+                            <div class="modal" style="max-width: 800px; width: 90vw;" onclick="event.stopPropagation()">
+                                <div class="modal-header">
+                                    <div>
+                                        <div id="edit-skill-modal-title" class="modal-title">Edit Skill</div>
+                                        <div id="edit-skill-modal-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 2px;"></div>
+                                    </div>
+                                    <button class="modal-close" onclick="hideModal('edit-skill-modal')">✕</button>
+                                </div>
+                                <div class="modal-body skill-edit-modal-body">
+                                    <input type="hidden" id="edit-skill-key">
+                                    <div class="skill-edit-left">
+                                        <div class="form-field">
+                                            <label class="form-label">Skill Name</label>
+                                            <input type="text" id="edit-skill-name" class="input" readonly style="opacity: 0.6;">
+                                        </div>
+                                        <div class="form-field">
+                                            <label class="form-label">Description</label>
+                                            <textarea id="edit-skill-description" class="input" rows="3" placeholder="Skill description"></textarea>
+                                        </div>
+                                        <div class="form-field">
+                                            <label class="form-label">Assigned Agent</label>
+                                            <select id="edit-skill-agent" class="input">
+                                                <option value="">— No specific agent —</option>
+                                                <option value="main">Main (Halo)</option>
+                                                <option value="elon">Elon</option>
+                                                <option value="orion">Orion</option>
+                                                <option value="dev">Dev</option>
+                                                <option value="forge">Forge</option>
+                                                <option value="quill">Quill</option>
+                                                <option value="chip">Chip</option>
+                                                <option value="sentinel">Sentinel</option>
+                                                <option value="knox">Knox</option>
+                                                <option value="atlas">Atlas</option>
+                                                <option value="canon">Canon</option>
+                                                <option value="vector">Vector</option>
+                                                <option value="nova">Nova</option>
+                                                <option value="snip">Snip</option>
+                                                <option value="luma">Luma</option>
+                                                <option value="sterling">Sterling</option>
+                                                <option value="ledger">Ledger</option>
+                                                <option value="haven">Haven</option>
+                                            </select>
+                                            <div class="form-hint">Which agent manages this skill</div>
+                                        </div>
+                                        <div class="form-field">
+                                            <label class="form-label">Enabled</label>
+                                            <label class="toggle-label">
+                                                <input type="checkbox" id="edit-skill-enabled" checked>
+                                                <span>Skill is active and available</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="skill-edit-right">
+                                        <div class="form-field form-field-full">
+                                            <label class="form-label">Environment Variables</label>
+                                            <textarea id="edit-skill-env" class="input skill-env-textarea" placeholder="VAR_NAME=value&#10;API_KEY=your-key-here" rows="6"></textarea>
+                                            <div class="form-hint">One per line in VAR=value format</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button onclick="hideModal('edit-skill-modal')" class="btn btn-ghost">Cancel</button>
+                                    <button onclick="submitEditSkill()" class="btn btn-primary">Save Changes</button>
                                 </div>
                             </div>
                         </div>

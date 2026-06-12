@@ -15,60 +15,10 @@ const SIDEBAR_AGENT_DEPT_OVERRIDES_KEY = 'sidebar_agents_dept_overrides_v1';
 const SIDEBAR_AGENT_GROUP_COLLAPSED_KEY = 'sidebar_agents_group_collapsed_v1';
 const SIDEBAR_AGENT_ORDER_BY_DEPT_KEY = 'sidebar_agents_order_by_dept_v1';
 
-// Legacy/alias role IDs mapped to canonical name IDs used by session routing.
-const AGENT_ID_ALIASES = {
-    exec: 'elon',
-    cto: 'orion',
-    coo: 'atlas',
-    cfo: 'sterling',
-    cmp: 'vector',
-    devops: 'forge',
-    ui: 'quill',
-    swe: 'chip',
-    youtube: 'snip',
-    veo: 'snip',
-    veoflow: 'snip',
-    sec: 'knox',
-    net: 'sentinel',
-    smm: 'nova',
-    docs: 'canon',
-    tax: 'ledger',
-    family: 'haven',
-    creative: 'luma',
-    art: 'luma',
-    halo: 'main'
-};
-
-// Departments requested by user (canonical org grouping)
-const DEFAULT_DEPARTMENTS = {
-    main: 'Executive',
-    elon: 'Executive',
-
-    orion: 'Technology',
-    dev: 'Technology',
-    forge: 'Technology',
-    quill: 'Technology',
-    chip: 'Technology',
-    sentinel: 'Technology',
-    knox: 'Technology',
-
-    atlas: 'Operations',
-    canon: 'Operations',
-
-    vector: 'Marketing & Product',
-    nova: 'Marketing & Product',
-    snip: 'Marketing & Product',
-    luma: 'Marketing & Product',
-
-    sterling: 'Finance',
-    ledger: 'Finance',
-
-    haven: 'Family / Household'
-};
+// Note: AGENT_ID_ALIASES, DEFAULT_DEPARTMENTS, ALLOWED_AGENT_IDS, 
+// normalizeAgentId, getAgentDepartment are now in utils.js
 
 const DEPARTMENT_ORDER = ['Executive', 'Technology', 'Operations', 'Marketing & Product', 'Finance', 'Family / Household', 'Other'];
-
-const ALLOWED_AGENT_IDS = new Set(Object.keys(DEFAULT_DEPARTMENTS));
 
 function getSidebarAgentsPrefs() {
     try {
@@ -160,10 +110,7 @@ function setSidebarOrderByDept(map) {
     } catch { }
 }
 
-function normalizeAgentId(agentId) {
-    const raw = (agentId || '').toLowerCase().trim();
-    return AGENT_ID_ALIASES[raw] || raw;
-}
+// Note: normalizeAgentId is now in utils.js
 
 function getAgentDepartment(agentId) {
     const overrides = getSidebarDeptOverrides();
@@ -512,11 +459,10 @@ function setupSidebarAgentsManageButton() {
 // Avatar resolution: check for .png first, fall back to .svg, then emoji/initial
 const AVATAR_EXTENSIONS = ['png', 'svg'];
 
+// Avatar resolution - now uses centralized function from utils.js
+// Keeping wrapper for backward compatibility
 function resolveAvatarUrl(agentId) {
-    // Main agent has a special avatar
-    if (agentId === 'main') return '/avatars/solobot.png';
-    // Others: try {id}.png, {id}.svg
-    return `/avatars/${agentId}.png`;
+    return getAvatarUrl(agentId);
 }
 
 function agentDisplayName(agent) {

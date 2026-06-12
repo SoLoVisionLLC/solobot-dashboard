@@ -1,6 +1,41 @@
                     <!-- =================== DASHBOARD PAGE (BENTO GRID) =================== -->
                     <div id="page-dashboard" class="page active">
-                        <div class="bento-grid">
+                        <div class="dashboard-shell">
+                            <section class="dashboard-hero-panel">
+                                <div class="dashboard-hero-copy">
+                                    <div class="dashboard-eyebrow">Calmer dashboard</div>
+                                    <h1>Taskboard first, everything else optional.</h1>
+                                    <p>
+                                        I pulled the noisy panels into collapsible sections so the board stays central,
+                                        and the supporting data is still one click away when you want it.
+                                    </p>
+                                </div>
+                                <div class="dashboard-hero-actions">
+                                    <button
+                                        class="btn btn-primary"
+                                        type="button"
+                                        onclick="window.DashboardLayout && window.DashboardLayout.focusTaskboard()"
+                                    >
+                                        Focus taskboard
+                                    </button>
+                                    <button
+                                        class="btn btn-ghost"
+                                        type="button"
+                                        onclick="window.DashboardLayout && window.DashboardLayout.toggleSection('operations')"
+                                    >
+                                        Toggle ops panels
+                                    </button>
+                                    <button
+                                        class="btn btn-ghost"
+                                        type="button"
+                                        onclick="window.DashboardLayout && window.DashboardLayout.toggleSection('insights')"
+                                    >
+                                        Toggle insights
+                                    </button>
+                                </div>
+                            </section>
+
+                            <div class="bento-grid dashboard-primary-grid">
                             <!-- Task Board Widget -->
                             <div class="bento-widget bento-task-board">
                                 <div class="bento-widget-header">
@@ -186,7 +221,7 @@
                             </div>
 
                             <!-- Quick Stats Widget with Sparklines -->
-                            <div class="bento-widget bento-quick-stats">
+                            <div class="bento-widget bento-quick-stats dashboard-support-widget">
                                 <div
                                     class="bento-widget-content"
                                     style="padding: var(--space-2) var(--space-3)"
@@ -219,17 +254,6 @@
                                             </div>
                                         </div>
                                         
-                                        <!-- Focus Sessions Stat -->
-                                        <div class="quick-stat-card">
-                                            <div class="stat-with-sparkline">
-                                                <div class="stat-info">
-                                                    <span class="stat-value" id="stat-focus-sessions">0</span>
-                                                    <div class="stat-label">Focus Sessions</div>
-                                                </div>
-                                                <div id="sparkline-focus"></div>
-                                            </div>
-                                        </div>
-                                        
                                         <!-- Streak & Session -->
                                         <div class="quick-stat-card">
                                             <div class="stat-with-sparkline">
@@ -254,228 +278,189 @@
                                 </div>
                             </div>
 
-                            <!-- Notion KANBAN Widget -->
-                            <div class="bento-widget bento-notion-kanban">
-                                <div id="notion-kanban-widget" class="notion-kanban-container"></div>
-                            </div>
-
-                            <!-- Terminal Widget -->
-                            <div class="bento-widget bento-terminal">
-                                <div
-                                    class="terminal"
-                                    id="console-section"
-                                    style="height: 100%; display: flex; flex-direction: column; border: none; border-radius: 0"
-                                >
-                                    <div class="terminal-header">
-                                        <div class="flex items-center gap-3">
-                                            <div class="terminal-dots">
-                                                <span class="red"></span>
-                                                <span class="yellow"></span>
-                                                <span class="green"></span>
-                                            </div>
-                                            <span class="terminal-title"
-                                            >Terminal</span>
-                                            <span
-                                                id="console-status-badge"
-                                                class="badge badge-success"
-                                            >IDLE</span>
-                                        </div>
-                                        <div class="flex items-center gap-2">
-                                            <button
-                                                onclick="clearConsole()"
-                                                class="btn-icon"
-                                                style="font-size: 11px"
-                                            >
-                                                Clear
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div
-                                        id="console-output"
-                                        class="terminal-output"
-                                        style="flex: 1; overflow-y: auto"
-                                    >
-                                        <div class="cmd">$ solobot --init</div>
-                                        <div class="info">
-                                            Ready for commands...
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Activity Log Widget -->
-                            <div class="bento-widget bento-activity">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            >
-                                            </path>
-                                        </svg>
-                                        Activity
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div
-                                        id="activity-log"
-                                        class="activity-list"
-                                    >
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Notes Widget -->
-                            <div class="bento-widget bento-notes">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                            >
-                                            </path>
-                                        </svg>
-                                        Notes
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div
-                                        class="notes-input"
-                                        style="margin-bottom: var(--space-3)"
-                                    >
-                                        <input
-                                            type="text"
-                                            id="note-input"
-                                            class="input flex-1"
-                                            placeholder="Leave a note for SoLoBot..."
-                                            style="font-size: 13px"
-                                        >
-                                        <button
-                                            onclick="addNote()"
-                                            class="btn btn-primary"
-                                            style="padding: 6px 12px; font-size: 13px"
-                                        >
-                                            Add
-                                        </button>
-                                    </div>
-                                    <div id="notes-list" class="notes-list">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Agent Status Widget -->
-                            <div class="bento-widget bento-agents">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                                        Agents
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div id="agent-status-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
-                                </div>
-                            </div>
-
-                            <!-- Channel Status Widget -->
-                            <div class="bento-widget bento-channels">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                                        Channels
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div id="channel-status-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
-                                </div>
-                            </div>
-
-                            <!-- Cost & Usage Widget -->
-                            <div class="bento-widget bento-costs">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                        Usage & Costs
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div id="cost-tracker-content"></div>
-                                </div>
-                            </div>
-
-                            <!-- Session Analytics Widget -->
-                            <div class="bento-widget bento-analytics">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                                        Analytics
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div id="analytics-content"></div>
-                                </div>
-                            </div>
-
-                            <!-- Activity Heatmap Widget -->
-                            <div class="bento-widget bento-heatmap">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                        </svg>
-                                        Activity Heatmap
-                                    </div>
-                                </div>
-                                <div class="bento-widget-content">
-                                    <div id="activity-heatmap-container" style="margin-bottom: var(--space-3);"></div>
-                                    <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-bottom: var(--space-2);">Last 28 days</div>
-                                    <div id="hourly-heatmap-container"></div>
-                                    <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: var(--space-2);">Activity by hour (24h)</div>
-                                </div>
-                            </div>
-
                             <!-- Chat Widget removed (SoLo does not use it). Use the Chat page instead. -->
 
-                            <!-- Sub-Agent Activity Monitor -->
-                            <div class="bento-widget bento-subagents">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                                        Sub-Agents
-                                        <span id="subagent-count-badge" class="badge badge-default" style="display:none;">0</span>
+
+                        </div>
+
+                            <section class="dashboard-collapsible-section" data-section="operations">
+                                <button class="dashboard-section-toggle" type="button" onclick="window.DashboardLayout && window.DashboardLayout.toggleSection('operations')" aria-expanded="false">
+                                    <span>
+                                        <strong>Operations panels</strong>
+                                        <small>Terminal, activity, notes, agents, channels, sub-agents</small>
+                                    </span>
+                                    <span class="dashboard-section-toggle-icon">+</span>
+                                </button>
+                                <div class="dashboard-section-content">
+                                    <div class="dashboard-secondary-grid dashboard-operations-grid">
+                                        <div class="bento-widget bento-terminal">
+                                            <div
+                                                class="terminal"
+                                                id="console-section"
+                                                style="height: 100%; display: flex; flex-direction: column; border: none; border-radius: 0"
+                                            >
+                                                <div class="terminal-header">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="terminal-dots">
+                                                            <span class="red"></span>
+                                                            <span class="yellow"></span>
+                                                            <span class="green"></span>
+                                                        </div>
+                                                        <span class="terminal-title">Terminal</span>
+                                                        <span id="console-status-badge" class="badge badge-success">IDLE</span>
+                                                    </div>
+                                                    <div class="flex items-center gap-2">
+                                                        <button onclick="clearConsole()" class="btn-icon" style="font-size: 11px">Clear</button>
+                                                    </div>
+                                                </div>
+                                                <div id="console-output" class="terminal-output" style="flex: 1; overflow-y: auto">
+                                                    <div class="cmd">$ solobot --init</div>
+                                                    <div class="info">Ready for commands...</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-activity">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    Activity
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="activity-log" class="activity-list"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-notes">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                                    </svg>
+                                                    Notes
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div class="notes-input" style="margin-bottom: var(--space-3)">
+                                                    <input type="text" id="note-input" class="input flex-1" placeholder="Leave a note for SoLoBot..." style="font-size: 13px">
+                                                    <button onclick="addNote()" class="btn btn-primary" style="padding: 6px 12px; font-size: 13px">Add</button>
+                                                </div>
+                                                <div id="notes-list" class="notes-list"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-agents">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                                    Agents
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="agent-status-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-channels">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                                    Channels
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="channel-status-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-subagents">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                                                    Sub-Agents
+                                                    <span id="subagent-count-badge" class="badge badge-default" style="display:none;">0</span>
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="subagent-monitor-list"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="bento-widget-content">
-                                    <div id="subagent-monitor-list"></div>
-                                </div>
-                            </div>
+                            </section>
 
-                            <!-- Activity Heatmap (30 days) -->
-                            <div class="bento-widget bento-heatmap bento-heatmap-30d">
-                                <div class="bento-widget-header">
-                                    <div class="bento-widget-title">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg>
-                                        Activity (30 days)
+                            <section class="dashboard-collapsible-section" data-section="insights">
+                                <button class="dashboard-section-toggle" type="button" onclick="window.DashboardLayout && window.DashboardLayout.toggleSection('insights')" aria-expanded="false">
+                                    <span>
+                                        <strong>Insights and analytics</strong>
+                                        <small>Notion, costs, analytics, heatmaps</small>
+                                    </span>
+                                    <span class="dashboard-section-toggle-icon">+</span>
+                                </button>
+                                <div class="dashboard-section-content">
+                                    <div class="dashboard-secondary-grid dashboard-insights-grid">
+                                        <div class="bento-widget bento-notion-kanban">
+                                            <div id="notion-kanban-widget" class="notion-kanban-container"></div>
+                                        </div>
+
+                                        <div class="bento-widget bento-costs">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                    Usage & Costs
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="cost-tracker-content"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-analytics">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                                                    Analytics
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="analytics-content"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-heatmap">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                                    </svg>
+                                                    Activity Heatmap
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="activity-heatmap-container" style="margin-bottom: var(--space-3);"></div>
+                                                <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-bottom: var(--space-2);">Last 28 days</div>
+                                                <div id="hourly-heatmap-container"></div>
+                                                <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: var(--space-2);">Activity by hour (24h)</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="bento-widget bento-heatmap bento-heatmap-30d">
+                                            <div class="bento-widget-header">
+                                                <div class="bento-widget-title">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path></svg>
+                                                    Activity (30 days)
+                                                </div>
+                                            </div>
+                                            <div class="bento-widget-content">
+                                                <div id="heatmap-container"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="bento-widget-content">
-                                    <div id="heatmap-container"></div>
-                                </div>
-                            </div>
-
+                            </section>
                         </div>
                     </div>
                     <!-- END DASHBOARD PAGE -->

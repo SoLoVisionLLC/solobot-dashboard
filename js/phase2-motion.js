@@ -630,7 +630,6 @@ const MotionController = {
         const statsToWatch = [
             '#stat-tasks-done',
             '#stat-messages',
-            '#stat-focus-sessions',
             '#todo-count',
             '#progress-count',
             '#done-count'

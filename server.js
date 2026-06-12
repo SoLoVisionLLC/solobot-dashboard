@@ -5,6 +5,10 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { exec } = require('child_process');
+const {
+  appendGuardedNotionProperties,
+  validateNotionPageForActiveSync
+} = require('./lib/notion-task-guardrails');
 
 process.env.TZ = process.env.TZ || 'America/New_York';
 
@@ -18,10 +22,17 @@ let notionLastFetch = 0;
 const NOTION_CACHE_TTL = 60 * 1000; // 1 minute cache
 
 // Notion Status Mapping
+// NOTE: Any unmapped status silently falls through to 'todo' — always keep this complete
 const STATUS_MAP_REV = {
   'To Do': 'todo',
   'In Progress': 'progress',
-  'Done': 'done'
+  'Done': 'done',
+  'Not Started': 'todo',   // No status yet — treat as backlog
+  'Completed': 'done',      // Done
+  'Cancelled': 'archive',   // Cancelled tasks → archive
+  'Blocked': 'progress',    // Blocked is a form of in-progress
+  'Asset Ready': 'done',    // Asset Ready means done
+  'Active': 'progress',     // Active means in progress
 };
 const STATUS_MAP_FWD = {
   'todo': 'To Do',
@@ -39,67 +50,96 @@ const PRIORITY_MAP_REV = {
 
 async function fetchNotionTasks() {
   if (!NOTION_API_KEY) return null;
-  
+
   // Return cached if fresh
   if (notionTasksCache && (Date.now() - notionLastFetch < NOTION_CACHE_TTL)) {
     return notionTasksCache;
   }
 
-  try {
-    console.log('[Notion] Fetching tasks from database...');
-    const response = await new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname: 'api.notion.com',
-        path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NOTION_API_KEY}`,
-          'Notion-Version': '2022-06-28',
-          'Content-Type': 'application/json'
-        }
-      }, res => {
-        let data = '';
-        res.on('data', c => data += c);
-        res.on('end', () => resolve(JSON.parse(data)));
-      });
-      req.on('error', reject);
-      req.write(JSON.stringify({ 
-        page_size: 100, 
-        filter: { 
-          property: 'Status', 
-          select: { 
-            is_not_empty: true 
-          } 
-        } 
-      }));
-      req.end();
+  // Helper to make a single Notion query request
+  const notionRequest = (body) => new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.notion.com',
+      path: `/v1/databases/${NOTION_DATABASE_ID}/query`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      }
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve(JSON.parse(data)));
     });
+    req.on('error', reject);
+    req.write(JSON.stringify(body));
+    req.end();
+  });
 
-    if (!response.results) {
-      console.error('[Notion] Failed to fetch tasks:', response);
-      return null;
-    }
+  try {
+    console.log('[Notion] Fetching tasks from database (paginated)...');
+    const allPages = [];
+    let cursor = undefined;
+    let pageCount = 0;
+
+    do {
+      const body = {
+        page_size: 100,
+        filter: {
+          property: 'Status',
+          select: {
+            is_not_empty: true
+          }
+        }
+      };
+      if (cursor) body.start_cursor = cursor;
+
+      const response = await notionRequest(body);
+      if (!response.results) {
+        console.error('[Notion] Failed to fetch tasks:', response);
+        return null;
+      }
+
+      allPages.push(...response.results);
+      pageCount++;
+      cursor = response.has_more ? response.next_cursor : undefined;
+      console.log(`[Notion] Page ${pageCount}: +${response.results.length} tasks (total: ${allPages.length}, has_more: ${response.has_more})`);
+    } while (cursor);
+
+    console.log(`[Notion] Fetched ${allPages.length} total tasks across ${pageCount} pages`);
 
     // Transform to Dashboard format
     const tasks = { todo: [], progress: [], done: [], archive: [] };
-    
-    for (const page of response.results) {
+
+    for (const page of allPages) {
       const props = page.properties;
       const statusVal = props.Status?.select?.name;
       const listName = STATUS_MAP_REV[statusVal] || 'todo';
-      
+      const guard = validateNotionPageForActiveSync(page, listName);
+      if (!guard.ok) {
+        console.warn(`[Notion Guardrail] ${guard.errors.join(' ')}`);
+        continue;
+      }
+      const assignedAgent = props['Assigned Agent']?.select?.name;
+
       const task = {
         id: page.id,
         title: props.Task?.title?.[0]?.plain_text || 'Untitled',
         description: props.Notes?.rich_text?.[0]?.plain_text || '',
         priority: PRIORITY_MAP_REV[props.Priority?.select?.name] ?? 2,
-        agent: (props['Assigned Agent']?.select?.name || 'Dev').toLowerCase(),
+        agent: assignedAgent ? assignedAgent.toLowerCase() : '',
+        dueDate: props['Due Date']?.date?.start || null,
         created: new Date(page.created_time).getTime(),
         notionUrl: page.url
       };
 
       if (tasks[listName]) {
         tasks[listName].push(task);
+      } else {
+        // Unknown bucket — put in todo but log warning
+        console.warn(`[Notion] Unknown status "${statusVal}" for task "${task.title}" — routing to todo`);
+        tasks.todo.push(task);
       }
     }
 
@@ -112,14 +152,20 @@ async function fetchNotionTasks() {
   }
 }
 
-async function updateNotionTaskStatus(pageId, newStatus) {
+async function updateNotionTaskStatus(pageId, newStatus, task = {}) {
   if (!NOTION_API_KEY) return;
   
-  const notionStatus = STATUS_MAP_FWD[newStatus];
-  if (!notionStatus) return;
+  const properties = {};
+  let guard;
+  try {
+    guard = appendGuardedNotionProperties(properties, task, newStatus);
+  } catch (e) {
+    console.warn(`[Notion Guardrail] Refusing to sync task ${pageId} to ${newStatus}: ${e.message}`);
+    return;
+  }
 
   try {
-    console.log(`[Notion] Updating task ${pageId} to ${notionStatus}`);
+    console.log(`[Notion] Updating task ${pageId} to ${guard.notionStatus}`);
     const req = https.request({
       hostname: 'api.notion.com',
       path: `/v1/pages/${pageId}`,
@@ -130,11 +176,7 @@ async function updateNotionTaskStatus(pageId, newStatus) {
         'Content-Type': 'application/json'
       }
     });
-    req.write(JSON.stringify({
-      properties: {
-        'Status': { select: { name: notionStatus } }
-      }
-    }));
+    req.write(JSON.stringify({ properties }));
     req.end();
     
     // Invalidate cache to force refresh on next load
@@ -333,8 +375,9 @@ function parseModelsOutput(output) {
   return models;
 }
 
-const PORT = process.env.PORT || 3000;
-const STATE_FILE = './data/state.json';
+const PORT = process.env.PORT || 3124;
+const DATA_DIR = process.env.DASHBOARD_DATA_DIR || './data';
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const DEFAULT_STATE_FILE = './data/default-state.json';
 // OpenClaw data — uses OPENCLAW_HOME (auto-detected or env var)
 // Falls back to ./memory for local dev without OpenClaw
@@ -342,8 +385,8 @@ const OPENCLAW_DATA = OPENCLAW_HOME;
 const MEMORY_DIR = fs.existsSync(path.join(OPENCLAW_DATA, 'workspace'))
   ? path.join(OPENCLAW_DATA, 'workspace')
   : './memory';
-const VERSIONS_DIR = './data/versions';  // Version history storage
-const META_FILE = './data/file-meta.json';  // Track bot updates
+const VERSIONS_DIR = path.join(DATA_DIR, 'versions');  // Version history storage
+const META_FILE = path.join(DATA_DIR, 'file-meta.json');  // Track bot updates
 const BACKUP_DIR = path.join(path.dirname(STATE_FILE), 'backups');
 const BACKUP_PREFIX = 'state-backup-';
 const BACKUP_RETENTION = 10;
@@ -505,11 +548,16 @@ function isNoiseMessageForMetrics(msg, text, role) {
   if (!lower) return false;
 
   if (
+    lower === 'ack' ||
     lower === 'heartbeat_ok' ||
     lower === 'announce_skip' ||
+    lower === 'reply_skip' ||
     lower === 'no_reply' ||
+    lower === 'no' ||
     lower === '[read-sync]' ||
-    lower === '[[read_ack]]'
+    lower === '[[read_ack]]' ||
+    trimmed.startsWith('[[read_ack]]') ||
+    /^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(trimmed)
   ) return true;
 
   if (/(keepalive|heartbeat check|agent-to-agent announce step|continue where you left off|retry heartbeat|wake request)/i.test(lower)) {
@@ -1072,7 +1120,7 @@ const GDRIVE_REFRESH_TOKEN = process.env.GDRIVE_REFRESH_TOKEN;
 const AUTO_RESTORE_ENABLED = GDRIVE_BACKUP_FILE_ID && GDRIVE_CLIENT_ID && GDRIVE_CLIENT_SECRET && GDRIVE_REFRESH_TOKEN;
 
 // Ensure data directories exist
-if (!fs.existsSync('./data')) fs.mkdirSync('./data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(VERSIONS_DIR)) fs.mkdirSync(VERSIONS_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
@@ -1478,7 +1526,7 @@ function readPage(name) {
   }
 }
 
-const PAGE_NAMES = ['dashboard', 'agents', 'chat', 'system', 'products', 'business', 'cron', 'security', 'skills', 'model-validator'];
+const PAGE_NAMES = ['dashboard', 'agents', 'chat', 'group-chat', 'system', 'products', 'business', 'cron', 'security', 'skills', 'model-validator'];
 
 function assemblePage(activePage) {
   // Build all pages, marking the active one
@@ -1523,6 +1571,87 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
+function normalizeGroupRoom(room) {
+  const memberIds = Array.isArray(room?.memberIds) ? room.memberIds : (Array.isArray(room?.members) ? room.members : []);
+  return {
+    ...room,
+    id: room?.id,
+    title: room?.title || 'Untitled room',
+    purpose: room?.purpose || '',
+    memberIds,
+    members: memberIds,
+    unreadCount: Number.isFinite(room?.unreadCount) ? room.unreadCount : 0,
+    active: room?.active !== false,
+    voiceMode: room?.voiceMode || 'Auto',
+    lastActivity: room?.lastActivity || 'Now',
+    createdAt: Number.isFinite(room?.createdAt) ? room.createdAt : Date.now(),
+    isLocal: room?.isLocal !== false,
+  };
+}
+
+function normalizeGroupMessage(message, index = 0) {
+  const id = message?.id || message?.messageKey || message?.key || message?._remoteKey || `message-${index}`;
+  const text = String(message?.text ?? message?.body ?? '').trim();
+  const senderType = String(message?.senderType || '').trim().toUpperCase()
+    || (String(message?.from || '').toLowerCase() === 'solo' ? 'USER' : 'AGENT');
+  const fromAgentId = message?.fromAgentId || (senderType === 'AGENT' ? message?.senderId : undefined);
+  const from = String(message?.from ?? message?.senderName ?? message?.senderId ?? 'Unknown').trim() || 'Unknown';
+  const time = message?.time || message?.timestampMs || message?.timestamp || Date.now();
+  return {
+    ...message,
+    id,
+    key: message?.key || message?.messageKey || id,
+    messageKey: message?.messageKey || message?.key || id,
+    text,
+    body: message?.body ?? text,
+    from,
+    senderName: message?.senderName || from,
+    senderId: message?.senderId || fromAgentId || (senderType === 'USER' ? 'solo' : from),
+    senderRole: message?.senderRole || (senderType === 'USER' ? 'Operator' : senderType === 'SYSTEM' ? 'System' : 'Agent'),
+    senderType,
+    time,
+    timestampMs: message?.timestampMs || time,
+    timestampLabel: message?.timestampLabel || 'Now',
+    fromAgentId,
+    spoken: Boolean(message?.spoken),
+    internal: Boolean(message?.internal),
+  };
+}
+
+function normalizeGroupMessages(messages) {
+  const seen = new Set();
+  return (Array.isArray(messages) ? messages : [])
+    .map(normalizeGroupMessage)
+    .filter((message) => {
+      const key = message.id || message.messageKey || message.key;
+      if (isNoiseMessageForMetrics(message, message.text || message.body, message.senderType?.toLowerCase())) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeGroupRoomsState(payload = {}) {
+  const rooms = (Array.isArray(payload.rooms) ? payload.rooms : [])
+    .map(normalizeGroupRoom)
+    .filter(room => room.id);
+  const messages = {};
+  if (payload.messages && typeof payload.messages === 'object') {
+    for (const [roomId, roomMessages] of Object.entries(payload.messages)) {
+      messages[roomId] = normalizeGroupMessages(roomMessages);
+    }
+  }
+  return {
+    rooms,
+    messages,
+    sessionKeys: payload.sessionKeys && typeof payload.sessionKeys === 'object' ? payload.sessionKeys : {},
+    memberNames: payload.memberNames && typeof payload.memberNames === 'object' ? payload.memberNames : {},
+    replyCursors: payload.replyCursors && typeof payload.replyCursors === 'object' ? payload.replyCursors : {},
+    version: Number.isFinite(payload.version) ? payload.version : 1,
+    updatedAt: Number.isFinite(payload.updatedAt) ? payload.updatedAt : Date.now(),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1552,6 +1681,32 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
     return res.end(JSON.stringify(responseState));
+  }
+
+  if (url.pathname === '/api/group-rooms-state' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    const payload = normalizeGroupRoomsState(
+      state.groupRoomsState && typeof state.groupRoomsState === 'object'
+        ? state.groupRoomsState
+        : { rooms: [], messages: {}, sessionKeys: {}, memberNames: {}, replyCursors: {}, version: 1, updatedAt: null }
+    );
+    return res.end(JSON.stringify(payload));
+  }
+
+  if (url.pathname === '/api/group-rooms-state' && req.method === 'PUT') {
+    let body = '';
+    try {
+      for await (const chunk of req) { body += chunk; }
+      const payload = JSON.parse(body || '{}');
+      state.groupRoomsState = normalizeGroupRoomsState(payload);
+      saveState();
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ ok: true, updatedAt: state.groupRoomsState.updatedAt }));
+    } catch (e) {
+      res.writeHead(400);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
   }
 
   if (url.pathname === '/api/sync' && req.method === 'POST') {
@@ -1639,7 +1794,7 @@ const server = http.createServer(async (req, res) => {
               // but Notion API is fast enough for occasional drags.
               // Only update if it looks like a Notion ID (UUID with dashes)
               if (task.id && task.id.length > 20 && task.id.includes('-')) {
-                 updateNotionTaskStatus(task.id, listName);
+                 updateNotionTaskStatus(task.id, listName, task);
               }
             });
           };
@@ -2097,6 +2252,113 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // List versions for a sub-agent file (must be before generic file GET)
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+    const safeKey = `agents__${agentId}__${filename.replace(/\//g, '__')}`;
+    const prefix = `${safeKey}.`;
+
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      const versions = fs.readdirSync(VERSIONS_DIR)
+        .filter(f => f.startsWith(prefix))
+        .map(f => {
+          const ts = parseInt(f.substring(prefix.length), 10);
+          const versionPath = path.join(VERSIONS_DIR, f);
+          const stat = fs.statSync(versionPath);
+          return { timestamp: ts, size: stat.size };
+        })
+        .filter(v => Number.isFinite(v.timestamp))
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 20);
+
+      return res.end(JSON.stringify({ versions }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // Read specific version of a sub-agent file
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions\/(\d+)$/) && req.method === 'GET') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/versions\/(\d+)$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+    const timestamp = match[3];
+    const safeKey = `agents__${agentId}__${filename.replace(/\//g, '__')}`;
+    const versionPath = path.join(VERSIONS_DIR, `${safeKey}.${timestamp}`);
+
+    res.setHeader('Content-Type', 'application/json');
+    try {
+      if (!fs.existsSync(versionPath)) {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ error: 'Version not found' }));
+      }
+      const content = fs.readFileSync(versionPath, 'utf8');
+      return res.end(JSON.stringify({ content, timestamp: Number(timestamp) }));
+    } catch (e) {
+      res.writeHead(500);
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+
+  // Restore a sub-agent file version
+  if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/restore$/) && req.method === 'POST') {
+    const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)\/restore$/);
+    const agentId = decodeURIComponent(match[1]);
+    const filename = decodeURIComponent(match[2]);
+
+    // Resolve workspace path
+    let agentWorkspace;
+    if (agentId === 'main') {
+      agentWorkspace = path.join(OPENCLAW_HOME, 'workspace');
+    } else {
+      agentWorkspace = path.join(OPENCLAW_HOME, `workspace-${agentId}`);
+      if (!fs.existsSync(agentWorkspace)) {
+        agentWorkspace = path.join(OPENCLAW_HOME, 'agents', agentId, 'workspace');
+      }
+    }
+
+    const filePath = path.resolve(agentWorkspace, filename);
+    const resolvedWorkspace = path.resolve(agentWorkspace);
+    if (!filePath.startsWith(resolvedWorkspace)) {
+      res.writeHead(403);
+      return res.end(JSON.stringify({ error: 'Access denied' }));
+    }
+
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { timestamp } = JSON.parse(body);
+        const safeKey = `agents__${agentId}__${filename.replace(/\//g, '__')}`;
+        const versionPath = path.join(VERSIONS_DIR, `${safeKey}.${timestamp}`);
+
+        if (!fs.existsSync(versionPath)) {
+          res.writeHead(404);
+          return res.end(JSON.stringify({ error: 'Version not found' }));
+        }
+
+        if (fs.existsSync(filePath)) {
+          const currentContent = fs.readFileSync(filePath, 'utf8');
+          createVersion(`agents/${agentId}/${filename}`, currentContent);
+        }
+
+        const versionContent = fs.readFileSync(versionPath, 'utf8');
+        fs.writeFileSync(filePath, versionContent, 'utf8');
+
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({ ok: true, restored: timestamp }));
+      } catch (e) {
+        res.writeHead(500);
+        return res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Read sub-agent file
   if (url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/) && req.method === 'GET') {
     const match = url.pathname.match(/^\/api\/agents\/([^/]+)\/files\/(.+)$/);
@@ -2192,6 +2454,8 @@ const server = http.createServer(async (req, res) => {
         const beforeContent = beforeExists ? fs.readFileSync(filePath, 'utf8') : '';
         const beforeHash = beforeExists ? crypto.createHash('sha256').update(beforeContent).digest('hex') : null;
 
+        const versionTimestamp = beforeExists ? createVersion(`agents/${agentId}/${filename}`, beforeContent) : null;
+
         fs.writeFileSync(filePath, content, 'utf8');
 
         const afterContent = fs.readFileSync(filePath, 'utf8');
@@ -2204,7 +2468,7 @@ const server = http.createServer(async (req, res) => {
 
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        return res.end(JSON.stringify({ ok: true, saved: filename, path: filename, debug: { traceId, requestedHash, beforeHash, afterHash, verified, mtime: afterStat.mtime.toISOString(), bytes: Buffer.byteLength(content, 'utf8') } }));
+        return res.end(JSON.stringify({ ok: true, saved: filename, path: filename, versionCreated: versionTimestamp, debug: { traceId, requestedHash, beforeHash, afterHash, verified, mtime: afterStat.mtime.toISOString(), bytes: Buffer.byteLength(content, 'utf8') } }));
       } catch (e) {
         res.writeHead(500);
         return res.end(JSON.stringify({ error: e.message }));
@@ -3490,6 +3754,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Health check for container/runtime smoke tests.
+  if (url.pathname === '/health' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   // Serve static files first (JS, CSS, images, etc.)
   let filePath = '.' + url.pathname;
   const ext = path.extname(filePath);
@@ -3529,6 +3800,7 @@ const server = http.createServer(async (req, res) => {
     '/agents': 'agents',
     '/memory': 'agents',      // legacy redirect
     '/chat': 'chat',
+    '/group-chat': 'group-chat',
     '/system': 'system',
     '/products': 'products',
     '/business': 'business',

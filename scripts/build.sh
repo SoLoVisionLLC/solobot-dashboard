@@ -38,6 +38,7 @@ MODULES=(
     cron.js
     health.js
     chat.js
+    talk-mode.js
 )
 
 BUNDLE="$DIST_DIR/bundle.js"

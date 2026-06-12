@@ -1,12 +1,30 @@
 // js/models.js — isSystemMessage, provider/model management
 
+function isInternalControlMessage(text) {
+    if (!text) return false;
+    const trimmed = String(text).trim();
+    const lowerTrimmed = trimmed.toLowerCase();
+
+    if (/^(ack|heartbeat_ok|no_reply|no|reply_skip|announce_skip)$/i.test(trimmed)) return true;
+    if (trimmed === '[read-sync]') return true;
+    if (trimmed === '[[read_ack]]') return true;
+    if (trimmed.startsWith('[[read_ack]]')) return true;
+    if (/^\[read-sync\]\s*\n*\s*\[\[read_ack\]\]$/s.test(trimmed)) return true;
+    if (lowerTrimmed.includes('agent-to-agent announce step')) return true;
+    if (lowerTrimmed.includes('reply with a one-line ack')) return true;
+    return false;
+}
+
 function isSystemMessage(text, from) {
-    // DEBUG MODE: Show everything in chat
+    if (!text) return false;
+
+    // These are protocol/control messages, never user-facing — even in debug mode.
+    if (isInternalControlMessage(text)) return true;
+
+    // DEBUG MODE: Show everything else in chat
     if (DISABLE_SYSTEM_FILTER) {
         return false; // Everything goes to chat
     }
-
-    if (!text) return false;
 
     const trimmed = text.trim();
     const lowerTrimmed = trimmed.toLowerCase();
@@ -85,6 +103,18 @@ function isSystemMessage(text, from) {
 
     // Heartbeat prompts
     if (trimmed.startsWith('Read HEARTBEAT.md if it exists')) return true;
+
+    // Memory/housekeeping prompts injected by automation should not appear as user chat
+    if (trimmed.startsWith('Write lasting notes to memory/')) return true;
+    if (trimmed.includes('Reply with NO_REPLY if nothing durable.')) return true;
+    if (trimmed.includes('Current time:') && trimmed.includes('America/Detroit')) return true;
+
+    // Watchdog / automation chatter
+    if (lowerTrimmed.includes('watchdog check')) return true;
+    if (lowerTrimmed.includes('watchdog ping')) return true;
+    if (lowerTrimmed.includes('agent-to-agent announce step')) return true;
+    if (lowerTrimmed.includes('reply with a one-line ack')) return true;
+    if (/^(ack|announce_skip|reply_skip)$/i.test(trimmed)) return true;
 
     // Short heartbeat patterns
     if (from === 'solobot' && trimmed.length < 200) {
@@ -655,7 +685,14 @@ async function fetchModelsFromGateway() {
 
         let configData = config;
         if (typeof config === 'string') configData = JSON.parse(config);
-        if (configData?.raw) configData = JSON.parse(configData.raw);
+        if (configData?.raw) {
+            try {
+                configData = JSON.parse(configData.raw);
+            } catch (e) {
+                console.warn('[Dashboard] Falling back to structured config due to raw parse error:', e.message);
+                if (configData.config) configData = configData.config;
+            }
+        }
 
         const modelConfig = configData?.agents?.defaults?.model;
         if (!modelConfig) return;
@@ -1103,7 +1140,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         // Populate model dropdown for current provider and select current model
 
         // Set up periodic model sync (every 5 minutes)
-        setInterval(async () => {
+        let modelSyncInterval = setInterval(async () => {
             try {
                 const response = await fetch('/api/models/current');
                 const modelInfo = await response.json();
@@ -1118,6 +1155,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 // Silent fail for periodic sync
             }
         }, 5 * 60 * 1000); // 5 minutes
+        
+        // Export cleanup for SPA navigation
+        window._modelsCleanup = () => clearInterval(modelSyncInterval);
+        
         await updateModelDropdown(window.currentProvider);
         selectModelInDropdowns(window.currentModel);
 

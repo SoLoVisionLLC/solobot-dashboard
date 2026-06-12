@@ -7,6 +7,7 @@ COPY server.js ./
 COPY dashboard.js ./
 COPY gateway-client.js ./
 COPY docs-hub-memory-files.js ./
+COPY lib ./lib/
 COPY solobot-avatar.png ./
 COPY favicon.svg ./
 COPY avatars ./avatars/

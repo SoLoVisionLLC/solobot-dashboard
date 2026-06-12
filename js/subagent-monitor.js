@@ -77,7 +77,11 @@ function escapeHtml(s) {
 }
 
 // Auto-init and periodic refresh
+let subagentInterval;
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(renderSubagentMonitor, 3000);
-  setInterval(renderSubagentMonitor, 15000);
+  subagentInterval = setInterval(renderSubagentMonitor, 15000);
 });
+
+// Cleanup function for SPA navigation
+window._subagentMonitorCleanup = () => clearInterval(subagentInterval);

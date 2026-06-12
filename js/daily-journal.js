@@ -1,7 +1,7 @@
 // js/daily-journal.js — Agents page daily journal view
 (function () {
   'use strict';
-  console.log('[Agents] daily-journal loaded (memory subview enabled)');
+  console.log('[Agents] daily-journal loaded');
 
   const api = window._dailyJournal || (window._dailyJournal = {});
 
@@ -10,11 +10,10 @@
   let currentView = 'org'; // org | log | journal | memory
   let lastDaily = null;
   let timelineMode = 'detailed'; // brief | detailed
-  let showMemoryInFlight = false;
 
   const AGENTS = ['main', 'elon', 'orion', 'atlas', 'sterling', 'dev', 'forge', 'knox', 'sentinel', 'vector', 'canon', 'luma', 'ledger', 'quill', 'chip', 'nova', 'snip', 'family'];
 
-  function $(id) { return document.getElementById(id); }
+  // Note: $ helper is now in utils.js
 
   function escapeHtml(v) {
     const d = document.createElement('div');
@@ -143,8 +142,6 @@ function showOrg(updateURL = true) {
   }
 
   function showMemory(updateURL = true) {
-    if (showMemoryInFlight) return;
-    showMemoryInFlight = true;
     currentView = 'memory';
     const org = $('agents-org-shell');
     const memory = $('agents-memory-shell');
@@ -160,21 +157,10 @@ function showOrg(updateURL = true) {
     const agentId = window._memoryCards?.getCurrentAgentId?.() || window._deepLinkAgentId || (pathMatch ? pathMatch[1] : null) || null;
     if (agentId && typeof window._memoryCards?.openAgentMemory === 'function') {
       window._memoryCards.openAgentMemory(agentId, { updateURL: false, forceAgentsPage: false });
-    } else if (memory) {
-      // Fallback: show classic global memory layout inside org shell.
-      memory.style.display = 'none';
-      if (org) org.style.display = '';
-      const cardsLayout = $('memory-cards-view');
-      const classicLayout = $('memory-classic-view');
-      if (cardsLayout) cardsLayout.style.display = 'none';
-      if (classicLayout) classicLayout.style.display = '';
-      if (typeof window._memoryCards?.setLayout === 'function') window._memoryCards.setLayout('classic');
-      if (typeof window.renderMemoryFilesForPage === 'function') window.renderMemoryFilesForPage('');
     }
 
     syncViewButtons();
     if (updateURL) pushAgentsHistory('memory');
-    showMemoryInFlight = false;
   }
 
   function normalizeIndex(payload) {
@@ -236,12 +222,7 @@ function showOrg(updateURL = true) {
     return { completed, blockers, decisions, followups };
   }
 
-  function formatTime(ts) {
-    if (!ts) return '';
-    const d = new Date(ts);
-    if (!Number.isFinite(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  // Note: formatTime is now in utils.js - using centralized version
 
   function renderSection(id, items) {
     const el = $(id);

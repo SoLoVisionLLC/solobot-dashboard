@@ -3,8 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// Path to dashboard state file
-const stateFile = path.join(__dirname, 'data/state.latest.json');
+// Path to private dashboard runtime state. Runtime snapshots are generated
+// locally and should not be committed to the public repository.
+const dataDir = process.env.DASHBOARD_DATA_DIR || path.join(__dirname, 'data');
+const stateFile = path.join(dataDir, 'state.json');
 
 try {
   // Read current state

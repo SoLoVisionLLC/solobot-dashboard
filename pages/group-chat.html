@@ -1,0 +1,60 @@
+                    <!-- =================== GROUP CHAT PAGE =================== -->
+                    <div id="page-group-chat" class="page">
+                        <div class="group-chat-shell">
+                            <aside class="group-chat-rooms-panel" aria-label="Group chat rooms">
+                                <div class="group-chat-panel-header">
+                                    <div>
+                                        <div class="group-chat-eyebrow">Coordination</div>
+                                        <h2>Rooms</h2>
+                                    </div>
+                                    <button class="btn btn-primary group-chat-create-btn" onclick="openCreateGroupRoomModal()" title="Create room">
+                                        +
+                                    </button>
+                                </div>
+                                <div class="group-chat-panel-copy">
+                                    Multi-agent rooms for planning, decisions, and handoffs.
+                                </div>
+                                <div id="group-chat-room-browser" class="group-chat-room-browser">
+                                    <!-- Room list rendered dynamically -->
+                                </div>
+                            </aside>
+
+                            <main class="group-chat-main-panel" aria-label="Group conversation">
+                                <div id="group-chat-header" class="group-chat-room-header">
+                                    <!-- Room header rendered dynamically -->
+                                </div>
+
+                                <div id="group-chat-messages" class="group-chat-messages">
+                                    <!-- Messages rendered dynamically -->
+                                </div>
+
+                                <div class="group-chat-composer">
+                                    <div class="group-chat-composer-hint">
+                                        Use <strong>@all</strong> for everyone or <strong>@agent</strong> for one teammate.
+                                    </div>
+                                    <div class="group-chat-input-row">
+                                        <textarea
+                                            id="group-chat-input"
+                                            placeholder="Message the room..."
+                                            autocomplete="off"
+                                            autocorrect="off"
+                                            autocapitalize="off"
+                                            spellcheck="false"
+                                            rows="1"
+                                            onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendGroupChatMessage();}"
+                                        ></textarea>
+                                        <button onclick="sendGroupChatMessage()" class="btn btn-primary">
+                                            Send
+                                        </button>
+                                    </div>
+                                </div>
+                            </main>
+
+                            <aside class="group-chat-context-panel" aria-label="Room context">
+                                <div id="group-chat-context">
+                                    <!-- Room context rendered dynamically -->
+                                </div>
+                            </aside>
+                        </div>
+                    </div>
+                    <!-- END GROUP CHAT PAGE -->

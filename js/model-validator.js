@@ -839,4 +839,3 @@ const ModelValidator = {
 window.ModelValidator = ModelValidator;
 window.initModelValidatorPage = () => ModelValidator.init();
 
-console.log('[ModelValidator] Loaded - waits for full response with rate limit capture');

@@ -36,7 +36,6 @@ const commands = [
     { id: 'chat', icon: '💬', title: 'Go to Chat', desc: 'Open chat page', shortcut: 'C', action: () => showPage('chat') },
     { id: 'system', icon: '🔧', title: 'System Messages', desc: 'View system/debug messages', shortcut: 'S', action: () => showPage('system') },
     { id: 'health', icon: '🏥', title: 'Model Health', desc: 'Check model status', shortcut: 'H', action: () => showPage('health') },
-    { id: 'memory', icon: '🧠', title: 'Memory Lane', desc: 'Browse memory files', shortcut: 'M', action: () => showPage('memory') },
     { id: 'settings', icon: '⚙️', title: 'Settings', desc: 'Open settings modal', shortcut: ',', action: () => openSettingsModal() },
     { id: 'theme', icon: '🎨', title: 'Themes', desc: 'Open theme picker', shortcut: 'T', action: () => toggleTheme() },
     { id: 'new-session', icon: '➕', title: 'New Session', desc: 'Create a new chat session', shortcut: 'N', action: () => createNewSession() },
@@ -226,8 +225,8 @@ document.addEventListener('keydown', (e) => {
     // Don't trigger shortcuts when typing in inputs (except specific ones)
     const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
     
-    // Command palette: Cmd/Ctrl + K
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    // Command palette: Cmd/Ctrl + Shift + K
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
         e.preventDefault();
         if (commandPaletteOpen) {
             closeCommandPalette();
@@ -269,9 +268,6 @@ document.addEventListener('keydown', (e) => {
             break;
         case 'h':
             showPage('health');
-            break;
-        case 'm':
-            showPage('memory');
             break;
         case 'd':
             showPage('dashboard');
