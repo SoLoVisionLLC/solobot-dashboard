@@ -108,16 +108,68 @@ function extractHistoryTextFromPart(part) {
     return '';
 }
 
-function resolveInterSessionMeta(primary, secondary = null) {
+function firstNonEmptyString(...values) {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return '';
+}
+
+function canonicalAttributionSessionKey(key) {
+    if (!key) return '';
+    const raw = String(key).trim();
+    if (!raw) return '';
+    if (typeof normalizeDashboardSessionKey === 'function') {
+        return normalizeDashboardSessionKey(raw).toLowerCase();
+    }
+    if (raw === 'main') return 'agent:main:main';
+    return raw.toLowerCase();
+}
+
+function resolveAttributionScope(primary = {}, secondary = {}) {
+    const meta = primary?.metadata || primary?.meta || secondary?.metadata || secondary?.meta || {};
+    const target = primary?.target || secondary?.target || {};
+    return {
+        targetSession: firstNonEmptyString(
+            primary?.targetSession, primary?.targetSessionKey, secondary?.targetSession, secondary?.targetSessionKey,
+            meta?.targetSession, meta?.targetSessionKey, target?.sessionKey, target?.session,
+            primary?.sessionKey, secondary?.sessionKey
+        ),
+        conversationKey: firstNonEmptyString(
+            primary?.conversationKey, primary?.conversationId, secondary?.conversationKey, secondary?.conversationId,
+            meta?.conversationKey, meta?.conversationId, target?.conversationKey, target?.conversationId
+        ),
+        userKey: firstNonEmptyString(
+            primary?.userKey, primary?.userId, secondary?.userKey, secondary?.userId,
+            meta?.userKey, meta?.userId, target?.userKey, target?.userId
+        )
+    };
+}
+
+function resolveInterSessionMeta(primary, secondary = null, expectedSessionKey = null) {
     const sourceSession = String(primary?.sourceSession || secondary?.sourceSession || '').trim();
     const sourceAgentRaw = String(primary?.sourceAgent || primary?.sourceAgentId || secondary?.sourceAgent || secondary?.sourceAgentId || '').trim();
     const sourceAgentName = String(primary?.sourceAgentName || secondary?.sourceAgentName || '').trim();
+    const scope = resolveAttributionScope(primary, secondary || {});
+
+    // Attribution is only safe when the message/event is scoped to the active
+    // target session. This prevents stale WebChat metadata from one
+    // conversation being stamped onto another browser/session history load.
+    const expected = canonicalAttributionSessionKey(expectedSessionKey || currentSessionName || GATEWAY_CONFIG?.sessionKey || '');
+    const scopedTarget = canonicalAttributionSessionKey(scope.targetSession);
+    if (expected && scopedTarget && expected !== scopedTarget) return null;
 
     let sourceAgent = sourceAgentRaw;
     if (!sourceAgent && sourceSession) {
         const m = sourceSession.match(/^agent:([^:]+):/i);
         if (m) sourceAgent = m[1];
     }
+
+    // A bare display name is not a stable attribution key. Require either a
+    // source session/agent, or explicit target conversation/user scoping.
+    const hasStableSource = !!(sourceSession || sourceAgent);
+    const hasScopedConversation = !!(scope.conversationKey || scope.userKey || scopedTarget);
+    if (!hasStableSource && (!sourceAgentName || !hasScopedConversation)) return null;
     if (!sourceSession && !sourceAgent && !sourceAgentName) return null;
 
     const canonicalAgent = (typeof window.resolveAgentId === 'function')
@@ -130,7 +182,18 @@ function resolveInterSessionMeta(primary, secondary = null) {
         _sourceAgent: canonicalAgent || null,
         _sourceAgentName: displayName || null,
         _agentId: canonicalAgent || (window.currentAgentId || 'main'),
+        _targetSession: scopedTarget || expected || null,
+        _conversationKey: scope.conversationKey || null,
+        _userKey: scope.userKey || null,
         _isInterSession: true
+    };
+}
+
+if (typeof window !== 'undefined') {
+    window._webchatAttributionTestHooks = {
+        resolveInterSessionMeta,
+        canonicalAttributionSessionKey,
+        resolveAttributionScope
     };
 }
 
@@ -793,7 +856,7 @@ function handleChatEvent(event) {
     if (window.ModelValidator && typeof window.ModelValidator.handleGatewayEvent === 'function') {
         window.ModelValidator.handleGatewayEvent(event);
     }
-    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind, sourceSession, sourceAgent, sourceAgentId, sourceAgentName } = event;
+    const { state: eventState, content, images, role, errorMessage, model, provider, stopReason, sessionKey, runId, errorKind, sourceSession, sourceAgent, sourceAgentId, sourceAgentName, targetSession, targetSessionKey, conversationKey, conversationId, userKey, userId } = event;
 
     // HARD GATE: only render events for the active session. Period.
     // Cross-session notifications are handled separately by onCrossSessionMessage.
@@ -854,7 +917,7 @@ function handleChatEvent(event) {
             return;
         }
 
-        const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+        const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName, targetSession, targetSessionKey, conversationKey, conversationId, userKey, userId, sessionKey }, event, sessionKey);
         const from = interMeta ? 'solobot' : 'user';
 
         // Check if we already have this message (to avoid duplicates from our own sends)
@@ -932,7 +995,7 @@ function handleChatEvent(event) {
                 });
                 const recentDuplicate = hasRecentFinalFingerprint(finalFingerprint);
                 if (!runtimeDuplicate && !recentDuplicate) {
-                    const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName }, event);
+                    const interMeta = resolveInterSessionMeta({ sourceSession, sourceAgent, sourceAgentId, sourceAgentName, targetSession, targetSessionKey, conversationKey, conversationId, userKey, userId, sessionKey }, event, sessionKey);
                     const msg = addLocalChatMessage(finalContent, 'solobot', images, window._lastResponseModel, window._lastResponseProvider, interMeta);
                     // Tag with runId for dedup against history merge
                     if (msg && runId) msg.runId = runId;
@@ -1038,6 +1101,7 @@ function loadHistoryMessages(messages) {
             content = extractContent(msg.message);
         }
 
+        const interMeta = resolveInterSessionMeta(msg, msg.message, currentSessionName || GATEWAY_CONFIG?.sessionKey || '');
         const message = {
             id: msg.id || 'm' + Date.now() + Math.random(),
             from: msg.role === 'user' ? 'user' : 'solobot',
@@ -1049,11 +1113,14 @@ function loadHistoryMessages(messages) {
             runId: msg.runId || msg.message?.runId || null,
             // Fix #3c: Stamp session + agent so history messages display correctly after agent switch
             _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
-            _agentId: (resolveInterSessionMeta(msg, msg.message)?._agentId) || (window.currentAgentId || 'main'),
-            _sourceSession: resolveInterSessionMeta(msg, msg.message)?._sourceSession || null,
-            _sourceAgent: resolveInterSessionMeta(msg, msg.message)?._sourceAgent || null,
-            _sourceAgentName: resolveInterSessionMeta(msg, msg.message)?._sourceAgentName || null,
-            _isInterSession: !!resolveInterSessionMeta(msg, msg.message)
+            _agentId: interMeta?._agentId || (window.currentAgentId || 'main'),
+            _sourceSession: interMeta?._sourceSession || null,
+            _sourceAgent: interMeta?._sourceAgent || null,
+            _sourceAgentName: interMeta?._sourceAgentName || null,
+            _targetSession: interMeta?._targetSession || null,
+            _conversationKey: interMeta?._conversationKey || null,
+            _userKey: interMeta?._userKey || null,
+            _isInterSession: !!interMeta
         };
 
         // Classify and route
@@ -1251,7 +1318,7 @@ function mergeHistoryMessages(messages) {
 
             // Only add if we have content and it's not a duplicate
             if (textContent) {
-                const interMeta = resolveInterSessionMeta(msg, msg.message);
+                const interMeta = resolveInterSessionMeta(msg, msg.message, currentSessionName || GATEWAY_CONFIG?.sessionKey || '');
                 const isSystemMsg = isSystemMessage(textContent, msg.role === 'user' ? 'user' : 'solobot') || !!interMeta;
 
                 // Skip if runId matches a real-time message we already have
@@ -1287,10 +1354,13 @@ function mergeHistoryMessages(messages) {
                     runId: msg.runId || msg.message?.runId || null,
                     _sessionKey: currentSessionName || GATEWAY_CONFIG?.sessionKey || '',
                     _agentId: interMeta?._agentId || (window.currentAgentId || 'main'),
-            _sourceSession: interMeta?._sourceSession || null,
-            _sourceAgent: interMeta?._sourceAgent || null,
-            _sourceAgentName: interMeta?._sourceAgentName || null,
-            _isInterSession: !!interMeta
+                    _sourceSession: interMeta?._sourceSession || null,
+                    _sourceAgent: interMeta?._sourceAgent || null,
+                    _sourceAgentName: interMeta?._sourceAgentName || null,
+                    _targetSession: interMeta?._targetSession || null,
+                    _conversationKey: interMeta?._conversationKey || null,
+                    _userKey: interMeta?._userKey || null,
+                    _isInterSession: !!interMeta
                 };
 
                 // Classify and route
