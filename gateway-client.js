@@ -80,6 +80,51 @@ function _collectTextFromPart(part) {
     return '';
 }
 
+
+function _firstStringField(...values) {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return '';
+}
+
+function _extractGatewayAttribution(message = {}, payload = {}) {
+    const meta = message?.metadata || message?.meta || payload?.metadata || payload?.meta || {};
+    const origin = message?.origin || payload?.origin || {};
+    const source = message?.source || payload?.source || {};
+    const target = message?.target || payload?.target || {};
+
+    return {
+        sourceSession: _firstStringField(
+            message?.sourceSession, payload?.sourceSession, meta?.sourceSession, origin?.sessionKey,
+            source?.sessionKey, source?.session, source?.conversationKey, source?.conversationId,
+            message?.source_session, payload?.source_session
+        ),
+        sourceAgent: _firstStringField(
+            message?.sourceAgent, message?.sourceAgentId, payload?.sourceAgent, payload?.sourceAgentId,
+            meta?.sourceAgent, meta?.sourceAgentId, origin?.agentId, source?.agentId, source?.agent,
+            message?.source_agent, payload?.source_agent
+        ),
+        sourceAgentName: _firstStringField(
+            message?.sourceAgentName, payload?.sourceAgentName, meta?.sourceAgentName,
+            origin?.agentName, source?.agentName, source?.displayName, message?.source_agent_name, payload?.source_agent_name
+        ),
+        targetSession: _firstStringField(
+            message?.targetSession, message?.targetSessionKey, payload?.targetSession, payload?.targetSessionKey,
+            meta?.targetSession, meta?.targetSessionKey, target?.sessionKey, target?.session,
+            message?.sessionKey, payload?.sessionKey
+        ),
+        conversationKey: _firstStringField(
+            message?.conversationKey, message?.conversationId, payload?.conversationKey, payload?.conversationId,
+            meta?.conversationKey, meta?.conversationId, target?.conversationKey, target?.conversationId
+        ),
+        userKey: _firstStringField(
+            message?.userKey, message?.userId, payload?.userKey, payload?.userId,
+            meta?.userKey, meta?.userId, target?.userKey, target?.userId
+        )
+    };
+}
+
 function _extractMessageContent(message, payload = null) {
     const textCandidates = [];
     const imageCandidates = [];
@@ -754,12 +799,20 @@ class GatewayClient {
                         return;
                     }
                     gwLog(`[Gateway] 🔔 Cross-session notification: ${eventSessionKey} (${contentText.length} chars, ${images.length} images)`);
+                    const attribution = _extractGatewayAttribution(message, payload);
                     this.onCrossSessionMessage({
                         sessionKey: eventSessionKey,
                         content: contentText,
                         images: images,
                         model: message?.model,
-                        provider: message?.provider
+                        provider: message?.provider,
+                        sourceSession: attribution.sourceSession,
+                        sourceAgent: attribution.sourceAgent,
+                        sourceAgentId: attribution.sourceAgent,
+                        sourceAgentName: attribution.sourceAgentName,
+                        targetSession: attribution.targetSession || eventSessionKey,
+                        conversationKey: attribution.conversationKey,
+                        userKey: attribution.userKey
                     });
                 }
             }
@@ -818,6 +871,7 @@ class GatewayClient {
             }
         }
 
+        const attribution = _extractGatewayAttribution(message, payload);
         this.onChatEvent({
             state,
             content: contentText,
@@ -830,7 +884,14 @@ class GatewayClient {
             model: message?.model || payload.model,
             provider: message?.provider || payload.provider,
             stopReason: message?.stopReason,
-            runId: message?.runId || payload.runId
+            runId: message?.runId || payload.runId,
+            sourceSession: attribution.sourceSession,
+            sourceAgent: attribution.sourceAgent,
+            sourceAgentId: attribution.sourceAgent,
+            sourceAgentName: attribution.sourceAgentName,
+            targetSession: attribution.targetSession || eventSessionKey,
+            conversationKey: attribution.conversationKey,
+            userKey: attribution.userKey
         });
     }
 

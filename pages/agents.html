@@ -63,43 +63,6 @@
             </div>
         </div>
 
-                <div id="agents-memory-shell" style="display:none;">
-            <div class="agent-memory-shell">
-                <div class="agent-memory-topbar">
-                    <div>
-                        <div class="agent-dash-card-title">🧠 Agent Memory</div>
-                        <div id="agents-memory-subtitle" class="agent-memory-subtitle">Select an agent to load memory files.</div>
-                    </div>
-                    <div class="agent-memory-controls">
-                        <input type="text" id="agents-memory-filter" class="input" placeholder="Filter files…" oninput="window._memoryCards && window._memoryCards.filterAgentMemoryFiles(this.value)">
-                        <button class="btn btn-ghost btn-sm" onclick="window._memoryCards && window._memoryCards.openAgentMemoryFromUi(null, window._memoryCards?.getCurrentAgentId?.())">Open file list</button>
-                    </div>
-                </div>
-
-                <div id="agent-memory-layout" class="agent-memory-layout">
-                    <div class="agent-dash-card agent-memory-files-panel">
-                        <div class="agent-dash-card-title agent-memory-panel-head">
-                            <span>📄 Memory Files</span>
-                            <span id="agent-memory-file-summary">No agent selected</span>
-                        </div>
-                        <div id="agent-memory-file-list" class="agent-memory-file-list"></div>
-                    </div>
-                    <div class="agent-dash-card agent-memory-preview-panel" style="display:grid; grid-template-rows:auto 1fr;">
-                        <div class="agent-dash-card-title agent-memory-panel-head" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                            <div>
-                                <div id="agent-memory-selected" style="font-weight:700;">No file selected</div>
-                                <div id="agent-memory-selected-meta" class="agent-memory-selected-meta"></div>
-                            </div>
-                            <div id="agent-memory-actions" class="agent-memory-actions"></div>
-                        </div>
-                        <div id="agent-memory-preview-body" class="agent-memory-preview-body">
-                            <div style="color:var(--text-muted); font-size:13px; text-align:center;">Choose a file to preview</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div id="agents-log-shell" style="display:none;">
             <div style="background: var(--surface-1); border:1px solid var(--border-default); border-radius: var(--radius-lg); padding: 12px; margin-bottom: 12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:10px;">
                 <div>
